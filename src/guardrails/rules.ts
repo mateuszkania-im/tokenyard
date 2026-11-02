@@ -23,8 +23,12 @@ export interface SecretRule {
   minEntropy?: number;
   /** Extra check on the value (checksums for PII). */
   validate?: (value: string) => boolean;
-  /** Matches only inside quoted strings, never in a bare token (PII numbers: a JSON number such as a timestamp is not a card). */
-  quotedOnly?: boolean;
+  /**
+   * Numeric PII: a match in a token outside quotes counts only when it is the whole token, an unsigned integer, and
+   * this check accepts it (signed, decimal and exponent forms are never a card or a PESEL). Skipped entirely with
+   * `guardrails.pii.quotedOnly`. Rules without it scan bare tokens like any text.
+   */
+  bareNumber?: (digits: string) => boolean;
 }
 
 const GITLEAKS = 'MIT (gitleaks)';

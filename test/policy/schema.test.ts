@@ -126,3 +126,11 @@ test('duplicate key hashes are refused', () => {
   const line = `- {"hash":"${'d'.repeat(64)}","keyId":"key_dddddddd","tenant":"acme","team":null,"name":"n","kind":"developer","billing":"api"}\n`;
   expect(loadCode({ ...base(), 'keys.yaml': line + line })).toBe('E_SCHEMA');
 });
+
+test('guardrails.pii.quotedOnly: a boolean defaulting to false, in the JSON Schema export', () => {
+  const min = { apiVersion: 'tokenyard/v1', kind: 'Policy', metadata: { name: 'x' }, providers: {}, routes: [] };
+  expect(policySchema.parse(min).guardrails.pii.quotedOnly).toBe(false);
+  expect(policySchema.parse({ ...min, guardrails: { pii: { quotedOnly: true } } }).guardrails.pii.quotedOnly).toBe(true);
+  expect(policySchema.safeParse({ ...min, guardrails: { pii: { quotedOnly: 'yes' } } }).success).toBe(false);
+  expect(JSON.stringify(policyJsonSchema())).toContain('"quotedOnly"');
+});

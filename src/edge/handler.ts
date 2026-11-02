@@ -378,9 +378,9 @@ function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, 
   const opts = { ...(x.messages && !untrusted ? { messages: x.messages } : {}), raw: untrusted };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => (product ? g.secrets.product : g.secrets.codingAgent), salt, opts);
   if (!product) return { hits, redactions: [] };
-  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
+  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, { ...opts, quotedOnly: g.pii.quotedOnly }));
   const redactRules = [...(g.secrets.product === 'redact' ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : []), ...(g.pii.product === 'redact' ? PII_RULES : [])];
-  const redactions = redactionHits(findSpans(body, redactRules, opts));
+  const redactions = redactionHits(findSpans(body, redactRules, { ...opts, quotedOnly: g.pii.quotedOnly }));
   return { hits, redactions };
 }
 

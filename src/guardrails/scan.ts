@@ -271,7 +271,16 @@ function globalOf(rule: SecretRule): RegExp {
 }
 
 /** Matches of `rule` in one view; from the joined view only those that cross strings (the rest come from `all`). */
-function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[]): void {
+const isDelimiter = (c: number | undefined): boolean => c === undefined || isWs(c) || isStructural(c);
+
+/** A numeric PII match in a bare token: kept only when it is the whole token, an unsigned integer the rule accepts. */
+function bareNumberOk(body: Buffer, rule: SecretRule, value: string, segments: Segment[], quotedOnly: boolean): boolean {
+  if (quotedOnly || !rule.bareNumber || segments.length !== 1 || !/^\d+$/.test(value)) return false;
+  const g = segments[0] as Segment;
+  return isDelimiter(g.start > 0 ? body[g.start - 1] : undefined) && isDelimiter(body[g.end]) && rule.bareNumber(value);
+}
+
+function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[], body: Buffer, quotedOnly: boolean): void {
   const text = view.text;
   if (rule.keywords.length > 0 && !rule.keywords.some((k) => text.includes(k))) return;
   const re = globalOf(rule);
@@ -290,7 +299,7 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
     const first = segments[0];
     const last = segments[segments.length - 1];
     if (first === undefined || last === undefined || (crossingOnly && segments.length < 2)) continue;
-    if (rule.quotedOnly && segments.some((g) => g.bare)) continue;
+    if (rule.bareNumber && segments.some((g) => g.bare) && !bareNumberOk(body, rule, value, segments, quotedOnly)) continue;
     out.push({ rule, start: first.start, end: last.end, value, segments });
   }
 }
@@ -300,20 +309,21 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
  * position. The keyword prefilter runs on the decoded text before any regex; entropy and `validate` run on the value.
  * With `messages`, text values split across blocks of one message are matched whole too.
  */
-export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[]; raw?: boolean } = {}): Span[] {
+export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean } = {}): Span[] {
+  const q = opts.quotedOnly === true;
   const range = opts.range ?? { start: 0, end: body.length };
   const out: Span[] = [];
   if (rules.length === 0 || range.end <= range.start) return out;
   const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
   for (const rule of rules) {
     const start = out.length;
-    matchView(all, rule, false, out);
-    if (joined) matchView(joined, rule, true, out);
+    matchView(all, rule, false, out, body, q);
+    if (joined) matchView(joined, rule, true, out, body, q);
     // The decoded copy of a raw body: a value it shares with the raw view is reported once (same rule and bytes).
     if (decoded) {
       const before = out.length;
       const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
-      matchView(decoded, rule, false, out);
+      matchView(decoded, rule, false, out, body, q);
       const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
       out.push(...fresh);
     }
@@ -349,7 +359,7 @@ export function scanBody(
   rules: readonly SecretRule[],
   actionFor: (rule: SecretRule) => GuardrailAction,
   salt: string,
-  opts: { messages?: readonly Range[]; raw?: boolean } = {},
+  opts: { messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean } = {},
 ): GuardrailHit[] {
   const action = (r: SecretRule): GuardrailAction => (r.entropyOnly ? 'warn' : actionFor(r));
   const historyRules = rules.filter((r) => action(r) !== 'warn');
@@ -363,7 +373,7 @@ export function scanBody(
   const hits: GuardrailHit[] = [];
   const seen = new Set<string>();
   for (const region of regions) {
-    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, ...(region.messages ? { messages: region.messages } : {}) })) {
+    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, ...(region.messages ? { messages: region.messages } : {}) })) {
       const valueHmac = pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;

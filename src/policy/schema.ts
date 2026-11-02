@@ -97,7 +97,13 @@ const guardrails = z.strictObject({
       taintTtlHours: z.number().positive().default(24),
     })
     .prefault({}),
-  pii: z.strictObject({ product: z.enum(['block', 'warn', 'redact']).default('redact') }).prefault({}),
+  pii: z
+    .strictObject({
+      product: z.enum(['block', 'warn', 'redact']).default('redact'),
+      /** Match PII only inside quoted strings: a card number or PESEL sent as a bare JSON number is then left alone. */
+      quotedOnly: z.boolean().default(false),
+    })
+    .prefault({}),
 });
 
 const failure = z.strictObject({

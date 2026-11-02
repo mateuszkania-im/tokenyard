@@ -26,3 +26,18 @@ test('PII: PESEL checksum, IBAN mod-97 and Luhn reject near-misses', () => {
   expect(spans('card 4111111111111112 ok')).toEqual([]);
   expect(spans('order 12345 shipped')).toEqual([]);
 });
+
+test('bare JSON numbers: valid cards and PESELs are found; signed, decimal, exponent forms and epoch-ms card-like numbers are not', () => {
+  const found = (json: string, quotedOnly = false): Array<[string, string]> => findSpans(Buffer.from(json), PII_RULES, { quotedOnly }).map((s) => [s.rule.id, s.value]);
+  expect(found('{"card":4111111111111111}')).toEqual([['card-number', '4111111111111111']]);
+  expect(found('{"p":44051401359}')).toEqual([['pesel', '44051401359']]);
+  expect(found('[4111111111111112,44051401358]')).toEqual([]);
+  expect(found('[-4111111111111111,1.4111111111111111,4111111111111111e2,4111111111111111E2,-44051401359]')).toEqual([]);
+  // A 13-digit millisecond timestamp that passes Luhn is not a card; the same digits quoted are.
+  let ts = 1_730_000_000_000;
+  while (!luhnValid(String(ts))) ts++;
+  expect(found(`{"ts":${ts}}`)).toEqual([]);
+  expect(found(`{"ts":"${ts}"}`)).toEqual([['card-number', String(ts)]]);
+  // guardrails.pii.quotedOnly: bare numbers are skipped, quoted ones still match.
+  expect(found('{"card":4111111111111111,"q":"4111111111111111"}', true)).toEqual([['card-number', '4111111111111111']]);
+});

@@ -61,7 +61,7 @@ export const PII_RULES: readonly SecretRule[] = Object.freeze([
     source: 'tokenyard (checksum per the PESEL specification)',
     licence: TOKENYARD,
     validate: peselValid,
-    quotedOnly: true,
+    bareNumber: () => true,
   },
   {
     id: 'iban',
@@ -78,6 +78,7 @@ export const PII_RULES: readonly SecretRule[] = Object.freeze([
     source: 'tokenyard (Luhn)',
     licence: TOKENYARD,
     validate: luhnValid,
-    quotedOnly: true,
+    // A 13-digit integer in the epoch-milliseconds range (2001 to 2036) is a timestamp, not a card; about one in ten passes Luhn.
+    bareNumber: (d: string) => !(d.length === 13 && Number(d) >= 1_000_000_000_000 && Number(d) <= 2_100_000_000_000),
   },
 ]);

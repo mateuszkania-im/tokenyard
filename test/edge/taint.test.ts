@@ -184,23 +184,35 @@ test('duplicate keys a provider could read differently are scanned as the last t
   expect(g.up.got).toHaveLength(0);
 });
 
-test('product route: PII rules skip bare numbers (signed, decimal, exponent, timestamps); a quoted card is still redacted', async () => {
+test('product route: bare card and PESEL numbers are redacted to strings; signed, decimal, exponent and epoch-ms numbers are not', async () => {
   const g = await gateway(createMemoryStore({ clock: Date.now }));
   const svc = { ...authHeaders, 'x-api-key': SERVICE_KEY };
   // A 13-digit millisecond timestamp that passes Luhn, found at run time.
   let ts = 1_730_000_000_000;
   const luhn = (s: string): boolean => [...s].reverse().reduce((acc, ch, i) => acc + (i % 2 ? ((Number(ch) * 2) % 10) + Math.floor((Number(ch) * 2) / 10) : Number(ch)), 0) % 10 === 0;
   while (!luhn(String(ts))) ts++;
-  const numbers = `{"a":-4111111111111111,"b":1.4111111111111111,"c":4111111111111111e2,"d":${ts},"e":44051401359}`;
+  const kept = `"a":-4111111111111111,"b":1.4111111111111111,"c":4111111111111111e2,"d":${ts}`;
   const b = Buffer.from(
-    `{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"card 4111111111111111"},{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"n","input":${numbers}}]},{"role":"user","content":"go"}]}`,
+    `{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"card 4111111111111111"},{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"n","input":{${kept},"card":4111111111111111,"p":44051401359}}]},{"role":"user","content":"go"}]}`,
   );
   const res = await post(g.url, b, 'p2', svc);
   expect(res.status).toBe(200);
   const sent = g.up.got[0]?.body.toString() ?? '';
-  expect(sent).toContain(numbers);
+  expect(sent).toContain(kept);
   expect(sent).toContain('card [REDACTED:CARD_NUMBER_1]');
+  expect(sent).toContain('"card":"[REDACTED:CARD_NUMBER_1]","p":"[REDACTED:PESEL_1]"');
   expect(() => JSON.parse(sent)).not.toThrow();
+});
+
+test('guardrails.pii.quotedOnly: true leaves bare numbers alone on a product route (default false redacts them)', async () => {
+  const svc = { ...authHeaders, 'x-api-key': SERVICE_KEY };
+  const b = Buffer.from(`{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":[{"type":"text","text":"x","n":4111111111111111}]}]}`);
+  const byDefault = await gateway(createMemoryStore({ clock: Date.now }));
+  expect((await post(byDefault.url, b, 'p3', svc)).status).toBe(200);
+  expect(byDefault.up.got[0]?.body.toString()).toContain('"n":"[REDACTED:CARD_NUMBER_1]"');
+  const quoted = await gateway(createMemoryStore({ clock: Date.now }), { edit: (p) => void Object.assign(p.guardrails.pii, { quotedOnly: true }) });
+  expect((await post(quoted.url, b, 'p3', svc)).status).toBe(200);
+  expect(quoted.up.got[0]?.body.toString()).toContain('"n":4111111111111111');
 });
 
 test('history hit of a value that was only warned does not block', async () => {

@@ -47,11 +47,17 @@ test('redact a key split across two text blocks: placeholder in the first, the r
   expect(parsed.messages[0]?.content.map((c) => c.text)).toEqual(['key [REDACTED:AWS_ACCESS_KEY_ID_1]', ' end']);
 });
 
-test('redact a secret in a token outside quotes: the placeholder is written as a JSON string; bare numbers are not PII', () => {
+test('redact a secret in a token outside quotes: the placeholder is written as a JSON string; a bare card or PESEL token is replaced whole', () => {
   const lenient = Buffer.from(`{"note":${AWS},"n":1}`);
   const out = redactProductBody(lenient, redactionHits(findSpans(lenient, DEFAULT_RULES)));
   expect(JSON.parse(out.toString())).toEqual({ note: '[REDACTED:AWS_ACCESS_KEY_ID_1]', n: 1 });
-  // PII rules skip bare numbers (a timestamp or an id is not a card), quoted ones are still redacted.
-  const b = Buffer.from('{"card":4111111111111111,"quoted":"4111111111111111"}');
-  expect(JSON.parse(redactProductBody(b, redactionHits(findSpans(b, PII_RULES))).toString())).toEqual({ card: 4111111111111111, quoted: '[REDACTED:CARD_NUMBER_1]' });
+  // A card or PESEL sent as a JSON number: the whole token becomes a quoted placeholder; other numbers stay.
+  const b = Buffer.from('{"card":4111111111111111,"quoted":"4111111111111111","p":44051401359,"neg":-4111111111111111,"n":7}');
+  expect(JSON.parse(redactProductBody(b, redactionHits(findSpans(b, PII_RULES))).toString())).toEqual({
+    card: '[REDACTED:CARD_NUMBER_1]',
+    quoted: '[REDACTED:CARD_NUMBER_1]',
+    p: '[REDACTED:PESEL_1]',
+    neg: -4111111111111111,
+    n: 7,
+  });
 });

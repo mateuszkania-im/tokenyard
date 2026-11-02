@@ -892,7 +892,7 @@ var init_pii = __esm({
         source: "tokenyard (checksum per the PESEL specification)",
         licence: TOKENYARD,
         validate: peselValid,
-        quotedOnly: true
+        bareNumber: () => true
       },
       {
         id: "iban",
@@ -909,7 +909,8 @@ var init_pii = __esm({
         source: "tokenyard (Luhn)",
         licence: TOKENYARD,
         validate: luhnValid,
-        quotedOnly: true
+        // A 13-digit integer in the epoch-milliseconds range (2001 to 2036) is a timestamp, not a card; about one in ten passes Luhn.
+        bareNumber: (d) => !(d.length === 13 && Number(d) >= 1e12 && Number(d) <= 21e11)
       }
     ]);
   }
@@ -1216,7 +1217,12 @@ function globalOf(rule) {
   }
   return re;
 }
-function matchView(view, rule, crossingOnly, out) {
+function bareNumberOk(body, rule, value, segments, quotedOnly) {
+  if (quotedOnly || !rule.bareNumber || segments.length !== 1 || !/^\d+$/.test(value)) return false;
+  const g = segments[0];
+  return isDelimiter(g.start > 0 ? body[g.start - 1] : void 0) && isDelimiter(body[g.end]) && rule.bareNumber(value);
+}
+function matchView(view, rule, crossingOnly, out, body, quotedOnly) {
   const text = view.text;
   if (rule.keywords.length > 0 && !rule.keywords.some((k) => text.includes(k))) return;
   const re = globalOf(rule);
@@ -1235,23 +1241,24 @@ function matchView(view, rule, crossingOnly, out) {
     const first2 = segments[0];
     const last = segments[segments.length - 1];
     if (first2 === void 0 || last === void 0 || crossingOnly && segments.length < 2) continue;
-    if (rule.quotedOnly && segments.some((g) => g.bare)) continue;
+    if (rule.bareNumber && segments.some((g) => g.bare) && !bareNumberOk(body, rule, value, segments, quotedOnly)) continue;
     out.push({ rule, start: first2.start, end: last.end, value, segments });
   }
 }
 function findSpans(body, rules, opts = {}) {
+  const q = opts.quotedOnly === true;
   const range = opts.range ?? { start: 0, end: body.length };
   const out = [];
   if (rules.length === 0 || range.end <= range.start) return out;
   const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
   for (const rule of rules) {
     const start = out.length;
-    matchView(all, rule, false, out);
-    if (joined) matchView(joined, rule, true, out);
+    matchView(all, rule, false, out, body, q);
+    if (joined) matchView(joined, rule, true, out, body, q);
     if (decoded) {
       const before = out.length;
       const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
-      matchView(decoded, rule, false, out);
+      matchView(decoded, rule, false, out, body, q);
       const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
       out.push(...fresh);
     }
@@ -1281,7 +1288,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const hits = [];
   const seen = /* @__PURE__ */ new Set();
   for (const region of regions) {
-    for (const s2 of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, ...region.messages ? { messages: region.messages } : {} })) {
+    for (const s2 of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, ...region.messages ? { messages: region.messages } : {} })) {
       const valueHmac = pseudonym(salt, s2.value);
       const id = `${s2.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
@@ -1293,7 +1300,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, globalRegex;
+var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, globalRegex, isDelimiter;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
@@ -1368,6 +1375,7 @@ var init_scan = __esm({
     isWs = (c) => c === 32 || c === 9 || c === 10 || c === 13;
     isStructural = (c) => c === 123 || c === 125 || c === 91 || c === 93 || c === 44 || c === 58;
     globalRegex = /* @__PURE__ */ new WeakMap();
+    isDelimiter = (c) => c === void 0 || isWs(c) || isStructural(c);
   }
 });
 
@@ -29512,7 +29520,11 @@ var init_schema = __esm({
         entropyOnly: external_exports.enum(["warn"]).default("warn"),
         taintTtlHours: external_exports.number().positive().default(24)
       }).prefault({}),
-      pii: external_exports.strictObject({ product: external_exports.enum(["block", "warn", "redact"]).default("redact") }).prefault({})
+      pii: external_exports.strictObject({
+        product: external_exports.enum(["block", "warn", "redact"]).default("redact"),
+        /** Match PII only inside quoted strings: a card number or PESEL sent as a bare JSON number is then left alone. */
+        quotedOnly: external_exports.boolean().default(false)
+      }).prefault({})
     });
     failure2 = external_exports.strictObject({
       // Both fields stay optional on purpose: validate.ts requires `budgets` to be stated, and a server tool without a price
@@ -57431,9 +57443,9 @@ function scanGuardrails(policy2, product, body, x, salt) {
   const opts = { ...x.messages && !untrusted ? { messages: x.messages } : {}, raw: untrusted };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => product ? g.secrets.product : g.secrets.codingAgent, salt, opts);
   if (!product) return { hits, redactions: [] };
-  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
+  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, { ...opts, quotedOnly: g.pii.quotedOnly }));
   const redactRules = [...g.secrets.product === "redact" ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : [], ...g.pii.product === "redact" ? PII_RULES : []];
-  const redactions = redactionHits(findSpans(body, redactRules, opts));
+  const redactions = redactionHits(findSpans(body, redactRules, { ...opts, quotedOnly: g.pii.quotedOnly }));
   return { hits, redactions };
 }
 async function handle(deps, failure3, runtime, held, id, req, res) {
