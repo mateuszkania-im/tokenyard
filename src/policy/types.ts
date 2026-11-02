@@ -162,6 +162,7 @@ export interface GuardrailHit {
 }
 
 export interface Plan {
+  id: string;                          // not in spec 6.5: the request id, which is the reservation id admit and settle use
   policyRevision: string;
   route: string | null;                // null: no route matched
   chain: Array<{ provider: string; upstreamModel: string; rewritesModel: boolean }>;

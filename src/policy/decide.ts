@@ -2,7 +2,7 @@
 // (weighted splits hash the session or request id). Same arguments, same plan: replay over traces relies on it.
 import { createHash } from 'node:crypto';
 import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd, worstCaseMicroUsd } from '../limits/estimator.js';
-import { budgetKey, gcraKey, streamKey, taintKey } from '../limits/keys.js';
+import { budgetKey, gcraKey, keyTaintKey, streamKey, taintKey } from '../limits/keys.js';
 import { lookupModel, type ModelPrice, type PriceTable } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { findAuthzRoute, findRoute, globTest } from './match.js';
@@ -70,8 +70,8 @@ export function buildFeatures(
   };
 }
 
-/** UTC window containing `ts`: day, ISO week (Monday start) or calendar month. */
-function windowOf(window: 'day' | 'week' | 'month', ts: number): { start: string; end: string } {
+/** UTC window containing `ts`: day, ISO week (Monday start) or calendar month. `end` is the next window's start, ISO. */
+export function windowOf(window: 'day' | 'week' | 'month', ts: number): { start: string; end: string } {
   const d = new Date(ts);
   const y = d.getUTCFullYear();
   const m = d.getUTCMonth();
@@ -91,7 +91,15 @@ function windowOf(window: 'day' | 'week' | 'month', ts: number): { start: string
   return { start: new Date(start).toISOString().slice(0, 10), end: new Date(end).toISOString() };
 }
 
-function scopeValue(scope: CompiledBudget['scope'], f: RequestFeatures): string | null {
+/** The parts of a request (or of a trace record, for warm-up) a level's scope reads. */
+export interface ScopeSource {
+  tenant: string;
+  team: string | null;
+  keyId: string;
+  attribution: { repo: string | null; session: string | null };
+}
+
+function scopeValue(scope: CompiledBudget['scope'], f: ScopeSource): string | null {
   switch (scope) {
     case 'tenant':
       return f.tenant;
@@ -104,6 +112,17 @@ function scopeValue(scope: CompiledBudget['scope'], f: RequestFeatures): string 
     case 'session':
       return f.attribution.session;
   }
+}
+
+/**
+ * Scope value of one budget, rate or stream level, or null to skip it. Key-derived values (a key without a team) skip;
+ * a missing client header (session, repo) on an enforced level is charged to UNATTRIBUTED, so leaving it out dodges
+ * nothing. Rate and stream levels always enforce.
+ */
+export function levelValue(scope: CompiledBudget['scope'], f: ScopeSource, enforce: boolean): string | null {
+  const value = scopeValue(scope, f);
+  if (value !== null) return value;
+  return (scope === 'session' || scope === 'repo') && enforce ? UNATTRIBUTED : null;
 }
 
 /**
@@ -149,12 +168,12 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     session === null && !hits.some((h) => h.action === 'block')
       ? null
       : {
-          key: taintKey(f.tenant, session ?? f.keyId),
+          key: session === null ? keyTaintKey(f.tenant, f.keyId) : taintKey(f.tenant, session),
           check: [...new Set(hits.filter((h) => h.where === 'history').map((h) => h.valueHmac))],
           add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac })),
           ttlMs: Math.round(policy.guardrails.secrets.taintTtlHours * 3_600_000),
         };
-  const plan: Plan = { policyRevision: policy.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
+  const plan: Plan = { id: f.id, policyRevision: policy.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
 
   const route = findRoute(policy, f);
   if (!route) return { ...plan, preBlock: 'no-route' };
@@ -192,8 +211,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const levels = policy.budgets.flatMap((b) => {
     // A key without a team skips team levels; a missing session or repo header is charged to UNATTRIBUTED on enforced
     // levels, so leaving a header out cannot dodge a budget.
-    const headerScoped = b.scope === 'session' || b.scope === 'repo';
-    const value = scopeValue(b.scope, f) ?? (headerScoped && b.enforce ? UNATTRIBUTED : null);
+    const value = levelValue(b.scope, f, b.enforce);
     if (value === null) return [];
     const w = b.window === null ? null : windowOf(b.window, f.ts);
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce: b.enforce, resetsAt: w?.end ?? null }];
@@ -229,12 +247,12 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
 
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
   plan.rateChecks = policy.rateLimits.flatMap((l) => {
-    const value = scopeValue(l.scope, f);
+    const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
   });
   // Slots deliberately apply to every messages request, streamed or not: both hold an upstream slot (spec 5.3, 11).
   plan.streamSlots = policy.streamLimits.flatMap((l) => {
-    const value = scopeValue(l.scope, f);
+    const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: streamKey(f.tenant, l.name, value), max: l.max }];
   });
   return plan;

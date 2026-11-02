@@ -28574,7 +28574,10 @@ function streamKey(tenant, limit, scopeValue2) {
   return `${prefix(tenant)}:st:${part(limit)}:${part(scopeValue2)}`;
 }
 function taintKey(tenant, session) {
-  return `${prefix(tenant)}:taint:${part(session)}`;
+  return `${prefix(tenant)}:taint:s:${part(session)}`;
+}
+function keyTaintKey(tenant, keyId) {
+  return `${prefix(tenant)}:taint:k:${part(keyId)}`;
 }
 var part, prefix;
 var init_keys = __esm({
@@ -28834,6 +28837,11 @@ function scopeValue(scope, f) {
       return f.attribution.session;
   }
 }
+function levelValue(scope, f, enforce) {
+  const value = scopeValue(scope, f);
+  if (value !== null) return value;
+  return (scope === "session" || scope === "repo") && enforce ? UNATTRIBUTED : null;
+}
 function orderChain(route2, seed) {
   const names = route2.chain.map((e) => e.provider);
   const total = route2.chain.reduce((s, e) => s + (e.weight ?? 0), 0);
@@ -28862,12 +28870,12 @@ function decide(policy2, f) {
   const lastTurnBlocks = hits.filter((h) => h.action === "block" && h.where === "last-turn");
   const session = f.attribution.session;
   const taint = session === null && !hits.some((h) => h.action === "block") ? null : {
-    key: taintKey(f.tenant, session ?? f.keyId),
+    key: session === null ? keyTaintKey(f.tenant, f.keyId) : taintKey(f.tenant, session),
     check: [...new Set(hits.filter((h) => h.where === "history").map((h) => h.valueHmac))],
     add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac })),
     ttlMs: Math.round(policy2.guardrails.secrets.taintTtlHours * 36e5)
   };
-  const plan = { policyRevision: policy2.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
+  const plan = { id: f.id, policyRevision: policy2.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
   const route2 = findRoute(policy2, f);
   if (!route2) return { ...plan, preBlock: "no-route" };
   plan.route = route2.name;
@@ -28894,8 +28902,7 @@ function decide(policy2, f) {
     warnings.push({ kind: "unpriced", model: upstreamModel });
   }
   const levels = policy2.budgets.flatMap((b) => {
-    const headerScoped = b.scope === "session" || b.scope === "repo";
-    const value = scopeValue(b.scope, f) ?? (headerScoped && b.enforce ? UNATTRIBUTED : null);
+    const value = levelValue(b.scope, f, b.enforce);
     if (value === null) return [];
     const w = b.window === null ? null : windowOf(b.window, f.ts);
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce: b.enforce, resetsAt: w?.end ?? null }];
@@ -28925,11 +28932,11 @@ function decide(policy2, f) {
   }
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
   plan.rateChecks = policy2.rateLimits.flatMap((l) => {
-    const value = scopeValue(l.scope, f);
+    const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
   });
   plan.streamSlots = policy2.streamLimits.flatMap((l) => {
-    const value = scopeValue(l.scope, f);
+    const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: streamKey(f.tenant, l.name, value), max: l.max }];
   });
   return plan;

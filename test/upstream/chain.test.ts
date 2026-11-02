@@ -50,6 +50,7 @@ async function rig(sc: { a?: Scenario; b?: Scenario; c?: Scenario } = {}, o: { f
     b,
     c,
     plan: (names) => ({
+      id: 'req_1',
       policyRevision: 'r',
       route: 'claude-code',
       chain: names.map((provider) => ({ provider, upstreamModel: 'claude-sonnet-5-5', rewritesModel: false })),

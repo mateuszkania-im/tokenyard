@@ -249,7 +249,7 @@ test('taint plan: session key, history hits checked, last-turn block hits added,
   const p = compile(BUDGETS);
   expect(decide(p, features()).taint).toBeNull();
   const withSession = decide(p, features({ attribution: { session: 's1' } }));
-  expect(withSession.taint).toEqual({ key: 'ty:{acme}:taint:s1', check: [], add: [], ttlMs: 24 * 3_600_000 });
+  expect(withSession.taint).toEqual({ key: 'ty:{acme}:taint:s:s1', check: [], add: [], ttlMs: 24 * 3_600_000 });
   const hits = decide(p, features({
     guardrail: {
       hits: [
@@ -259,10 +259,47 @@ test('taint plan: session key, history hits checked, last-turn block hits added,
       ],
     },
   }));
-  expect(hits.taint).toEqual({ key: 'ty:{acme}:taint:k1', check: ['h-hist'], add: [{ rule: 'gh', valueHmac: 'h-last' }], ttlMs: 24 * 3_600_000 });
+  expect(hits.taint).toEqual({ key: 'ty:{acme}:taint:k:k1', check: ['h-hist'], add: [{ rule: 'gh', valueHmac: 'h-last' }], ttlMs: 24 * 3_600_000 });
   expect(hits.preBlock).toBe('secret');
   expect(hits.reservations).toEqual([]);
   expect(hits.warnings).toEqual([{ kind: 'guardrail', rule: 'entropy', where: 'last-turn' }]);
+});
+
+test('a session id equal to a key id cannot reach that key taint set', () => {
+  const p = compile(BUDGETS);
+  const block = [{ rule: 'gh', action: 'block' as const, valueHmac: 'h', where: 'history' as const }];
+  const byKey = decide(p, features({ keyId: 'k1', guardrail: { hits: block } })).taint?.key;
+  const bySession = decide(p, features({ keyId: 'k2', attribution: { session: 'k1' }, guardrail: { hits: block } })).taint?.key;
+  expect(byKey).toBe('ty:{acme}:taint:k:k1');
+  expect(bySession).toBe('ty:{acme}:taint:s:k1');
+  expect(bySession).not.toBe(byKey);
+});
+
+test('the plan carries the request id as its reservation id', () => {
+  expect(decide(compile(BUDGETS), features({ id: 'req_42' })).id).toBe('req_42');
+  expect(decide(compile(`${HEAD}routes: []\n`), features({ id: 'req_43' })).id).toBe('req_43');
+});
+
+test('rate and stream levels scoped to a missing header use "(unattributed)"; a key without a team skips team levels', () => {
+  const base = compile(BUDGETS);
+  // The schema scopes rate and stream limits to tenant, team or key today; this guards decide if repo or session is added.
+  const p: CompiledPolicy = {
+    ...base,
+    rateLimits: [
+      { name: 'sess-rpm', scope: 'session' as 'key', emissionMs: 1_000, burst: 1 },
+      { name: 'repo-rpm', scope: 'repo' as 'key', emissionMs: 1_000, burst: 1 },
+      { name: 'team-rpm', scope: 'team', emissionMs: 1_000, burst: 1 },
+    ],
+    streamLimits: [
+      { name: 'sess-st', scope: 'session' as 'key', max: 2 },
+      { name: 'team-st', scope: 'team', max: 2 },
+    ],
+  };
+  const plan = decide(p, features({ team: null }));
+  expect(plan.rateChecks.map((r) => r.key)).toEqual(['ty:{acme}:g:sess-rpm:(unattributed)', 'ty:{acme}:g:repo-rpm:(unattributed)']);
+  expect(plan.streamSlots.map((s) => s.key)).toEqual(['ty:{acme}:st:sess-st:(unattributed)']);
+  const named = decide(p, features({ attribution: { session: 's1', repo: 'acme/web' } }));
+  expect(named.rateChecks.map((r) => r.key)).toEqual(['ty:{acme}:g:sess-rpm:s1', 'ty:{acme}:g:repo-rpm:acme%2Fweb', 'ty:{acme}:g:team-rpm:web']);
 });
 
 test('candidate policy produces its own plan for the trace', () => {
