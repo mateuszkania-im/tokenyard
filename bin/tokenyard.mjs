@@ -49,6 +49,17 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
+// src/guardrails/hmac.ts
+import { createHmac } from "node:crypto";
+function pseudonym(salt, value) {
+  return createHmac("sha256", salt).update(value).digest("hex").slice(0, 32);
+}
+var init_hmac = __esm({
+  "src/guardrails/hmac.ts"() {
+    "use strict";
+  }
+});
+
 // src/mock/cache-sim.ts
 import { createHash } from "node:crypto";
 function canon(v) {
@@ -401,6 +412,165 @@ var init_anthropic = __esm({
 data: ${JSON.stringify(e.data)}
 
 `;
+  }
+});
+
+// src/edge/ulid.ts
+var ulid_exports = {};
+__export(ulid_exports, {
+  ulid: () => ulid
+});
+import { randomBytes } from "node:crypto";
+function ulid(nowMs = Date.now()) {
+  let t = Math.floor(nowMs);
+  let time3 = "";
+  for (let i = 0; i < 10; i++) {
+    time3 = ALPHABET[t % 32] + time3;
+    t = Math.floor(t / 32);
+  }
+  let r = BigInt(`0x${randomBytes(10).toString("hex")}`);
+  let rand = "";
+  for (let i = 0; i < 16; i++) {
+    rand = ALPHABET[Number(r & 31n)] + rand;
+    r >>= 5n;
+  }
+  return time3 + rand;
+}
+var ALPHABET;
+var init_ulid = __esm({
+  "src/edge/ulid.ts"() {
+    "use strict";
+    ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  }
+});
+
+// src/ledger/writer.ts
+var writer_exports = {};
+__export(writer_exports, {
+  TraceWriter: () => TraceWriter,
+  defaultInstanceId: () => defaultInstanceId,
+  safeTenantDir: () => safeTenantDir
+});
+import { createHash as createHash2 } from "node:crypto";
+import { appendFile, mkdir } from "node:fs/promises";
+import { join as join2 } from "node:path";
+function defaultInstanceId(hostname3, startedAtMs) {
+  return createHash2("sha256").update(`${hostname3}
+${startedAtMs}`).digest("hex").slice(0, 8);
+}
+function safeTenantDir(tenant) {
+  const s = tenant.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, (dots) => "_".repeat(dots.length));
+  return s === "" ? "_" : s;
+}
+var TraceWriter;
+var init_writer = __esm({
+  "src/ledger/writer.ts"() {
+    "use strict";
+    TraceWriter = class {
+      constructor(o) {
+        this.o = o;
+      }
+      o;
+      dropped = 0;
+      seq = 0;
+      queue = [];
+      queuedRequests = 0;
+      opened = /* @__PURE__ */ new Set();
+      tenants = /* @__PURE__ */ new Set();
+      draining = null;
+      closed = false;
+      pathFor(tenant, nowMs) {
+        const iso = new Date(nowMs).toISOString();
+        return { path: join2(this.o.dir, safeTenantDir(tenant), iso.slice(0, 10), `${iso.slice(11, 13)}.${this.o.instanceId}.ndjson`) };
+      }
+      /** Queues one request record. Never waits on disk; false when the queue was full (the record is dropped, its seq is still used so the gap shows). */
+      write(r) {
+        const seq = ++this.seq;
+        if (this.closed || this.queuedRequests >= this.o.queueMax) {
+          this.dropped++;
+          return false;
+        }
+        const at = this.o.clock();
+        const { path: path2 } = this.pathFor(r.tenant, at);
+        this.tenants.add(r.tenant);
+        this.queuedRequests++;
+        this.queue.push({ path: path2, tenant: r.tenant, at, request: true, line: { ...r, instance: this.o.instanceId, seq } });
+        this.kick();
+        return true;
+      }
+      control(kind) {
+        const now = this.o.clock();
+        for (const tenant of this.tenants) {
+          const { path: path2 } = this.pathFor(tenant, now);
+          const line = { v: 1, kind, instance: this.o.instanceId, ts: new Date(now).toISOString(), seq: this.seq };
+          this.queue.push({ path: path2, tenant, at: now, request: false, line: { ...line } });
+        }
+        this.kick();
+      }
+      /** Called from the sweeper tick (Task 13) and by a 60 s timer in `serve` until then. */
+      heartbeat() {
+        if (!this.closed) this.control("heartbeat");
+      }
+      kick() {
+        this.draining ??= this.drain().finally(() => {
+          this.draining = null;
+          if (this.queue.length > 0) this.kick();
+        });
+      }
+      async drain() {
+        await Promise.resolve();
+        const batch = this.queue;
+        this.queue = [];
+        this.queuedRequests = 0;
+        const byPath = /* @__PURE__ */ new Map();
+        for (const p of batch) {
+          const list = byPath.get(p.path);
+          if (list) list.push(p);
+          else byPath.set(p.path, [p]);
+        }
+        for (const [path2, items] of byPath) {
+          const first2 = items[0];
+          if (!first2) continue;
+          let text = "";
+          if (!this.opened.has(path2)) {
+            const firstSeq = items.find((i) => i.request)?.line.seq;
+            const seg = {
+              v: 1,
+              kind: "segment",
+              instance: this.o.instanceId,
+              startedAt: new Date(first2.at).toISOString(),
+              firstSeq: typeof firstSeq === "number" ? firstSeq : this.seq + 1
+            };
+            text += `${JSON.stringify(seg)}
+`;
+            this.opened.add(path2);
+          }
+          text += items.map((i) => `${JSON.stringify(i.line)}
+`).join("");
+          try {
+            await mkdir(join2(path2, ".."), { recursive: true });
+            await appendFile(path2, text);
+          } catch {
+            this.opened.delete(path2);
+            this.dropped += items.filter((i) => i.request).length;
+          }
+        }
+      }
+      /** Resolves when everything queued so far has been written. */
+      async flushed() {
+        while (this.draining || this.queue.length > 0) {
+          if (!this.draining) this.kick();
+          await this.draining;
+        }
+      }
+      /** Writes a shutdown record to every tenant file and drains the queue. */
+      async close() {
+        if (this.closed) return;
+        this.control("shutdown");
+        this.closed = true;
+        await this.flushed();
+      }
+    };
   }
 });
 
@@ -2414,7 +2584,7 @@ var require_YAMLMap = __commonJS({
       static from(schema, obj, ctx) {
         const { keepUndefined, replacer } = ctx;
         const map2 = new this(schema);
-        const add = (key, value) => {
+        const add2 = (key, value) => {
           if (typeof replacer === "function")
             value = replacer.call(obj, key, value);
           else if (Array.isArray(replacer) && !replacer.includes(key))
@@ -2424,10 +2594,10 @@ var require_YAMLMap = __commonJS({
         };
         if (obj instanceof Map) {
           for (const [key, value] of obj)
-            add(key, value);
+            add2(key, value);
         } else if (obj && typeof obj === "object") {
           for (const key of Object.keys(obj))
-            add(key, obj[key]);
+            add2(key, obj[key]);
         }
         if (typeof schema.sortMapEntries === "function") {
           map2.items.sort(schema.sortMapEntries);
@@ -9147,7 +9317,7 @@ __export(regexes_exports, {
   sha512_hex: () => sha512_hex,
   string: () => string,
   time: () => time,
-  ulid: () => ulid,
+  ulid: () => ulid2,
   undefined: () => _undefined,
   unicodeEmail: () => unicodeEmail,
   uppercase: () => uppercase,
@@ -9188,13 +9358,13 @@ function fixedBase64(bodyLength, padding) {
 function fixedBase64url(length) {
   return new RegExp(`^[A-Za-z0-9_-]{${length}}$`);
 }
-var cuid, cuid2, ulid, xid, ksuid, nanoid, duration, extendedDuration, guid, uuid, uuid4, uuid6, uuid7, email, html5Email, rfc5322Email, unicodeEmail, idnEmail, browserEmail, _emoji, ipv4, ipv6, mac, cidrv4, cidrv6, base64, base64url, hostname, domain, httpProtocol, e164, creditCard, currencyCode, iban, dateSource, date, anyString, string, bigint, integer, number, boolean, _null, _undefined, lowercase, uppercase, hex, md5_hex, md5_base64, md5_base64url, sha1_hex, sha1_base64, sha1_base64url, sha256_hex, sha256_base64, sha256_base64url, sha384_hex, sha384_base64, sha384_base64url, sha512_hex, sha512_base64, sha512_base64url;
+var cuid, cuid2, ulid2, xid, ksuid, nanoid, duration, extendedDuration, guid, uuid, uuid4, uuid6, uuid7, email, html5Email, rfc5322Email, unicodeEmail, idnEmail, browserEmail, _emoji, ipv4, ipv6, mac, cidrv4, cidrv6, base64, base64url, hostname, domain, httpProtocol, e164, creditCard, currencyCode, iban, dateSource, date, anyString, string, bigint, integer, number, boolean, _null, _undefined, lowercase, uppercase, hex, md5_hex, md5_base64, md5_base64url, sha1_hex, sha1_base64, sha1_base64url, sha256_hex, sha256_base64, sha256_base64url, sha384_hex, sha384_base64, sha384_base64url, sha512_hex, sha512_base64, sha512_base64url;
 var init_regexes = __esm({
   "node_modules/zod/v4/core/regexes.js"() {
     init_util();
     cuid = /^[cC][0-9a-z]{6,}$/;
     cuid2 = /^[0-9a-z]+$/;
-    ulid = /^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$/;
+    ulid2 = /^[0-7][0-9A-HJKMNP-TV-Za-hjkmnp-tv-z]{25}$/;
     xid = /^[0-9a-vA-V]{20}$/;
     ksuid = /^[A-Za-z0-9]{27}$/;
     nanoid = /^[a-zA-Z0-9_-]{21}$/;
@@ -10749,7 +10919,7 @@ var init_schemas = __esm({
       $ZodStringFormat.init(inst, def);
     });
     $ZodULID = /* @__PURE__ */ $constructor("$ZodULID", (inst, def) => {
-      def.pattern ?? (def.pattern = ulid);
+      def.pattern ?? (def.pattern = ulid2);
       $ZodStringFormat.init(inst, def);
     });
     $ZodXID = /* @__PURE__ */ $constructor("$ZodXID", (inst, def) => {
@@ -12274,11 +12444,11 @@ function cloneIssues(issues) {
 function isRecursive(inst, stack, resolve) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
-    return cached2 ? PROVEN : NONE;
+    return cached2 ? PROVEN : NONE2;
   if (stack.has(inst))
     return PROVEN;
   stack.add(inst);
-  let result = NONE;
+  let result = NONE2;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
       const answer = isRecursive(child, stack, resolve);
@@ -12287,12 +12457,12 @@ function isRecursive(inst, stack, resolve) {
     }
   };
   const shape = (sh, spread) => {
-    let answer = NONE;
+    let answer = NONE2;
     for (const key of Reflect.ownKeys(sh)) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve) : NONE;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve) : NONE2;
       if (child > answer)
         answer = child;
     }
@@ -12409,7 +12579,7 @@ function settle(inst, answer) {
   return answer;
 }
 function isRecursiveSchema(inst) {
-  return isRecursive(inst, /* @__PURE__ */ new Set(), true) !== NONE;
+  return isRecursive(inst, /* @__PURE__ */ new Set(), true) !== NONE2;
 }
 function bucketFor(state, inst) {
   let bucket = state.buckets.get(inst);
@@ -12426,7 +12596,7 @@ function isBackEdge(ctx, value) {
   const backEdges = ctx[STATE]?.backEdges;
   return backEdges !== void 0 && isRef(value) && backEdges.has(value);
 }
-var $ZodCyclicError, STATE, NO_ISSUES, recursive, NONE, ASSUMED, PROVEN, handoff, open, memo;
+var $ZodCyclicError, STATE, NO_ISSUES, recursive, NONE2, ASSUMED, PROVEN, handoff, open, memo;
 var init_memoizer = __esm({
   "node_modules/zod/v4/core/memoizer.js"() {
     init_util();
@@ -12439,20 +12609,20 @@ var init_memoizer = __esm({
     STATE = "~memo";
     NO_ISSUES = [];
     recursive = /* @__PURE__ */ new WeakMap();
-    NONE = 0;
+    NONE2 = 0;
     ASSUMED = 1;
     PROVEN = 2;
     open = [];
     memo = {
-      alloc(_inst, payload, empty) {
+      alloc(_inst, payload, empty2) {
         const bucket = handoff;
         if (!bucket)
-          return empty;
+          return empty2;
         handoff = void 0;
-        const entry = { value: empty, issues: null };
+        const entry = { value: empty2, issues: null };
         bucket.set(payload.value, entry);
         open.push(entry);
-        return empty;
+        return empty2;
       },
       guard(inst) {
         var _a3;
@@ -12481,7 +12651,7 @@ var init_memoizer = __esm({
           const wrapped = (payload, ctx) => {
             if (isRecursiveInst === void 0) {
               const walked = isRecursive(inst, /* @__PURE__ */ new Set(), false);
-              if (walked === NONE) {
+              if (walked === NONE2) {
                 inst._zod.parse = base;
                 if (inst._zod.run === wrapped)
                   inst._zod.run = base;
@@ -25308,7 +25478,7 @@ __export(schemas_exports2, {
   tuple: () => tuple,
   uint32: () => uint32,
   uint64: () => uint64,
-  ulid: () => ulid2,
+  ulid: () => ulid3,
   undefined: () => _undefined3,
   union: () => union,
   unknown: () => unknown,
@@ -25372,7 +25542,7 @@ function cuid3(params) {
 function cuid22(params) {
   return _cuid2(ZodCUID2, params);
 }
-function ulid2(params) {
+function ulid3(params) {
   return _ulid(ZodULID, params);
 }
 function xid2(params) {
@@ -28096,7 +28266,7 @@ __export(external_exports, {
   tuple: () => tuple,
   uint32: () => uint32,
   uint64: () => uint64,
-  ulid: () => ulid2,
+  ulid: () => ulid3,
   undefined: () => _undefined3,
   union: () => union,
   unknown: () => unknown,
@@ -28345,7 +28515,7 @@ var init_anthropic_usage = __esm({
         const usage = { ...this.usage };
         if (!this.deltaOutput) {
           usage.output = Math.ceil(this.chars / 4);
-          return { ...base, usage, source: this.sawStop ? "final" : "estimated" };
+          return this.sawStop ? { ...base, usage, source: "final", outputEstimated: true } : { ...base, usage, source: "estimated" };
         }
         return { ...base, usage, source: this.sawStop ? "final" : "partial" };
       }
@@ -28455,7 +28625,7 @@ var init_tee = __esm({
 });
 
 // src/surfaces/anthropic-messages.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 function emptyFeatures(bodyBytes, parseError) {
   return {
     model: null,
@@ -28501,7 +28671,7 @@ function extractAnthropicFeatures(body) {
   for (const m of messages) if (isObj3(m)) collectBlockTypes(m.content, types);
   const blockTypes = [...types];
   const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
-  const prefixHash = hasPrefix ? createHash2("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
+  const prefixHash = hasPrefix ? createHash3("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
   const thinking = parsed.thinking;
   return {
     model: typeof parsed.model === "string" ? parsed.model : null,
@@ -42520,7 +42690,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile, readFile, mkdir } = __require("node:fs/promises");
+    var { writeFile: writeFile2, readFile, mkdir: mkdir2 } = __require("node:fs/promises");
     var { dirname, resolve } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
@@ -42752,12 +42922,12 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         const resolvedPath = resolve(path2);
-        await mkdir(dirname(resolvedPath), { recursive: true });
+        await mkdir2(dirname(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
           snapshot
         }));
-        await writeFile(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
+        await writeFile2(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
       }
       /**
        * Clears all recorded snapshots
@@ -46354,7 +46524,7 @@ var require_cache2 = __commonJS({
 var require_decompress = __commonJS({
   "node_modules/undici/lib/interceptor/decompress.js"(exports, module) {
     "use strict";
-    var { createInflate, createGunzip, createBrotliDecompress, createZstdDecompress } = __require("node:zlib");
+    var { createInflate, createGunzip: createGunzip2, createBrotliDecompress, createZstdDecompress } = __require("node:zlib");
     var { pipeline: pipeline2, Transform: TransformStream2 } = __require("node:stream");
     var { InvalidArgumentError: InvalidArgumentError2, ResponseExceededMaxSizeError } = require_errors2();
     var DecoratorHandler = require_decorator_handler();
@@ -46415,8 +46585,8 @@ var require_decompress = __commonJS({
       }
     };
     var supportedEncodings = {
-      gzip: createGunzip,
-      "x-gzip": createGunzip,
+      gzip: createGunzip2,
+      "x-gzip": createGunzip2,
       br: createBrotliDecompress,
       deflate: createInflate,
       compress: createInflate,
@@ -54953,7 +55123,7 @@ var init_attribution = __esm({
 });
 
 // src/edge/auth.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 function extractCredentials(h) {
   const out = [];
   const own2 = first(h["x-tokenyard-key"])?.trim();
@@ -54965,7 +55135,7 @@ function extractCredentials(h) {
   return out;
 }
 function hashKey(v) {
-  return createHash3("sha256").update(v).digest("hex");
+  return createHash4("sha256").update(v).digest("hex");
 }
 var first;
 var init_auth = __esm({
@@ -55122,6 +55292,100 @@ var init_paths = __esm({
   }
 });
 
+// src/edge/trace-record.ts
+function parseClient(userAgent) {
+  const ua = userAgent ?? "";
+  const claude = /^claude-cli\/([^\s;()]+)/i.exec(ua);
+  if (claude) return { agent: "claude-code", version: claude[1] ?? null };
+  const codex = /^codex[\w-]*\/([^\s;()]+)/i.exec(ua);
+  if (codex) return { agent: "codex", version: codex[1] ?? null };
+  return { agent: "other", version: null };
+}
+function buildTraceRecord(o, salt) {
+  const hmac = (v) => v === null ? null : pseudonym(salt, v);
+  const u = o.usage;
+  const a = o.attribution;
+  return {
+    v: 1,
+    kind: "request",
+    id: o.id,
+    ts: new Date(o.startedAt).toISOString(),
+    tenant: o.key.tenant,
+    team: o.key.team,
+    keyId: o.key.keyId,
+    traffic: o.key.kind === "service" ? "product" : "coding-agent",
+    billing: o.key.billing,
+    surface: o.surface,
+    client: o.client,
+    attribution: {
+      session: hmac(a.session),
+      agent: hmac(a.agent),
+      parentAgent: hmac(a.parentAgent),
+      promptId: hmac(a.promptId),
+      requestClass: a.requestClass,
+      agentType: a.agentType,
+      repo: a.repo,
+      branch: a.branch,
+      ticket: a.ticket,
+      feature: a.feature
+    },
+    features: {
+      model: o.features.model ?? u?.responseModel ?? "",
+      stream: o.features.stream,
+      // Until the estimator lands (Task 10) the request body size is the bound: one token per byte at most.
+      inputTokensBound: o.features.bodyBytes,
+      boundKind: "bytes",
+      maxOutputTokens: o.features.maxOutputTokens,
+      serverTools: o.features.serverTools,
+      toolCount: o.features.toolCount,
+      thinking: o.features.thinking,
+      bodyBytes: o.features.bodyBytes,
+      prefixHash: o.features.prefixHash,
+      contextCompacted: false
+    },
+    guardrail: { hits: [] },
+    policy: { revision: o.policyRevision },
+    decision: {
+      route: o.route?.name ?? null,
+      action: "forward",
+      reason: null,
+      chain: o.route ? [...o.route.chain] : [],
+      reservedMicroUsd: 0,
+      boundAssumed: false,
+      taintUnchecked: false,
+      audit: []
+    },
+    outcome: {
+      provider: o.provider,
+      upstreamModel: u?.responseModel ?? o.features.model,
+      attempts: 1,
+      cacheColdRisk: false,
+      status: o.status,
+      errorClass: null,
+      midStreamError: u?.midStreamError ?? null,
+      ttfbMs: o.ttfbMs,
+      totalMs: o.totalMs,
+      addedTtfbMs: o.addedTtfbMs,
+      usage: u?.usage ?? null,
+      usageSource: u?.source ?? "none",
+      ...u?.outputEstimated ? { outputEstimated: true } : {},
+      costMicroUsd: o.costMicroUsd,
+      costBasis: o.costBasis,
+      priceTable: o.priceTable,
+      aborted: o.aborted,
+      settledBy: "request",
+      overrun: false,
+      ...o.rateLimitHeaders && Object.keys(o.rateLimitHeaders).length > 0 ? { rateLimitHeaders: o.rateLimitHeaders } : {}
+    }
+  };
+}
+var init_trace_record = __esm({
+  "src/edge/trace-record.ts"() {
+    "use strict";
+    init_hmac();
+  }
+});
+
 // src/edge/handler.ts
 import { pipeline } from "node:stream/promises";
 function sendError(req, res, e, closeConnection = false) {
@@ -55131,7 +55395,15 @@ function sendError(req, res, e, closeConnection = false) {
 function forwardToFirstProvider(policy, surface) {
   const route = policy.routes.find((r) => r.surfaces.includes(surface));
   const name = route?.chain[0];
-  return name === void 0 ? null : policy.providers.get(name) ?? null;
+  const provider = name === void 0 ? void 0 : policy.providers.get(name);
+  return route && provider ? { provider, route } : null;
+}
+function rateLimitHeaders(h) {
+  const out = {};
+  for (const [k, v] of Object.entries(h)) {
+    if (k.startsWith("anthropic-ratelimit-unified-")) out[k] = String(Array.isArray(v) ? v[0] : v);
+  }
+  return out;
 }
 function providerCredential(p) {
   if (p.credential === "passthrough") return null;
@@ -55176,6 +55448,7 @@ function priceOutcome(deps, features, usage) {
 }
 function afterResponse(deps, outcome) {
   deps.onSettled?.(outcome);
+  if (deps.traces) deps.traces.write(buildTraceRecord(outcome, deps.traceSalt ?? ""));
 }
 async function handle(deps, id, req, res) {
   const startedAt = deps.clock();
@@ -55229,10 +55502,11 @@ async function handle(deps, id, req, res) {
     return;
   }
   const features = extractFeatures(surface, body);
-  const provider = forwardToFirstProvider(policy, surface);
-  if (!provider) {
+  const target = forwardToFirstProvider(policy, surface);
+  if (!target) {
     return sendError(req, res, anthropicError(403, "permission_error", "no route allows this request", null, id));
   }
+  const { provider, route } = target;
   const mode = provider.credential === "passthrough" ? "passthrough" : "api";
   const headers = upstreamHeaders(req.headers, {
     mode,
@@ -55241,6 +55515,7 @@ async function handle(deps, id, req, res) {
     clientKeyHeaders: [...keyHeaders]
   });
   let up;
+  const forwardedAt = deps.clock();
   try {
     up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
@@ -55252,7 +55527,8 @@ async function handle(deps, id, req, res) {
     up.body.destroy();
     return;
   }
-  const ttfbMs = deps.clock() - startedAt;
+  const upstreamHeadersAt = deps.clock();
+  const ttfbMs = upstreamHeadersAt - startedAt;
   res.writeHead(
     up.status,
     clientHeaders(up.headers, {
@@ -55282,10 +55558,17 @@ async function handle(deps, id, req, res) {
     ttfbMs,
     totalMs: deps.clock() - startedAt,
     costMicroUsd: priceOutcome(deps, features, usage),
-    costBasis: key.billing === "subscription" ? "api-equivalent" : "billed"
+    costBasis: key.billing === "subscription" ? "api-equivalent" : "billed",
+    addedTtfbMs: Math.max(0, ttfbMs - (upstreamHeadersAt - forwardedAt)),
+    client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
+    policyRevision: policy.revision,
+    route: { name: route.name, chain: route.chain },
+    priceTable: deps.prices?.version ?? "none",
+    rateLimitHeaders: rateLimitHeaders(up.headers)
   });
 }
 function createHandler(deps) {
+  if (deps.traces && !deps.traceSalt) throw new Error("traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
   return (req, res) => {
     const id = deps.newId();
     handle(deps, id, req, res).catch(() => {
@@ -55311,6 +55594,7 @@ var init_handler = __esm({
     init_errors3();
     init_headers();
     init_paths();
+    init_trace_record();
   }
 });
 
@@ -55422,8 +55706,8 @@ __export(keys_exports, {
   appendKey: () => appendKey,
   createKey: () => createKey
 });
-import { randomBytes } from "node:crypto";
-import { appendFile } from "node:fs/promises";
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { appendFile as appendFile2 } from "node:fs/promises";
 function base62(bytes) {
   let n = BigInt(`0x${bytes.toString("hex")}`);
   let out = "";
@@ -55434,11 +55718,11 @@ function base62(bytes) {
   return out.padStart(B62_LEN, "0");
 }
 function createKey() {
-  const plaintext = `ty_live_${base62(randomBytes(32))}`;
+  const plaintext = `ty_live_${base62(randomBytes2(32))}`;
   return { plaintext, hash: hashKey(plaintext) };
 }
 async function appendKey(file2, rec) {
-  await appendFile(file2, `- ${JSON.stringify(rec)}
+  await appendFile2(file2, `- ${JSON.stringify(rec)}
 `, "utf8");
 }
 var B62, B62_LEN;
@@ -58867,6 +59151,262 @@ var package_default = {
   }
 };
 
+// src/ledger/export.ts
+import { readdir, rmdir, stat, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { gzipSync } from "node:zlib";
+
+// src/ledger/anonymize.ts
+init_hmac();
+function anonymizeRecord(r, p) {
+  const opt = (kind, v) => v === null ? null : p(kind, v);
+  return {
+    ...r,
+    tenant: p("tenant", r.tenant),
+    team: opt("team", r.team),
+    keyId: p("key", r.keyId),
+    client: { ...r.client, version: null },
+    attribution: {
+      ...r.attribution,
+      repo: opt("repo", r.attribution.repo),
+      branch: opt("branch", r.attribution.branch),
+      ticket: opt("ticket", r.attribution.ticket)
+    }
+  };
+}
+function saltedPseudonyms(salt) {
+  return (kind, v) => `${kind}-${pseudonym(salt, `${kind}:${v}`).slice(0, 8)}`;
+}
+
+// src/ledger/reader.ts
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
+import { createGunzip } from "node:zlib";
+async function* readLedger(paths) {
+  for (const path2 of paths) {
+    const file2 = createReadStream(path2);
+    const input2 = path2.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
+    file2.on("error", (e) => input2.destroy(e));
+    for await (const text of createInterface({ input: input2, crlfDelay: Infinity })) {
+      if (text === "") continue;
+      try {
+        const line = JSON.parse(text);
+        if (typeof line === "object" && line !== null && typeof line.kind === "string") yield line;
+      } catch {
+      }
+    }
+  }
+}
+
+// src/ledger/export.ts
+var HOUR_MS = 36e5;
+var DAY_MS = 24 * HOUR_MS;
+var DATE_DIR = /^\d{4}-\d{2}-\d{2}$/;
+var FILE_NAME = /^(\d{2})\.(.+)\.ndjson(\.gz)?$/;
+function parseDuration(s) {
+  const m = /^(\d+)([hd])$/.exec(s.trim());
+  if (!m) throw new Error(`invalid duration "${s}": use a number and h or d, for example 7d`);
+  return Number(m[1]) * (m[2] === "h" ? HOUR_MS : DAY_MS);
+}
+async function listLedgerFiles(dir, fromMs, toMs) {
+  const out = [];
+  const names = async (p) => readdir(p).catch(() => []);
+  for (const tenantDir of await names(dir)) {
+    for (const date5 of await names(join(dir, tenantDir))) {
+      if (!DATE_DIR.test(date5)) continue;
+      const dayMs = Date.parse(`${date5}T00:00:00.000Z`);
+      if (dayMs + DAY_MS <= fromMs || dayMs > toMs) continue;
+      for (const f of await names(join(dir, tenantDir, date5))) {
+        const m = FILE_NAME.exec(f);
+        if (!m) continue;
+        const hourMs = dayMs + Number(m[1]) * HOUR_MS;
+        if (hourMs >= fromMs && hourMs <= toMs) out.push({ path: join(dir, tenantDir, date5, f), tenantDir, instance: m[2], hourMs });
+      }
+    }
+  }
+  return out.sort((a, b) => a.hourMs - b.hourMs || a.path.localeCompare(b.path));
+}
+var hourLabel = (ms) => new Date(ms).toISOString().slice(0, 13);
+async function exportTraces(o) {
+  const files = await listLedgerFiles(o.dir, Math.floor(o.sinceMs / HOUR_MS) * HOUR_MS, Math.floor(o.untilMs / HOUR_MS) * HOUR_MS + HOUR_MS);
+  const instances = /* @__PURE__ */ new Map();
+  const acc = (id) => {
+    let a = instances.get(id);
+    if (!a) instances.set(id, a = { hours: /* @__PURE__ */ new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: /* @__PURE__ */ new Set(), minSeq: Infinity, maxSeq: -Infinity });
+    return a;
+  };
+  const inWindow = (ms) => ms >= o.sinceMs && ms <= o.untilMs;
+  const seen = (a, ms) => {
+    a.firstTs = Math.min(a.firstTs, ms);
+    a.lastTs = Math.max(a.lastTs, ms);
+  };
+  const records = [];
+  for (const f of files) {
+    acc(f.instance).hours.add(f.hourMs);
+    for await (const line of readLedger([f.path])) {
+      if (line.kind === "request") {
+        const ms = Date.parse(line.ts);
+        if (!inWindow(ms)) continue;
+        const a = acc(line.instance);
+        seen(a, ms);
+        a.seqs.add(line.seq);
+        a.minSeq = Math.min(a.minSeq, line.seq);
+        a.maxSeq = Math.max(a.maxSeq, line.seq);
+        records.push({ ms, r: line });
+      } else if (line.kind === "heartbeat" || line.kind === "shutdown") {
+        const ms = Date.parse(line.ts);
+        if (!inWindow(ms)) continue;
+        const a = acc(line.instance);
+        seen(a, ms);
+        a.maxSeq = Math.max(a.maxSeq, line.seq);
+      } else if (line.kind === "segment") {
+        const seg = line;
+        const ms = Date.parse(seg.startedAt);
+        if (!inWindow(ms)) continue;
+        const a = acc(seg.instance);
+        seen(a, ms);
+        a.minSeq = Math.min(a.minSeq, seg.firstSeq);
+      }
+    }
+  }
+  const manifest = {
+    v: 1,
+    kind: "manifest",
+    since: new Date(o.sinceMs).toISOString(),
+    until: new Date(o.untilMs).toISOString(),
+    instances: [...instances].filter(([, a]) => a.firstTs !== Infinity || a.seqs.size > 0).sort(([x], [y]) => x.localeCompare(y)).map(([id, a]) => {
+      const hours = [...a.hours];
+      const first2 = Math.min(...hours);
+      const last = Math.max(...hours);
+      const hoursWithoutFile = [];
+      for (let h = first2; h <= last; h += HOUR_MS) if (!a.hours.has(h)) hoursWithoutFile.push(hourLabel(h));
+      let seqGaps = 0;
+      for (let s = a.minSeq; s <= a.maxSeq; s++) if (!a.seqs.has(s)) seqGaps++;
+      return {
+        id,
+        firstTs: new Date(a.firstTs === Infinity ? first2 : a.firstTs).toISOString(),
+        lastTs: new Date(a.lastTs === -Infinity ? last : a.lastTs).toISOString(),
+        records: a.seqs.size,
+        seqGaps,
+        hoursWithoutFile
+      };
+    })
+  };
+  records.sort((a, b) => a.ms - b.ms || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
+  const p = o.anonymizeSalt === void 0 ? null : saltedPseudonyms(o.anonymizeSalt);
+  const text = [manifest, ...records.map(({ r }) => p ? anonymizeRecord(r, p) : r)].map((l) => `${JSON.stringify(l)}
+`).join("");
+  await writeFile(o.out, o.out.endsWith(".gz") ? gzipSync(text) : text);
+  return manifest;
+}
+async function pruneTraces(o) {
+  const cutoff = o.nowMs - o.olderThanMs;
+  const old = (await listLedgerFiles(o.dir, 0, cutoff - HOUR_MS)).filter((f) => f.hourMs + HOUR_MS <= cutoff);
+  for (const f of old) await unlink(f.path);
+  for (const f of old) {
+    const day = join(f.path, "..");
+    await rmdir(day).then(() => rmdir(join(day, ".."))).catch(() => void 0);
+  }
+  return old.length;
+}
+async function loadTraceRecords(o) {
+  const isDir = (await stat(o.path)).isDirectory();
+  const paths = isDir ? (await listLedgerFiles(o.path, Math.floor(o.sinceMs / HOUR_MS) * HOUR_MS, Math.floor(o.untilMs / HOUR_MS) * HOUR_MS + HOUR_MS)).map((f) => f.path) : [o.path];
+  const out = [];
+  for await (const line of readLedger(paths)) {
+    if (line.kind !== "request") continue;
+    const ms = Date.parse(line.ts);
+    if (ms >= o.sinceMs && ms <= o.untilMs && (o.tenant === void 0 || line.tenant === o.tenant)) out.push(line);
+  }
+  return out;
+}
+
+// src/report/render-terminal.ts
+function formatUsd(micro) {
+  const cents = Math.round(micro / 100);
+  return `$${Math.floor(cents / 1e4)}.${String(cents % 1e4).padStart(4, "0")}`;
+}
+var pct = (part, whole) => whole === 0 ? "-" : `${(part / whole * 100).toFixed(1)}%`;
+function renderReportTerminal(r) {
+  const cols = r.by.length > 0 ? r.by.map(String) : ["all"];
+  const header2 = [...cols, "requests", "cost", "share", "input", "output", "cache read", "cache write"];
+  const row = (label, x) => [
+    ...label,
+    String(x.requests),
+    formatUsd(x.costMicroUsd) + (x.unpriced > 0 ? `+${x.unpriced} unpriced` : ""),
+    pct(x.costMicroUsd, r.totals.costMicroUsd),
+    String(x.input),
+    String(x.output),
+    String(x.cacheRead),
+    String(x.cacheWrite)
+  ];
+  const rows = [
+    header2,
+    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => g.key[d] ?? "") : ["all"], g)),
+    row(["total", ...cols.slice(1).map(() => "")], r.totals)
+  ];
+  const widths = header2.map((_, i) => Math.max(...rows.map((x) => (x[i] ?? "").length)));
+  const numeric = (i) => i >= cols.length;
+  return rows.map((x) => x.map((c, i) => numeric(i) ? c.padStart(widths[i] ?? 0) : c.padEnd(widths[i] ?? 0)).join("  ").trimEnd()).join("\n") + "\n";
+}
+
+// src/report/report.ts
+var REPORT_DIMENSIONS = ["tenant", "team", "key", "repo", "branch", "ticket", "session", "requestClass", "agent", "promptId"];
+var NONE = "(none)";
+function dimension(r, d) {
+  switch (d) {
+    case "tenant":
+      return r.tenant;
+    case "team":
+      return r.team;
+    case "key":
+      return r.keyId;
+    case "repo":
+      return r.attribution.repo;
+    case "branch":
+      return r.attribution.branch;
+    case "ticket":
+      return r.attribution.ticket;
+    case "session":
+      return r.attribution.session;
+    case "requestClass":
+      return r.attribution.requestClass;
+    case "agent":
+      return r.attribution.agent;
+    case "promptId":
+      return r.attribution.promptId;
+  }
+}
+var empty = () => ({ requests: 0, costMicroUsd: 0, unpriced: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+function add(row, r) {
+  const u = r.outcome.usage;
+  row.requests++;
+  if (r.outcome.costMicroUsd === null) row.unpriced++;
+  else row.costMicroUsd += r.outcome.costMicroUsd;
+  if (u) {
+    row.input += u.input;
+    row.output += u.output;
+    row.cacheRead += u.cacheRead;
+    row.cacheWrite += u.cacheWrite5m + u.cacheWrite1h;
+  }
+}
+function buildReport(records, by) {
+  const totals = empty();
+  const groups = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    add(totals, r);
+    const key = {};
+    for (const d of by) key[d] = dimension(r, d) ?? NONE;
+    const id = JSON.stringify(by.map((d) => key[d]));
+    let g = groups.get(id);
+    if (!g) groups.set(id, g = { ...empty(), key });
+    add(g, r);
+  }
+  const sorted = [...groups.values()].sort((a, b) => b.costMicroUsd - a.costMicroUsd || b.requests - a.requests || idOf(a, by).localeCompare(idOf(b, by)));
+  return { by, totals, groups: sorted };
+}
+var idOf = (g, by) => by.map((d) => g.key[d]).join("\0");
+
 // src/cli.ts
 var program2 = new Command();
 program2.name("tokenyard").description(package_default.description).version(package_default.version);
@@ -58881,27 +59421,41 @@ program2.command("mock").description("run the deterministic mock Anthropic provi
 program2.command("serve").description("run the gateway").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--host <host>", "address to bind", "127.0.0.1").option("--base-path <path>", "mount prefix stripped before path matching").option(
   "--dev-upstream <url>",
   "development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)"
-).option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").action(async (o) => {
+).option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").action(async (o) => {
   if (!o.devUpstream) {
     console.error("tokenyard serve: policy loading is not available yet; use --dev-upstream <url>");
     process.exit(1);
   }
-  const { randomUUID } = await import("node:crypto");
+  const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
+  if (o.traceDir && !traceSalt) {
+    console.error("tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)");
+    process.exit(1);
+  }
+  const { hostname: hostname3 } = await import("node:os");
+  const { ulid: ulid4 } = await Promise.resolve().then(() => (init_ulid(), ulid_exports));
+  const { defaultInstanceId: defaultInstanceId2, TraceWriter: TraceWriter2 } = await Promise.resolve().then(() => (init_writer(), writer_exports));
+  const writer = o.traceDir ? new TraceWriter2({ dir: o.traceDir, instanceId: o.instanceId ?? defaultInstanceId2(hostname3(), Date.now()), queueMax: 1e4, clock: Date.now }) : null;
+  const beat = writer ? setInterval(() => writer.heartbeat(), 6e4) : null;
+  beat?.unref();
   const { createGateway: createGateway2, DEFAULT_BODY_CAP_BYTES: DEFAULT_BODY_CAP_BYTES2 } = await Promise.resolve().then(() => (init_server(), server_exports));
   const { devPolicy: devPolicy2, DEV_KEY: DEV_KEY2, DEV_UPSTREAM_KEY_ENV: DEV_UPSTREAM_KEY_ENV2 } = await Promise.resolve().then(() => (init_dev_policy(), dev_policy_exports));
   const policy = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 }, models: [] });
   const gw = createGateway2({
     policy: () => policy,
     store: null,
-    traces: null,
+    traces: writer,
+    traceSalt,
     clock: Date.now,
-    newId: randomUUID,
+    newId: () => ulid4(),
     basePath: o.basePath ?? null,
     bodyCapBytes: DEFAULT_BODY_CAP_BYTES2,
     experimentalSubscription: o.experimentalSubscription === true
   });
   console.log(await gw.listen(Number(o.port), o.host));
-  const stop = () => void gw.close().then(() => process.exit(0));
+  const stop = () => {
+    if (beat) clearInterval(beat);
+    void gw.close().then(() => writer?.close()).then(() => process.exit(0));
+  };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 });
@@ -58939,5 +59493,31 @@ keys.command("create").description("create a key: prints it once and appends its
   await appendKey2(o.file, { hash: hash2, keyId: `key_${hash2.slice(0, 8)}`, tenant: o.tenant, team: o.team ?? null, name: o.name, kind: o.kind, billing: o.billing });
   console.log(plaintext);
   console.error(`appended the hash to ${o.file}; the key is shown only once`);
+});
+var traces = program2.command("traces").description("trace files written by serve --trace-dir");
+var sinceOf = (v, now) => /^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v);
+traces.command("export").description("merge every instance file in a window into one ordered NDJSON file with a manifest line first").requiredOption("--trace-dir <dir>", "trace directory (shared storage when several instances write)").requiredOption("--out <file>", "output file; a name ending in .gz is gzipped").option("--since <when>", "duration such as 7d or 12h, or an ISO time", "7d").option("--until <when>", "ISO time (default now)").option("--anonymize", "replace tenant, team, key id, repo, branch and ticket with stable pseudonyms and drop client.version").option("--salt <salt>", "salt for --anonymize (or TOKENYARD_TRACE_SALT)").action(async (o) => {
+  const salt = o.salt ?? process.env.TOKENYARD_TRACE_SALT;
+  if (o.anonymize && !salt) return void (console.error("tokenyard traces export: --anonymize needs --salt or TOKENYARD_TRACE_SALT"), process.exit(1));
+  const now = Date.now();
+  const sinceMs = sinceOf(o.since, now);
+  const untilMs = o.until ? Date.parse(o.until) : now;
+  if (Number.isNaN(sinceMs) || Number.isNaN(untilMs)) return void (console.error("tokenyard traces export: --since and --until must be a duration or an ISO time"), process.exit(1));
+  const m = await exportTraces({ dir: o.traceDir, sinceMs, untilMs, out: o.out, ...o.anonymize && salt ? { anonymizeSalt: salt } : {} });
+  const gaps = m.instances.filter((i) => i.seqGaps > 0 || i.hoursWithoutFile.length > 0);
+  console.error(`wrote ${o.out}: ${m.instances.reduce((n, i) => n + i.records, 0)} records from ${m.instances.length} instance(s)`);
+  for (const i of gaps) console.error(`warning: instance ${i.id}: ${i.seqGaps} missing seq numbers, hours without a file: ${i.hoursWithoutFile.join(", ") || "none"}`);
+});
+traces.command("prune").description("delete trace files older than a duration").requiredOption("--trace-dir <dir>", "trace directory").requiredOption("--older-than <duration>", "for example 30d").action(async (o) => {
+  const removed = await pruneTraces({ dir: o.traceDir, olderThanMs: parseDuration(o.olderThan), nowMs: Date.now() });
+  console.error(`removed ${removed} file(s)`);
+});
+program2.command("report").description("cost report from a trace dir or an export file").requiredOption("--traces <path>", "trace directory or an export file (.ndjson or .ndjson.gz)").option("--by <dims>", "comma list of tenant, team, key, repo, branch, ticket, session, requestClass, agent, promptId", "team").option("--since <when>", "duration such as 7d, or an ISO time", "7d").option("--until <when>", "ISO time (default now)").option("--tenant <tenant>", "only this tenant").action(async (o) => {
+  const dims = o.by.split(",").map((d) => d.trim()).filter(Boolean);
+  const bad = dims.filter((d) => !REPORT_DIMENSIONS.includes(d));
+  if (bad.length > 0) return void (console.error(`tokenyard report: unknown dimension ${bad.join(", ")}`), process.exit(1));
+  const now = Date.now();
+  const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...o.tenant ? { tenant: o.tenant } : {} });
+  process.stdout.write(renderReportTerminal(buildReport(records, dims)));
 });
 await program2.parseAsync(process.argv);

@@ -131,7 +131,7 @@ export async function startStack(
     mock?: Parameters<typeof startAnthropicMock>[0];
     policy?: Partial<Parameters<typeof testPolicy>[0]>;
     basePath?: string;
-    gw?: Pick<Parameters<typeof startGateway>[0], 'prices' | 'experimentalSubscription' | 'onSettled'>;
+    gw?: Pick<Parameters<typeof startGateway>[0], 'prices' | 'experimentalSubscription' | 'onSettled' | 'traces' | 'traceSalt'>;
   } = {},
 ): Promise<{ mock: MockServer; gw: TestGateway; close(): Promise<void> }> {
   process.env[PROVIDER_KEY_ENV] = PROVIDER_KEY;

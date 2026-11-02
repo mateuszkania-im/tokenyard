@@ -15,6 +15,8 @@ export interface UsageResult {
   sawStop: boolean;
   streamedChars: number;
   responseModel: string | null;
+  /** True when source is 'final' but `usage.output` was estimated from streamed chars (no message_delta output count). */
+  outputEstimated?: boolean;
 }
 
 type Obj = Record<string, unknown>;
@@ -114,7 +116,7 @@ export class AnthropicUsageAccumulator {
     const usage = { ...this.usage };
     if (!this.deltaOutput) {
       usage.output = Math.ceil(this.chars / 4);
-      return { ...base, usage, source: this.sawStop ? 'final' : 'estimated' };
+      return this.sawStop ? { ...base, usage, source: 'final', outputEstimated: true } : { ...base, usage, source: 'estimated' };
     }
     return { ...base, usage, source: this.sawStop ? 'final' : 'partial' };
   }

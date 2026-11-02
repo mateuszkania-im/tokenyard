@@ -8,7 +8,7 @@ export interface TestGateway {
   close(): Promise<void>;
 }
 
-/** Start a gateway on an ephemeral port with deterministic ids and no traces. */
+/** Start a gateway on an ephemeral port with deterministic ids; no traces unless `traces` is given (with a `traceSalt`). */
 export async function startGateway(o: {
   policy: CompiledPolicy;
   bodyCapBytes?: number;
@@ -17,12 +17,15 @@ export async function startGateway(o: {
   prices?: PriceTable | null;
   experimentalSubscription?: boolean;
   onSettled?: GatewayDeps['onSettled'];
+  traces?: GatewayDeps['traces'];
+  traceSalt?: string;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
     policy: () => o.policy,
     store: o.store ?? null,
-    traces: null,
+    traces: o.traces ?? null,
+    traceSalt: o.traceSalt,
     clock: Date.now,
     newId: () => `req_${String(++n).padStart(6, '0')}`,
     basePath: o.basePath ?? null,

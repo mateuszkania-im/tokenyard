@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import type { TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
-import type { CompiledPolicy, KeyRecord, ProviderSpec, Surface } from '../policy/types.js';
+import type { CompiledPolicy, CompiledRoute, KeyRecord, ProviderSpec, Surface } from '../policy/types.js';
 import { costMicroUsd } from '../pricing/cost.js';
 import type { PriceTable } from '../pricing/prices.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
@@ -19,8 +19,9 @@ import { BodyTooLargeError, readBody } from './body.js';
 import { anthropicError } from './errors.js';
 import { clientHeaders, upstreamHeaders } from './headers.js';
 import { matchRoute } from './paths.js';
+import { buildTraceRecord, parseClient } from './trace-record.js';
 
-/** Where finished request records go. Implemented by TraceWriter (Task 7); `null` until then. */
+/** Where finished request records go. Implemented by `TraceWriter`; `null` when `--trace-dir` is not set. */
 export interface TraceSink {
   write(r: Omit<TraceRecord, 'instance' | 'seq'>): boolean;
 }
@@ -37,7 +38,9 @@ export interface GatewayDeps {
   prices?: PriceTable | null;
   /** `serve --experimental-subscription` (spec 6.8): without it keys with `billing: subscription` get 401. */
   experimentalSubscription?: boolean;
-  /** Called after the response has ended with what the request knew; the trace writer (Task 7) and settlement (Task 14) replace it. */
+  /** HMAC salt for session, agent, parent agent and prompt id in traces (spec 9.1); required when `traces` is set. */
+  traceSalt?: string;
+  /** Called after the response has ended with what the request knew (tests; settlement, Task 14, replaces it). The trace record is queued separately. */
   onSettled?: (outcome: RequestOutcome) => void;
 }
 
@@ -59,6 +62,16 @@ export interface RequestOutcome {
   costMicroUsd: number | null;
   /** `api-equivalent` for subscription keys (spec 7.6), else `billed`. */
   costBasis: 'billed' | 'api-equivalent';
+  /** Time from request received to first byte written, minus the upstream's own time to first byte (spec 9.1). */
+  addedTtfbMs: number | null;
+  /** From the User-Agent header. */
+  client: { agent: 'claude-code' | 'codex' | 'other'; version: string | null };
+  policyRevision: string;
+  /** Route the request was sent through; null for a request no route served. */
+  route: { name: string; chain: readonly string[] } | null;
+  priceTable: string;
+  /** Upstream `anthropic-ratelimit-unified-*` response headers. */
+  rateLimitHeaders?: Record<string, string>;
 }
 
 type ErrorReply = ReturnType<typeof anthropicError>;
@@ -73,10 +86,19 @@ function sendError(req: IncomingMessage, res: ServerResponse, e: ErrorReply, clo
  * Spec 5.3 steps 5 to 8 placeholder until Tasks 10 and 14 (guardrails, decide, admit, resolve):
  * the first route serving this surface, forwarded to the first provider of its chain.
  */
-function forwardToFirstProvider(policy: CompiledPolicy, surface: Surface): ProviderSpec | null {
+function forwardToFirstProvider(policy: CompiledPolicy, surface: Surface): { provider: ProviderSpec; route: CompiledRoute } | null {
   const route = policy.routes.find((r) => r.surfaces.includes(surface));
   const name = route?.chain[0];
-  return name === undefined ? null : (policy.providers.get(name) ?? null);
+  const provider = name === undefined ? undefined : policy.providers.get(name);
+  return route && provider ? { provider, route } : null;
+}
+
+function rateLimitHeaders(h: UpstreamResponse['headers']): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(h)) {
+    if (k.startsWith('anthropic-ratelimit-unified-')) out[k] = String(Array.isArray(v) ? v[0] : v);
+  }
+  return out;
 }
 
 function providerCredential(p: ProviderSpec): { header: 'x-api-key' | 'authorization'; value: string } | null {
@@ -125,9 +147,10 @@ function priceOutcome(deps: GatewayDeps, features: ExtractedFeatures, usage: Usa
   }
 }
 
-/** Settlement (Task 14) and the trace record (Task 7) hook in here, after `res.end()`. */
+/** After `res.end()`: the trace record is queued (never waits on disk); settlement (Task 14) hooks in here too. */
 function afterResponse(deps: GatewayDeps, outcome: RequestOutcome): void {
   deps.onSettled?.(outcome);
+  if (deps.traces) deps.traces.write(buildTraceRecord(outcome, deps.traceSalt ?? ''));
 }
 
 async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -197,10 +220,12 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   const features = extractFeatures(surface, body);
 
   // 5 to 8. Guardrails, decide, admit, resolve: placeholder until Tasks 10 and 14.
-  const provider = forwardToFirstProvider(policy, surface);
-  if (!provider) {
+  const target = forwardToFirstProvider(policy, surface);
+  if (!target) {
     return sendError(req, res, anthropicError(403, 'permission_error', 'no route allows this request', null, id));
   }
+
+  const { provider, route } = target;
 
   // 9. Forward.
   const mode = provider.credential === 'passthrough' ? 'passthrough' : 'api';
@@ -212,6 +237,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     clientKeyHeaders: [...keyHeaders],
   });
   let up: UpstreamResponse;
+  const forwardedAt = deps.clock();
   try {
     up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
@@ -225,7 +251,8 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   }
 
   // 10. First response headers: written and flushed at once, never compressed.
-  const ttfbMs = deps.clock() - startedAt;
+  const upstreamHeadersAt = deps.clock();
+  const ttfbMs = upstreamHeadersAt - startedAt;
   res.writeHead(
     up.status,
     clientHeaders(up.headers, {
@@ -261,10 +288,17 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     totalMs: deps.clock() - startedAt,
     costMicroUsd: priceOutcome(deps, features, usage),
     costBasis: key.billing === 'subscription' ? 'api-equivalent' : 'billed',
+    addedTtfbMs: Math.max(0, ttfbMs - (upstreamHeadersAt - forwardedAt)),
+    client: parseClient(typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined),
+    policyRevision: policy.revision,
+    route: { name: route.name, chain: route.chain },
+    priceTable: deps.prices?.version ?? 'none',
+    rateLimitHeaders: rateLimitHeaders(up.headers),
   });
 }
 
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
+  if (deps.traces && !deps.traceSalt) throw new Error('traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
   return (req, res) => {
     const id = deps.newId();
     handle(deps, id, req, res).catch(() => {

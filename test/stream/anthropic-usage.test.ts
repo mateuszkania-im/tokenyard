@@ -89,5 +89,9 @@ test('message_stop seen with no delta output is final, output estimated from cha
   acc.onEvent(ev('message_start', { message: { model: 'm', usage: { input_tokens: 2, output_tokens: 1 } } }));
   acc.onEvent(ev('content_block_delta', { index: 0, delta: { type: 'text_delta', text: '123456789' } }));
   acc.onEvent(ev('message_stop', {}));
-  expect(acc.result()).toMatchObject({ source: 'final', sawStop: true, usage: { input: 2, output: 3 } });
+  expect(acc.result()).toMatchObject({ source: 'final', sawStop: true, outputEstimated: true, usage: { input: 2, output: 3 } });
+});
+
+test('outputEstimated is not set when message_delta carried the output count', () => {
+  expect(run(fx('anthropic-basic')).outputEstimated).toBeUndefined();
 });

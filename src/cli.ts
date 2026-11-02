@@ -1,5 +1,8 @@
 import { Command } from 'commander';
 import pkg from '../package.json' with { type: 'json' };
+import { exportTraces, loadTraceRecords, parseDuration, pruneTraces } from './ledger/export.js';
+import { renderReportTerminal } from './report/render-terminal.js';
+import { buildReport, REPORT_DIMENSIONS, type ReportDimension } from './report/report.js';
 
 const program = new Command();
 program.name('tokenyard').description(pkg.description).version(pkg.version);
@@ -26,27 +29,47 @@ program
     'development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)',
   )
   .option('--experimental-subscription', 'experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; experimentalSubscription?: boolean }) => {
+  .option('--trace-dir <dir>', 'write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson')
+  .option('--instance-id <id>', 'instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)')
+  .option('--trace-salt <salt>', 'HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
+  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string }) => {
     if (!o.devUpstream) {
       console.error('tokenyard serve: policy loading is not available yet; use --dev-upstream <url>');
       process.exit(1);
     }
-    const { randomUUID } = await import('node:crypto');
+    const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
+    if (o.traceDir && !traceSalt) {
+      console.error('tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)');
+      process.exit(1);
+    }
+    const { hostname } = await import('node:os');
+    const { ulid } = await import('./edge/ulid.js');
+    const { defaultInstanceId, TraceWriter } = await import('./ledger/writer.js');
+    const writer = o.traceDir
+      ? new TraceWriter({ dir: o.traceDir, instanceId: o.instanceId ?? defaultInstanceId(hostname(), Date.now()), queueMax: 10_000, clock: Date.now })
+      : null;
+    // Until the sweeper tick exists (Task 13) a timer writes the 60 s heartbeat.
+    const beat = writer ? setInterval(() => writer.heartbeat(), 60_000) : null;
+    beat?.unref();
     const { createGateway, DEFAULT_BODY_CAP_BYTES } = await import('./edge/server.js');
     const { devPolicy, DEV_KEY, DEV_UPSTREAM_KEY_ENV } = await import('./edge/dev-policy.js');
     const policy = devPolicy({ upstream: o.devUpstream, keys: [DEV_KEY], credential: { env: DEV_UPSTREAM_KEY_ENV }, models: [] });
     const gw = createGateway({
       policy: () => policy,
       store: null,
-      traces: null,
+      traces: writer,
+      traceSalt,
       clock: Date.now,
-      newId: randomUUID,
+      newId: () => ulid(),
       basePath: o.basePath ?? null,
       bodyCapBytes: DEFAULT_BODY_CAP_BYTES,
       experimentalSubscription: o.experimentalSubscription === true,
     });
     console.log(await gw.listen(Number(o.port), o.host));
-    const stop = (): void => void gw.close().then(() => process.exit(0));
+    const stop = (): void => {
+      if (beat) clearInterval(beat);
+      void gw.close().then(() => writer?.close()).then(() => process.exit(0));
+    };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
@@ -98,5 +121,53 @@ keys
     await appendKey(o.file, { hash, keyId: `key_${hash.slice(0, 8)}`, tenant: o.tenant, team: o.team ?? null, name: o.name, kind: o.kind, billing: o.billing });
     console.log(plaintext);
     console.error(`appended the hash to ${o.file}; the key is shown only once`);
+  });
+const traces = program.command('traces').description('trace files written by serve --trace-dir');
+const sinceOf = (v: string, now: number): number => (/^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v));
+traces
+  .command('export')
+  .description('merge every instance file in a window into one ordered NDJSON file with a manifest line first')
+  .requiredOption('--trace-dir <dir>', 'trace directory (shared storage when several instances write)')
+  .requiredOption('--out <file>', 'output file; a name ending in .gz is gzipped')
+  .option('--since <when>', 'duration such as 7d or 12h, or an ISO time', '7d')
+  .option('--until <when>', 'ISO time (default now)')
+  .option('--anonymize', 'replace tenant, team, key id, repo, branch and ticket with stable pseudonyms and drop client.version')
+  .option('--salt <salt>', 'salt for --anonymize (or TOKENYARD_TRACE_SALT)')
+  .action(async (o: { traceDir: string; out: string; since: string; until?: string; anonymize?: boolean; salt?: string }) => {
+    const salt = o.salt ?? process.env.TOKENYARD_TRACE_SALT;
+    if (o.anonymize && !salt) return void (console.error('tokenyard traces export: --anonymize needs --salt or TOKENYARD_TRACE_SALT'), process.exit(1));
+    const now = Date.now();
+    const sinceMs = sinceOf(o.since, now);
+    const untilMs = o.until ? Date.parse(o.until) : now;
+    if (Number.isNaN(sinceMs) || Number.isNaN(untilMs)) return void (console.error('tokenyard traces export: --since and --until must be a duration or an ISO time'), process.exit(1));
+    const m = await exportTraces({ dir: o.traceDir, sinceMs, untilMs, out: o.out, ...(o.anonymize && salt ? { anonymizeSalt: salt } : {}) });
+    const gaps = m.instances.filter((i) => i.seqGaps > 0 || i.hoursWithoutFile.length > 0);
+    console.error(`wrote ${o.out}: ${m.instances.reduce((n, i) => n + i.records, 0)} records from ${m.instances.length} instance(s)`);
+    for (const i of gaps) console.error(`warning: instance ${i.id}: ${i.seqGaps} missing seq numbers, hours without a file: ${i.hoursWithoutFile.join(', ') || 'none'}`);
+  });
+traces
+  .command('prune')
+  .description('delete trace files older than a duration')
+  .requiredOption('--trace-dir <dir>', 'trace directory')
+  .requiredOption('--older-than <duration>', 'for example 30d')
+  .action(async (o: { traceDir: string; olderThan: string }) => {
+    const removed = await pruneTraces({ dir: o.traceDir, olderThanMs: parseDuration(o.olderThan), nowMs: Date.now() });
+    console.error(`removed ${removed} file(s)`);
+  });
+program
+  .command('report')
+  .description('cost report from a trace dir or an export file')
+  .requiredOption('--traces <path>', 'trace directory or an export file (.ndjson or .ndjson.gz)')
+  .option('--by <dims>', 'comma list of tenant, team, key, repo, branch, ticket, session, requestClass, agent, promptId', 'team')
+  .option('--since <when>', 'duration such as 7d, or an ISO time', '7d')
+  .option('--until <when>', 'ISO time (default now)')
+  .option('--tenant <tenant>', 'only this tenant')
+  .action(async (o: { traces: string; by: string; since: string; until?: string; tenant?: string }) => {
+    const dims = o.by.split(',').map((d) => d.trim()).filter(Boolean);
+    const bad = dims.filter((d) => !REPORT_DIMENSIONS.includes(d as ReportDimension));
+    if (bad.length > 0) return void (console.error(`tokenyard report: unknown dimension ${bad.join(', ')}`), process.exit(1));
+    const now = Date.now();
+    const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...(o.tenant ? { tenant: o.tenant } : {}) });
+    process.stdout.write(renderReportTerminal(buildReport(records, dims as ReportDimension[])));
   });
 await program.parseAsync(process.argv);

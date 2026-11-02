@@ -1,4 +1,4 @@
-// Spec 9.1 trace record (type only). Task 7 adds the writer, reader and segment/heartbeat records.
+// Spec 9.1 and 9.5: the trace record and the other lines of a ledger file. Types only.
 
 export interface TraceRecord {
   v: 1;
@@ -29,8 +29,26 @@ export interface TraceRecord {
     ttfbMs: number | null; totalMs: number; addedTtfbMs: number | null;
     usage: { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number } | null;
     usageSource: 'final' | 'partial' | 'estimated' | 'none';
+    /** Set (true) when usageSource is 'final' but `usage.output` was estimated from streamed characters: message_stop arrived without a message_delta output count. Not in spec 9.1; added so settlement and replay can tell. */
+    outputEstimated?: boolean;
     costMicroUsd: number | null; costBasis: 'billed' | 'api-equivalent'; priceTable: string;
     aborted: boolean; settledBy: 'request' | 'sweeper'; overrun: boolean;
     rateLimitHeaders?: Record<string, string>;   // anthropic-ratelimit-unified-* only
   };
 }
+
+/** First line of every ledger file (spec 9.1). `firstSeq` is the seq the next request record of this instance will get. */
+export interface SegmentRecord { v: 1; kind: 'segment'; instance: string; startedAt: string; firstSeq: number }
+/** Appended every 60 s to each open file; `seq` is the last request seq assigned, so a tail of dropped records shows. */
+export interface HeartbeatRecord { v: 1; kind: 'heartbeat'; instance: string; ts: string; seq: number }
+/** Appended on graceful stop. */
+export interface ShutdownRecord { v: 1; kind: 'shutdown'; instance: string; ts: string; seq: number }
+/** First line of an export (spec 9.5). `hoursWithoutFile` lists UTC hours as `YYYY-MM-DDTHH`. */
+export interface ManifestRecord {
+  v: 1;
+  kind: 'manifest';
+  since: string;
+  until: string;
+  instances: Array<{ id: string; firstTs: string; lastTs: string; records: number; seqGaps: number; hoursWithoutFile: string[] }>;
+}
+export type LedgerLine = TraceRecord | SegmentRecord | HeartbeatRecord | ShutdownRecord | ManifestRecord;
