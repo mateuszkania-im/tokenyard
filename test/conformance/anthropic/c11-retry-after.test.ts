@@ -16,10 +16,11 @@ test('C11 tokenyard own retry-after is an integer number of seconds [https://cod
     expect(e.headers['retry-after']).toMatch(/^\d+$/);
   }
   expect(anthropicError(500, 'api_error', 'x', null, 'req_1').headers['retry-after']).toBeUndefined();
-  // And on the wire for a tokenyard-originated error that exists today (the 429 paths arrive with Task 14, same builder).
-  stack = await startStack({ policy: { upstream: 'http://127.0.0.1:1' } });
+  // On the wire: a 429 carrying retry-after reaches the client as the same plain integer. The gateway's own 429s
+  // (Task 14) are built by the same anthropicError, covered by the unit check above until then.
+  stack = await startStack();
+  stack.mock.setScenario({ kind: 'status', status: 429, headers: { 'retry-after': '3' }, body: '{"type":"error","error":{"type":"rate_limit_error","message":"x"}}' });
   const res = await send(stack.gw.url, { path: '/v1/messages', headers: authHeaders, body: '{}' });
-  expect(res.status).toBe(502);
-  const ra = res.headers['retry-after'];
-  if (ra !== undefined) expect(ra).toMatch(/^\d+$/);
+  expect(res.status).toBe(429);
+  expect(res.headers['retry-after']).toBe('3');
 });

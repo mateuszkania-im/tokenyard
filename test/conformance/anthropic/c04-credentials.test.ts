@@ -26,7 +26,7 @@ test('C4 Bearer and x-api-key both accepted; in API mode the inbound credential 
 
 test('C4 in passthrough mode Authorization reaches upstream unchanged and x-tokenyard-key does not [https://code.claude.com/docs/en/llm-gateway-protocol.md]', async () => {
   stack = await startStack({ policy: { credential: 'passthrough' } });
-  const oauth = 'Bearer sk-ant-oat01-client-oauth-value';
+  const oauth = 'Bearer sk-ant-test-CANARY-oauth-client-value';
   const res = await send(stack.gw.url, {
     path: '/v1/messages',
     headers: { ...json, 'x-tokenyard-key': TEST_KEY, authorization: oauth, 'anthropic-beta': 'oauth-2025-04-20' },
