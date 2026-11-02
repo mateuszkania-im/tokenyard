@@ -1,0 +1,46 @@
+{
+  "name": "@mateuszkania-im/tokenyard",
+  "version": "0.1.0",
+  "description": "LLM gateway for coding-agent traffic",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "tokenyard": "bin/tokenyard.mjs"
+  },
+  "files": [
+    "bin",
+    "action.yml",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "test": "vitest run",
+    "test:redis": "node -e \"console.error('test:redis: not implemented yet'); process.exit(1)\"",
+    "bench": "node -e \"console.error('bench: not implemented yet'); process.exit(1)\"",
+    "bench:check": "node -e \"console.error('bench:check: not implemented yet'); process.exit(1)\"",
+    "live": "node -e \"console.error('live: not implemented yet'); process.exit(1)\"",
+    "check:secrets": "node scripts/check-no-secrets.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "commander": "^15.0.0",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.10.2",
+    "oxlint": "^1.90.0",
+    "picocolors": "^1.1.1",
+    "redis": "^6.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "undici": "^7.30.1",
+    "vitest": "^5.1.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  }
+}
