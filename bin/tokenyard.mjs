@@ -11021,11 +11021,11 @@ function capSize(inst, size) {
   const caps = sizeCaps(inst._zod.def.checks);
   if (!caps.length)
     return;
-  const cap = Math.min(...caps.map((c) => c[0]));
+  const cap2 = Math.min(...caps.map((c) => c[0]));
   const parse3 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
     const n2 = size(payload.value);
-    if (n2 > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
+    if (n2 > cap2 && !ctx?.skipChecks && ctx?.direction !== "backward") {
       for (const [max, ch] of sizeCaps(inst._zod.def.checks)) {
         if (n2 > max && ch._zod.def.when(payload)) {
           const start = payload.issues.length;
@@ -37177,7 +37177,7 @@ var require_client_h1 = __commonJS({
       kHTTPContext,
       kClosed
     } = require_symbols();
-    var constants2 = require_constants2();
+    var constants3 = require_constants2();
     var EMPTY_BUF = Buffer.alloc(0);
     var FastBuffer = Buffer[Symbol.species];
     var removeAllListeners = util.removeAllListeners;
@@ -37312,7 +37312,7 @@ var require_client_h1 = __commonJS({
          */
       constructor(client, socket, { exports: exports2 }) {
         this.llhttp = exports2;
-        this.ptr = this.llhttp.llhttp_alloc(constants2.TYPE.RESPONSE);
+        this.ptr = this.llhttp.llhttp_alloc(constants3.TYPE.RESPONSE);
         this.client = client;
         this.socket = socket;
         this.timeout = null;
@@ -37408,11 +37408,11 @@ var require_client_h1 = __commonJS({
             currentParser = null;
             currentBufferRef = null;
           }
-          if (ret !== constants2.ERROR.OK) {
+          if (ret !== constants3.ERROR.OK) {
             const data = chunk.subarray(llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr);
-            if (ret === constants2.ERROR.PAUSED_UPGRADE) {
+            if (ret === constants3.ERROR.PAUSED_UPGRADE) {
               this.onUpgrade(data);
-            } else if (ret === constants2.ERROR.PAUSED) {
+            } else if (ret === constants3.ERROR.PAUSED) {
               this.paused = true;
               socket.unshift(data);
             } else {
@@ -37435,10 +37435,10 @@ var require_client_h1 = __commonJS({
         } finally {
           currentParser = null;
         }
-        if (ret === constants2.ERROR.OK) {
+        if (ret === constants3.ERROR.OK) {
           return null;
         }
-        if (ret === constants2.ERROR.PAUSED || ret === constants2.ERROR.PAUSED_UPGRADE) {
+        if (ret === constants3.ERROR.PAUSED || ret === constants3.ERROR.PAUSED_UPGRADE) {
           this.paused = true;
           return null;
         }
@@ -37455,7 +37455,7 @@ var require_client_h1 = __commonJS({
           const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
           message = "Response does not match the HTTP/1.1 protocol (" + Buffer.from(llhttp.memory.buffer, ptr, len).toString() + ")";
         }
-        return new HTTPParserError(message, constants2.ERROR[ret], data);
+        return new HTTPParserError(message, constants3.ERROR[ret], data);
       }
       destroy() {
         assert2(currentParser === null);
@@ -37666,7 +37666,7 @@ var require_client_h1 = __commonJS({
           socket[kBlocking] = false;
           client[kResume]();
         }
-        return pause ? constants2.ERROR.PAUSED : 0;
+        return pause ? constants3.ERROR.PAUSED : 0;
       }
       /**
        * @param {Buffer} buf
@@ -37692,7 +37692,7 @@ var require_client_h1 = __commonJS({
         }
         this.bytesRead += buf.length;
         if (request2.onData(buf) === false) {
-          return constants2.ERROR.PAUSED;
+          return constants3.ERROR.PAUSED;
         }
         return 0;
       }
@@ -37732,13 +37732,13 @@ var require_client_h1 = __commonJS({
         if (socket[kWriting]) {
           assert2(client[kRunning] === 0);
           util.destroy(socket, new InformationalError("reset"));
-          return constants2.ERROR.PAUSED;
+          return constants3.ERROR.PAUSED;
         } else if (!shouldKeepAlive) {
           util.destroy(socket, new InformationalError("reset"));
-          return constants2.ERROR.PAUSED;
+          return constants3.ERROR.PAUSED;
         } else if (socket[kReset] && client[kRunning] === 0) {
           util.destroy(socket, new InformationalError("reset"));
-          return constants2.ERROR.PAUSED;
+          return constants3.ERROR.PAUSED;
         } else if (client[kPipelining] == null || client[kPipelining] === 1) {
           setImmediate(client[kResume]);
         } else {
@@ -44438,7 +44438,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile4, readFile: readFile4, mkdir: mkdir5 } = __require("node:fs/promises");
+    var { writeFile: writeFile4, readFile: readFile3, mkdir: mkdir5 } = __require("node:fs/promises");
     var { dirname: dirname4, resolve: resolve3 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
@@ -44640,7 +44640,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile4(resolve3(path2), "utf8");
+          const data = await readFile3(resolve3(path2), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -58306,7 +58306,7 @@ function parsePolicyFiles(dir, files) {
   };
   const policyText = get(POLICY_FILE);
   const p = policySchema.safeParse(yamlOf(POLICY_FILE, policyText));
-  if (!p.success) throw new PolicyLoadError("E_SCHEMA", POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: i.message })));
+  if (!p.success) throw new PolicyLoadError("E_SCHEMA", POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: messageOf(i.message) })));
   const policy2 = p.data;
   const pricesName = bare(policy2.pricing);
   const keysName = bare(policy2.keys);
@@ -58323,7 +58323,7 @@ function parsePolicyFiles(dir, files) {
   }
   const rawKeys = yamlOf(keysName, keysText) ?? [];
   const k = keysFileSchema.safeParse(rawKeys);
-  if (!k.success) throw new PolicyLoadError("E_SCHEMA", keysName, k.error.issues.map((i) => ({ path: pathOf(i.path), message: i.message })));
+  if (!k.success) throw new PolicyLoadError("E_SCHEMA", keysName, k.error.issues.map((i) => ({ path: pathOf(i.path), message: messageOf(i.message) })));
   const seenHash = /* @__PURE__ */ new Set();
   const seenId = /* @__PURE__ */ new Set();
   k.data.forEach((rec, i) => {
@@ -58337,7 +58337,7 @@ function parsePolicyFiles(dir, files) {
   normalizedFiles[keysName] = keysText;
   return { dir, policy: policy2, prices, keys: k.data, normalizedFiles };
 }
-var PolicyLoadError, POLICY_FILE, DEFAULT_PRICES, DEFAULT_KEYS, bare, pathOf;
+var PolicyLoadError, POLICY_FILE, DEFAULT_PRICES, DEFAULT_KEYS, bare, cap, pathOf, messageOf;
 var init_load_dir = __esm({
   "src/policy/load-dir.ts"() {
     "use strict";
@@ -58361,7 +58361,9 @@ var init_load_dir = __esm({
     DEFAULT_PRICES = "prices.yaml";
     DEFAULT_KEYS = "keys.yaml";
     bare = (ref) => ref.replace(/^\.\//, "");
-    pathOf = (p) => p.reduce((s2, k) => typeof k === "number" ? `${s2}[${k}]` : s2 ? `${s2}.${String(k)}` : String(k), "");
+    cap = (x, n2) => x.length > n2 ? `${x.slice(0, n2)}...` : x;
+    pathOf = (p) => p.reduce((s2, k) => typeof k === "number" ? `${s2}[${k}]` : s2 ? `${s2}.${cap(String(k), 64)}` : cap(String(k), 64), "");
+    messageOf = (m) => cap(m.replace(/"([^"]{64})[^"]*"/g, '"$1..."'), 300);
   }
 });
 
@@ -58551,14 +58553,28 @@ __export(load_dir_exports2, {
   PolicyLoadError: () => PolicyLoadError,
   loadPolicyDir: () => loadPolicyDir
 });
-import { readFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open as open2 } from "node:fs/promises";
 import { join as join3 } from "node:path";
 async function readOrMissing(dir, name2) {
+  const path2 = join3(dir, name2);
+  let st;
   try {
-    return await readFile(join3(dir, name2), "utf8");
+    st = await lstat(path2);
   } catch (e2) {
     if (e2.code === "ENOENT" || e2.code === "ENOTDIR") return void 0;
     throw e2;
+  }
+  if (!st.isFile()) throw new PolicyLoadError("E_YAML_UNSAFE", name2, [{ path: "", message: "must be a regular file (symbolic links and special files are refused)" }]);
+  if (st.size > MAX_YAML_BYTES) throw new PolicyLoadError("E_YAML_UNSAFE", name2, [{ path: "", message: `file is larger than ${MAX_YAML_BYTES} bytes` }]);
+  const fh = await open2(path2, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const buf = Buffer.alloc(MAX_YAML_BYTES + 1);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    if (bytesRead > MAX_YAML_BYTES) throw new PolicyLoadError("E_YAML_UNSAFE", name2, [{ path: "", message: `file is larger than ${MAX_YAML_BYTES} bytes` }]);
+    return buf.toString("utf8", 0, bytesRead);
+  } finally {
+    await fh.close();
   }
 }
 async function loadPolicyDir(dir) {
@@ -58576,13 +58592,14 @@ async function loadPolicyDir(dir) {
 var init_load_dir2 = __esm({
   "src/policy-loader/load-dir.ts"() {
     "use strict";
+    init_safe_yaml();
     init_load_dir();
   }
 });
 
 // src/policy-loader/lkg.ts
 import { createHash as createHash8 } from "node:crypto";
-import { mkdir as mkdir2, readFile as readFile2, rename, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
+import { mkdir as mkdir2, readFile, rename, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 async function writeLkg(stateDir, bundleText) {
   await mkdir2(stateDir, { recursive: true });
@@ -58598,7 +58615,7 @@ async function writeLkg(stateDir, bundleText) {
 async function readLkg(stateDir) {
   let text2;
   try {
-    text2 = await readFile2(join4(stateDir, LKG_FILE), "utf8");
+    text2 = await readFile(join4(stateDir, LKG_FILE), "utf8");
   } catch (e3) {
     if (e3.code === "ENOENT") return null;
     throw e3;
@@ -102675,7 +102692,7 @@ __export(redis_store_exports, {
 });
 import { createHash as createHash9 } from "node:crypto";
 function createRedisStore(client, o) {
-  const open2 = /* @__PURE__ */ new Map();
+  const open3 = /* @__PURE__ */ new Map();
   let loaded = null;
   const load = () => loaded ??= Promise.all([ADMIT, SETTLE, SWEEP, SEED].map((s2) => client.sendCommand(["SCRIPT", "LOAD", s2.source]))).then(
     () => void 0,
@@ -102722,7 +102739,7 @@ function createRedisStore(client, o) {
       const name2 = reply.name ?? "";
       switch (reply.r) {
         case "ok":
-          open2.set(plan.id, tenant);
+          open3.set(plan.id, tenant);
           return { admitted: true, failed: null, audit, totals: totals3 };
         case "dup":
           return NOTHING2;
@@ -102740,10 +102757,10 @@ function createRedisStore(client, o) {
     // instance died is settled by the sweeper. `perLevel` is accepted for the spec 7.1 signature and not used.
     async settle(id, actualMicroUsd) {
       assertMicroUsd(actualMicroUsd, "actual cost");
-      const tenant = open2.get(id);
+      const tenant = open3.get(id);
       if (tenant === void 0) return "unknown";
       const done = await run(SETTLE, [reservationKey(tenant, id), deadlinesKey(tenant)], [String(actualMicroUsd)]);
-      open2.delete(id);
+      open3.delete(id);
       return Number(done) === 1 ? "settled" : "unknown";
     },
     async sweep() {
@@ -102757,7 +102774,7 @@ function createRedisStore(client, o) {
             const done = list(await run(SWEEP, [key], [String(SWEEP_BATCH)])).map(String);
             n2 += done.length;
             const ids = done.map((resKey) => decodeURIComponent(resKey.slice(resKey.lastIndexOf(":") + 1)));
-            for (const id of ids) open2.delete(id);
+            for (const id of ids) open3.delete(id);
             if (ids.length > 0) o.onSwept?.(ids);
             if (done.length < SWEEP_BATCH) break;
           }
@@ -103968,7 +103985,7 @@ __export(harness_exports, {
   startLiveHarness: () => startLiveHarness
 });
 import { randomBytes as randomBytes5 } from "node:crypto";
-import { access, constants, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
+import { access, constants as constants2, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
 import { closeSync, existsSync as existsSync2, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
 import { hostname as hostname3 } from "node:os";
 import { dirname, join as join7 } from "node:path";
@@ -104067,7 +104084,7 @@ async function assertReadable(dir) {
   for (const e2 of await readdir2(dir, { withFileTypes: true })) {
     const p = join7(dir, e2.name);
     if (e2.isDirectory()) await assertReadable(p);
-    else await access(p, constants.R_OK);
+    else await access(p, constants2.R_OK);
   }
 }
 async function startLiveHarness(o) {
@@ -104497,7 +104514,7 @@ __export(main_exports, {
   githubClient: () => githubClient,
   runAction: () => runAction
 });
-import { appendFile as appendFile3, mkdir as mkdir4, readFile as readFile3, writeFile as writeFile3 } from "node:fs/promises";
+import { appendFile as appendFile3, mkdir as mkdir4, readFile as readFile2, writeFile as writeFile3 } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { dirname as dirname3, join as join9 } from "node:path";
 import { Readable as Readable2, Transform as Transform2 } from "node:stream";
@@ -104506,7 +104523,7 @@ async function readEvent(env) {
   const path2 = env.GITHUB_EVENT_PATH;
   if (!path2) return null;
   try {
-    const ev = JSON.parse(await readFile3(path2, "utf8"));
+    const ev = JSON.parse(await readFile2(path2, "utf8"));
     const pr = ev.pull_request;
     if (!pr) return null;
     const headRepo = pr.head?.repo;
@@ -104523,13 +104540,13 @@ async function download(url2, token, dest) {
   const res = await fetch(u, { redirect: "error", headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok || !res.body) throw new Error(`traces download failed with HTTP ${res.status}`);
   let seen = 0;
-  const cap = new Transform2({
+  const cap2 = new Transform2({
     transform(chunk, _enc, cb) {
       seen += chunk.length;
       cb(seen > MAX_TRACES_BYTES ? new Error("traces download is larger than 512 MiB") : null, chunk);
     }
   });
-  await pipeline2(Readable2.fromWeb(res.body), cap, createWriteStream(dest));
+  await pipeline2(Readable2.fromWeb(res.body), cap2, createWriteStream(dest));
 }
 function clip(body) {
   if (body.length <= MAX_COMMENT) return body;

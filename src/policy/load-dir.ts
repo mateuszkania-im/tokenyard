@@ -76,7 +76,10 @@ function yamlOf(file: string, text: string): unknown {
   }
 }
 
-const pathOf = (p: ReadonlyArray<PropertyKey>): string => p.reduce<string>((s, k) => (typeof k === 'number' ? `${s}[${k}]` : s ? `${s}.${String(k)}` : String(k)), '');
+/** Key names and messages echoed from a policy file are cut, so a hostile file cannot fill a log or a PR comment. */
+const cap = (x: string, n: number): string => (x.length > n ? `${x.slice(0, n)}...` : x);
+const pathOf = (p: ReadonlyArray<PropertyKey>): string => p.reduce<string>((s, k) => (typeof k === 'number' ? `${s}[${k}]` : s ? `${s}.${cap(String(k), 64)}` : cap(String(k), 64)), '');
+const messageOf = (m: string): string => cap(m.replace(/"([^"]{64})[^"]*"/g, '"$1..."'), 300);
 
 /** `files` maps file names (as the policy names them, without `./`) to their raw text. Throws PolicyLoadError. */
 export function parsePolicyFiles(dir: string, files: Record<string, string>): PolicySource {
@@ -88,7 +91,7 @@ export function parsePolicyFiles(dir: string, files: Record<string, string>): Po
 
   const policyText = get(POLICY_FILE);
   const p = policySchema.safeParse(yamlOf(POLICY_FILE, policyText));
-  if (!p.success) throw new PolicyLoadError('E_SCHEMA', POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: i.message })));
+  if (!p.success) throw new PolicyLoadError('E_SCHEMA', POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: messageOf(i.message) })));
   const policy = p.data;
 
   const pricesName = bare(policy.pricing);
@@ -108,7 +111,7 @@ export function parsePolicyFiles(dir: string, files: Record<string, string>): Po
 
   const rawKeys = yamlOf(keysName, keysText) ?? [];
   const k = keysFileSchema.safeParse(rawKeys);
-  if (!k.success) throw new PolicyLoadError('E_SCHEMA', keysName, k.error.issues.map((i) => ({ path: pathOf(i.path), message: i.message })));
+  if (!k.success) throw new PolicyLoadError('E_SCHEMA', keysName, k.error.issues.map((i) => ({ path: pathOf(i.path), message: messageOf(i.message) })));
   const seenHash = new Set<string>();
   const seenId = new Set<string>();
   k.data.forEach((rec, i) => {
