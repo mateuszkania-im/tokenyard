@@ -1,0 +1,1 @@
+{"model":"claude-sonnet-5","max_tokens":64,"tools":[{"name":"t","description":"d","input_schema":{"type":"object","properties":{"name":{"type":"string","pattern":"^[\\p{L}\\p{N}_-]+$"}},"required":["name"]}}],"messages":[{"role":"user","content":"x"}]}

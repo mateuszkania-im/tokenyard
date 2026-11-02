@@ -1,0 +1,4 @@
+{ "model":"claude-opus-5-5","max_tokens":1024,
+  "system":[ {"type":"text","text":"You are Claude Code, zażółć gęślą jaźń A","cache_control":{"type":"ephemeral","ttl":"1h"}} ,
+             {"type":"text","text":"second block","cache_control":{"type":"ephemeral"}} ],
+  "messages":[{"role":"user","content":[{"type":"text","text":"hello","cache_control":{"type":"ephemeral"}}]}] }

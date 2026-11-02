@@ -1,0 +1,1 @@
+{"zzz_future_field":{"b":[3,2,1],"a":null},"model":"claude-sonnet-5","max_tokens":64,"metadata":{"user_id":"u"},"service_tier":"auto","messages":[{"role":"user","content":"x"}],"another_unknown":1.50,"big":12345678901234567890}

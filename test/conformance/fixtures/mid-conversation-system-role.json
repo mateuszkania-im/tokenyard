@@ -1,0 +1,10 @@
+{
+	"model": "claude-sonnet-5",
+	"max_tokens": 64,
+	"messages": [
+		{"role": "user", "content": "first"},
+		{"role": "system", "content": "mid-conversation system entry"},
+		{"role": "assistant", "content": "ok"},
+		{"role": "user", "content": "second"}
+	]
+}
