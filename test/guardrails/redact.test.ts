@@ -1,8 +1,9 @@
 import { expect, test } from 'vitest';
 import { PII_RULES } from '../../src/guardrails/pii.js';
-import { redactProductBody } from '../../src/guardrails/redact.js';
+import { redactionHits, redactProductBody } from '../../src/guardrails/redact.js';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
 import { findSpans } from '../../src/guardrails/scan.js';
+import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
 
 const AWS = RULE_FIXTURES['aws-access-key-id']?.positive as string;
@@ -17,7 +18,7 @@ test('redact: placeholders numbered per rule and value, every other byte kept, v
     ],
   };
   const b = Buffer.from(JSON.stringify(original));
-  const hits = findSpans(b, [...DEFAULT_RULES, ...PII_RULES]).map((s) => ({ rule: s.rule.id, start: s.start, end: s.end }));
+  const hits = redactionHits(findSpans(b, [...DEFAULT_RULES, ...PII_RULES]));
   const out = redactProductBody(b, hits);
   const parsed = JSON.parse(out.toString()) as typeof original;
   expect(parsed.model).toBe('m');
@@ -30,4 +31,18 @@ test('redact with no hits returns the same buffer; overlapping spans keep the fi
   const b = Buffer.from('{"c":"abcdef"}');
   expect(redactProductBody(b, [])).toBe(b);
   expect(redactProductBody(b, [{ rule: 'x', start: 6, end: 9 }, { rule: 'y', start: 8, end: 11 }]).toString()).toBe('{"c":"[REDACTED:X_1]def"}');
+});
+
+test('redact on decoded content: an email at line start after \\n yields valid JSON with the placeholder', () => {
+  const b = Buffer.from(JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'Contact:\njan@example.com please\n\tbob@example.com' }] }));
+  const out = redactProductBody(b, redactionHits(findSpans(b, PII_RULES)));
+  const parsed = JSON.parse(out.toString()) as { messages: Array<{ content: string }> };
+  expect(parsed.messages[0]?.content).toBe('Contact:\n[REDACTED:EMAIL_1] please\n\t[REDACTED:EMAIL_2]');
+});
+
+test('redact a key split across two text blocks: placeholder in the first, the rest removed, valid JSON', () => {
+  const b = Buffer.from(JSON.stringify({ messages: [{ role: 'user', content: [{ type: 'text', text: `key ${AWS.slice(0, 10)}` }, { type: 'text', text: `${AWS.slice(10)} end` }] }] }));
+  const out = redactProductBody(b, redactionHits(findSpans(b, DEFAULT_RULES, { messages: extractAnthropicFeatures(b).messages })));
+  const parsed = JSON.parse(out.toString()) as { messages: Array<{ content: Array<{ text: string }> }> };
+  expect(parsed.messages[0]?.content.map((c) => c.text)).toEqual(['key [REDACTED:AWS_ACCESS_KEY_ID_1]', ' end']);
 });

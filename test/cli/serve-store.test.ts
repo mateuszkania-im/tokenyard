@@ -73,12 +73,21 @@ test('serve refuses an unknown --store and --store redis without a URL', async (
   await expect(run('node', [...base, '--store', 'redis'], { env })).rejects.toMatchObject({ stderr: expect.stringContaining('--redis-url') });
 });
 
+test('serve --store redis refuses to start without a stable salt (taint HMACs must match across instances)', async () => {
+  const dir = tempDir();
+  writePolicyDir(dir, 'http://127.0.0.1:1', 'one');
+  const env = { ...process.env };
+  delete env.TOKENYARD_TRACE_SALT;
+  const args = ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--store', 'redis', '--redis-url', 'redis://127.0.0.1:1'];
+  await expect(run('node', args, { env, timeout: 15_000 })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('--store redis needs --trace-salt or TOKENYARD_TRACE_SALT') });
+});
+
 test('serve --store redis with an unreachable Redis exits 1 with a clear message', async () => {
   const dir = tempDir();
   writePolicyDir(dir, 'http://127.0.0.1:1', 'one');
   const t0 = Date.now();
   await expect(
-    run('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--store', 'redis', '--redis-url', 'redis://127.0.0.1:1'], { timeout: 15_000 }),
+    run('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--store', 'redis', '--redis-url', 'redis://127.0.0.1:1', '--trace-salt', 's'], { timeout: 15_000 }),
   ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('counter store') });
   expect(Date.now() - t0).toBeLessThan(10_000);
 }, 20_000);

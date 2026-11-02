@@ -1,18 +1,22 @@
 // Secret scanner (spec 5.3 step 5, 6.6). Pure: runs before admit, needs no store, and returns only HMACs of what it
-// found. The body is scanned as bytes: rules match ASCII, so a latin1 view keeps every string index equal to its byte
-// offset, which redaction needs.
+// found. Rules run on the decoded content of the JSON strings in the scanned byte range, not on the raw escaped bytes,
+// so a secret after a `\n` or `\t` escape, one written with `\uXXXX` escapes and one split across two text blocks of
+// a message are all seen as the model sees them. A map from decoded index to byte offset keeps redaction on exact bytes.
 import type { GuardrailHit } from '../policy/types.js';
 import { pseudonym } from './hmac.js';
 import type { SecretRule } from './rules.js';
 
 export type GuardrailAction = GuardrailHit['action'];
+type Range = { start: number; end: number };
 
-/** One match: the rule, its byte range in the body and the matched value (never leaves the process). */
+/** One match: the rule, its byte range in the body, the decoded value (never leaves the process) and its byte pieces. */
 export interface Span {
   rule: SecretRule;
   start: number;
   end: number;
   value: string;
+  /** Byte ranges the value occupies, in order; more than one when it is split across strings (text blocks). */
+  segments: Range[];
 }
 
 /** Shannon entropy in bits per character. */
@@ -28,6 +32,175 @@ export function shannonEntropy(s: string): number {
   return h;
 }
 
+// ---- Decoded views -------------------------------------------------------------------------------------------------
+// The decoded text holds one character per UTF-8 byte (a latin1 view), so a raw byte and the same byte written as a
+// `\u` escape decode alike. Strings are separated by SEP, which no rule matches across.
+const SEP = '\0';
+const PLAIN = 0;
+const ESCAPE = 1;
+const SEPARATOR = 2;
+/** Values of these keys are message text: inside one message they are joined without a separator. */
+const PIECE_KEYS = new Set(['text', 'content', 'thinking']);
+const SIMPLE_ESCAPES: Record<number, string> = { 0x22: '"', 0x5c: '\\', 0x2f: '/', 0x62: '\b', 0x66: '\f', 0x6e: '\n', 0x72: '\r', 0x74: '\t' };
+
+class View {
+  private readonly parts: string[] = [];
+  /** Stride 4: text start, byte start, byte end, kind. */
+  private readonly runs: number[] = [];
+  length = 0;
+  private textCache: string | null = null;
+
+  push(text: string, bStart: number, bEnd: number, kind: number): void {
+    if (text.length === 0) return;
+    this.parts.push(text);
+    this.runs.push(this.length, bStart, bEnd, kind);
+    this.length += text.length;
+    this.textCache = null;
+  }
+
+  runCount(): number {
+    return this.parts.length;
+  }
+
+  /** Decoded text of runs `[from, to)`. */
+  textOf(from: number, to: number): string {
+    return this.parts.slice(from, to).join('');
+  }
+
+  copyRuns(from: number, to: number, into: View): void {
+    for (let k = from; k < to; k++) into.push(this.parts[k] as string, this.runs[k * 4 + 1] as number, this.runs[k * 4 + 2] as number, this.runs[k * 4 + 3] as number);
+  }
+
+  separate(at: number): void {
+    if (this.length > 0) this.push(SEP, at, at, SEPARATOR);
+  }
+
+  get text(): string {
+    this.textCache ??= this.parts.join('');
+    return this.textCache;
+  }
+
+  /** Byte ranges of decoded `[s, e)`; a separator or a gap between strings starts a new range. */
+  segments(s: number, e: number): Range[] {
+    const r = this.runs;
+    let lo = 0;
+    let hi = r.length / 4 - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if ((r[mid * 4] as number) <= s) lo = mid;
+      else hi = mid - 1;
+    }
+    const out: Range[] = [];
+    for (let k = lo; k * 4 < r.length; k++) {
+      const t = r[k * 4] as number;
+      if (t >= e) break;
+      const b = r[k * 4 + 1] as number;
+      const bEnd = r[k * 4 + 2] as number;
+      const kind = r[k * 4 + 3] as number;
+      const tl = (this.parts[k] as string).length;
+      if (kind === SEPARATOR) continue;
+      const from = kind === PLAIN ? b + Math.max(s, t) - t : b;
+      const to = kind === PLAIN ? b + Math.min(e, t + tl) - t : bEnd;
+      const last = out[out.length - 1];
+      if (last !== undefined && last.end === from) last.end = to;
+      else out.push({ start: from, end: to });
+    }
+    return out;
+  }
+}
+
+/** UTF-8 bytes of a code point as latin1 characters. */
+function utf8Latin1(cp: number): string {
+  return Buffer.from(String.fromCodePoint(cp), 'utf8').toString('latin1');
+}
+
+function hex4(b: Buffer, i: number): number {
+  if (i + 4 > b.length) return -1;
+  const s = b.toString('latin1', i, i + 4);
+  return /^[0-9A-Fa-f]{4}$/.test(s) ? Number.parseInt(s, 16) : -1;
+}
+
+/** One escape at `e` (a backslash): its decoded text and the index just past it. */
+function decodeEscape(b: Buffer, e: number, end: number): { text: string; next: number } {
+  const c = b[e + 1];
+  if (c === undefined || e + 1 >= end) return { text: '\\', next: Math.min(e + 1, end) };
+  const simple = SIMPLE_ESCAPES[c];
+  if (simple !== undefined) return { text: simple, next: e + 2 };
+  if (c !== 0x75) return { text: b.toString('latin1', e, e + 2), next: e + 2 };
+  const u = hex4(b, e + 2);
+  if (u < 0 || e + 6 > end) return { text: b.toString('latin1', e, e + 2), next: e + 2 };
+  if (u >= 0xd800 && u <= 0xdbff && b[e + 6] === 0x5c && b[e + 7] === 0x75 && e + 12 <= end) {
+    const lo = hex4(b, e + 8);
+    if (lo >= 0xdc00 && lo <= 0xdfff) return { text: utf8Latin1(0x10000 + ((u - 0xd800) << 10) + (lo - 0xdc00)), next: e + 12 };
+  }
+  return { text: utf8Latin1(u >= 0xd800 && u <= 0xdfff ? 0xfffd : u), next: e + 6 };
+}
+
+const isWs = (c: number | undefined): boolean => c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d;
+
+/**
+ * Decoded views of the JSON strings in `body[start, end)` (a range that starts and ends outside any string):
+ * `all` holds every string, separated; `joined` holds the message-text values (`text`, `content`, `thinking`) of each
+ * message in `messages` joined with no separator, messages separated, so a value split across text blocks is whole.
+ */
+function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined): { all: View; joined: View | null } {
+  const all = new View();
+  const joined = messages && messages.length > 0 ? new View() : null;
+  let lastKey: string | null = null;
+  let group = -1;
+  let m = 0;
+  // Next backslash and next quote at or after the cursor, cached so each is searched for once per occurrence (linear).
+  let bs = -2;
+  let nq = -2;
+  const nextBs = (p: number): number => (bs !== -1 && bs < p ? (bs = body.indexOf(0x5c, p)) : bs);
+  const nextQuote = (p: number): number => {
+    if (nq !== -1 && nq < p) nq = body.indexOf(0x22, p);
+    return nq < 0 || nq >= end ? end : nq;
+  };
+  let i = start;
+  while (i < end) {
+    const q = nextQuote(i);
+    if (q >= end) break;
+    let j = q - 1;
+    while (j >= start && isWs(body[j])) j--;
+    const afterColon = j >= start && body[j] === 0x3a;
+    all.separate(q);
+    const first = all.runCount();
+    let p = q + 1;
+    let close: number;
+    for (;;) {
+      const quote = nextQuote(p);
+      const esc = nextBs(p);
+      if (esc >= 0 && esc < quote) {
+        if (esc > p) all.push(body.toString('latin1', p, esc), p, esc, PLAIN);
+        const d = decodeEscape(body, esc, end);
+        all.push(d.text, esc, d.next, ESCAPE);
+        p = d.next;
+        continue;
+      }
+      if (quote > p) all.push(body.toString('latin1', p, quote), p, quote, PLAIN);
+      close = quote;
+      break;
+    }
+    const last = all.runCount();
+    let k = close + 1;
+    while (k < end && isWs(body[k])) k++;
+    if (k < end && body[k] === 0x3a) {
+      lastKey = all.textOf(first, last);
+    } else if (joined && messages && afterColon && lastKey !== null && PIECE_KEYS.has(lastKey)) {
+      while (m < messages.length && (messages[m] as Range).end <= q) m++;
+      const msg = messages[m];
+      if (msg !== undefined && q >= msg.start) {
+        if (m !== group) joined.separate(q);
+        group = m;
+        all.copyRuns(first, last, joined);
+      }
+    }
+    i = close + 1;
+  }
+  return { all, joined };
+}
+
 const globalRegex = new WeakMap<SecretRule, RegExp>();
 function globalOf(rule: SecretRule): RegExp {
   let re = globalRegex.get(rule);
@@ -38,46 +211,49 @@ function globalOf(rule: SecretRule): RegExp {
   return re;
 }
 
-/** Whether any keyword of `rule` occurs in `body[start, end)`: one `Buffer.indexOf` per keyword. */
-function keywordIn(body: Buffer, rule: SecretRule, start: number, end: number): boolean {
-  if (rule.keywords.length === 0) return true;
-  return rule.keywords.some((k) => {
-    const at = body.indexOf(k, start, 'latin1');
-    return at >= 0 && at + k.length <= end;
-  });
+/** Matches of `rule` in one view; from the joined view only those that cross strings (the rest come from `all`). */
+function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[]): void {
+  const text = view.text;
+  if (rule.keywords.length > 0 && !rule.keywords.some((k) => text.includes(k))) return;
+  const re = globalOf(rule);
+  re.lastIndex = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
+    }
+    const value = m[1] ?? m[0];
+    const offset = m[1] === undefined ? 0 : m[0].indexOf(m[1]);
+    if (rule.minEntropy !== undefined && shannonEntropy(value) < rule.minEntropy) continue;
+    if (rule.validate && !rule.validate(value)) continue;
+    const s = m.index + offset;
+    const segments = view.segments(s, s + value.length);
+    const first = segments[0];
+    const last = segments[segments.length - 1];
+    if (first === undefined || last === undefined || (crossingOnly && segments.length < 2)) continue;
+    out.push({ rule, start: first.start, end: last.end, value, segments });
+  }
 }
 
 /**
- * Every match of `rules` inside `body[start, end)` (the whole body by default), in rule order then position.
- * The keyword prefilter runs before any regex; entropy and `validate` checks run on the value.
+ * Every match of `rules` in the decoded strings of `body[range)` (the whole body by default), in rule order then
+ * position. The keyword prefilter runs on the decoded text before any regex; entropy and `validate` run on the value.
+ * With `messages`, text values split across blocks of one message are matched whole too.
  */
-export function findSpans(body: Buffer, rules: readonly SecretRule[], range: { start: number; end: number } = { start: 0, end: body.length }, text?: string): Span[] {
+export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[] } = {}): Span[] {
+  const range = opts.range ?? { start: 0, end: body.length };
   const out: Span[] = [];
-  let view = text;
+  if (rules.length === 0 || range.end <= range.start) return out;
+  const { all, joined } = buildViews(body, range.start, range.end, opts.messages);
   for (const rule of rules) {
-    if (!keywordIn(body, rule, range.start, range.end)) continue;
-    view ??= body.toString('latin1');
-    const slice = view.slice(range.start, range.end);
-    const re = globalOf(rule);
-    re.lastIndex = 0;
-    for (let m = re.exec(slice); m !== null; m = re.exec(slice)) {
-      if (m[0].length === 0) {
-        re.lastIndex++;
-        continue;
-      }
-      const value = m[1] ?? m[0];
-      const offset = m[1] === undefined ? 0 : m[0].indexOf(m[1]);
-      if (rule.minEntropy !== undefined && shannonEntropy(value) < rule.minEntropy) continue;
-      if (rule.validate && !rule.validate(value)) continue;
-      const start = range.start + m.index + offset;
-      out.push({ rule, start, end: start + value.length, value });
-    }
+    matchView(all, rule, false, out);
+    if (joined) matchView(joined, rule, true, out);
   }
   return out;
 }
 
 /** Index of the message whose byte range holds `pos`, if any. */
-function messageAt(messages: ReadonlyArray<{ start: number; end: number }> | undefined, pos: number): number | undefined {
+function messageAt(messages: readonly Range[] | undefined, pos: number): number | undefined {
   if (!messages) return undefined;
   const i = messages.findIndex((m) => pos >= m.start && pos < m.end);
   return i < 0 ? undefined : i;
@@ -86,32 +262,31 @@ function messageAt(messages: ReadonlyArray<{ start: number; end: number }> | und
 /**
  * Spec 6.6: the newest turn (`lastTurn`) with every rule, the rest of the body with the rules whose action is not
  * `warn` (on coding-agent routes: the block rules). Entropy-only rules are `warn` at most, so they never block and are
- * not scanned in history. Each value is reported once per rule and place, as an HMAC with `salt`, with the index of
- * the message it is in when `messages` are given. No last turn: the whole body is history.
+ * not scanned in history. Each value is reported once per rule and place, as an HMAC with `salt` of its decoded form
+ * (so the same secret escaped another way matches the taint), with the index of its message when `messages` are
+ * given. No last turn: the whole body is history.
  */
 export function scanBody(
   body: Buffer,
-  lastTurn: { start: number; end: number } | null,
+  lastTurn: Range | null,
   rules: readonly SecretRule[],
   actionFor: (rule: SecretRule) => GuardrailAction,
   salt: string,
-  opts: { messages?: ReadonlyArray<{ start: number; end: number }> } = {},
+  opts: { messages?: readonly Range[] } = {},
 ): GuardrailHit[] {
   const action = (r: SecretRule): GuardrailAction => (r.entropyOnly ? 'warn' : actionFor(r));
   const historyRules = rules.filter((r) => action(r) !== 'warn');
-  const text = body.toString('latin1');
-  const regions: Array<{ where: GuardrailHit['where']; start: number; end: number; rules: readonly SecretRule[] }> = lastTurn
+  const regions: Array<{ where: GuardrailHit['where']; range: Range; rules: readonly SecretRule[]; messages: readonly Range[] | undefined }> = lastTurn
     ? [
-        { where: 'last-turn', start: lastTurn.start, end: lastTurn.end, rules },
-        { where: 'history', start: 0, end: lastTurn.start, rules: historyRules },
-        { where: 'history', start: lastTurn.end, end: body.length, rules: historyRules },
+        { where: 'last-turn', range: lastTurn, rules, messages: opts.messages ?? [lastTurn] },
+        { where: 'history', range: { start: 0, end: lastTurn.start }, rules: historyRules, messages: opts.messages },
+        { where: 'history', range: { start: lastTurn.end, end: body.length }, rules: historyRules, messages: opts.messages },
       ]
-    : [{ where: 'history', start: 0, end: body.length, rules: historyRules }];
+    : [{ where: 'history', range: { start: 0, end: body.length }, rules: historyRules, messages: opts.messages }];
   const hits: GuardrailHit[] = [];
   const seen = new Set<string>();
   for (const region of regions) {
-    if (region.end <= region.start || region.rules.length === 0) continue;
-    for (const s of findSpans(body, region.rules, region, text)) {
+    for (const s of findSpans(body, region.rules, { range: region.range, ...(region.messages ? { messages: region.messages } : {}) })) {
       const valueHmac = pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;

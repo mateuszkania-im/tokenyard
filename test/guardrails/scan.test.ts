@@ -70,3 +70,48 @@ test('no last turn: the whole body is history', () => {
   const b = Buffer.from(JSON.stringify({ system: `x ${GH}` }));
   expect(scanBody(b, null, DEFAULT_RULES, block, 's')).toEqual([{ rule: 'github-pat', action: 'block', valueHmac: pseudonym('s', GH), where: 'history' }]);
 });
+
+// Fix round 1: rules run on decoded JSON string content, not on the raw escaped bytes.
+const raw = (jsonString: string): Buffer => Buffer.from(`{"model":"m","messages":[{"role":"user","content":"${jsonString}"}]}`);
+const scanLast = (b: Buffer, salt = 's'): ReturnType<typeof scanBody> => {
+  const f = extractAnthropicFeatures(b);
+  return scanBody(b, f.lastTurn, DEFAULT_RULES, block, salt, { messages: f.messages });
+};
+
+test('decoded content: a secret right after a \\n or \\t escape (cat -n output) is found', () => {
+  expect(scanLast(body([{ role: 'user', content: `line1\n${AWS}` }]).b)).toEqual([{ rule: 'aws-access-key-id', action: 'block', valueHmac: pseudonym('s', AWS), where: 'last-turn', message: 0 }]);
+  const catN = `     1\t${GH}\n     2\tnext line\n`;
+  expect(scanLast(body([{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: catN }] }]).b)).toMatchObject([{ rule: 'github-pat', valueHmac: pseudonym('s', GH) }]);
+});
+
+test('decoded content: \\uXXXX and \\/ escapes are decoded before matching, and the HMAC is of the decoded value', () => {
+  expect(scanLast(raw(`see \\u0041${AWS.slice(1)} now`))).toMatchObject([{ rule: 'aws-access-key-id', valueHmac: pseudonym('s', AWS) }]);
+  expect(scanLast(raw(`see ${AWS.slice(0, 4)}\\u004${AWS.charCodeAt(4).toString(16).slice(1)}${AWS.slice(5)}`))).toMatchObject([{ valueHmac: pseudonym('s', AWS) }]);
+  const value = `${GENERIC.slice(11, 31)}/${GENERIC.slice(31, 51)}`;
+  const hits = scanLast(raw(`api_key = ${value.replace('/', '\\/')}`));
+  expect(hits).toMatchObject([{ rule: 'generic-secret-assignment', action: 'warn', valueHmac: pseudonym('s', value) }]);
+});
+
+test('decoded content: a key split across two text blocks of the last message is found once, as the whole value', () => {
+  const split = body([{ role: 'user', content: [{ type: 'text', text: `key ${AWS.slice(0, 10)}` }, { type: 'text', text: `${AWS.slice(10)} end` }] }]);
+  expect(scanLast(split.b)).toEqual([{ rule: 'aws-access-key-id', action: 'block', valueHmac: pseudonym('s', AWS), where: 'last-turn', message: 0 }]);
+  // Inside a tool_result's text blocks too.
+  const inTool = body([{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: [{ type: 'text', text: GH.slice(0, 7) }, { type: 'text', text: GH.slice(7) }] }] }]);
+  expect(scanLast(inTool.b)).toMatchObject([{ rule: 'github-pat', valueHmac: pseudonym('s', GH) }]);
+});
+
+test('decoded content: joining never crosses messages, keys or structure', () => {
+  const across = body([{ role: 'user', content: AWS.slice(0, 10) }, { role: 'assistant', content: AWS.slice(10) }, { role: 'user', content: 'x' }]);
+  expect(scanLast(across.b)).toEqual([]);
+  // A key name next to a value is not joined into one string.
+  const b = Buffer.from(JSON.stringify({ messages: [{ role: 'user', content: [{ type: 'text', text: 'x', AKIAIOSFODNN: 'N7EXAMPLE' }] }] }));
+  expect(scanLast(b)).toEqual([]);
+});
+
+test('taint matches when the same secret comes back escaped differently in history', () => {
+  const first = scanLast(body([{ role: 'user', content: AWS }]).b);
+  const later = Buffer.from(`{"model":"m","messages":[{"role":"user","content":"\\u0041${AWS.slice(1)}"},{"role":"assistant","content":"ok"},{"role":"user","content":"go"}]}`);
+  const history = scanLast(later);
+  expect(history).toMatchObject([{ where: 'history', message: 0 }]);
+  expect(history[0]?.valueHmac).toBe(first[0]?.valueHmac);
+});

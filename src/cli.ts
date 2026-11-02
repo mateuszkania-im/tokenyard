@@ -65,6 +65,11 @@ program
       process.exit(1);
     }
     const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
+    // The guardrail HMAC salt is the trace salt whenever one is set: taint written by one instance must match on another.
+    if (o.store === 'redis' && !traceSalt) {
+      console.error('tokenyard serve: --store redis needs --trace-salt or TOKENYARD_TRACE_SALT (a stable salt, so session taint HMACs match across instances and restarts)');
+      process.exit(1);
+    }
     if (o.traceDir && !traceSalt) {
       console.error('tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)');
       process.exit(1);

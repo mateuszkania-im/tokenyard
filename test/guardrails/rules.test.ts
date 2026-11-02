@@ -27,8 +27,8 @@ test.each(DEFAULT_RULES.map((r) => [r.id, r] as const))('rule %s matches its pos
   if (!f) throw new Error(`no fixture for ${id}`);
   const pos = findSpans(inBody(f.positive), [rule]);
   expect(pos).toHaveLength(1);
-  // The JSON-escaped form of the fixture contains the matched value (newlines travel as \n).
-  expect(JSON.stringify(f.positive)).toContain(pos[0]?.value);
+  // The value is matched on decoded content, so it is the fixture itself (or, for the assignment rule, its value part).
+  expect(f.positive).toContain(pos[0]?.value);
   expect(findSpans(inBody(f.negative), [rule])).toEqual([]);
   // No other rule fires on either fixture, so one secret gives one hit.
   const others = DEFAULT_RULES.filter((r) => r !== rule);

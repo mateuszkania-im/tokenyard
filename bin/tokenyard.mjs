@@ -840,7 +840,7 @@ var init_pii = __esm({
       {
         id: "email",
         keywords: ["@"],
-        regex: /\b([A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,24})\b/,
+        regex: /(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24})(?![A-Za-z0-9-])/,
         source: "tokenyard",
         licence: TOKENYARD
       },
@@ -873,6 +873,9 @@ var init_pii = __esm({
 });
 
 // src/guardrails/redact.ts
+function redactionHits(spans) {
+  return spans.flatMap((s) => s.segments.map((g, i) => ({ rule: s.rule.id, start: g.start, end: g.end, value: s.value, ...i > 0 ? { erase: true } : {} })));
+}
 function redactProductBody(body, hits) {
   if (hits.length === 0) return body;
   const sorted = [...hits].sort((a, b) => a.start - b.start || b.end - a.end);
@@ -881,7 +884,10 @@ function redactProductBody(body, hits) {
   let at = 0;
   for (const h of sorted) {
     if (h.start < at || h.end <= h.start || h.end > body.length) continue;
-    const value = body.toString("latin1", h.start, h.end);
+    parts.push(body.subarray(at, h.start));
+    at = h.end;
+    if (h.erase) continue;
+    const value = h.value ?? body.toString("latin1", h.start, h.end);
     let perRule = numbers.get(h.rule);
     if (perRule === void 0) {
       perRule = /* @__PURE__ */ new Map();
@@ -892,8 +898,7 @@ function redactProductBody(body, hits) {
       n = perRule.size + 1;
       perRule.set(value, n);
     }
-    parts.push(body.subarray(at, h.start), Buffer.from(placeholder(h.rule, n), "latin1"));
-    at = h.end;
+    parts.push(Buffer.from(placeholder(h.rule, n), "latin1"));
   }
   parts.push(body.subarray(at));
   return Buffer.concat(parts);
@@ -951,30 +956,31 @@ var init_rules = __esm({
       {
         id: "slack-token",
         keywords: ["xoxa-", "xoxb-", "xoxp-", "xoxo-", "xoxs-", "xoxr-"],
-        regex: /\b(xox[abposr]-\d{6,13}-[0-9A-Za-z-]{10,})/,
+        regex: /(?<![0-9A-Za-z_-])(xox[abposr]-\d{6,13}-[0-9A-Za-z-]{10,256})/,
         source: "gitleaks slack-bot-token, slack-user-token, slack-legacy-token (one rule over xox[abposr]-)",
         licence: GITLEAKS
       },
       {
         id: "stripe-live-key",
         keywords: ["sk_live_", "rk_live_"],
-        regex: /\b((?:sk|rk)_live_[0-9A-Za-z]{10,99})\b/,
+        regex: /(?<![0-9A-Za-z_])((?:sk|rk)_live_[0-9A-Za-z]{10,99})(?![0-9A-Za-z_])/,
         source: "gitleaks stripe-access-token (live keys only)",
         licence: GITLEAKS
       },
       {
         id: "private-key",
         keywords: ["-----BEGIN"],
-        // Inside a JSON body the line breaks are `\n` escapes, so any character may sit in the key body, except a run of five
-        // dashes: a match never spans from one block's BEGIN to a later block's END.
-        regex: /(-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----(?:[^-]|-(?!----)){64,65536}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----)/,
+        // The key body may hold any character except the string separator and a run of five dashes, so a match never spans
+        // from one block's BEGIN to a later block's END or across two JSON strings (a key split across text blocks is
+        // matched in the joined view of the message instead).
+        regex: /(-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----(?:[^\0-]|-(?!----)){64,65536}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----)/,
         source: "gitleaks private-key (key body capped at 64 KiB and never across a BEGIN or END line)",
         licence: GITLEAKS
       },
       {
         id: "jwt",
         keywords: ["eyJ"],
-        regex: /\b(eyJ[0-9A-Za-z_-]{15,}\.eyJ[0-9A-Za-z_-]{15,}\.[0-9A-Za-z_-]{10,})/,
+        regex: /(?<![0-9A-Za-z_-])(eyJ[0-9A-Za-z_-]{15,4096}\.eyJ[0-9A-Za-z_-]{15,16384}\.[0-9A-Za-z_-]{10,4096})/,
         source: "gitleaks jwt (signed tokens with a JSON header and payload only)",
         licence: GITLEAKS
       },
@@ -982,21 +988,21 @@ var init_rules = __esm({
         id: "anthropic-api-key",
         keywords: ["sk-ant-"],
         // api03, admin01, oat01 (OAuth) and later numbered kinds; the repo's `sk-ant-test-CANARY` fake has no number.
-        regex: /\b(sk-ant-[a-z]{2,8}\d{2}-[0-9A-Za-z_-]{80,})/,
+        regex: /(?<![0-9A-Za-z_-])(sk-ant-[a-z]{2,8}\d{2}-[0-9A-Za-z_-]{80,512})/,
         source: "gitleaks anthropic-api-key and anthropic-admin-api-key (any numbered key kind, length not pinned)",
         licence: GITLEAKS
       },
       {
         id: "openai-api-key",
         keywords: ["sk-proj-", "sk-svcacct-", "sk-admin-"],
-        regex: /\b(sk-(?:proj|svcacct|admin)-[0-9A-Za-z_-]{40,})/,
+        regex: /(?<![0-9A-Za-z_-])(sk-(?:proj|svcacct|admin)-[0-9A-Za-z_-]{40,512})/,
         source: "gitleaks openai-api-key (project, service account and admin keys, without the T3BlbkFJ marker)",
         licence: GITLEAKS
       },
       {
         id: "google-api-key",
         keywords: ["AIza"],
-        regex: /\b(AIza[0-9A-Za-z_-]{35})(?![0-9A-Za-z_-])/,
+        regex: /(?<![0-9A-Za-z_-])(AIza[0-9A-Za-z_-]{35})(?![0-9A-Za-z_-])/,
         source: "gitleaks gcp-api-key",
         licence: GITLEAKS
       },
@@ -1010,9 +1016,9 @@ var init_rules = __esm({
       {
         id: "generic-secret-assignment",
         keywords: ["secret", "Secret", "SECRET", "token", "Token", "TOKEN", "passw", "Passw", "PASSW", "api_key", "apiKey", "API_KEY", "apikey", "APIKEY", "api-key"],
-        // A name ending in secret, token, password or api key, `=` or `:`, then a long random-looking value (JSON-escaped
-        // quotes allowed). Entropy only: never blocks.
-        regex: /(?:secret|token|passw(?:or)?d|api[_-]?key)[0-9A-Za-z_-]{0,20}\\?["']?\s{0,4}[:=]\s{0,4}\\?["']?([0-9A-Za-z+/_.=-]{32,128})/i,
+        // A name ending in secret, token, password or api key, `=` or `:`, then a long random-looking value. Entropy only:
+        // never blocks.
+        regex: /(?:secret|token|passw(?:or)?d|api[_-]?key)[0-9A-Za-z_-]{0,20}["']?[ \t]{0,4}[:=][ \t]{0,4}["']?([0-9A-Za-z+/_.=-]{32,128})/i,
         source: "gitleaks generic-api-key (simplified; entropy threshold 4.0)",
         licence: GITLEAKS,
         entropyOnly: true,
@@ -1034,6 +1040,84 @@ function shannonEntropy(s) {
   }
   return h;
 }
+function utf8Latin1(cp) {
+  return Buffer.from(String.fromCodePoint(cp), "utf8").toString("latin1");
+}
+function hex4(b, i) {
+  if (i + 4 > b.length) return -1;
+  const s = b.toString("latin1", i, i + 4);
+  return /^[0-9A-Fa-f]{4}$/.test(s) ? Number.parseInt(s, 16) : -1;
+}
+function decodeEscape(b, e, end) {
+  const c = b[e + 1];
+  if (c === void 0 || e + 1 >= end) return { text: "\\", next: Math.min(e + 1, end) };
+  const simple = SIMPLE_ESCAPES[c];
+  if (simple !== void 0) return { text: simple, next: e + 2 };
+  if (c !== 117) return { text: b.toString("latin1", e, e + 2), next: e + 2 };
+  const u = hex4(b, e + 2);
+  if (u < 0 || e + 6 > end) return { text: b.toString("latin1", e, e + 2), next: e + 2 };
+  if (u >= 55296 && u <= 56319 && b[e + 6] === 92 && b[e + 7] === 117 && e + 12 <= end) {
+    const lo = hex4(b, e + 8);
+    if (lo >= 56320 && lo <= 57343) return { text: utf8Latin1(65536 + (u - 55296 << 10) + (lo - 56320)), next: e + 12 };
+  }
+  return { text: utf8Latin1(u >= 55296 && u <= 57343 ? 65533 : u), next: e + 6 };
+}
+function buildViews(body, start, end, messages) {
+  const all = new View();
+  const joined = messages && messages.length > 0 ? new View() : null;
+  let lastKey = null;
+  let group = -1;
+  let m = 0;
+  let bs = -2;
+  let nq = -2;
+  const nextBs = (p) => bs !== -1 && bs < p ? bs = body.indexOf(92, p) : bs;
+  const nextQuote = (p) => {
+    if (nq !== -1 && nq < p) nq = body.indexOf(34, p);
+    return nq < 0 || nq >= end ? end : nq;
+  };
+  let i = start;
+  while (i < end) {
+    const q = nextQuote(i);
+    if (q >= end) break;
+    let j = q - 1;
+    while (j >= start && isWs(body[j])) j--;
+    const afterColon = j >= start && body[j] === 58;
+    all.separate(q);
+    const first2 = all.runCount();
+    let p = q + 1;
+    let close;
+    for (; ; ) {
+      const quote = nextQuote(p);
+      const esc2 = nextBs(p);
+      if (esc2 >= 0 && esc2 < quote) {
+        if (esc2 > p) all.push(body.toString("latin1", p, esc2), p, esc2, PLAIN);
+        const d = decodeEscape(body, esc2, end);
+        all.push(d.text, esc2, d.next, ESCAPE);
+        p = d.next;
+        continue;
+      }
+      if (quote > p) all.push(body.toString("latin1", p, quote), p, quote, PLAIN);
+      close = quote;
+      break;
+    }
+    const last = all.runCount();
+    let k = close + 1;
+    while (k < end && isWs(body[k])) k++;
+    if (k < end && body[k] === 58) {
+      lastKey = all.textOf(first2, last);
+    } else if (joined && messages && afterColon && lastKey !== null && PIECE_KEYS.has(lastKey)) {
+      while (m < messages.length && messages[m].end <= q) m++;
+      const msg = messages[m];
+      if (msg !== void 0 && q >= msg.start) {
+        if (m !== group) joined.separate(q);
+        group = m;
+        all.copyRuns(first2, last, joined);
+      }
+    }
+    i = close + 1;
+  }
+  return { all, joined };
+}
 function globalOf(rule) {
   let re = globalRegex.get(rule);
   if (re === void 0) {
@@ -1042,34 +1126,36 @@ function globalOf(rule) {
   }
   return re;
 }
-function keywordIn(body, rule, start, end) {
-  if (rule.keywords.length === 0) return true;
-  return rule.keywords.some((k) => {
-    const at = body.indexOf(k, start, "latin1");
-    return at >= 0 && at + k.length <= end;
-  });
-}
-function findSpans(body, rules, range = { start: 0, end: body.length }, text) {
-  const out = [];
-  let view = text;
-  for (const rule of rules) {
-    if (!keywordIn(body, rule, range.start, range.end)) continue;
-    view ??= body.toString("latin1");
-    const slice = view.slice(range.start, range.end);
-    const re = globalOf(rule);
-    re.lastIndex = 0;
-    for (let m = re.exec(slice); m !== null; m = re.exec(slice)) {
-      if (m[0].length === 0) {
-        re.lastIndex++;
-        continue;
-      }
-      const value = m[1] ?? m[0];
-      const offset = m[1] === void 0 ? 0 : m[0].indexOf(m[1]);
-      if (rule.minEntropy !== void 0 && shannonEntropy(value) < rule.minEntropy) continue;
-      if (rule.validate && !rule.validate(value)) continue;
-      const start = range.start + m.index + offset;
-      out.push({ rule, start, end: start + value.length, value });
+function matchView(view, rule, crossingOnly, out) {
+  const text = view.text;
+  if (rule.keywords.length > 0 && !rule.keywords.some((k) => text.includes(k))) return;
+  const re = globalOf(rule);
+  re.lastIndex = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    if (m[0].length === 0) {
+      re.lastIndex++;
+      continue;
     }
+    const value = m[1] ?? m[0];
+    const offset = m[1] === void 0 ? 0 : m[0].indexOf(m[1]);
+    if (rule.minEntropy !== void 0 && shannonEntropy(value) < rule.minEntropy) continue;
+    if (rule.validate && !rule.validate(value)) continue;
+    const s = m.index + offset;
+    const segments = view.segments(s, s + value.length);
+    const first2 = segments[0];
+    const last = segments[segments.length - 1];
+    if (first2 === void 0 || last === void 0 || crossingOnly && segments.length < 2) continue;
+    out.push({ rule, start: first2.start, end: last.end, value, segments });
+  }
+}
+function findSpans(body, rules, opts = {}) {
+  const range = opts.range ?? { start: 0, end: body.length };
+  const out = [];
+  if (rules.length === 0 || range.end <= range.start) return out;
+  const { all, joined } = buildViews(body, range.start, range.end, opts.messages);
+  for (const rule of rules) {
+    matchView(all, rule, false, out);
+    if (joined) matchView(joined, rule, true, out);
   }
   return out;
 }
@@ -1081,17 +1167,15 @@ function messageAt(messages, pos) {
 function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const action = (r) => r.entropyOnly ? "warn" : actionFor(r);
   const historyRules = rules.filter((r) => action(r) !== "warn");
-  const text = body.toString("latin1");
   const regions = lastTurn ? [
-    { where: "last-turn", start: lastTurn.start, end: lastTurn.end, rules },
-    { where: "history", start: 0, end: lastTurn.start, rules: historyRules },
-    { where: "history", start: lastTurn.end, end: body.length, rules: historyRules }
-  ] : [{ where: "history", start: 0, end: body.length, rules: historyRules }];
+    { where: "last-turn", range: lastTurn, rules, messages: opts.messages ?? [lastTurn] },
+    { where: "history", range: { start: 0, end: lastTurn.start }, rules: historyRules, messages: opts.messages },
+    { where: "history", range: { start: lastTurn.end, end: body.length }, rules: historyRules, messages: opts.messages }
+  ] : [{ where: "history", range: { start: 0, end: body.length }, rules: historyRules, messages: opts.messages }];
   const hits = [];
   const seen = /* @__PURE__ */ new Set();
   for (const region of regions) {
-    if (region.end <= region.start || region.rules.length === 0) continue;
-    for (const s of findSpans(body, region.rules, region, text)) {
+    for (const s of findSpans(body, region.rules, { range: region.range, ...region.messages ? { messages: region.messages } : {} })) {
       const valueHmac = pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
@@ -1103,11 +1187,76 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var globalRegex;
+var SEP, PLAIN, ESCAPE, SEPARATOR, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, globalRegex;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
     init_hmac();
+    SEP = "\0";
+    PLAIN = 0;
+    ESCAPE = 1;
+    SEPARATOR = 2;
+    PIECE_KEYS = /* @__PURE__ */ new Set(["text", "content", "thinking"]);
+    SIMPLE_ESCAPES = { 34: '"', 92: "\\", 47: "/", 98: "\b", 102: "\f", 110: "\n", 114: "\r", 116: "	" };
+    View = class {
+      parts = [];
+      /** Stride 4: text start, byte start, byte end, kind. */
+      runs = [];
+      length = 0;
+      textCache = null;
+      push(text, bStart, bEnd, kind) {
+        if (text.length === 0) return;
+        this.parts.push(text);
+        this.runs.push(this.length, bStart, bEnd, kind);
+        this.length += text.length;
+        this.textCache = null;
+      }
+      runCount() {
+        return this.parts.length;
+      }
+      /** Decoded text of runs `[from, to)`. */
+      textOf(from, to) {
+        return this.parts.slice(from, to).join("");
+      }
+      copyRuns(from, to, into) {
+        for (let k = from; k < to; k++) into.push(this.parts[k], this.runs[k * 4 + 1], this.runs[k * 4 + 2], this.runs[k * 4 + 3]);
+      }
+      separate(at) {
+        if (this.length > 0) this.push(SEP, at, at, SEPARATOR);
+      }
+      get text() {
+        this.textCache ??= this.parts.join("");
+        return this.textCache;
+      }
+      /** Byte ranges of decoded `[s, e)`; a separator or a gap between strings starts a new range. */
+      segments(s, e) {
+        const r = this.runs;
+        let lo = 0;
+        let hi = r.length / 4 - 1;
+        while (lo < hi) {
+          const mid = lo + hi + 1 >> 1;
+          if (r[mid * 4] <= s) lo = mid;
+          else hi = mid - 1;
+        }
+        const out = [];
+        for (let k = lo; k * 4 < r.length; k++) {
+          const t = r[k * 4];
+          if (t >= e) break;
+          const b = r[k * 4 + 1];
+          const bEnd = r[k * 4 + 2];
+          const kind = r[k * 4 + 3];
+          const tl = this.parts[k].length;
+          if (kind === SEPARATOR) continue;
+          const from = kind === PLAIN ? b + Math.max(s, t) - t : b;
+          const to = kind === PLAIN ? b + Math.min(e, t + tl) - t : bEnd;
+          const last = out[out.length - 1];
+          if (last !== void 0 && last.end === from) last.end = to;
+          else out.push({ start: from, end: to });
+        }
+        return out;
+      }
+    };
+    isWs = (c) => c === 32 || c === 9 || c === 10 || c === 13;
     globalRegex = /* @__PURE__ */ new WeakMap();
   }
 });
@@ -57156,7 +57305,7 @@ function scanGuardrails(policy2, product, body, x, salt) {
   if (!product) return { hits, redactions: [] };
   hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
   const redactRules = [...g.secrets.product === "redact" ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : [], ...g.pii.product === "redact" ? PII_RULES : []];
-  const redactions = findSpans(body, redactRules).map((sp) => ({ rule: sp.rule.id, start: sp.start, end: sp.end }));
+  const redactions = redactionHits(findSpans(body, redactRules, opts));
   return { hits, redactions };
 }
 async function handle(deps, failure3, runtime, held, id, req, res) {
@@ -106447,6 +106596,10 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     process.exit(1);
   }
   const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
+  if (o.store === "redis" && !traceSalt) {
+    console.error("tokenyard serve: --store redis needs --trace-salt or TOKENYARD_TRACE_SALT (a stable salt, so session taint HMACs match across instances and restarts)");
+    process.exit(1);
+  }
   if (o.traceDir && !traceSalt) {
     console.error("tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)");
     process.exit(1);

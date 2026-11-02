@@ -50,7 +50,7 @@ export const PII_RULES: readonly SecretRule[] = Object.freeze([
   {
     id: 'email',
     keywords: ['@'],
-    regex: /\b([A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,24})\b/,
+    regex: /(?<![A-Za-z0-9._%+-])([A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63}){0,8}\.[A-Za-z]{2,24})(?![A-Za-z0-9-])/,
     source: 'tokenyard',
     licence: TOKENYARD,
   },

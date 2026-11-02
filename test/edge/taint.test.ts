@@ -142,6 +142,18 @@ describe.skipIf(!redisUrl)('redis (REDIS_URL)', () => {
   });
 });
 
+test('taint holds when the next request carries the secret escaped differently (\\u escape)', async () => {
+  const g = await gateway(createMemoryStore({ clock: Date.now }));
+  expect((await post(g.url, turn1())).status).toBe(400);
+  const escaped = Buffer.from(
+    `{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"key \\u0041${AWS.slice(1)}"},{"role":"assistant","content":"ok"},{"role":"user","content":"go"}]}`,
+  );
+  const res = await post(g.url, escaped);
+  expect(res.status).toBe(400);
+  expect(message(res.body)).toContain('history (message 0)');
+  expect(g.up.got).toHaveLength(0);
+});
+
 test('history hit of a value that was only warned does not block', async () => {
   const spy = spyStore(createMemoryStore({ clock: Date.now }));
   const g = await gateway(spy.store, { edit: (p) => void (p.guardrails.secrets.codingAgent = 'warn') });

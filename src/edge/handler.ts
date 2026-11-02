@@ -5,7 +5,7 @@ import type { TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
 import { pseudonym } from '../guardrails/hmac.js';
 import { PII_RULES } from '../guardrails/pii.js';
-import { redactProductBody } from '../guardrails/redact.js';
+import { type RedactionHit, redactionHits, redactProductBody } from '../guardrails/redact.js';
 import { DEFAULT_RULES } from '../guardrails/rules.js';
 import { findSpans, scanBody } from '../guardrails/scan.js';
 import { buildFeatures, decide } from '../policy/decide.js';
@@ -367,7 +367,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
  * byte ranges a `redact` action replaces, over the whole body (a product client resends its history unredacted).
  * A body JSON.parse refused has no structure to trust, so all of it counts as the last turn.
  */
-function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, x: ExtractedFeatures, salt: string): { hits: GuardrailHit[]; redactions: Array<{ rule: string; start: number; end: number }> } {
+function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, x: ExtractedFeatures, salt: string): { hits: GuardrailHit[]; redactions: RedactionHit[] } {
   const g = policy.guardrails;
   const lastTurn = x.parseError ? { start: 0, end: body.length } : x.lastTurn;
   const opts = x.messages ? { messages: x.messages } : {};
@@ -375,7 +375,7 @@ function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, 
   if (!product) return { hits, redactions: [] };
   hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
   const redactRules = [...(g.secrets.product === 'redact' ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : []), ...(g.pii.product === 'redact' ? PII_RULES : [])];
-  const redactions = findSpans(body, redactRules).map((sp) => ({ rule: sp.rule.id, start: sp.start, end: sp.end }));
+  const redactions = redactionHits(findSpans(body, redactRules, opts));
   return { hits, redactions };
 }
 
