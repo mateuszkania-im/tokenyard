@@ -56,6 +56,8 @@ export interface GatewayDeps {
   runtime?: GatewayRuntime;
   /** How long admit and settle may take before the store counts as down (default 1 s): a slow store must not hang requests. */
   admitTimeoutMs?: number;
+  /** Where provider credentials (`credential: { env }`) are read inside this process (default `process.env`). */
+  env?: NodeJS.ProcessEnv;
 }
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
@@ -210,9 +212,9 @@ function rateLimitHeaders(h: UpstreamResponse['headers']): Record<string, string
   return out;
 }
 
-function providerCredential(p: ProviderSpec): { header: 'x-api-key' | 'authorization'; value: string } | null {
+function providerCredential(p: ProviderSpec, env: NodeJS.ProcessEnv): { header: 'x-api-key' | 'authorization'; value: string } | null {
   if (p.credential === 'passthrough') return null;
-  const value = process.env[p.credential.env];
+  const value = env[p.credential.env];
   if (!value) return null; // upstream answers 401, which reaches the client unchanged
   return p.format === 'anthropic' ? { header: 'x-api-key', value } : { header: 'authorization', value: `Bearer ${value}` };
 }
@@ -258,6 +260,8 @@ interface Held {
   streamed: boolean;
   /** Settlement has started; the fault path in `createHandler` settles an admitted request that never got here. */
   settled: boolean;
+  /** What the request knew once admitted, so the fault path can still queue its trace line (warm-up reads the charge). */
+  known: Omit<RequestOutcome, 'status' | 'usage' | 'aborted' | 'ttfbMs' | 'totalMs' | 'costMicroUsd' | 'addedTtfbMs'> | null;
 }
 
 const totalInput = (u: NonNullable<UsageResult['usage']>): number => u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
@@ -265,7 +269,8 @@ const totalInput = (u: NonNullable<UsageResult['usage']>): number => u.input + u
 /** Price table modifiers the request selects: `inference_geo: "us"` is `inferenceGeoUs`; a geo without an entry has none. */
 function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures): string[] {
   if (x.inferenceGeo === undefined || x.inferenceGeo === '') return [];
-  const name = `inferenceGeo${x.inferenceGeo.charAt(0).toUpperCase()}${x.inferenceGeo.slice(1)}`;
+  const geo = x.inferenceGeo.toLowerCase();
+  const name = `inferenceGeo${geo.charAt(0).toUpperCase()}${geo.slice(1)}`;
   return Object.hasOwn(policy.prices.modifiers, name) ? [name] : [];
 }
 
@@ -507,6 +512,22 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     ...(admission ? { audit: admission.audit } : {}),
     ...(admission?.storeDown ? { storeDown: true, taintUnchecked: plan.taint !== null } : {}),
   };
+  if (held.admitted) {
+    held.known = {
+      id,
+      key,
+      attribution: readAttribution(req.headers, surface),
+      surface,
+      ...decided,
+      ...admitted,
+      provider: first?.provider ?? null,
+      startedAt,
+      costBasis: key.billing === 'subscription' ? 'api-equivalent' : 'billed',
+      client: parseClient(typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined),
+      policyRevision: policy.revision,
+      priceTable: policy.priceTableVersion,
+    };
+  }
 
   // 8. Resolve.
   const decision = admission === null ? pre : resolve(policy, plan, admission);
@@ -522,7 +543,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const headersFor = (p: ProviderSpec): Record<string, string | string[]> =>
     upstreamHeaders(req.headers, {
       mode: p.credential === 'passthrough' ? 'passthrough' : 'api',
-      credential: providerCredential(p),
+      credential: providerCredential(p, deps.env ?? process.env),
       host: new URL(p.baseUrl).host,
       clientKeyHeaders: [...keyHeaders],
     });
@@ -623,13 +644,47 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
   };
   return (req, res) => {
     const id = deps.newId();
-    const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false };
+    const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
-      // (whether upstream billed is unknown, so fail closed).
+      // (whether upstream billed is unknown, so fail closed), and queue the trace line with that charge so warm-up
+      // (and the live cap across runs) counts it.
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
-        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).catch(() => undefined);
+        const known = held.known;
+        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs)
+          .then((r) => r === 'settled', () => false)
+          .then((settled) => {
+            if (known === null || !deps.traces) return;
+            const swept = runtime.takeSwept(id) || !settled;
+            let now = known.startedAt;
+            try {
+              now = deps.clock();
+            } catch {
+              // the clock is what failed; the line still goes out
+            }
+            deps.traces.write(
+              buildTraceRecord(
+                {
+                  ...known,
+                  status: 500,
+                  usage: null,
+                  aborted: false,
+                  ttfbMs: null,
+                  totalMs: Math.max(0, now - known.startedAt),
+                  costMicroUsd: held.est,
+                  addedTtfbMs: null,
+                  errorClass: 'internal_error',
+                  settledAtEstimate: true,
+                  settledBy: swept ? 'sweeper' : 'request',
+                  chargedMicroUsd: held.est,
+                  overrun: false,
+                },
+                deps.traceSalt ?? '',
+              ),
+            );
+          })
+          .catch(() => undefined);
       }
       try {
         if (!res.headersSent) sendError(req, res, anthropicError(500, 'api_error', 'internal error', null, id));

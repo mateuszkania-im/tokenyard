@@ -675,8 +675,8 @@ __export(writer_exports, {
 import { createHash as createHash2 } from "node:crypto";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join as join2 } from "node:path";
-function defaultInstanceId(hostname3, startedAtMs) {
-  return createHash2("sha256").update(`${hostname3}
+function defaultInstanceId(hostname4, startedAtMs) {
+  return createHash2("sha256").update(`${hostname4}
 ${startedAtMs}`).digest("hex").slice(0, 8);
 }
 function safeTenantDir(tenant) {
@@ -10298,9 +10298,9 @@ function parseURLObject(trimmed, def) {
 function stripTabAndNewline(value) {
   return value.replace(asciiTabOrNewline, "");
 }
-function urlHostnameOk(url2, hostname3) {
-  hostname3.lastIndex = 0;
-  return hostname3.test(url2.hostname);
+function urlHostnameOk(url2, hostname4) {
+  hostname4.lastIndex = 0;
+  return hostname4.test(url2.hostname);
 }
 function urlProtocolOk(url2, protocol) {
   protocol.lastIndex = 0;
@@ -32768,14 +32768,14 @@ var require_connect = __commonJS({
       const sessionCache = new SessionCache(maxCachedSessions == null ? 100 : maxCachedSessions);
       timeout = timeout == null ? 1e4 : timeout;
       allowH2 = allowH2 != null ? allowH2 : false;
-      return function connect({ hostname: hostname3, host, protocol, port, servername, localAddress, httpSocket }, callback) {
+      return function connect({ hostname: hostname4, host, protocol, port, servername, localAddress, httpSocket }, callback) {
         let socket;
         if (protocol === "https:") {
           if (!tls) {
             tls = __require("node:tls");
           }
           servername = servername || options.servername || util.getServerName(host) || null;
-          const sessionKey = servername || hostname3;
+          const sessionKey = servername || hostname4;
           assert2(sessionKey);
           const session = customSession || sessionCache.get(sessionKey) || null;
           port = port || 443;
@@ -32790,7 +32790,7 @@ var require_connect = __commonJS({
             socket: httpSocket,
             // upgrade socket connection
             port,
-            host: hostname3
+            host: hostname4
           });
           socket.on("session", function(session2) {
             sessionCache.set(sessionKey, session2);
@@ -32804,7 +32804,7 @@ var require_connect = __commonJS({
             ...options,
             localAddress,
             port,
-            host: hostname3
+            host: hostname4
           });
           if (useH2c === true) {
             socket.alpnProtocol = "h2";
@@ -32814,7 +32814,7 @@ var require_connect = __commonJS({
           const keepAliveInitialDelay = options.keepAliveInitialDelay === void 0 ? 6e4 : options.keepAliveInitialDelay;
           socket.setKeepAlive(true, keepAliveInitialDelay);
         }
-        const clearConnectTimeout = util.setupConnectTimeout(new WeakRef(socket), { timeout, hostname: hostname3, port });
+        const clearConnectTimeout = util.setupConnectTimeout(new WeakRef(socket), { timeout, hostname: hostname4, port });
         socket.setNoDelay(true).once(protocol === "https:" ? "secureConnect" : "connect", function() {
           queueMicrotask(clearConnectTimeout);
           if (callback) {
@@ -36504,7 +36504,7 @@ var require_client_h1 = __commonJS({
       kHTTPContext,
       kClosed
     } = require_symbols();
-    var constants = require_constants2();
+    var constants2 = require_constants2();
     var EMPTY_BUF = Buffer.alloc(0);
     var FastBuffer = Buffer[Symbol.species];
     var removeAllListeners = util.removeAllListeners;
@@ -36639,7 +36639,7 @@ var require_client_h1 = __commonJS({
          */
       constructor(client, socket, { exports: exports2 }) {
         this.llhttp = exports2;
-        this.ptr = this.llhttp.llhttp_alloc(constants.TYPE.RESPONSE);
+        this.ptr = this.llhttp.llhttp_alloc(constants2.TYPE.RESPONSE);
         this.client = client;
         this.socket = socket;
         this.timeout = null;
@@ -36735,11 +36735,11 @@ var require_client_h1 = __commonJS({
             currentParser = null;
             currentBufferRef = null;
           }
-          if (ret !== constants.ERROR.OK) {
+          if (ret !== constants2.ERROR.OK) {
             const data = chunk.subarray(llhttp.llhttp_get_error_pos(this.ptr) - currentBufferPtr);
-            if (ret === constants.ERROR.PAUSED_UPGRADE) {
+            if (ret === constants2.ERROR.PAUSED_UPGRADE) {
               this.onUpgrade(data);
-            } else if (ret === constants.ERROR.PAUSED) {
+            } else if (ret === constants2.ERROR.PAUSED) {
               this.paused = true;
               socket.unshift(data);
             } else {
@@ -36762,10 +36762,10 @@ var require_client_h1 = __commonJS({
         } finally {
           currentParser = null;
         }
-        if (ret === constants.ERROR.OK) {
+        if (ret === constants2.ERROR.OK) {
           return null;
         }
-        if (ret === constants.ERROR.PAUSED || ret === constants.ERROR.PAUSED_UPGRADE) {
+        if (ret === constants2.ERROR.PAUSED || ret === constants2.ERROR.PAUSED_UPGRADE) {
           this.paused = true;
           return null;
         }
@@ -36782,7 +36782,7 @@ var require_client_h1 = __commonJS({
           const len = new Uint8Array(llhttp.memory.buffer, ptr).indexOf(0);
           message = "Response does not match the HTTP/1.1 protocol (" + Buffer.from(llhttp.memory.buffer, ptr, len).toString() + ")";
         }
-        return new HTTPParserError(message, constants.ERROR[ret], data);
+        return new HTTPParserError(message, constants2.ERROR[ret], data);
       }
       destroy() {
         assert2(currentParser === null);
@@ -36993,7 +36993,7 @@ var require_client_h1 = __commonJS({
           socket[kBlocking] = false;
           client[kResume]();
         }
-        return pause ? constants.ERROR.PAUSED : 0;
+        return pause ? constants2.ERROR.PAUSED : 0;
       }
       /**
        * @param {Buffer} buf
@@ -37019,7 +37019,7 @@ var require_client_h1 = __commonJS({
         }
         this.bytesRead += buf.length;
         if (request2.onData(buf) === false) {
-          return constants.ERROR.PAUSED;
+          return constants2.ERROR.PAUSED;
         }
         return 0;
       }
@@ -37059,13 +37059,13 @@ var require_client_h1 = __commonJS({
         if (socket[kWriting]) {
           assert2(client[kRunning] === 0);
           util.destroy(socket, new InformationalError("reset"));
-          return constants.ERROR.PAUSED;
+          return constants2.ERROR.PAUSED;
         } else if (!shouldKeepAlive) {
           util.destroy(socket, new InformationalError("reset"));
-          return constants.ERROR.PAUSED;
+          return constants2.ERROR.PAUSED;
         } else if (socket[kReset] && client[kRunning] === 0) {
           util.destroy(socket, new InformationalError("reset"));
-          return constants.ERROR.PAUSED;
+          return constants2.ERROR.PAUSED;
         } else if (client[kPipelining] == null || client[kPipelining] === 1) {
           setImmediate(client[kResume]);
         } else {
@@ -38087,8 +38087,8 @@ var require_client_h2 = __commonJS({
         }
       }
       let stream = null;
-      const { hostname: hostname3, port } = client[kUrl];
-      headers[HTTP2_HEADER_AUTHORITY] = host || `${hostname3}${port ? `:${port}` : ""}`;
+      const { hostname: hostname4, port } = client[kUrl];
+      headers[HTTP2_HEADER_AUTHORITY] = host || `${hostname4}${port ? `:${port}` : ""}`;
       headers[HTTP2_HEADER_METHOD] = method;
       const abort = (err) => {
         if (request2.aborted || request2.completed) {
@@ -38825,20 +38825,20 @@ var require_client = __commonJS({
     function connect(client) {
       assert2(!client[kConnecting]);
       assert2(!client[kHTTPContext]);
-      let { host, hostname: hostname3, protocol, port } = client[kUrl];
-      if (hostname3[0] === "[") {
-        const idx = hostname3.indexOf("]");
+      let { host, hostname: hostname4, protocol, port } = client[kUrl];
+      if (hostname4[0] === "[") {
+        const idx = hostname4.indexOf("]");
         assert2(idx !== -1);
-        const ip = hostname3.substring(1, idx);
+        const ip = hostname4.substring(1, idx);
         assert2(net.isIPv6(ip));
-        hostname3 = ip;
+        hostname4 = ip;
       }
       client[kConnecting] = true;
       if (channels.beforeConnect.hasSubscribers) {
         channels.beforeConnect.publish({
           connectParams: {
             host,
-            hostname: hostname3,
+            hostname: hostname4,
             protocol,
             port,
             version: client[kHTTPContext]?.version,
@@ -38851,14 +38851,14 @@ var require_client = __commonJS({
       try {
         client[kConnector]({
           host,
-          hostname: hostname3,
+          hostname: hostname4,
           protocol,
           port,
           servername: client[kServerName],
           localAddress: client[kLocalAddress]
         }, (err, socket) => {
           if (err) {
-            handleConnectError(client, err, { host, hostname: hostname3, protocol, port });
+            handleConnectError(client, err, { host, hostname: hostname4, protocol, port });
             client[kResume]();
             return;
           }
@@ -38872,7 +38872,7 @@ var require_client = __commonJS({
             client[kHTTPContext] = socket.alpnProtocol === "h2" ? connectH2(client, socket) : connectH1(client, socket);
           } catch (err2) {
             socket.destroy().on("error", noop);
-            handleConnectError(client, err2, { host, hostname: hostname3, protocol, port });
+            handleConnectError(client, err2, { host, hostname: hostname4, protocol, port });
             client[kResume]();
             return;
           }
@@ -38885,7 +38885,7 @@ var require_client = __commonJS({
             channels.connected.publish({
               connectParams: {
                 host,
-                hostname: hostname3,
+                hostname: hostname4,
                 protocol,
                 port,
                 version: client[kHTTPContext]?.version,
@@ -38900,11 +38900,11 @@ var require_client = __commonJS({
           client[kResume]();
         });
       } catch (err) {
-        handleConnectError(client, err, { host, hostname: hostname3, protocol, port });
+        handleConnectError(client, err, { host, hostname: hostname4, protocol, port });
         client[kResume]();
       }
     }
-    function handleConnectError(client, err, { host, hostname: hostname3, protocol, port }) {
+    function handleConnectError(client, err, { host, hostname: hostname4, protocol, port }) {
       if (client.destroyed) {
         return;
       }
@@ -38913,7 +38913,7 @@ var require_client = __commonJS({
         channels.connectError.publish({
           connectParams: {
             host,
-            hostname: hostname3,
+            hostname: hostname4,
             protocol,
             port,
             version: client[kHTTPContext]?.version,
@@ -40782,10 +40782,10 @@ var require_env_http_proxy_agent = __commonJS({
         ]);
       }
       #getProxyAgentForUrl(url2) {
-        let { protocol, host: hostname3, port } = url2;
-        hostname3 = hostname3.replace(/:\d*$/, "").toLowerCase();
+        let { protocol, host: hostname4, port } = url2;
+        hostname4 = hostname4.replace(/:\d*$/, "").toLowerCase();
         port = Number.parseInt(port, 10) || DEFAULT_PORTS[protocol] || 0;
-        if (!this.#shouldProxy(hostname3, port)) {
+        if (!this.#shouldProxy(hostname4, port)) {
           return this[kNoProxyAgent];
         }
         if (protocol === "https:") {
@@ -40793,7 +40793,7 @@ var require_env_http_proxy_agent = __commonJS({
         }
         return this[kHttpProxyAgent];
       }
-      #shouldProxy(hostname3, port) {
+      #shouldProxy(hostname4, port) {
         if (this.#noProxyChanged) {
           this.#parseNoProxy();
         }
@@ -40808,10 +40808,10 @@ var require_env_http_proxy_agent = __commonJS({
           if (entry.port && entry.port !== port) {
             continue;
           }
-          if (hostname3 === entry.hostname) {
+          if (hostname4 === entry.hostname) {
             return false;
           }
-          if (hostname3.slice(-(entry.hostname.length + 1)) === `.${entry.hostname}`) {
+          if (hostname4.slice(-(entry.hostname.length + 1)) === `.${entry.hostname}`) {
             return false;
           }
         }
@@ -43765,7 +43765,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir3 } = __require("node:fs/promises");
+    var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir4 } = __require("node:fs/promises");
     var { dirname, resolve: resolve2 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
@@ -43997,7 +43997,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         const resolvedPath = resolve2(path2);
-        await mkdir3(dirname(resolvedPath), { recursive: true });
+        await mkdir4(dirname(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
           snapshot
@@ -45001,14 +45001,14 @@ var require_dns = __commonJS({
       get size() {
         return this.#records.size;
       }
-      get(hostname3) {
-        return this.#records.get(hostname3) ?? null;
+      get(hostname4) {
+        return this.#records.get(hostname4) ?? null;
       }
-      set(hostname3, records) {
-        this.#records.set(hostname3, records);
+      set(hostname4, records) {
+        this.#records.set(hostname4, records);
       }
-      delete(hostname3) {
-        this.#records.delete(hostname3);
+      delete(hostname4) {
+        this.#records.delete(hostname4);
       }
       // Delegate to storage decide can we do more lookups or not
       full() {
@@ -56698,9 +56698,9 @@ function rateLimitHeaders(h) {
   }
   return out;
 }
-function providerCredential(p) {
+function providerCredential(p, env) {
   if (p.credential === "passthrough") return null;
-  const value = process.env[p.credential.env];
+  const value = env[p.credential.env];
   if (!value) return null;
   return p.format === "anthropic" ? { header: "x-api-key", value } : { header: "authorization", value: `Bearer ${value}` };
 }
@@ -56732,7 +56732,8 @@ function usageTap(surface, up, capBytes) {
 }
 function requestModifiers(policy2, x) {
   if (x.inferenceGeo === void 0 || x.inferenceGeo === "") return [];
-  const name2 = `inferenceGeo${x.inferenceGeo.charAt(0).toUpperCase()}${x.inferenceGeo.slice(1)}`;
+  const geo = x.inferenceGeo.toLowerCase();
+  const name2 = `inferenceGeo${geo.charAt(0).toUpperCase()}${geo.slice(1)}`;
   return Object.hasOwn(policy2.prices.modifiers, name2) ? [name2] : [];
 }
 function actualCost(policy2, model, r, x) {
@@ -56919,6 +56920,22 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     ...admission ? { audit: admission.audit } : {},
     ...admission?.storeDown ? { storeDown: true, taintUnchecked: plan.taint !== null } : {}
   };
+  if (held.admitted) {
+    held.known = {
+      id,
+      key,
+      attribution: readAttribution(req.headers, surface),
+      surface,
+      ...decided,
+      ...admitted,
+      provider: first2?.provider ?? null,
+      startedAt,
+      costBasis: key.billing === "subscription" ? "api-equivalent" : "billed",
+      client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
+      policyRevision: policy2.revision,
+      priceTable: policy2.priceTableVersion
+    };
+  }
   const decision = admission === null ? pre : resolve(policy2, plan, admission);
   const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
   if (decision.block || !provider2) {
@@ -56928,7 +56945,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   }
   const headersFor = (p) => upstreamHeaders(req.headers, {
     mode: p.credential === "passthrough" ? "passthrough" : "api",
-    credential: providerCredential(p),
+    credential: providerCredential(p, deps.env ?? process.env),
     host: new URL(p.baseUrl).host,
     clientKeyHeaders: [...keyHeaders]
   });
@@ -57017,11 +57034,40 @@ function createHandler(deps) {
   };
   return (req, res) => {
     const id = deps.newId();
-    const held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false };
+    const held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
-        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).catch(() => void 0);
+        const known = held.known;
+        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
+          if (known === null || !deps.traces) return;
+          const swept = runtime.takeSwept(id) || !settled;
+          let now = known.startedAt;
+          try {
+            now = deps.clock();
+          } catch {
+          }
+          deps.traces.write(
+            buildTraceRecord(
+              {
+                ...known,
+                status: 500,
+                usage: null,
+                aborted: false,
+                ttfbMs: null,
+                totalMs: Math.max(0, now - known.startedAt),
+                costMicroUsd: held.est,
+                addedTtfbMs: null,
+                errorClass: "internal_error",
+                settledAtEstimate: true,
+                settledBy: swept ? "sweeper" : "request",
+                chargedMicroUsd: held.est,
+                overrun: false
+              },
+              deps.traceSalt ?? ""
+            )
+          );
+        }).catch(() => void 0);
       }
       try {
         if (!res.headersSent) sendError(req, res, anthropicError(500, "api_error", "internal error", null, id));
@@ -87424,10 +87470,10 @@ var require_client2 = __commonJS({
         if (url2.startsWith("unix:")) {
           return _a3.#parseUnixURL(url2);
         }
-        const { hostname: hostname3, port, protocol, username, password, pathname } = new node_url_1.URL(url2), parsed = {
+        const { hostname: hostname4, port, protocol, username, password, pathname } = new node_url_1.URL(url2), parsed = {
           socket: {
             // Use net.SocketAddress.parse() once supported.
-            host: hostname3.replace(/^\[([0-9a-f:]+)\]$/, "$1"),
+            host: hostname4.replace(/^\[([0-9a-f:]+)\]$/, "$1"),
             tls: false
           }
         };
@@ -102147,34 +102193,6 @@ var init_sweeper = __esm({
   }
 });
 
-// src/env.ts
-var env_exports = {};
-__export(env_exports, {
-  buildEnvExport: () => buildEnvExport
-});
-function ticketOf(branch, pattern) {
-  const m = new RegExp(pattern ?? DEFAULT_TICKET).exec(branch);
-  return m ? m[1] ?? m[0] : null;
-}
-function buildEnvExport(o) {
-  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
-  lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
-  const ticket = ticketOf(o.branch, o.ticketPattern);
-  if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
-  return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
-`;
-}
-var DEFAULT_TICKET, OWN, oneLine, shellQuote;
-var init_env = __esm({
-  "src/env.ts"() {
-    "use strict";
-    DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
-    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
-    oneLine = (s) => s.replace(/[\r\n]+/g, " ").trim();
-    shellQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
-  }
-});
-
 // src/edge/keys.ts
 var keys_exports = {};
 __export(keys_exports, {
@@ -102207,6 +102225,188 @@ var init_keys2 = __esm({
     init_auth();
     B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     B62_LEN = 43;
+  }
+});
+
+// src/live/harness.ts
+var harness_exports = {};
+__export(harness_exports, {
+  LIVE_BUDGET: () => LIVE_BUDGET,
+  LIVE_LAST_DAY: () => LIVE_LAST_DAY,
+  LIVE_MAX_USD: () => LIVE_MAX_USD,
+  liveGuard: () => liveGuard,
+  loadLivePolicy: () => loadLivePolicy,
+  startLiveHarness: () => startLiveHarness
+});
+import { randomBytes as randomBytes4 } from "node:crypto";
+import { access, constants, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { hostname as hostname3 } from "node:os";
+import { join as join6 } from "node:path";
+function liveGuard(env, today) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || today > LIVE_LAST_DAY) return { ok: false, reason: `live tests end on ${LIVE_LAST_DAY} (the credits expire); today is ${today}` };
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, reason: "ANTHROPIC_API_KEY is not set (npm run live reads it from .env)" };
+  const raw = env.TOKENYARD_LIVE_BUDGET_USD;
+  if (raw === void 0 || raw.trim() === "") return { ok: false, reason: `TOKENYARD_LIVE_BUDGET_USD is not set (at most ${LIVE_MAX_USD})` };
+  const capUsd = Number(raw);
+  if (!Number.isFinite(capUsd) || capUsd <= 0 || capUsd > LIVE_MAX_USD) return { ok: false, reason: `TOKENYARD_LIVE_BUDGET_USD must be a number above 0 and at most ${LIVE_MAX_USD}` };
+  return { ok: true, capUsd, codexLive: Boolean(env.OPENAI_API_KEY) };
+}
+function loadLivePolicy(o) {
+  const dir = o.dir ?? LIVE_POLICY_DIR;
+  const read = (f) => readFileSync(join6(dir, f), "utf8");
+  const keys2 = `- ${JSON.stringify({ hash: o.keyHash, keyId: `key_${o.keyHash.slice(0, 8)}`, tenant: LIVE_TENANT, team: LIVE_TENANT, name: "live", kind: "developer", billing: "api" })}
+`;
+  const src = parsePolicyFiles(dir, { "policy.yaml": read("policy.yaml"), "prices.yaml": read("prices.yaml"), "keys.yaml": keys2 });
+  const budgets = src.policy.budgets;
+  const total = budgets[0];
+  if (budgets.length !== 1 || total?.name !== LIVE_BUDGET || total.scope !== "tenant" || total.window !== "month") {
+    throw new Error(`the live policy must have exactly one budget, ${LIVE_BUDGET} (scope tenant, window month)`);
+  }
+  total.usd = o.capUsd;
+  total.onExceed = "block";
+  total.mode = "enforce";
+  if (o.upstream !== void 0) {
+    const p = src.policy.providers.anthropic;
+    if (!p) throw new Error("the live policy has no provider anthropic");
+    p.baseUrl = o.upstream;
+  }
+  return compilePolicy(src, "live", { experimentalSubscription: false });
+}
+async function assertReadable(dir) {
+  for (const e of await readdir2(dir, { withFileTypes: true })) {
+    const p = join6(dir, e.name);
+    if (e.isDirectory()) await assertReadable(p);
+    else await access(p, constants.R_OK);
+  }
+}
+async function startLiveHarness(o) {
+  const guard = liveGuard(o.env, o.today);
+  if (!guard.ok) throw new Error(`tokenyard live: ${guard.reason}`);
+  const { plaintext: clientKey, hash: hash2 } = createKey();
+  const policy2 = loadLivePolicy({ capUsd: guard.capUsd, keyHash: hash2, ...o.policyDir ? { dir: o.policyDir } : {}, ...o.upstream ? { upstream: o.upstream } : {} });
+  const now = Date.now();
+  let spentMicroUsd;
+  const store = createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: (ids) => runtime.onSwept(ids) });
+  const runtime = createGatewayRuntime();
+  try {
+    await mkdir3(o.traceDir, { recursive: true });
+    await assertReadable(o.traceDir);
+    const records = await loadTraceRecords({ path: o.traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
+    const entries = await warmupEntries(
+      (async function* () {
+        yield* records;
+      })(),
+      policy2,
+      now
+    );
+    await store.seed(entries);
+    spentMicroUsd = entries.reduce((n, e) => n + e.spentMicroUsd, 0);
+  } catch (e) {
+    const code = e.code;
+    throw new Error(`tokenyard live: cannot read the live trace dir ${o.traceDir}${code ? ` (${code})` : ""}; refusing to start without the earlier spend`);
+  }
+  const writer = new TraceWriter({ dir: o.traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
+  let ticks = 0;
+  const stopSweeper = startSweeper(store, {
+    intervalMs: SWEEP_INTERVAL_MS,
+    onTick: () => {
+      if (++ticks % 2 === 0) writer.heartbeat();
+    },
+    onError: (e) => console.error(`tokenyard live: sweeper: ${e instanceof Error ? e.message : String(e)}`)
+  });
+  const gw = createGateway({
+    policy: () => policy2,
+    store,
+    runtime,
+    traces: writer,
+    traceSalt: o.env.TOKENYARD_TRACE_SALT || randomBytes4(16).toString("hex"),
+    clock: Date.now,
+    newId: () => ulid(),
+    basePath: null,
+    bodyCapBytes: DEFAULT_BODY_CAP_BYTES,
+    env: o.env
+  });
+  let url2;
+  try {
+    url2 = await gw.listen(o.port, "127.0.0.1");
+  } catch (e) {
+    stopSweeper();
+    await writer.close();
+    throw e;
+  }
+  const capMicro = Math.round(guard.capUsd * 1e6);
+  process.stdout.write(
+    [
+      `tokenyard live: gateway ${url2}`,
+      `tokenyard live: client key ${clientKey}`,
+      `tokenyard live: ${LIVE_BUDGET} ${usd2(capMicro)}, spent ${usd2(spentMicroUsd)}, remaining ${usd2(Math.max(0, capMicro - spentMicroUsd))}`,
+      `tokenyard live: codex ${guard.codexLive ? "live" : "not live (no OPENAI_API_KEY)"}`,
+      ""
+    ].join("\n")
+  );
+  return {
+    url: url2,
+    clientKey,
+    spentMicroUsd,
+    async close() {
+      stopSweeper();
+      await gw.close();
+      await writer.close();
+    }
+  };
+}
+var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_POLICY_DIR, WARMUP_LOOKBACK_MS2, usd2;
+var init_harness = __esm({
+  "src/live/harness.ts"() {
+    "use strict";
+    init_keys2();
+    init_handler();
+    init_server();
+    init_ulid();
+    init_export();
+    init_writer();
+    init_memory_store();
+    init_open_store();
+    init_sweeper();
+    init_warmup();
+    init_compile2();
+    init_load_dir();
+    LIVE_LAST_DAY = "2026-11-16";
+    LIVE_MAX_USD = 20;
+    LIVE_BUDGET = "live-total";
+    LIVE_TENANT = "live";
+    LIVE_POLICY_DIR = join6("test", "live");
+    WARMUP_LOOKBACK_MS2 = 32 * 864e5;
+    usd2 = (micro) => `$${(micro / 1e6).toFixed(2)}`;
+  }
+});
+
+// src/env.ts
+var env_exports = {};
+__export(env_exports, {
+  buildEnvExport: () => buildEnvExport
+});
+function ticketOf(branch, pattern) {
+  const m = new RegExp(pattern ?? DEFAULT_TICKET).exec(branch);
+  return m ? m[1] ?? m[0] : null;
+}
+function buildEnvExport(o) {
+  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
+  lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
+  const ticket = ticketOf(o.branch, o.ticketPattern);
+  if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
+  return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
+`;
+}
+var DEFAULT_TICKET, OWN, oneLine, shellQuote;
+var init_env = __esm({
+  "src/env.ts"() {
+    "use strict";
+    DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
+    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
+    oneLine = (s) => s.replace(/[\r\n]+/g, " ").trim();
+    shellQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
   }
 });
 
@@ -105622,7 +105822,7 @@ var package_default = {
     "test:redis": `node -e "process.env.REDIS_URL || (console.error('test:redis needs REDIS_URL, for example redis://127.0.0.1:6379'), process.exit(1))" && vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts`,
     bench: `node -e "console.error('bench: not implemented yet'); process.exit(1)"`,
     "bench:check": `node -e "console.error('bench:check: not implemented yet'); process.exit(1)"`,
-    live: `node -e "console.error('live: not implemented yet'); process.exit(1)"`,
+    live: "node --env-file=.env bin/tokenyard.mjs live",
     "check:secrets": "node scripts/check-no-secrets.mjs"
   },
   devDependencies: {
@@ -105777,10 +105977,10 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     console.error("tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)");
     process.exit(1);
   }
-  const { hostname: hostname3 } = await import("node:os");
+  const { hostname: hostname4 } = await import("node:os");
   const { ulid: ulid4 } = await Promise.resolve().then(() => (init_ulid(), ulid_exports));
   const { defaultInstanceId: defaultInstanceId2, TraceWriter: TraceWriter2 } = await Promise.resolve().then(() => (init_writer(), writer_exports));
-  const instanceId = o.instanceId ?? defaultInstanceId2(hostname3(), Date.now());
+  const instanceId = o.instanceId ?? defaultInstanceId2(hostname4(), Date.now());
   const writer = o.traceDir ? new TraceWriter2({ dir: o.traceDir, instanceId, queueMax: 1e4, clock: Date.now }) : null;
   const { createGateway: createGateway2, DEFAULT_BODY_CAP_BYTES: DEFAULT_BODY_CAP_BYTES2 } = await Promise.resolve().then(() => (init_server(), server_exports));
   let loader = null;
@@ -105853,6 +106053,19 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 });
+program2.command("live", { hidden: true }).description("live-test harness: the gateway with the live policy and the tokenyard-enforced cap (npm run live)").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--trace-dir <dir>", "live trace directory (gitignored)", ".live/traces").action(async (o) => {
+  const { startLiveHarness: startLiveHarness2 } = await Promise.resolve().then(() => (init_harness(), harness_exports));
+  let h;
+  try {
+    h = await startLiveHarness2({ env: process.env, today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), traceDir: o.traceDir, port: Number(o.port) });
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  }
+  const stop = () => void h.close().then(() => process.exit(0));
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+});
 program2.command("env").description('print shell code that sets repo, branch and ticket headers for Claude Code: eval "$(tokenyard env)"').option("--ticket-pattern <regex>", "regex applied to the branch name; the first group (or the whole match) is the ticket").action(async (o) => {
   const { execFileSync } = await import("node:child_process");
   const { basename } = await import("node:path");
@@ -105908,7 +106121,7 @@ policy.command("check").description("validate a policy directory: schema, then t
   if (errors.length > 0) process.exit(1);
 });
 policy.command("build").description("write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256").argument("[dir]", "policy directory", "policy").option("--out <file>", "output file", "dist/policy-bundle.json").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
-  const { mkdir: mkdir3, writeFile: writeFile3 } = await import("node:fs/promises");
+  const { mkdir: mkdir4, writeFile: writeFile3 } = await import("node:fs/promises");
   const { dirname } = await import("node:path");
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
   const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
@@ -105922,7 +106135,7 @@ policy.command("build").description("write one bundle file (manifest, policy, pr
       process.exit(1);
     }
     const bundle = buildBundle2(src, { createdAt: (/* @__PURE__ */ new Date()).toISOString(), ...process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {} });
-    await mkdir3(dirname(o.out), { recursive: true });
+    await mkdir4(dirname(o.out), { recursive: true });
     await writeFile3(o.out, serializeBundle2(bundle));
     console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
   } catch (e) {

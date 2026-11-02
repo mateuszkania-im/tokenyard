@@ -1,0 +1,65 @@
+# Live-test policy (spec 14.1), loaded only by `npm run live`. The harness replaces the `usd` of `live-total` with
+# TOKENYARD_LIVE_BUDGET_USD (at most 20) and the keys with one `ty_` key it creates at start; nothing else changes.
+apiVersion: tokenyard/v1
+kind: Policy
+metadata:
+  name: tokenyard-live
+
+pricing: ./prices.yaml
+keys: ./keys.yaml
+
+providers:
+  anthropic:
+    format: anthropic
+    baseUrl: https://api.anthropic.com
+    credential: { env: ANTHROPIC_API_KEY }
+  openai:
+    format: openai
+    baseUrl: https://api.openai.com/v1
+    credential: { env: OPENAI_API_KEY }
+
+tenants:
+  live: { teams: [live] }
+
+routes:
+  - name: claude-code
+    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }
+    chain: [anthropic]
+    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]
+    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]
+  - name: codex
+    match: { surface: openai-responses, traffic: coding-agent }
+    chain: [openai]
+
+# One enforced budget on the tenant covers every route, Anthropic and OpenAI together. All live runs fall inside
+# November 2026, so the month window holds the whole cap; the harness seeds it from every earlier live trace.
+budgets:
+  - { name: live-total, scope: tenant, window: month, usd: 20, onExceed: block, mode: enforce }
+
+reservation:
+  estimator: worst-case
+  onOverrun: allow-and-debit
+  serverToolsWithoutMaxUses: block
+
+rateLimits:
+  - { name: live-rpm, scope: key, rpm: 120, burst: 30 }
+  - { name: live-streams, scope: key, concurrentStreams: 8 }
+
+guardrails:
+  secrets:
+    rules: default
+    codingAgent: block
+    product: redact
+    entropyOnly: warn
+    taintTtlHours: 24
+
+failure:
+  counterStoreDown: { rateLimits: closed, budgets: closed }
+  unpricedModel: block
+  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }
+  retryBudgetRatio: 0.1
+
+ci:
+  failOn:
+    cutSessions: 0
+    costIncreasePct: 10

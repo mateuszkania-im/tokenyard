@@ -528,3 +528,62 @@ test('inference_geo "us" in the body settles at the inferenceGeoUs rate (1.1x)',
   expect(spy.settles[1]?.actual).toBe(costMicroUsd(g.policy.prices, 'claude-haiku-5-5', u));
   expect(spy.settles[0]?.actual).toBeGreaterThan(spy.settles[1]?.actual as number);
 });
+
+// Task 15 carried item: inference_geo is matched without regard to case ("US" is the us modifier).
+test('inference_geo "US" (any case) settles at the inferenceGeoUs rate', async () => {
+  const up = await raw((req, res) => {
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/json' }).end(json('claude-haiku-5-5', { input_tokens: 10_000, output_tokens: 2_000 }));
+  });
+  const spy = spyStore(createMemoryStore({ clock: Date.now }));
+  const g = await gateway({ upstream: up.url, store: spy.store });
+  await send(g.url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-haiku-5-5', inference_geo: 'US' }) });
+  await send(g.url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-haiku-5-5', inference_geo: 'Us' }) });
+  await expect.poll(() => spy.settles.length).toBe(2);
+  const u = { input: 10_000, output: 2_000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 };
+  const geo = costMicroUsd(g.policy.prices, 'claude-haiku-5-5', u, { modifiers: ['inferenceGeoUs'] });
+  expect(spy.settles.map((s) => s.actual)).toEqual([geo, geo]);
+});
+
+// Task 15 carried item: the fault path writes a trace line charged at the estimate, so warm-up sees that charge.
+test('a fault after admit queues a trace line with chargedMicroUsd equal to the estimate', async () => {
+  let n = 0;
+  let faults = 0;
+  const up = await raw((req, res) => {
+    req.resume();
+    if (n === 1) faults = 2;
+    res.writeHead(200, { 'content-type': 'application/json' }).end(json('claude-haiku-5-5', { input_tokens: 5, output_tokens: 1 }));
+  });
+  const spy = spyStore(createMemoryStore({ clock: Date.now }));
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const traces: Rec[] = [];
+  const policy = testPolicy({ upstream: up.url });
+  const gw = createGateway({
+    policy: () => policy,
+    store: spy.store,
+    traces: { write: (r) => (traces.push(r), true) },
+    traceSalt: 's',
+    clock: () => {
+      if (faults > 0) {
+        faults--;
+        throw new Error('injected fault');
+      }
+      return Date.now();
+    },
+    newId: () => `req_${++n}`,
+    basePath: null,
+    bodyCapBytes: 1 << 20,
+  });
+  const url = await gw.listen(0);
+  closers.push(gw.close);
+  await sendTolerant(url, '/v1/messages', authHeaders, msgBody({ model: 'claude-haiku-5-5' }));
+  await expect.poll(() => traces.length).toBe(1);
+  const est = spy.admits[0]?.plan.reservations[0]?.estMicroUsd;
+  expect(est).toBeGreaterThan(0);
+  const t = traces[0] as Rec;
+  expect(t.id).toBe('req_1');
+  expect(t.tenant).toBe('acme');
+  expect(t.outcome).toMatchObject({ chargedMicroUsd: est, costMicroUsd: est, settledAtEstimate: true, errorClass: 'internal_error' });
+  expect(t.decision.reservedMicroUsd).toBe(est);
+  expect(spy.settles).toEqual([{ id: 'req_1', actual: est, result: 'settled' }]);
+});
