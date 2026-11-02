@@ -29,8 +29,8 @@ var __commonJS = (cb, mod) => function __require2() {
   }
 };
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name2 in all)
+    __defProp(target, name2, { get: all[name2], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -613,7 +613,7 @@ var require_identity = __commonJS({
     var isDocument = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === DOC;
     var isMap = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === MAP;
     var isPair = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === PAIR;
-    var isScalar = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SCALAR;
+    var isScalar2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SCALAR;
     var isSeq = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SEQ;
     function isCollection(node2) {
       if (node2 && typeof node2 === "object")
@@ -635,7 +635,7 @@ var require_identity = __commonJS({
         }
       return false;
     }
-    var hasAnchor = (node2) => (isScalar(node2) || isCollection(node2)) && !!node2.anchor;
+    var hasAnchor = (node2) => (isScalar2(node2) || isCollection(node2)) && !!node2.anchor;
     exports.ALIAS = ALIAS;
     exports.DOC = DOC;
     exports.MAP = MAP;
@@ -650,7 +650,7 @@ var require_identity = __commonJS({
     exports.isMap = isMap;
     exports.isNode = isNode;
     exports.isPair = isPair;
-    exports.isScalar = isScalar;
+    exports.isScalar = isScalar2;
     exports.isSeq = isSeq;
   }
 });
@@ -663,7 +663,7 @@ var require_visit = __commonJS({
     var BREAK = /* @__PURE__ */ Symbol("break visit");
     var SKIP = /* @__PURE__ */ Symbol("skip children");
     var REMOVE = /* @__PURE__ */ Symbol("remove node");
-    function visit2(node2, visitor) {
+    function visit3(node2, visitor) {
       const visitor_ = initVisitor(visitor);
       if (identity.isDocument(node2)) {
         const cd = visit_(null, node2.contents, visitor_, Object.freeze([node2]));
@@ -672,9 +672,9 @@ var require_visit = __commonJS({
       } else
         visit_(null, node2, visitor_, Object.freeze([]));
     }
-    visit2.BREAK = BREAK;
-    visit2.SKIP = SKIP;
-    visit2.REMOVE = REMOVE;
+    visit3.BREAK = BREAK;
+    visit3.SKIP = SKIP;
+    visit3.REMOVE = REMOVE;
     function visit_(key, node2, visitor, path2) {
       const ctrl = callVisitor(key, node2, visitor, path2);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
@@ -685,12 +685,12 @@ var require_visit = __commonJS({
         if (identity.isCollection(node2)) {
           path2 = Object.freeze(path2.concat(node2));
           for (let i = 0; i < node2.items.length; ++i) {
-            const ci = visit_(i, node2.items[i], visitor, path2);
-            if (typeof ci === "number")
-              i = ci - 1;
-            else if (ci === BREAK)
+            const ci2 = visit_(i, node2.items[i], visitor, path2);
+            if (typeof ci2 === "number")
+              i = ci2 - 1;
+            else if (ci2 === BREAK)
               return BREAK;
-            else if (ci === REMOVE) {
+            else if (ci2 === REMOVE) {
               node2.items.splice(i, 1);
               i -= 1;
             }
@@ -733,12 +733,12 @@ var require_visit = __commonJS({
         if (identity.isCollection(node2)) {
           path2 = Object.freeze(path2.concat(node2));
           for (let i = 0; i < node2.items.length; ++i) {
-            const ci = await visitAsync_(i, node2.items[i], visitor, path2);
-            if (typeof ci === "number")
-              i = ci - 1;
-            else if (ci === BREAK)
+            const ci2 = await visitAsync_(i, node2.items[i], visitor, path2);
+            if (typeof ci2 === "number")
+              i = ci2 - 1;
+            else if (ci2 === BREAK)
               return BREAK;
-            else if (ci === REMOVE) {
+            else if (ci2 === REMOVE) {
               node2.items.splice(i, 1);
               i -= 1;
             }
@@ -808,7 +808,7 @@ var require_visit = __commonJS({
         throw new Error(`Cannot replace node with ${pt} parent`);
       }
     }
-    exports.visit = visit2;
+    exports.visit = visit3;
     exports.visitAsync = visitAsync;
   }
 });
@@ -818,7 +818,7 @@ var require_directives = __commonJS({
   "node_modules/yaml/dist/doc/directives.js"(exports) {
     "use strict";
     var identity = require_identity();
-    var visit2 = require_visit();
+    var visit3 = require_visit();
     var escapeChars = {
       "!": "%21",
       ",": "%2C",
@@ -872,8 +872,8 @@ var require_directives = __commonJS({
           this.atNextDocument = false;
         }
         const parts = line.trim().split(/[ \t]+/);
-        const name = parts.shift();
-        switch (name) {
+        const name2 = parts.shift();
+        switch (name2) {
           case "%TAG": {
             if (parts.length !== 2) {
               onError(0, "%TAG directive should contain exactly two parts");
@@ -901,7 +901,7 @@ var require_directives = __commonJS({
             }
           }
           default:
-            onError(0, `Unknown directive ${name}`, true);
+            onError(0, `Unknown directive ${name2}`, true);
             return false;
         }
       }
@@ -962,7 +962,7 @@ var require_directives = __commonJS({
         let tagNames;
         if (doc && tagEntries.length > 0 && identity.isNode(doc.contents)) {
           const tags = {};
-          visit2.visit(doc.contents, (_key, node2) => {
+          visit3.visit(doc.contents, (_key, node2) => {
             if (identity.isNode(node2) && node2.tag)
               tags[node2.tag] = true;
           });
@@ -989,7 +989,7 @@ var require_anchors = __commonJS({
   "node_modules/yaml/dist/doc/anchors.js"(exports) {
     "use strict";
     var identity = require_identity();
-    var visit2 = require_visit();
+    var visit3 = require_visit();
     function anchorIsValid(anchor2) {
       if (/[\x00-\x19\s,[\]{}]/.test(anchor2)) {
         const sa = JSON.stringify(anchor2);
@@ -1000,7 +1000,7 @@ var require_anchors = __commonJS({
     }
     function anchorNames(root) {
       const anchors = /* @__PURE__ */ new Set();
-      visit2.visit(root, {
+      visit3.visit(root, {
         Value(_key, node2) {
           if (node2.anchor)
             anchors.add(node2.anchor);
@@ -1010,9 +1010,9 @@ var require_anchors = __commonJS({
     }
     function findNewAnchor(prefix, exclude) {
       for (let i = 1; true; ++i) {
-        const name = `${prefix}${i}`;
-        if (!exclude.has(name))
-          return name;
+        const name2 = `${prefix}${i}`;
+        if (!exclude.has(name2))
+          return name2;
       }
     }
     function createNodeAnchors(doc, prefix) {
@@ -1180,7 +1180,7 @@ var require_Alias = __commonJS({
   "node_modules/yaml/dist/nodes/Alias.js"(exports) {
     "use strict";
     var anchors = require_anchors();
-    var visit2 = require_visit();
+    var visit3 = require_visit();
     var identity = require_identity();
     var Node = require_Node();
     var toJS = require_toJS();
@@ -1206,7 +1206,7 @@ var require_Alias = __commonJS({
           nodes = ctx.aliasResolveCache;
         } else {
           nodes = [];
-          visit2.visit(doc, {
+          visit3.visit(doc, {
             Node: (_key, node2) => {
               if (identity.isAlias(node2) || identity.hasAnchor(node2))
                 nodes.push(node2);
@@ -2049,8 +2049,8 @@ var require_stringify = __commonJS({
         tagObj = tags.find((t) => t.nodeClass && obj instanceof t.nodeClass);
       }
       if (!tagObj) {
-        const name = obj?.constructor?.name ?? (obj === null ? "null" : typeof obj);
-        throw new Error(`Tag not resolved for ${name} value`);
+        const name2 = obj?.constructor?.name ?? (obj === null ? "null" : typeof obj);
+        throw new Error(`Tag not resolved for ${name2} value`);
       }
       return tagObj;
     }
@@ -4049,11 +4049,11 @@ var require_Document = __commonJS({
        * `name` will be used as a prefix for a new unique anchor.
        * If `name` is undefined, the generated anchor will use 'a' as a prefix.
        */
-      createAlias(node2, name) {
+      createAlias(node2, name2) {
         if (!node2.anchor) {
           const prev = anchors.anchorNames(this);
           node2.anchor = // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
-          !name || prev.has(name) ? anchors.findNewAnchor(name || "a", prev) : name;
+          !name2 || prev.has(name2) ? anchors.findNewAnchor(name2 || "a", prev) : name2;
         }
         return new Alias.Alias(node2.anchor);
       }
@@ -4272,9 +4272,9 @@ var require_errors = __commonJS({
   "node_modules/yaml/dist/errors.js"(exports) {
     "use strict";
     var YAMLError = class extends Error {
-      constructor(name, pos, code, message) {
+      constructor(name2, pos, code, message) {
         super();
-        this.name = name;
+        this.name = name2;
         this.code = code;
         this.message = message;
         this.pos = pos;
@@ -4296,16 +4296,16 @@ var require_errors = __commonJS({
       error62.linePos = error62.pos.map((pos) => lc.linePos(pos));
       const { line, col } = error62.linePos[0];
       error62.message += ` at line ${line}, column ${col}`;
-      let ci = col - 1;
+      let ci2 = col - 1;
       let lineStr = src.substring(lc.lineStarts[line - 1], lc.lineStarts[line]).replace(/[\n\r]+$/, "");
-      if (ci >= 60 && lineStr.length > 80) {
-        const trimStart = Math.min(ci - 39, lineStr.length - 79);
+      if (ci2 >= 60 && lineStr.length > 80) {
+        const trimStart = Math.min(ci2 - 39, lineStr.length - 79);
         lineStr = "\u2026" + lineStr.substring(trimStart);
-        ci -= trimStart - 1;
+        ci2 -= trimStart - 1;
       }
       if (lineStr.length > 80)
         lineStr = lineStr.substring(0, 79) + "\u2026";
-      if (line > 1 && /^ *$/.test(lineStr.substring(0, ci))) {
+      if (line > 1 && /^ *$/.test(lineStr.substring(0, ci2))) {
         let prev = src.substring(lc.lineStarts[line - 2], lc.lineStarts[line - 1]);
         if (prev.length > 80)
           prev = prev.substring(0, 79) + "\u2026\n";
@@ -4315,9 +4315,9 @@ var require_errors = __commonJS({
         let count = 1;
         const end = error62.linePos[1];
         if (end?.line === line && end.col > col) {
-          count = Math.max(1, Math.min(end.col - col, 80 - ci));
+          count = Math.max(1, Math.min(end.col - col, 80 - ci2));
         }
-        const pointer = " ".repeat(ci) + "^".repeat(count);
+        const pointer = " ".repeat(ci2) + "^".repeat(count);
         error62.message += `:
 
 ${lineStr}
@@ -4914,8 +4914,8 @@ var require_resolve_flow_collection = __commonJS({
       if (ce?.source === expectedEnd)
         cePos = ce.offset + ce.source.length;
       else {
-        const name = fcName[0].toUpperCase() + fcName.substring(1);
-        const msg = atRoot ? `${name} must end with a ${expectedEnd}` : `${name} in block collection must be sufficiently indented and end with a ${expectedEnd}`;
+        const name2 = fcName[0].toUpperCase() + fcName.substring(1);
+        const msg = atRoot ? `${name2} must end with a ${expectedEnd}` : `${name2} in block collection must be sufficiently indented and end with a ${expectedEnd}`;
         onError(offset, atRoot ? "MISSING_CHAR" : "BAD_INDENT", msg);
         if (ce && ce.source.length !== 1)
           ee.unshift(ce);
@@ -6128,15 +6128,15 @@ var require_cst_visit = __commonJS({
     var BREAK = /* @__PURE__ */ Symbol("break visit");
     var SKIP = /* @__PURE__ */ Symbol("skip children");
     var REMOVE = /* @__PURE__ */ Symbol("remove item");
-    function visit2(cst, visitor) {
+    function visit3(cst, visitor) {
       if ("type" in cst && cst.type === "document")
         cst = { start: cst.start, value: cst.value };
       _visit(Object.freeze([]), cst, visitor);
     }
-    visit2.BREAK = BREAK;
-    visit2.SKIP = SKIP;
-    visit2.REMOVE = REMOVE;
-    visit2.itemAtPath = (cst, path2) => {
+    visit3.BREAK = BREAK;
+    visit3.SKIP = SKIP;
+    visit3.REMOVE = REMOVE;
+    visit3.itemAtPath = (cst, path2) => {
       let item = cst;
       for (const [field, index] of path2) {
         const tok = item?.[field];
@@ -6147,8 +6147,8 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit2.parentCollection = (cst, path2) => {
-      const parent = visit2.itemAtPath(cst, path2.slice(0, -1));
+    visit3.parentCollection = (cst, path2) => {
+      const parent = visit3.itemAtPath(cst, path2.slice(0, -1));
       const field = path2[path2.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
@@ -6163,12 +6163,12 @@ var require_cst_visit = __commonJS({
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci = _visit(Object.freeze(path2.concat([[field, i]])), token.items[i], visitor);
-            if (typeof ci === "number")
-              i = ci - 1;
-            else if (ci === BREAK)
+            const ci2 = _visit(Object.freeze(path2.concat([[field, i]])), token.items[i], visitor);
+            if (typeof ci2 === "number")
+              i = ci2 - 1;
+            else if (ci2 === BREAK)
               return BREAK;
-            else if (ci === REMOVE) {
+            else if (ci2 === REMOVE) {
               token.items.splice(i, 1);
               i -= 1;
             }
@@ -6179,7 +6179,7 @@ var require_cst_visit = __commonJS({
       }
       return typeof ctrl === "function" ? ctrl(item, path2) : ctrl;
     }
-    exports.visit = visit2;
+    exports.visit = visit3;
   }
 });
 
@@ -6195,7 +6195,7 @@ var require_cst = __commonJS({
     var FLOW_END = "";
     var SCALAR = "";
     var isCollection = (token) => !!token && "items" in token;
-    var isScalar = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
+    var isScalar2 = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
     function prettyToken(token) {
       switch (token) {
         case BOM:
@@ -6279,7 +6279,7 @@ var require_cst = __commonJS({
     exports.FLOW_END = FLOW_END;
     exports.SCALAR = SCALAR;
     exports.isCollection = isCollection;
-    exports.isScalar = isScalar;
+    exports.isScalar = isScalar2;
     exports.prettyToken = prettyToken;
     exports.tokenType = tokenType;
   }
@@ -7809,7 +7809,7 @@ var require_public_api = __commonJS({
         return docs;
       return Object.assign([], { empty: true }, composer$1.streamInfo());
     }
-    function parseDocument(source, options = {}) {
+    function parseDocument2(source, options = {}) {
       const { lineCounter: lineCounter2, prettyErrors } = parseOptions(options);
       const parser$1 = new parser.Parser(lineCounter2?.addNewLine);
       const composer$1 = new composer.Composer(options);
@@ -7828,14 +7828,14 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse4(src, reviver, options) {
+    function parse3(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
       } else if (options === void 0 && reviver && typeof reviver === "object") {
         options = reviver;
       }
-      const doc = parseDocument(src, options);
+      const doc = parseDocument2(src, options);
       if (!doc)
         return null;
       doc.warnings.forEach((warning) => log.warn(doc.options.logLevel, warning));
@@ -7869,9 +7869,9 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse4;
+    exports.parse = parse3;
     exports.parseAllDocuments = parseAllDocuments;
-    exports.parseDocument = parseDocument;
+    exports.parseDocument = parseDocument2;
     exports.stringify = stringify;
   }
 });
@@ -7895,7 +7895,7 @@ var require_dist = __commonJS({
     var lineCounter = require_line_counter();
     var parser = require_parser();
     var publicApi = require_public_api();
-    var visit2 = require_visit();
+    var visit3 = require_visit();
     exports.Composer = composer.Composer;
     exports.Document = Document.Document;
     exports.Schema = Schema.Schema;
@@ -7923,8 +7923,51 @@ var require_dist = __commonJS({
     exports.parseAllDocuments = publicApi.parseAllDocuments;
     exports.parseDocument = publicApi.parseDocument;
     exports.stringify = publicApi.stringify;
-    exports.visit = visit2.visit;
-    exports.visitAsync = visit2.visitAsync;
+    exports.visit = visit3.visit;
+    exports.visitAsync = visit3.visitAsync;
+  }
+});
+
+// src/policy/safe-yaml.ts
+function parseYamlSafe(text) {
+  if (text.length > MAX_YAML_BYTES) throw new YamlError("E_YAML_UNSAFE", `file is larger than ${MAX_YAML_BYTES} bytes`);
+  let doc;
+  try {
+    doc = (0, import_yaml.parseDocument)(text, { uniqueKeys: true, merge: false });
+  } catch (e) {
+    throw new YamlError("E_YAML_SYNTAX", e instanceof Error ? e.message : String(e));
+  }
+  const first2 = doc.errors[0];
+  if (first2) throw new YamlError("E_YAML_SYNTAX", first2.message.split("\n")[0] ?? "syntax error");
+  (0, import_yaml.visit)(doc, {
+    Alias: () => {
+      throw new YamlError("E_YAML_UNSAFE", "YAML aliases are not allowed in policy files");
+    },
+    Pair: (_k, pair) => {
+      if ((0, import_yaml.isScalar)(pair.key) && pair.key.value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
+      if ((0, import_yaml.isScalar)(pair.key) && pair.key.value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
+    }
+  });
+  try {
+    return doc.toJS({ maxAliasCount: 0 });
+  } catch (e) {
+    throw new YamlError("E_YAML_SYNTAX", e instanceof Error ? e.message : String(e));
+  }
+}
+var import_yaml, YamlError, MAX_YAML_BYTES;
+var init_safe_yaml = __esm({
+  "src/policy/safe-yaml.ts"() {
+    "use strict";
+    import_yaml = __toESM(require_dist(), 1);
+    YamlError = class extends Error {
+      constructor(code, message) {
+        super(message);
+        this.code = code;
+        this.name = "YamlError";
+      }
+      code;
+    };
+    MAX_YAML_BYTES = 1e6;
   }
 });
 
@@ -8371,12 +8414,12 @@ function merge(a, b) {
   });
   return clone(a, def);
 }
-function partial(Class2, schema, mask, name = "partial") {
+function partial(Class2, schema, mask, name2 = "partial") {
   const currDef = schema._zod.def;
   const checks = currDef.checks;
   const hasChecks = checks && checks.length > 0;
   if (hasChecks) {
-    throw new Error(`.${name}() cannot be used on object schemas containing refinements`);
+    throw new Error(`.${name2}() cannot be used on object schemas containing refinements`);
   }
   const selected = mask ? new Set(maskedKeys(schema, mask)) : void 0;
   const newShape = {};
@@ -8811,7 +8854,7 @@ function newError(Definition) {
   return new Definition();
 }
 // @__NO_SIDE_EFFECTS__
-function $constructor(name, initializer3, proto, params) {
+function $constructor(name2, initializer3, proto, params) {
   const zodProto = {};
   function Internals(def) {
     this.def = def;
@@ -8829,10 +8872,10 @@ function $constructor(name, initializer3, proto, params) {
       } finally {
         _zodDesc.value = void 0;
       }
-    } else if (inst._zod.traits.has(name)) {
+    } else if (inst._zod.traits.has(name2)) {
       return;
     }
-    inst._zod.traits.add(name);
+    inst._zod.traits.add(name2);
     initializer3(inst, def);
     if (initialized) {
       const own2 = Object.getPrototypeOf(inst);
@@ -8858,7 +8901,7 @@ function $constructor(name, initializer3, proto, params) {
   const Parent = params?.Parent ?? Object;
   class Definition extends Parent {
   }
-  Object.defineProperty(Definition, "name", { value: name });
+  Object.defineProperty(Definition, "name", { value: name2 });
   function _(def) {
     const inst = params?.Parent ? newError(Definition) : this;
     init(inst, def);
@@ -8879,10 +8922,10 @@ function $constructor(name, initializer3, proto, params) {
     value: (inst) => {
       if (params?.Parent && inst instanceof params.Parent)
         return true;
-      return inst?._zod?.traits?.has(name);
+      return inst?._zod?.traits?.has(name2);
     }
   });
-  Object.defineProperty(_, "name", { value: name });
+  Object.defineProperty(_, "name", { value: name2 });
   return _;
 }
 function config(newConfig) {
@@ -8906,8 +8949,8 @@ var init_core = __esm({
       }
     };
     $ZodEncodeError = class extends Error {
-      constructor(name) {
-        super(`Encountered unidirectional transform during encode: ${name}`);
+      constructor(name2) {
+        super(`Encountered unidirectional transform during encode: ${name2}`);
         this.name = "ZodEncodeError";
       }
     };
@@ -9229,18 +9272,18 @@ var init_parse = __esm({
       return result.issues.length === 0;
     };
     _encode = (_Err) => {
-      const parse4 = _parse(_Err);
+      const parse3 = _parse(_Err);
       const fn = (schema, value, _ctx, _params) => {
         const ctx = _ctx ? { ..._ctx, direction: "backward" } : { direction: "backward" };
-        return parse4(schema, value, ctx, finalizeParams(fn, _params));
+        return parse3(schema, value, ctx, finalizeParams(fn, _params));
       };
       return fn;
     };
     encode = /* @__PURE__ */ _encode($ZodRealError);
     _decode = (_Err) => {
-      const parse4 = _parse(_Err);
+      const parse3 = _parse(_Err);
       const fn = (schema, value, _ctx, _params) => {
-        return parse4(schema, value, _ctx, finalizeParams(fn, _params));
+        return parse3(schema, value, _ctx, finalizeParams(fn, _params));
       };
       return fn;
     };
@@ -10165,7 +10208,7 @@ function capSize(inst, size) {
   if (!caps.length)
     return;
   const cap = Math.min(...caps.map((c) => c[0]));
-  const parse4 = inst._zod.parse;
+  const parse3 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
     const n = size(payload.value);
     if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
@@ -10179,7 +10222,7 @@ function capSize(inst, size) {
         }
       }
     }
-    return parse4(payload, ctx);
+    return parse3(payload, ctx);
   };
 }
 function handleArrayResult(result, final, index) {
@@ -20920,13 +20963,13 @@ ${code}
   return fn;
 }
 function addConstant(ctx, value) {
-  for (const [name2, v] of ctx.constants) {
+  for (const [name3, v] of ctx.constants) {
     if (v === value)
-      return name2;
+      return name3;
   }
-  const name = `c${ctx.constantCounter++}`;
-  ctx.constants.set(name, value);
-  return name;
+  const name2 = `c${ctx.constantCounter++}`;
+  ctx.constants.set(name2, value);
+  return name2;
 }
 function addUserConstant(ctx, fn) {
   ctx.definite = false;
@@ -27799,7 +27842,7 @@ var init_from_json_schema = __esm({
 });
 
 // node_modules/zod/v4/core/visit.js
-function visit(schema, fnOrHandlers) {
+function visit2(schema, fnOrHandlers) {
   const fn = typeof fnOrHandlers === "function" ? fnOrHandlers : (node2, rewritten) => {
     const h = fnOrHandlers[node2._zod.def.type];
     return h ? h(node2, rewritten) : node2;
@@ -27962,7 +28005,7 @@ var init_visit = __esm({
 
 // node_modules/zod/v4/classic/deep-partial.js
 function deepPartial(schema) {
-  return visit(schema, {
+  return visit2(schema, {
     object: (s) => s.partial(),
     // Every partialed option now admits `undefined`, which the constructor rejects as a duplicate.
     union: (s) => {
@@ -27992,7 +28035,7 @@ function inSide(def) {
   return def.in._zod.traits.has("$ZodTransform") ? outSide(def) : def.in;
 }
 function input(schema) {
-  return visit(schema, {
+  return visit2(schema, {
     pipe: (s) => inSide(s._zod.def),
     // A default value belongs to the output side, so a rewritten inner type leaves it stranded. `.default()` widens the declared input type with `undefined`, and `optional` is what carries that across.
     default: (s, rewritten) => rewritten ? optional(s._zod.def.innerType) : s,
@@ -28001,7 +28044,7 @@ function input(schema) {
   });
 }
 function output(schema) {
-  return visit(schema, {
+  return visit2(schema, {
     pipe: (s) => outSide(s._zod.def),
     // A prefault value is fed through the schema, which makes it input-side, so a rewritten inner type leaves it stranded.
     prefault: (s, rewritten) => rewritten ? s._zod.def.innerType : s
@@ -28337,6 +28380,23 @@ var init_zod = __esm({
 });
 
 // src/pricing/prices.ts
+function parsePriceTable(text) {
+  const raw = parseYamlSafe(text);
+  if (typeof raw === "object" && raw !== null) {
+    for (const section of ["models", "modifiers", "serverTools"]) {
+      const map2 = raw[section];
+      if (typeof map2 === "object" && map2 !== null && Object.hasOwn(map2, "__proto__")) {
+        throw new Error(`invalid price table: ${section}: key __proto__ is not allowed`);
+      }
+    }
+  }
+  const r = tableSchema.safeParse(raw);
+  if (!r.success) {
+    const issues = r.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
+    throw new Error(`invalid price table: ${issues.join("; ")}`);
+  }
+  return r.data;
+}
 function lookupModel(t, model) {
   if (Object.hasOwn(t.models, model)) {
     const exact = t.models[model];
@@ -28349,11 +28409,11 @@ function lookupModel(t, model) {
   const price = best === null ? void 0 : t.models[best];
   return best !== null && price ? { id: best, price } : null;
 }
-var import_yaml, rate, tokens, provenance, tierSchema, modelSchema, tableSchema;
+var rate, tokens, provenance, tierSchema, modelSchema, tableSchema;
 var init_prices = __esm({
   "src/pricing/prices.ts"() {
     "use strict";
-    import_yaml = __toESM(require_dist(), 1);
+    init_safe_yaml();
     init_zod();
     rate = external_exports.number().nonnegative();
     tokens = external_exports.number().int().positive();
@@ -28401,15 +28461,15 @@ function costMicroUsd(t, modelId, u, o = {}) {
     }
   }
   let tokenCost = u.input * p.input + u.cacheWrite5m * p.cacheWrite5m + u.cacheWrite1h * p.cacheWrite1h + u.cacheRead * p.cacheRead + u.output * p.output;
-  for (const name of o.modifiers ?? []) {
-    const factor = Object.hasOwn(t.modifiers, name) ? t.modifiers[name] : void 0;
-    if (factor === void 0) throw new Error(`unknown price modifier: ${name}`);
+  for (const name2 of o.modifiers ?? []) {
+    const factor = Object.hasOwn(t.modifiers, name2) ? t.modifiers[name2] : void 0;
+    if (factor === void 0) throw new Error(`unknown price modifier: ${name2}`);
     tokenCost *= factor;
   }
   let toolCost = 0;
-  for (const [name, uses] of Object.entries(o.serverToolUses ?? {})) {
-    const tool = Object.hasOwn(t.serverTools, name) ? t.serverTools[name] : void 0;
-    if (!tool) throw new Error(`unpriced server tool: ${name}`);
+  for (const [name2, uses] of Object.entries(o.serverToolUses ?? {})) {
+    const tool = Object.hasOwn(t.serverTools, name2) ? t.serverTools[name2] : void 0;
+    if (!tool) throw new Error(`unpriced server tool: ${name2}`);
     toolCost += uses * tool.perUseUsd * 1e6;
   }
   const cost = Math.round(tokenCost + toolCost);
@@ -30480,16 +30540,16 @@ var require_util = __commonJS({
         size: m[3] ? parseInt(m[3]) : null
       } : null;
     }
-    function addListener(obj, name, listener) {
+    function addListener(obj, name2, listener) {
       const listeners = obj[kListeners] ??= [];
-      listeners.push([name, listener]);
-      obj.on(name, listener);
+      listeners.push([name2, listener]);
+      obj.on(name2, listener);
       return obj;
     }
     function removeAllListeners(obj) {
       if (obj[kListeners] != null) {
-        for (const [name, listener] of obj[kListeners]) {
-          obj.removeListener(name, listener);
+        for (const [name2, listener] of obj[kListeners]) {
+          obj.removeListener(name2, listener);
         }
         obj[kListeners] = null;
       }
@@ -33064,9 +33124,9 @@ var require_data_url = __commonJS({
       assert2(mimeType !== "failure");
       const { parameters, essence } = mimeType;
       let serialization = essence;
-      for (let [name, value] of parameters.entries()) {
+      for (let [name2, value] of parameters.entries()) {
         serialization += ";";
-        serialization += name;
+        serialization += name2;
         serialization += "=";
         if (!HTTP_TOKEN_CODEPOINTS.test(value)) {
           value = value.replace(/[\\"]/ug, "\\$&");
@@ -33514,12 +33574,12 @@ var require_webidl = __commonJS({
         return result;
       };
     };
-    webidl.interfaceConverter = function(TypeCheck, name) {
+    webidl.interfaceConverter = function(TypeCheck, name2) {
       return (V, prefix, argument) => {
         if (!TypeCheck(V)) {
           throw webidl.errors.exception({
             header: prefix,
-            message: `Expected ${argument} ("${webidl.util.Stringify(V)}") to be an instance of ${name}.`
+            message: `Expected ${argument} ("${webidl.util.Stringify(V)}") to be an instance of ${name2}.`
           });
         }
         return V;
@@ -33916,22 +33976,22 @@ var require_util2 = __commonJS({
     }
     function parseReferrerPolicy(actualResponse) {
       const policyHeader = (actualResponse.headersList.get("referrer-policy", true) ?? "").split(",");
-      let policy = "";
+      let policy2 = "";
       if (policyHeader.length) {
         for (let i = policyHeader.length; i !== 0; i--) {
           const token = policyHeader[i - 1].trim();
           if (referrerPolicyTokens.has(token)) {
-            policy = token;
+            policy2 = token;
             break;
           }
         }
       }
-      return policy;
+      return policy2;
     }
     function setRequestReferrerPolicyOnRedirect(request2, actualResponse) {
-      const policy = parseReferrerPolicy(actualResponse);
-      if (policy !== "") {
-        request2.referrerPolicy = policy;
+      const policy2 = parseReferrerPolicy(actualResponse);
+      if (policy2 !== "") {
+        request2.referrerPolicy = policy2;
       }
     }
     function crossOriginResourcePolicyCheck() {
@@ -34029,8 +34089,8 @@ var require_util2 = __commonJS({
       };
     }
     function determineRequestsReferrer(request2) {
-      const policy = request2.referrerPolicy;
-      assert2(policy);
+      const policy2 = request2.referrerPolicy;
+      assert2(policy2);
       let referrerSource = null;
       if (request2.referrer === "client") {
         const globalOrigin = getGlobalOrigin();
@@ -34046,7 +34106,7 @@ var require_util2 = __commonJS({
       if (referrerURL.toString().length > 4096) {
         referrerURL = referrerOrigin;
       }
-      switch (policy) {
+      switch (policy2) {
         case "no-referrer":
           return "no-referrer";
         case "origin":
@@ -34172,7 +34232,7 @@ var require_util2 = __commonJS({
       return normalizedMethodRecordsBase[method.toLowerCase()] ?? method;
     }
     var esIteratorPrototype = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]()));
-    function createIterator(name, kInternalIterator, keyIndex = 0, valueIndex = 1) {
+    function createIterator(name2, kInternalIterator, keyIndex = 0, valueIndex = 1) {
       class FastIterableIterator {
         /** @type {any} */
         #target;
@@ -34193,7 +34253,7 @@ var require_util2 = __commonJS({
         next() {
           if (typeof this !== "object" || this === null || !(#target in this)) {
             throw new TypeError(
-              `'next' called on an object that does not implement interface ${name} Iterator.`
+              `'next' called on an object that does not implement interface ${name2} Iterator.`
             );
           }
           const index = this.#index;
@@ -34232,7 +34292,7 @@ var require_util2 = __commonJS({
           writable: false,
           enumerable: false,
           configurable: true,
-          value: `${name} Iterator`
+          value: `${name2} Iterator`
         },
         next: { writable: true, enumerable: true, configurable: true }
       });
@@ -34240,8 +34300,8 @@ var require_util2 = __commonJS({
         return new FastIterableIterator(target, kind);
       };
     }
-    function iteratorMixin(name, object2, kInternalIterator, keyIndex = 0, valueIndex = 1) {
-      const makeIterator = createIterator(name, kInternalIterator, keyIndex, valueIndex);
+    function iteratorMixin(name2, object2, kInternalIterator, keyIndex = 0, valueIndex = 1) {
+      const makeIterator = createIterator(name2, kInternalIterator, keyIndex, valueIndex);
       const properties = {
         keys: {
           writable: true,
@@ -34276,10 +34336,10 @@ var require_util2 = __commonJS({
           configurable: true,
           value: function forEach(callbackfn, thisArg = globalThis) {
             webidl.brandCheck(this, object2);
-            webidl.argumentLengthCheck(arguments, 1, `${name}.forEach`);
+            webidl.argumentLengthCheck(arguments, 1, `${name2}.forEach`);
             if (typeof callbackfn !== "function") {
               throw new TypeError(
-                `Failed to execute 'forEach' on '${name}': parameter 1 is not of type 'Function'.`
+                `Failed to execute 'forEach' on '${name2}': parameter 1 is not of type 'Function'.`
               );
             }
             for (const { 0: key, 1: value } of makeIterator(this, "key+value")) {
@@ -34523,8 +34583,8 @@ var require_util2 = __commonJS({
       }
       return values;
     }
-    function getDecodeSplit(name, list) {
-      const value = list.get(name, true);
+    function getDecodeSplit(name2, list) {
+      const value = list.get(name2, true);
       if (value === null) {
         return null;
       }
@@ -34624,11 +34684,11 @@ var require_formdata = __commonJS({
           });
         }
       }
-      append(name, value, filename = void 0) {
+      append(name2, value, filename = void 0) {
         webidl.brandCheck(this, _FormData);
         const prefix = "FormData.append";
         webidl.argumentLengthCheck(arguments, 2, prefix);
-        name = webidl.converters.USVString(name);
+        name2 = webidl.converters.USVString(name2);
         if (arguments.length === 3 || webidl.is.Blob(value)) {
           value = webidl.converters.Blob(value, prefix, "value");
           if (filename !== void 0) {
@@ -34637,46 +34697,46 @@ var require_formdata = __commonJS({
         } else {
           value = webidl.converters.USVString(value);
         }
-        const entry = makeEntry(name, value, filename);
+        const entry = makeEntry(name2, value, filename);
         this.#state.push(entry);
       }
-      delete(name) {
+      delete(name2) {
         webidl.brandCheck(this, _FormData);
         const prefix = "FormData.delete";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        name = webidl.converters.USVString(name);
-        this.#state = this.#state.filter((entry) => entry.name !== name);
+        name2 = webidl.converters.USVString(name2);
+        this.#state = this.#state.filter((entry) => entry.name !== name2);
       }
-      get(name) {
+      get(name2) {
         webidl.brandCheck(this, _FormData);
         const prefix = "FormData.get";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        name = webidl.converters.USVString(name);
-        const idx = this.#state.findIndex((entry) => entry.name === name);
+        name2 = webidl.converters.USVString(name2);
+        const idx = this.#state.findIndex((entry) => entry.name === name2);
         if (idx === -1) {
           return null;
         }
         return this.#state[idx].value;
       }
-      getAll(name) {
+      getAll(name2) {
         webidl.brandCheck(this, _FormData);
         const prefix = "FormData.getAll";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        name = webidl.converters.USVString(name);
-        return this.#state.filter((entry) => entry.name === name).map((entry) => entry.value);
+        name2 = webidl.converters.USVString(name2);
+        return this.#state.filter((entry) => entry.name === name2).map((entry) => entry.value);
       }
-      has(name) {
+      has(name2) {
         webidl.brandCheck(this, _FormData);
         const prefix = "FormData.has";
         webidl.argumentLengthCheck(arguments, 1, prefix);
-        name = webidl.converters.USVString(name);
-        return this.#state.findIndex((entry) => entry.name === name) !== -1;
+        name2 = webidl.converters.USVString(name2);
+        return this.#state.findIndex((entry) => entry.name === name2) !== -1;
       }
-      set(name, value, filename = void 0) {
+      set(name2, value, filename = void 0) {
         webidl.brandCheck(this, _FormData);
         const prefix = "FormData.set";
         webidl.argumentLengthCheck(arguments, 2, prefix);
-        name = webidl.converters.USVString(name);
+        name2 = webidl.converters.USVString(name2);
         if (arguments.length === 3 || webidl.is.Blob(value)) {
           value = webidl.converters.Blob(value, prefix, "value");
           if (filename !== void 0) {
@@ -34685,13 +34745,13 @@ var require_formdata = __commonJS({
         } else {
           value = webidl.converters.USVString(value);
         }
-        const entry = makeEntry(name, value, filename);
-        const idx = this.#state.findIndex((entry2) => entry2.name === name);
+        const entry = makeEntry(name2, value, filename);
+        const idx = this.#state.findIndex((entry2) => entry2.name === name2);
         if (idx !== -1) {
           this.#state = [
             ...this.#state.slice(0, idx),
             entry,
-            ...this.#state.slice(idx + 1).filter((entry2) => entry2.name !== name)
+            ...this.#state.slice(idx + 1).filter((entry2) => entry2.name !== name2)
           ];
         } else {
           this.#state.push(entry);
@@ -34745,7 +34805,7 @@ var require_formdata = __commonJS({
         configurable: true
       }
     });
-    function makeEntry(name, value, filename) {
+    function makeEntry(name2, value, filename) {
       if (typeof value === "string") {
       } else {
         if (!webidl.is.File(value)) {
@@ -34759,7 +34819,7 @@ var require_formdata = __commonJS({
           value = new File([value], filename, options);
         }
       }
-      return { name, value };
+      return { name: name2, value };
     }
     webidl.is.FormData = webidl.util.MakeTypeAssertion(FormData);
     module.exports = { FormData, makeEntry, setFormDataState };
@@ -34828,7 +34888,7 @@ var require_formdata_parser = __commonJS({
         }
         position.position += 2;
         const result = parseMultipartFormDataHeaders(input2, position);
-        let { name, filename, contentType, encoding } = result;
+        let { name: name2, filename, contentType, encoding } = result;
         position.position += 2;
         let body;
         {
@@ -34857,9 +34917,9 @@ var require_formdata_parser = __commonJS({
         } else {
           value = decoderIgnoreBOM.decode(Buffer.from(body));
         }
-        assert2(webidl.is.USVString(name));
+        assert2(webidl.is.USVString(name2));
         assert2(typeof value === "string" && webidl.is.USVString(value) || webidl.is.File(value));
-        entryList.push(makeEntry(name, value, filename));
+        entryList.push(makeEntry(name2, value, filename));
       }
     }
     function parseContentDispositionAttribute(input2, position) {
@@ -34935,16 +34995,16 @@ var require_formdata_parser = __commonJS({
       return { name: attrNameStr, value, extended: isExtended };
     }
     function parseMultipartFormDataHeaders(input2, position) {
-      let name = null;
+      let name2 = null;
       let filename = null;
       let contentType = null;
       let encoding = null;
       while (true) {
         if (input2[position.position] === 13 && input2[position.position + 1] === 10) {
-          if (name === null) {
+          if (name2 === null) {
             throw parsingError("header name is null");
           }
-          return { name, filename, contentType, encoding };
+          return { name: name2, filename, contentType, encoding };
         }
         let headerName = collectASequenceOfBytes(
           (char) => char !== 10 && char !== 13 && char !== 58,
@@ -34966,7 +35026,7 @@ var require_formdata_parser = __commonJS({
         );
         switch (bufferToLowerCasedHeaderName(headerName)) {
           case "content-disposition": {
-            name = filename = null;
+            name2 = filename = null;
             let filenameIsExtended = false;
             const dispositionType = collectASequenceOfBytes(
               (char) => isToken(char),
@@ -34982,7 +35042,7 @@ var require_formdata_parser = __commonJS({
                 break;
               }
               if (attribute.name === "name") {
-                name = attribute.value;
+                name2 = attribute.value;
               } else if (attribute.name === "filename") {
                 if (attribute.extended) {
                   filename = attribute.value;
@@ -34992,7 +35052,7 @@ var require_formdata_parser = __commonJS({
                 }
               }
             }
-            if (name === null) {
+            if (name2 === null) {
               throw parsingError("name attribute is required in content-disposition header");
             }
             break;
@@ -35189,16 +35249,16 @@ Content-Disposition: form-data`;
         const rn = new Uint8Array([13, 10]);
         length = 0;
         let hasUnknownSizeValue = false;
-        for (const [name, value] of object2) {
+        for (const [name2, value] of object2) {
           if (typeof value === "string") {
-            const chunk2 = textEncoder.encode(prefix + `; name="${formdataEscape(normalizeLinefeeds(name))}"\r
+            const chunk2 = textEncoder.encode(prefix + `; name="${formdataEscape(normalizeLinefeeds(name2))}"\r
 \r
 ${normalizeLinefeeds(value)}\r
 `);
             blobParts.push(chunk2);
             length += chunk2.byteLength;
           } else {
-            const chunk2 = textEncoder.encode(`${prefix}; name="${formdataEscape(normalizeLinefeeds(name))}"` + (value.name ? `; filename="${formdataEscape(value.name)}"` : "") + `\r
+            const chunk2 = textEncoder.encode(`${prefix}; name="${formdataEscape(normalizeLinefeeds(name2))}"` + (value.name ? `; filename="${formdataEscape(value.name)}"` : "") + `\r
 Content-Type: ${value.type || "application/octet-stream"}\r
 \r
 `);
@@ -35326,8 +35386,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
                 case "application/x-www-form-urlencoded": {
                   const entries = new URLSearchParams(value.toString());
                   const fd = new FormData();
-                  for (const [name, value2] of entries) {
-                    fd.append(name, value2);
+                  for (const [name2, value2] of entries) {
+                    fd.append(name2, value2);
                   }
                   return fd;
                 }
@@ -36742,13 +36802,13 @@ var require_client_h2 = __commonJS({
     } = http2;
     function parseH2Headers(headers) {
       const result = [];
-      for (const [name, value] of Object.entries(headers)) {
+      for (const [name2, value] of Object.entries(headers)) {
         if (Array.isArray(value)) {
           for (const subvalue of value) {
-            result.push(Buffer.from(name), Buffer.from(subvalue));
+            result.push(Buffer.from(name2), Buffer.from(subvalue));
           }
         } else {
-          result.push(Buffer.from(name), Buffer.from(value));
+          result.push(Buffer.from(name2), Buffer.from(value));
         }
       }
       return result;
@@ -41746,13 +41806,13 @@ var require_mock_utils = __commonJS({
       for (let i = 0; i < keys2.length; ++i) {
         const key = keys2[i];
         const value = data[key];
-        const name = Buffer.from(`${key}`);
+        const name2 = Buffer.from(`${key}`);
         if (Array.isArray(value)) {
           for (let j = 0; j < value.length; ++j) {
-            result.push(name, Buffer.from(`${value[j]}`));
+            result.push(name2, Buffer.from(`${value[j]}`));
           }
         } else {
-          result.push(name, Buffer.from(`${value}`));
+          result.push(name2, Buffer.from(`${value}`));
         }
       }
       return result;
@@ -42714,7 +42774,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile2, readFile, mkdir: mkdir2 } = __require("node:fs/promises");
+    var { writeFile: writeFile2, readFile: readFile2, mkdir: mkdir2 } = __require("node:fs/promises");
     var { dirname, resolve } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
@@ -42916,7 +42976,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile(resolve(path2), "utf8");
+          const data = await readFile2(resolve(path2), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -43619,8 +43679,8 @@ var require_redirect_handler = __commonJS({
         return true;
       }
       if (unknownOrigin && (header2.length === 13 || header2.length === 6 || header2.length === 19)) {
-        const name = util.headerNameToString(header2);
-        return name === "authorization" || name === "cookie" || name === "proxy-authorization";
+        const name2 = util.headerNameToString(header2);
+        return name2 === "authorization" || name2 === "cookie" || name2 === "proxy-authorization";
       }
       return false;
     }
@@ -44723,26 +44783,26 @@ var require_cache = __commonJS({
       }
       return false;
     }
-    function assertCacheStore(store, name = "CacheStore") {
+    function assertCacheStore(store, name2 = "CacheStore") {
       if (typeof store !== "object" || store === null) {
-        throw new TypeError(`expected type of ${name} to be a CacheStore, got ${store === null ? "null" : typeof store}`);
+        throw new TypeError(`expected type of ${name2} to be a CacheStore, got ${store === null ? "null" : typeof store}`);
       }
       for (const fn of ["get", "createWriteStream", "delete"]) {
         if (typeof store[fn] !== "function") {
-          throw new TypeError(`${name} needs to have a \`${fn}()\` function`);
+          throw new TypeError(`${name2} needs to have a \`${fn}()\` function`);
         }
       }
     }
-    function assertCacheMethods(methods, name = "CacheMethods") {
+    function assertCacheMethods(methods, name2 = "CacheMethods") {
       if (!Array.isArray(methods)) {
-        throw new TypeError(`expected type of ${name} needs to be an array, got ${methods === null ? "null" : typeof methods}`);
+        throw new TypeError(`expected type of ${name2} needs to be an array, got ${methods === null ? "null" : typeof methods}`);
       }
       if (methods.length === 0) {
-        throw new TypeError(`${name} needs to have at least one method`);
+        throw new TypeError(`${name2} needs to have at least one method`);
       }
       for (const method of methods) {
         if (!arrayIncludes(safeHTTPMethods, method)) {
-          throw new TypeError(`element of ${name}-array needs to be one of following values: ${safeHTTPMethods.join(", ")}, got ${method}`);
+          throw new TypeError(`element of ${name2}-array needs to be one of following values: ${safeHTTPMethods.join(", ")}, got ${method}`);
         }
       }
     }
@@ -46139,15 +46199,15 @@ var require_cache2 = __commonJS({
     var { assertCacheStore, assertCacheMethods, makeCacheKey, normalizeHeaders, parseCacheControlHeader, isInvalidOrWildcardVaryHeader } = require_cache();
     var { AbortError } = require_errors2();
     var { parseHttpDate } = require_date();
-    function assertCacheOrigins(origins, name) {
+    function assertCacheOrigins(origins, name2) {
       if (origins === void 0) return;
       if (!Array.isArray(origins)) {
-        throw new TypeError(`expected ${name} to be an array or undefined, got ${typeof origins}`);
+        throw new TypeError(`expected ${name2} to be an array or undefined, got ${typeof origins}`);
       }
       for (let i = 0; i < origins.length; i++) {
         const origin = origins[i];
         if (typeof origin !== "string" && !(origin instanceof RegExp)) {
-          throw new TypeError(`expected ${name}[${i}] to be a string or RegExp, got ${typeof origin}`);
+          throw new TypeError(`expected ${name2}[${i}] to be a string or RegExp, got ${typeof origin}`);
         }
       }
     }
@@ -46930,8 +46990,8 @@ var require_decompress = __commonJS({
             const filteredHeaders = [];
             for (let i = 0; i < rawHeaders.length; i += 2) {
               const headerName = rawHeaders[i];
-              const name = Buffer.isBuffer(headerName) ? headerName.toString("latin1") : `${headerName}`;
-              const lowerName = name.toLowerCase();
+              const name2 = Buffer.isBuffer(headerName) ? headerName.toString("latin1") : `${headerName}`;
+              const lowerName = name2.toLowerCase();
               if (lowerName === "content-encoding" || lowerName === "content-length") {
                 continue;
               }
@@ -46939,10 +46999,10 @@ var require_decompress = __commonJS({
             }
             rawHeaders.splice(0, rawHeaders.length, ...filteredHeaders);
           } else if (typeof rawHeaders === "object") {
-            for (const name of Object.keys(rawHeaders)) {
-              const lowerName = name.toLowerCase();
+            for (const name2 of Object.keys(rawHeaders)) {
+              const lowerName = name2.toLowerCase();
               if (lowerName === "content-encoding" || lowerName === "content-length") {
-                delete rawHeaders[name];
+                delete rawHeaders[name2];
               }
             }
           }
@@ -47447,8 +47507,8 @@ var require_deduplicate = __commonJS({
       if (!Number.isFinite(maxBufferSize) || maxBufferSize <= 0) {
         throw new TypeError(`expected opts.maxBufferSize to be a positive finite number, got ${maxBufferSize}`);
       }
-      const skipHeaderNamesSet = new Set(skipHeaderNames.map((name) => name.toLowerCase()));
-      const excludeHeaderNamesSet = new Set(excludeHeaderNames.map((name) => name.toLowerCase()));
+      const skipHeaderNamesSet = new Set(skipHeaderNames.map((name2) => name2.toLowerCase()));
+      const excludeHeaderNamesSet = new Set(excludeHeaderNames.map((name2) => name2.toLowerCase()));
       const pendingRequests = /* @__PURE__ */ new Map();
       return (dispatch) => {
         return (opts2, handler) => {
@@ -47909,12 +47969,12 @@ var require_headers = __commonJS({
         });
       }
     }
-    function appendHeader(headers, name, value) {
+    function appendHeader(headers, name2, value) {
       value = headerValueNormalize(value);
-      if (!isValidHeaderName(name)) {
+      if (!isValidHeaderName(name2)) {
         throw webidl.errors.invalidArgument({
           prefix: "Headers.append",
-          value: name,
+          value: name2,
           type: "header name"
         });
       } else if (!isValidHeaderValue(value)) {
@@ -47927,7 +47987,7 @@ var require_headers = __commonJS({
       if (getHeadersGuard(headers) === "immutable") {
         throw new TypeError("immutable");
       }
-      return getHeadersList(headers).append(name, value, false);
+      return getHeadersList(headers).append(name2, value, false);
     }
     function headersListSortAndCombine(target) {
       const headersList = getHeadersList(target);
@@ -47944,13 +48004,13 @@ var require_headers = __commonJS({
         return headersList.sortedMap = names;
       }
       for (let i = 0; i < names.length; ++i) {
-        const { 0: name, 1: value } = names[i];
-        if (name === "set-cookie") {
+        const { 0: name2, 1: value } = names[i];
+        if (name2 === "set-cookie") {
           for (let j = 0; j < cookies.length; ++j) {
-            headers.push([name, cookies[j]]);
+            headers.push([name2, cookies[j]]);
           }
         } else {
-          headers.push([name, value]);
+          headers.push([name2, value]);
         }
       }
       return headersList.sortedMap = headers;
@@ -47978,8 +48038,8 @@ var require_headers = __commonJS({
        * @param {string} name
        * @param {boolean} isLowerCase
        */
-      contains(name, isLowerCase) {
-        return this.headersMap.has(isLowerCase ? name : name.toLowerCase());
+      contains(name2, isLowerCase) {
+        return this.headersMap.has(isLowerCase ? name2 : name2.toLowerCase());
       }
       clear() {
         this.headersMap.clear();
@@ -47992,9 +48052,9 @@ var require_headers = __commonJS({
        * @param {string} value
        * @param {boolean} isLowerCase
        */
-      append(name, value, isLowerCase) {
+      append(name2, value, isLowerCase) {
         this.sortedMap = null;
-        const lowercaseName = isLowerCase ? name : name.toLowerCase();
+        const lowercaseName = isLowerCase ? name2 : name2.toLowerCase();
         const exists = this.headersMap.get(lowercaseName);
         if (exists) {
           const delimiter = lowercaseName === "cookie" ? "; " : ", ";
@@ -48003,7 +48063,7 @@ var require_headers = __commonJS({
             value: `${exists.value}${delimiter}${value}`
           });
         } else {
-          this.headersMap.set(lowercaseName, { name, value });
+          this.headersMap.set(lowercaseName, { name: name2, value });
         }
         if (lowercaseName === "set-cookie") {
           (this.cookies ??= []).push(value);
@@ -48015,26 +48075,26 @@ var require_headers = __commonJS({
        * @param {string} value
        * @param {boolean} isLowerCase
        */
-      set(name, value, isLowerCase) {
+      set(name2, value, isLowerCase) {
         this.sortedMap = null;
-        const lowercaseName = isLowerCase ? name : name.toLowerCase();
+        const lowercaseName = isLowerCase ? name2 : name2.toLowerCase();
         if (lowercaseName === "set-cookie") {
           this.cookies = [value];
         }
-        this.headersMap.set(lowercaseName, { name, value });
+        this.headersMap.set(lowercaseName, { name: name2, value });
       }
       /**
        * @see https://fetch.spec.whatwg.org/#concept-header-list-delete
        * @param {string} name
        * @param {boolean} isLowerCase
        */
-      delete(name, isLowerCase) {
+      delete(name2, isLowerCase) {
         this.sortedMap = null;
-        if (!isLowerCase) name = name.toLowerCase();
-        if (name === "set-cookie") {
+        if (!isLowerCase) name2 = name2.toLowerCase();
+        if (name2 === "set-cookie") {
           this.cookies = null;
         }
-        this.headersMap.delete(name);
+        this.headersMap.delete(name2);
       }
       /**
        * @see https://fetch.spec.whatwg.org/#concept-header-list-get
@@ -48042,19 +48102,19 @@ var require_headers = __commonJS({
        * @param {boolean} isLowerCase
        * @returns {string | null}
        */
-      get(name, isLowerCase) {
-        return this.headersMap.get(isLowerCase ? name : name.toLowerCase())?.value ?? null;
+      get(name2, isLowerCase) {
+        return this.headersMap.get(isLowerCase ? name2 : name2.toLowerCase())?.value ?? null;
       }
       *[Symbol.iterator]() {
-        for (const { 0: name, 1: { value } } of this.headersMap) {
-          yield [name, value];
+        for (const { 0: name2, 1: { value } } of this.headersMap) {
+          yield [name2, value];
         }
       }
       get entries() {
         const headers = {};
         if (this.headersMap.size !== 0) {
-          for (const { name, value } of this.headersMap.values()) {
-            headers[name] = value;
+          for (const { name: name2, value } of this.headersMap.values()) {
+            headers[name2] = value;
           }
         }
         return headers;
@@ -48065,13 +48125,13 @@ var require_headers = __commonJS({
       get entriesList() {
         const headers = [];
         if (this.headersMap.size !== 0) {
-          for (const { 0: lowerName, 1: { name, value } } of this.headersMap) {
+          for (const { 0: lowerName, 1: { name: name2, value } } of this.headersMap) {
             if (lowerName === "set-cookie") {
               for (const cookie of this.cookies) {
-                headers.push([name, cookie]);
+                headers.push([name2, cookie]);
               }
             } else {
-              headers.push([name, value]);
+              headers.push([name2, value]);
             }
           }
         }
@@ -48117,8 +48177,8 @@ var require_headers = __commonJS({
           return array2;
         } else {
           let i = 0;
-          for (const { 0: name, 1: { value } } of this.headersMap) {
-            array2[i++] = [name, value];
+          for (const { 0: name2, 1: { value } } of this.headersMap) {
+            array2[i++] = [name2, value];
             assert2(value !== null);
           }
           return array2.sort(compareHeaderName);
@@ -48148,77 +48208,77 @@ var require_headers = __commonJS({
         }
       }
       // https://fetch.spec.whatwg.org/#dom-headers-append
-      append(name, value) {
+      append(name2, value) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 2, "Headers.append");
         const prefix = "Headers.append";
-        name = webidl.converters.ByteString(name, prefix, "name");
+        name2 = webidl.converters.ByteString(name2, prefix, "name");
         value = webidl.converters.ByteString(value, prefix, "value");
-        return appendHeader(this, name, value);
+        return appendHeader(this, name2, value);
       }
       // https://fetch.spec.whatwg.org/#dom-headers-delete
-      delete(name) {
+      delete(name2) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 1, "Headers.delete");
         const prefix = "Headers.delete";
-        name = webidl.converters.ByteString(name, prefix, "name");
-        if (!isValidHeaderName(name)) {
+        name2 = webidl.converters.ByteString(name2, prefix, "name");
+        if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
             prefix: "Headers.delete",
-            value: name,
+            value: name2,
             type: "header name"
           });
         }
         if (this.#guard === "immutable") {
           throw new TypeError("immutable");
         }
-        if (!this.#headersList.contains(name, false)) {
+        if (!this.#headersList.contains(name2, false)) {
           return;
         }
-        this.#headersList.delete(name, false);
+        this.#headersList.delete(name2, false);
       }
       // https://fetch.spec.whatwg.org/#dom-headers-get
-      get(name) {
+      get(name2) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 1, "Headers.get");
         const prefix = "Headers.get";
-        name = webidl.converters.ByteString(name, prefix, "name");
-        if (!isValidHeaderName(name)) {
+        name2 = webidl.converters.ByteString(name2, prefix, "name");
+        if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
             prefix,
-            value: name,
+            value: name2,
             type: "header name"
           });
         }
-        return this.#headersList.get(name, false);
+        return this.#headersList.get(name2, false);
       }
       // https://fetch.spec.whatwg.org/#dom-headers-has
-      has(name) {
+      has(name2) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 1, "Headers.has");
         const prefix = "Headers.has";
-        name = webidl.converters.ByteString(name, prefix, "name");
-        if (!isValidHeaderName(name)) {
+        name2 = webidl.converters.ByteString(name2, prefix, "name");
+        if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
             prefix,
-            value: name,
+            value: name2,
             type: "header name"
           });
         }
-        return this.#headersList.contains(name, false);
+        return this.#headersList.contains(name2, false);
       }
       // https://fetch.spec.whatwg.org/#dom-headers-set
-      set(name, value) {
+      set(name2, value) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 2, "Headers.set");
         const prefix = "Headers.set";
-        name = webidl.converters.ByteString(name, prefix, "name");
+        name2 = webidl.converters.ByteString(name2, prefix, "name");
         value = webidl.converters.ByteString(value, prefix, "value");
         value = headerValueNormalize(value);
-        if (!isValidHeaderName(name)) {
+        if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
             prefix,
-            value: name,
+            value: name2,
             type: "header name"
           });
         } else if (!isValidHeaderValue(value)) {
@@ -48231,7 +48291,7 @@ var require_headers = __commonJS({
         if (this.#guard === "immutable") {
           throw new TypeError("immutable");
         }
-        this.#headersList.set(name, value, false);
+        this.#headersList.set(name2, value, false);
       }
       // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
       getSetCookie() {
@@ -48685,9 +48745,9 @@ var require_response = __commonJS({
       }
       return response;
     }
-    webidl.converters.XMLHttpRequestBodyInit = function(V, prefix, name) {
+    webidl.converters.XMLHttpRequestBodyInit = function(V, prefix, name2) {
       if (typeof V === "string") {
-        return webidl.converters.USVString(V, prefix, name);
+        return webidl.converters.USVString(V, prefix, name2);
       }
       if (webidl.is.Blob(V)) {
         return V;
@@ -48701,7 +48761,7 @@ var require_response = __commonJS({
       if (webidl.is.URLSearchParams(V)) {
         return V;
       }
-      return webidl.converters.DOMString(V, prefix, name);
+      return webidl.converters.DOMString(V, prefix, name2);
     };
     webidl.converters.BodyInit = function(V, prefix, argument) {
       if (webidl.is.ReadableStream(V)) {
@@ -49033,8 +49093,8 @@ var require_request2 = __commonJS({
           const headers = init.headers !== void 0 ? init.headers : new HeadersList(headersList);
           headersList.clear();
           if (headers instanceof HeadersList) {
-            for (const { name, value } of headers.rawValues()) {
-              headersList.append(name, value, false);
+            for (const { name: name2, value } of headers.rawValues()) {
+              headersList.append(name2, value, false);
             }
             headersList.cookies = headers.cookies;
           } else {
@@ -50723,11 +50783,11 @@ var require_fetch = __commonJS({
                 return false;
               }
               const headersList = new HeadersList();
-              for (const [name, value] of Object.entries(headers)) {
+              for (const [name2, value] of Object.entries(headers)) {
                 if (value == null) {
                   continue;
                 }
-                const headerName = name.toLowerCase();
+                const headerName = name2.toLowerCase();
                 if (Array.isArray(value)) {
                   for (const entry of value) {
                     headersList.append(headerName, String(entry), true);
@@ -51496,9 +51556,9 @@ var require_util4 = __commonJS({
       }
       return false;
     }
-    function validateCookieName(name) {
-      for (let i = 0; i < name.length; ++i) {
-        const code = name.charCodeAt(i);
+    function validateCookieName(name2) {
+      for (let i = 0; i < name2.length; ++i) {
+        const code = name2.charCodeAt(i);
         if (code < 33 || // exclude CTLs (0-31), SP and HT
         code > 126 || // exclude non-ascii and DEL
         code === 34 || // "
@@ -51709,7 +51769,7 @@ var require_parse = __commonJS({
       }
       let nameValuePair = "";
       let unparsedAttributes = "";
-      let name = "";
+      let name2 = "";
       let value = "";
       if (header2.includes(";")) {
         const position = { position: 0 };
@@ -51722,20 +51782,20 @@ var require_parse = __commonJS({
         value = nameValuePair;
       } else {
         const position = { position: 0 };
-        name = collectASequenceOfCodePointsFast(
+        name2 = collectASequenceOfCodePointsFast(
           "=",
           nameValuePair,
           position
         );
         value = nameValuePair.slice(position.position + 1);
       }
-      name = name.trim();
+      name2 = name2.trim();
       value = value.trim();
-      if (name.length + value.length > maxNameValuePairSize) {
+      if (name2.length + value.length > maxNameValuePairSize) {
         return null;
       }
       return {
-        name,
+        name: name2,
         value,
         ...parseUnparsedAttributes(unparsedAttributes)
       };
@@ -51850,19 +51910,19 @@ var require_cookies = __commonJS({
         return out;
       }
       for (const piece of cookie.split(";")) {
-        const [name, ...value] = piece.split("=");
-        out[name.trim()] = value.join("=");
+        const [name2, ...value] = piece.split("=");
+        out[name2.trim()] = value.join("=");
       }
       return out;
     }
-    function deleteCookie(headers, name, attributes) {
+    function deleteCookie(headers, name2, attributes) {
       brandChecks(headers);
       const prefix = "deleteCookie";
       webidl.argumentLengthCheck(arguments, 2, prefix);
-      name = webidl.converters.DOMString(name, prefix, "name");
+      name2 = webidl.converters.DOMString(name2, prefix, "name");
       attributes = webidl.converters.DeleteCookieAttributes(attributes);
       setCookie(headers, {
-        name,
+        name: name2,
         value: "",
         expires: /* @__PURE__ */ new Date(0),
         ...attributes
@@ -52378,9 +52438,9 @@ var require_util5 = __commonJS({
       const extensionList = /* @__PURE__ */ new Map();
       while (position.position < extensions.length) {
         const pair = collectASequenceOfCodePointsFast(";", extensions, position);
-        const [name, value = ""] = pair.split("=", 2);
+        const [name2, value = ""] = pair.split("=", 2);
         extensionList.set(
-          removeHTTPWhitespace(name, true, false),
+          removeHTTPWhitespace(name2, true, false),
           removeHTTPWhitespace(value, false, true)
         );
         position.position++;
@@ -55120,8 +55180,8 @@ var init_forward = __esm({
 });
 
 // src/edge/attribution.ts
-function header(h, name, flag) {
-  const v = h[name];
+function header(h, name2, flag) {
+  const v = h[name2];
   const raw = (Array.isArray(v) ? v[0] : v)?.trim();
   if (!raw) return null;
   const { value, changed } = sanitizeHeaderValue(raw);
@@ -55130,7 +55190,7 @@ function header(h, name, flag) {
 }
 function readAttribution(h, surface) {
   const f = { changed: false };
-  const read = (name) => header(h, name, f);
+  const read = (name2) => header(h, name2, f);
   const codex = surface === "openai-responses" || surface === "openai-chat";
   return {
     session: codex ? read("session_id") ?? read("session-id") : read("x-claude-code-session-id"),
@@ -55251,20 +55311,20 @@ function hopByHop(h) {
   const listed = /* @__PURE__ */ new Set();
   const conn = h.connection;
   for (const v of Array.isArray(conn) ? conn : conn ? [conn] : []) {
-    for (const name of v.split(",")) listed.add(name.trim().toLowerCase());
+    for (const name2 of v.split(",")) listed.add(name2.trim().toLowerCase());
   }
-  return (name) => HOP_BY_HOP.has(name) || name.startsWith("proxy-") || listed.has(name);
+  return (name2) => HOP_BY_HOP.has(name2) || name2.startsWith("proxy-") || listed.has(name2);
 }
 function upstreamHeaders(inbound, opts) {
   const drop = hopByHop(inbound);
   const out = {};
-  for (const [name, value] of Object.entries(inbound)) {
+  for (const [name2, value] of Object.entries(inbound)) {
     if (value === void 0) continue;
-    if (drop(name) || name === "host" || name === "content-length" || name === "expect" || name === "accept-encoding") continue;
-    if (name.startsWith("x-tokenyard-")) continue;
-    if (opts.mode === "api" && (name === "authorization" || name === "x-api-key")) continue;
-    if (opts.clientKeyHeaders?.some((h) => h === name)) continue;
-    out[name] = value;
+    if (drop(name2) || name2 === "host" || name2 === "content-length" || name2 === "expect" || name2 === "accept-encoding") continue;
+    if (name2.startsWith("x-tokenyard-")) continue;
+    if (opts.mode === "api" && (name2 === "authorization" || name2 === "x-api-key")) continue;
+    if (opts.clientKeyHeaders?.some((h) => h === name2)) continue;
+    out[name2] = value;
   }
   if (opts.mode === "api" && opts.credential) out[opts.credential.header] = opts.credential.value;
   out.host = opts.host;
@@ -55274,9 +55334,9 @@ function upstreamHeaders(inbound, opts) {
 function clientHeaders(up, extra) {
   const drop = hopByHop(up);
   const out = {};
-  for (const [name, value] of Object.entries(up)) {
-    if (value === void 0 || drop(name) || name.startsWith("x-tokenyard-")) continue;
-    out[name] = value;
+  for (const [name2, value] of Object.entries(up)) {
+    if (value === void 0 || drop(name2) || name2.startsWith("x-tokenyard-")) continue;
+    out[name2] = value;
   }
   return { ...out, ...extra };
 }
@@ -55307,8 +55367,8 @@ function matchRoute(method, rawUrl, basePath) {
     path2 = path2.slice(base.length);
   }
   if ((method === "HEAD" || method === "GET") && path2 === "/api/hello") return { surface: "hello", pathAndQuery: path2 + query };
-  const bare = path2.startsWith("/v1/") ? path2.slice(3) : path2;
-  const r = ROUTES.find((x) => x.path === bare && x.methods.includes(method));
+  const bare2 = path2.startsWith("/v1/") ? path2.slice(3) : path2;
+  const r = ROUTES.find((x) => x.path === bare2 && x.methods.includes(method));
   return r ? { surface: r.surface, pathAndQuery: r.canonical + query } : null;
 }
 var ROUTES;
@@ -55424,11 +55484,11 @@ function sendError(req, res, e, closeConnection = false) {
   req.resume();
   res.writeHead(e.status, closeConnection ? { ...e.headers, connection: "close" } : e.headers).end(e.body);
 }
-function forwardToFirstProvider(policy, surface) {
-  const route = policy.routes.find((r) => r.surfaces.includes(surface));
-  const name = route?.chain[0];
-  const provider = name === void 0 ? void 0 : policy.providers.get(name);
-  return route && provider ? { provider, route } : null;
+function forwardToFirstProvider(policy2, surface) {
+  const route2 = policy2.routes.find((r) => r.surfaces.includes(surface));
+  const name2 = route2?.chain[0];
+  const provider2 = name2 === void 0 ? void 0 : policy2.providers.get(name2);
+  return route2 && provider2 ? { provider: provider2, route: route2 } : null;
 }
 function rateLimitHeaders(h) {
   const out = {};
@@ -55484,7 +55544,7 @@ function afterResponse(deps, outcome) {
 }
 async function handle(deps, id, req, res) {
   const startedAt = deps.clock();
-  const policy = deps.policy();
+  const policy2 = deps.policy();
   const ac = new AbortController();
   res.on("close", () => {
     if (!res.writableFinished) ac.abort();
@@ -55504,7 +55564,7 @@ async function handle(deps, id, req, res) {
   let key;
   const keyHeaders = /* @__PURE__ */ new Set();
   for (const c of creds) {
-    const k = policy.keysByHash.get(hashKey(c.value));
+    const k = policy2.keysByHash.get(hashKey(c.value));
     if (!k) continue;
     key ??= k;
     if (c.source === "bearer") keyHeaders.add("authorization");
@@ -55518,7 +55578,7 @@ async function handle(deps, id, req, res) {
   }
   if (match.surface === "models") {
     req.resume();
-    const body2 = modelsListBody(policy.routes.flatMap((r) => r.models));
+    const body2 = modelsListBody(policy2.routes.flatMap((r) => r.models));
     res.writeHead(200, { "content-type": "application/json", "content-length": String(body2.length), "x-tokenyard-request-id": id }).end(body2);
     return;
   }
@@ -55539,7 +55599,7 @@ async function handle(deps, id, req, res) {
     costBasis: key.billing === "subscription" ? "api-equivalent" : "billed",
     addedTtfbMs: null,
     client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
-    policyRevision: policy.revision,
+    policyRevision: policy2.revision,
     route: null,
     priceTable: deps.prices?.version ?? "none",
     ...over
@@ -55558,33 +55618,33 @@ async function handle(deps, id, req, res) {
     return;
   }
   const features = extractFeatures(surface, body);
-  const target = forwardToFirstProvider(policy, surface);
+  const target = forwardToFirstProvider(policy2, surface);
   if (!target) {
     sendError(req, res, anthropicError(403, "permission_error", "no route allows this request", null, id));
     return early({ status: 403, features, decision: { action: "block", reason: "no-route" }, errorClass: "permission_error" });
   }
-  const { provider, route } = target;
-  const mode = provider.credential === "passthrough" ? "passthrough" : "api";
+  const { provider: provider2, route: route2 } = target;
+  const mode = provider2.credential === "passthrough" ? "passthrough" : "api";
   const headers = upstreamHeaders(req.headers, {
     mode,
-    credential: providerCredential(provider),
-    host: new URL(provider.baseUrl).host,
+    credential: providerCredential(provider2),
+    host: new URL(provider2.baseUrl).host,
     clientKeyHeaders: [...keyHeaders]
   });
   let up;
   const forwardedAt = deps.clock();
   try {
-    up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
+    up = await forward(provider2, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
-    const common = { features, provider: provider.name, route: { name: route.name, chain: route.chain } };
+    const common = { features, provider: provider2.name, route: { name: route2.name, chain: route2.chain } };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
-    sendError(req, res, anthropicError(502, "api_error", `upstream ${provider.name} is unreachable`, null, id));
+    sendError(req, res, anthropicError(502, "api_error", `upstream ${provider2.name} is unreachable`, null, id));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
   }
   if (ac.signal.aborted) {
     up.body.on("error", () => void 0);
     up.body.destroy();
-    return early({ features, provider: provider.name, route: { name: route.name, chain: route.chain }, status: 499, aborted: true, errorClass: "client_abort" });
+    return early({ features, provider: provider2.name, route: { name: route2.name, chain: route2.chain }, status: 499, aborted: true, errorClass: "client_abort" });
   }
   const upstreamHeadersAt = deps.clock();
   const ttfbMs = upstreamHeadersAt - startedAt;
@@ -55592,7 +55652,7 @@ async function handle(deps, id, req, res) {
     up.status,
     clientHeaders(up.headers, {
       "x-tokenyard-request-id": id,
-      "x-tokenyard-policy-revision": policy.revision,
+      "x-tokenyard-policy-revision": policy2.revision,
       "X-Accel-Buffering": "no"
     })
   );
@@ -55609,7 +55669,7 @@ async function handle(deps, id, req, res) {
     attribution: readAttribution(req.headers, surface),
     surface,
     features,
-    provider: provider.name,
+    provider: provider2.name,
     status: up.status,
     usage,
     aborted: ac.signal.aborted,
@@ -55620,8 +55680,8 @@ async function handle(deps, id, req, res) {
     costBasis: key.billing === "subscription" ? "api-equivalent" : "billed",
     addedTtfbMs: Math.max(0, ttfbMs - (upstreamHeadersAt - forwardedAt)),
     client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
-    policyRevision: policy.revision,
-    route: { name: route.name, chain: route.chain },
+    policyRevision: policy2.revision,
+    route: { name: route2.name, chain: route2.chain },
     priceTable: deps.prices?.version ?? "none",
     rateLimitHeaders: rateLimitHeaders(up.headers)
   });
@@ -55718,7 +55778,7 @@ __export(dev_policy_exports, {
   devPolicy: () => devPolicy
 });
 function devPolicy(o) {
-  const provider = { name: "dev-upstream", format: "anthropic", baseUrl: o.upstream, credential: o.credential };
+  const provider2 = { name: "dev-upstream", format: "anthropic", baseUrl: o.upstream, credential: o.credential };
   const keys2 = o.keys.map((plaintext, i) => ({
     hash: hashKey(plaintext),
     keyId: `dev${i + 1}`,
@@ -55730,9 +55790,9 @@ function devPolicy(o) {
   }));
   return {
     revision: "dev",
-    providers: /* @__PURE__ */ new Map([[provider.name, provider]]),
+    providers: /* @__PURE__ */ new Map([[provider2.name, provider2]]),
     keysByHash: new Map(keys2.map((k) => [k.hash, k])),
-    routes: [{ name: "dev", surfaces: ["anthropic-messages", "anthropic-count-tokens"], models: o.models, chain: [provider.name] }],
+    routes: [{ name: "dev", surfaces: ["anthropic-messages", "anthropic-count-tokens"], models: o.models, chain: [provider2.name] }],
     candidate: null
   };
 }
@@ -55809,6 +55869,446 @@ var init_keys = __esm({
   }
 });
 
+// src/policy/schema.ts
+var SURFACES, name, fileRef, httpUrl2, provider, route, budget, rateLimit, reservation, guardrails, failure2, ci, policySchema, keyRecordSchema, keysFileSchema, SURFACE_LIST;
+var init_schema = __esm({
+  "src/policy/schema.ts"() {
+    "use strict";
+    init_zod();
+    SURFACES = ["anthropic-messages", "anthropic-count-tokens", "openai-responses", "openai-chat"];
+    name = external_exports.string().min(1);
+    fileRef = external_exports.string().regex(/^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/, "must be a file name in the policy directory");
+    httpUrl2 = external_exports.string().refine((s) => {
+      try {
+        return ["http:", "https:"].includes(new URL(s).protocol);
+      } catch {
+        return false;
+      }
+    }, "must be an http(s) URL");
+    provider = external_exports.strictObject({
+      format: external_exports.enum(["anthropic", "openai"]),
+      baseUrl: httpUrl2,
+      // The env var name is checked syntactically in validate.ts (E_CREDENTIAL_ENV); whether it is set is a runtime matter.
+      credential: external_exports.union([external_exports.strictObject({ env: external_exports.string() }), external_exports.literal("passthrough")])
+    });
+    route = external_exports.strictObject({
+      name,
+      match: external_exports.strictObject({
+        surface: external_exports.enum(SURFACES).optional(),
+        traffic: external_exports.enum(["coding-agent", "product"]).optional(),
+        billing: external_exports.enum(["api", "subscription"]).optional(),
+        feature: name.optional()
+      }).default({}),
+      chain: external_exports.array(name),
+      allowModels: external_exports.array(name).optional(),
+      rewriteModel: name.optional(),
+      allowBodyRewrite: external_exports.boolean().optional(),
+      because: external_exports.string().optional(),
+      /** Server tool types this route lets through (for example `web_search`); each needs a price or an explicit `failure.unpricedModel`. */
+      serverTools: external_exports.array(name).optional(),
+      criticality: external_exports.enum(["standard", "sheddable"]).optional(),
+      reserveOutputTokens: external_exports.number().int().positive().optional()
+    });
+    budget = external_exports.strictObject({
+      name,
+      scope: external_exports.enum(["tenant", "team", "key", "session"]),
+      // `window` and `usd` are checked in validate.ts (E_BUDGET_WINDOW, E_BUDGET_USD) so each failure has its own code.
+      window: external_exports.string().optional(),
+      usd: external_exports.number(),
+      onExceed: external_exports.enum(["block", "warn"]).default("block"),
+      mode: external_exports.enum(["enforce", "audit"]).default("enforce")
+    });
+    rateLimit = external_exports.strictObject({
+      name,
+      scope: external_exports.enum(["tenant", "team", "key"]),
+      rpm: external_exports.number().positive().optional(),
+      burst: external_exports.number().int().positive().optional(),
+      concurrentStreams: external_exports.number().int().positive().optional()
+    }).refine((r) => r.rpm !== void 0 || r.concurrentStreams !== void 0, "needs rpm or concurrentStreams");
+    reservation = external_exports.strictObject({
+      estimator: external_exports.enum(["worst-case", "session-aware"]).default("worst-case"),
+      onOverrun: external_exports.enum(["allow-and-debit"]).default("allow-and-debit"),
+      serverToolsWithoutMaxUses: external_exports.enum(["block", "assume"]).default("block"),
+      assumedMaxUses: external_exports.number().int().positive().default(25)
+    });
+    guardrails = external_exports.strictObject({
+      secrets: external_exports.strictObject({
+        rules: external_exports.literal("default").default("default"),
+        codingAgent: external_exports.enum(["block", "warn"]).default("block"),
+        product: external_exports.enum(["block", "warn", "redact"]).default("redact"),
+        entropyOnly: external_exports.enum(["warn"]).default("warn"),
+        taintTtlHours: external_exports.number().positive().default(24)
+      }).prefault({}),
+      pii: external_exports.strictObject({ product: external_exports.enum(["block", "warn", "redact"]).default("redact") }).prefault({})
+    });
+    failure2 = external_exports.strictObject({
+      // Both fields stay optional on purpose: validate.ts requires `budgets` to be stated, and a server tool without a price
+      // is only covered when `unpricedModel` is stated (E_STORE_DOWN_UNSTATED, E_UNPRICED_SERVER_TOOL).
+      counterStoreDown: external_exports.strictObject({ rateLimits: external_exports.enum(["open", "closed"]).default("open"), budgets: external_exports.enum(["open", "closed"]).optional() }).prefault({}),
+      unpricedModel: external_exports.enum(["block", "allow-and-flag"]).optional(),
+      breaker: external_exports.strictObject({
+        minRequests: external_exports.number().int().positive().default(20),
+        failureRatio: external_exports.number().gt(0).max(1).default(0.5),
+        windowSeconds: external_exports.number().positive().default(30),
+        openSeconds: external_exports.number().positive().default(30)
+      }).prefault({}),
+      retryBudgetRatio: external_exports.number().min(0).max(1).default(0.1)
+    });
+    ci = external_exports.strictObject({
+      failOn: external_exports.strictObject({ cutSessions: external_exports.number().int().nonnegative().default(0), costIncreasePct: external_exports.number().nonnegative().default(10) }).prefault({})
+    });
+    policySchema = external_exports.strictObject({
+      apiVersion: external_exports.literal("tokenyard/v1"),
+      kind: external_exports.literal("Policy"),
+      metadata: external_exports.strictObject({ name, owners: external_exports.array(external_exports.string()).optional() }),
+      pricing: fileRef.default("./prices.yaml"),
+      keys: fileRef.default("./keys.yaml"),
+      providers: external_exports.record(name, provider),
+      tenants: external_exports.record(name, external_exports.strictObject({ teams: external_exports.array(name).default([]) })).default({}),
+      routes: external_exports.array(route),
+      budgets: external_exports.array(budget).default([]),
+      reservation: reservation.prefault({}),
+      rateLimits: external_exports.array(rateLimit).default([]),
+      guardrails: guardrails.prefault({}),
+      failure: failure2.prefault({}),
+      ci: ci.prefault({})
+    });
+    keyRecordSchema = external_exports.strictObject({
+      hash: external_exports.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 hex digest"),
+      keyId: name,
+      tenant: name,
+      team: name.nullable(),
+      name,
+      kind: external_exports.enum(["developer", "service"]),
+      billing: external_exports.enum(["api", "subscription"])
+    });
+    keysFileSchema = external_exports.array(keyRecordSchema);
+    SURFACE_LIST = SURFACES;
+  }
+});
+
+// src/policy/load-dir.ts
+var load_dir_exports = {};
+__export(load_dir_exports, {
+  POLICY_FILE: () => POLICY_FILE,
+  PolicyLoadError: () => PolicyLoadError,
+  normalizeText: () => normalizeText,
+  parsePolicyFiles: () => parsePolicyFiles,
+  policyFileNames: () => policyFileNames
+});
+function normalizeText(text) {
+  return (text.charCodeAt(0) === 65279 ? text.slice(1) : text).replace(/\r\n/g, "\n");
+}
+function policyFileNames(policyText) {
+  let pricing = DEFAULT_PRICES;
+  let keys2 = DEFAULT_KEYS;
+  try {
+    const raw = parseYamlSafe(normalizeText(policyText));
+    if (typeof raw === "object" && raw !== null) {
+      const r = raw;
+      if (typeof r.pricing === "string" && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.pricing)) pricing = bare(r.pricing);
+      if (typeof r.keys === "string" && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.keys)) keys2 = bare(r.keys);
+    }
+  } catch {
+  }
+  return [.../* @__PURE__ */ new Set([POLICY_FILE, pricing, keys2])];
+}
+function yamlOf(file2, text) {
+  try {
+    return parseYamlSafe(text);
+  } catch (e) {
+    if (e instanceof YamlError) throw new PolicyLoadError(e.code, file2, [{ path: "", message: e.message }]);
+    throw e;
+  }
+}
+function parsePolicyFiles(dir, files) {
+  const get = (name2) => {
+    const text = Object.hasOwn(files, name2) ? files[name2] : void 0;
+    if (text === void 0) throw new PolicyLoadError("E_FILE_MISSING", name2, [{ path: "", message: `${name2} not found in ${dir}` }]);
+    return normalizeText(text);
+  };
+  const policyText = get(POLICY_FILE);
+  const p = policySchema.safeParse(yamlOf(POLICY_FILE, policyText));
+  if (!p.success) throw new PolicyLoadError("E_SCHEMA", POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: i.message })));
+  const policy2 = p.data;
+  const pricesName = bare(policy2.pricing);
+  const keysName = bare(policy2.keys);
+  const pricesText = get(pricesName);
+  const keysText = get(keysName);
+  let prices;
+  try {
+    prices = parsePriceTable(pricesText);
+  } catch (e) {
+    if (e instanceof YamlError) throw new PolicyLoadError(e.code, pricesName, [{ path: "", message: e.message }]);
+    const message = e instanceof Error ? e.message.replace(/^invalid price table: /, "") : String(e);
+    const code = /\.(maxContextTokens|maxOutputTokens):/.test(message) ? "E_MODEL_LIMITS_MISSING" : "E_PRICES_INVALID";
+    throw new PolicyLoadError(code, pricesName, [{ path: "", message }]);
+  }
+  const rawKeys = yamlOf(keysName, keysText) ?? [];
+  const k = keysFileSchema.safeParse(rawKeys);
+  if (!k.success) throw new PolicyLoadError("E_SCHEMA", keysName, k.error.issues.map((i) => ({ path: pathOf(i.path), message: i.message })));
+  const seenHash = /* @__PURE__ */ new Set();
+  const seenId = /* @__PURE__ */ new Set();
+  k.data.forEach((rec, i) => {
+    if (seenHash.has(rec.hash) || seenId.has(rec.keyId)) throw new PolicyLoadError("E_SCHEMA", keysName, [{ path: `[${i}]`, message: "duplicate key hash or keyId" }]);
+    seenHash.add(rec.hash);
+    seenId.add(rec.keyId);
+  });
+  const normalizedFiles = {};
+  normalizedFiles[POLICY_FILE] = policyText;
+  normalizedFiles[pricesName] = pricesText;
+  normalizedFiles[keysName] = keysText;
+  return { dir, policy: policy2, prices, keys: k.data, normalizedFiles };
+}
+var PolicyLoadError, POLICY_FILE, DEFAULT_PRICES, DEFAULT_KEYS, bare, pathOf;
+var init_load_dir = __esm({
+  "src/policy/load-dir.ts"() {
+    "use strict";
+    init_prices();
+    init_schema();
+    init_safe_yaml();
+    PolicyLoadError = class extends Error {
+      constructor(code, file2, issues) {
+        const first2 = issues[0];
+        super(`${code} ${file2}${first2 && first2.path ? ` ${first2.path}` : ""}: ${first2?.message ?? "invalid"}${issues.length > 1 ? ` (and ${issues.length - 1} more)` : ""}`);
+        this.code = code;
+        this.file = file2;
+        this.name = "PolicyLoadError";
+        this.issues = issues.map((i) => ({ code, path: i.path ? `${file2}:${i.path}` : file2, message: i.message }));
+      }
+      code;
+      file;
+      issues;
+    };
+    POLICY_FILE = "policy.yaml";
+    DEFAULT_PRICES = "prices.yaml";
+    DEFAULT_KEYS = "keys.yaml";
+    bare = (ref) => ref.replace(/^\.\//, "");
+    pathOf = (p) => p.reduce((s, k) => typeof k === "number" ? `${s}[${k}]` : s ? `${s}.${String(k)}` : String(k), "");
+  }
+});
+
+// src/policy-loader/load-dir.ts
+var load_dir_exports2 = {};
+__export(load_dir_exports2, {
+  PolicyLoadError: () => PolicyLoadError,
+  loadPolicyDir: () => loadPolicyDir
+});
+import { readFile } from "node:fs/promises";
+import { join as join3 } from "node:path";
+async function readOrMissing(dir, name2) {
+  try {
+    return await readFile(join3(dir, name2), "utf8");
+  } catch (e) {
+    if (e.code === "ENOENT" || e.code === "ENOTDIR") return void 0;
+    throw e;
+  }
+}
+async function loadPolicyDir(dir) {
+  const files = {};
+  const policy2 = await readOrMissing(dir, POLICY_FILE);
+  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir}` }]);
+  files[POLICY_FILE] = policy2;
+  for (const name2 of policyFileNames(policy2)) {
+    if (name2 === POLICY_FILE) continue;
+    const text = await readOrMissing(dir, name2);
+    if (text !== void 0) files[name2] = text;
+  }
+  return parsePolicyFiles(dir, files);
+}
+var init_load_dir2 = __esm({
+  "src/policy-loader/load-dir.ts"() {
+    "use strict";
+    init_load_dir();
+  }
+});
+
+// src/policy/validate.ts
+var validate_exports = {};
+__export(validate_exports, {
+  ERROR_CODES: () => ERROR_CODES,
+  LOAD_ERROR_CODES: () => LOAD_ERROR_CODES,
+  WARNING_CODES: () => WARNING_CODES,
+  globMatch: () => globMatch,
+  validatePolicy: () => validatePolicy
+});
+function globMatch(pattern, text) {
+  let p = 0;
+  let t = 0;
+  let star = -1;
+  let mark = 0;
+  while (t < text.length) {
+    if (p < pattern.length && pattern[p] === "*") {
+      star = p++;
+      mark = t;
+    } else if (p < pattern.length && pattern[p] === text[t]) {
+      p++;
+      t++;
+    } else if (star >= 0) {
+      p = star + 1;
+      t = ++mark;
+    } else return false;
+  }
+  while (p < pattern.length && pattern[p] === "*") p++;
+  return p === pattern.length;
+}
+function covers(earlier, later) {
+  return MATCH_FIELDS.every((f) => earlier.match[f] === void 0 || earlier.match[f] === later.match[f]);
+}
+function validatePolicy(src, o) {
+  const errors = [];
+  const warnings = [];
+  const err = (code, path2, message) => void errors.push({ code, path: path2, message });
+  const warn = (code, path2, message) => void warnings.push({ code, path: path2, message });
+  const { policy: policy2, prices, keys: keys2 } = src;
+  const flag = o.experimentalSubscription;
+  const providers = new Map(Object.entries(policy2.providers).map(([n, p]) => [n, p.format]));
+  for (const [name2, p] of Object.entries(policy2.providers)) {
+    const at = `providers.${name2}`;
+    if (p.credential === "passthrough") {
+      let ok = false;
+      try {
+        const u = new URL(p.baseUrl);
+        ok = u.protocol === "https:" && u.hostname === OFFICIAL_HOST[p.format] && u.port === "" && u.username === "" && u.password === "";
+      } catch {
+        ok = false;
+      }
+      if (!ok) err("E_PASSTHROUGH_HOST", `${at}.baseUrl`, `credential: passthrough is only allowed with https://${OFFICIAL_HOST[p.format]} (a user's token must never reach another host)`);
+      if (!flag) err("E_SUBSCRIPTION_FLAG", `${at}.credential`, "credential: passthrough needs --experimental-subscription");
+    } else if (!ENV_NAME.test(p.credential.env)) {
+      err("E_CREDENTIAL_ENV", `${at}.credential.env`, `"${p.credential.env}" is not a valid environment variable name`);
+    }
+  }
+  keys2.forEach((k, i) => {
+    if (k.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `keys[${i}].billing`, `key ${k.keyId} has billing: subscription, which needs --experimental-subscription`);
+  });
+  const priced = (pattern) => pattern.includes("*") ? Object.keys(prices.models).some((id) => globMatch(pattern, id)) : lookupModel(prices, pattern) !== null;
+  policy2.routes.forEach((r, i) => {
+    const at = `routes[${i}]`;
+    const codingAgentSeen = r.match.traffic !== "product";
+    const codingMessages = r.match.surface === "anthropic-messages" && r.match.traffic === "coding-agent";
+    if (r.chain.length < 1 || r.chain.length > 3) err("E_CHAIN_LENGTH", `${at}.chain`, `a chain has 1 to 3 providers, this one has ${r.chain.length}`);
+    r.chain.forEach((p, j) => {
+      const format = providers.get(p);
+      if (format === void 0) return void err("E_CHAIN_UNKNOWN_PROVIDER", `${at}.chain[${j}]`, `provider "${p}" is not defined under providers`);
+      if (codingMessages && format !== "anthropic") err("E_CODING_AGENT_FORMAT", `${at}.chain[${j}]`, `coding-agent traffic on anthropic-messages may only chain format: anthropic providers; "${p}" is ${format}`);
+    });
+    if (codingMessages) {
+      r.allowModels?.forEach((m, j) => {
+        if (!m.startsWith("claude")) err("E_CODING_AGENT_NON_CLAUDE", `${at}.allowModels[${j}]`, `"${m}" is not a Claude model; Claude Code is not supported through a gateway that routes it to non-Claude models`);
+      });
+    }
+    if (codingAgentSeen) {
+      if (r.rewriteModel !== void 0 && r.allowBodyRewrite !== true) err("E_BODY_REWRITE", `${at}.rewriteModel`, "rewriteModel on coding-agent traffic needs allowBodyRewrite: true and a because: reason");
+      if (r.allowBodyRewrite === true && (r.because ?? "").trim() === "") err("E_BODY_REWRITE", `${at}.because`, "allowBodyRewrite: true must name the reason in because:");
+    }
+    r.allowModels?.forEach((m, j) => {
+      if (!priced(m)) err("E_UNPRICED_MODEL", `${at}.allowModels[${j}]`, `"${m}" has no entry in the price table`);
+    });
+    if (r.rewriteModel !== void 0 && lookupModel(prices, r.rewriteModel) === null) err("E_UNPRICED_MODEL", `${at}.rewriteModel`, `"${r.rewriteModel}" has no entry in the price table`);
+    r.serverTools?.forEach((t, j) => {
+      if (!Object.hasOwn(prices.serverTools, t) && policy2.failure.unpricedModel === void 0) {
+        err("E_UNPRICED_SERVER_TOOL", `${at}.serverTools[${j}]`, `server tool "${t}" has no price and failure.unpricedModel is not stated`);
+      }
+    });
+    if (r.match.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `${at}.match.billing`, "a route matching billing: subscription needs --experimental-subscription");
+  });
+  for (const [id, m] of Object.entries(prices.models)) {
+    if (m.maxOutputTokens > m.maxContextTokens) err("E_MODEL_LIMITS", `prices.models.${id}`, `maxOutputTokens (${m.maxOutputTokens}) is larger than maxContextTokens (${m.maxContextTokens})`);
+  }
+  const names = /* @__PURE__ */ new Set();
+  policy2.budgets.forEach((b, i) => {
+    const at = `budgets[${i}]`;
+    if (names.has(b.name)) err("E_BUDGET_DUP", `${at}.name`, `budget name "${b.name}" is used twice`);
+    names.add(b.name);
+    if (b.scope === "session") {
+      if (b.window !== void 0) err("E_BUDGET_WINDOW", `${at}.window`, "a session budget has no window");
+    } else if (b.window === void 0 || !Object.hasOwn(WINDOW_RANK, b.window)) {
+      err("E_BUDGET_WINDOW", `${at}.window`, `window must be day, week or month (UTC) for scope ${b.scope}`);
+    }
+    if (!(b.usd > 0) || !Number.isFinite(b.usd)) err("E_BUDGET_USD", `${at}.usd`, `usd must be greater than 0, got ${b.usd}`);
+  });
+  const enforced = policy2.budgets.filter((b) => b.mode === "enforce");
+  if (enforced.length > 0 && policy2.failure.counterStoreDown.budgets === void 0) {
+    err("E_STORE_DOWN_UNSTATED", "failure.counterStoreDown.budgets", "state open or closed explicitly: the policy has budgets with mode: enforce");
+  }
+  policy2.budgets.forEach((child, i) => {
+    const parent = policy2.budgets.find(
+      (b) => (SCOPE_RANK[b.scope] ?? 0) > (SCOPE_RANK[child.scope] ?? 0) && child.usd > b.usd && (WINDOW_RANK[child.window ?? ""] ?? 0) >= (WINDOW_RANK[b.window ?? ""] ?? 0) && child.window !== void 0
+    );
+    if (parent) warn("W_CHILD_BUDGET", `budgets[${i}]`, `${child.scope} budget "${child.name}" (${child.usd} USD) is larger than ${parent.scope} budget "${parent.name}" (${parent.usd} USD)`);
+  });
+  for (const s of SURFACE_LIST) {
+    if (!policy2.routes.some((r) => r.match.surface === void 0 || r.match.surface === s)) warn("W_SURFACE_NO_ROUTE", "routes", `no route matches surface ${s}; requests on it get 403 "no route"`);
+  }
+  policy2.routes.forEach((later, j) => {
+    const i = policy2.routes.findIndex((earlier, k) => k < j && covers(earlier, later));
+    if (i >= 0) warn("W_ROUTE_SHADOWED", `routes[${j}]`, `route "${later.name}" can never match: route "${policy2.routes[i]?.name}" before it covers it`);
+  });
+  if (policy2.reservation.estimator === "session-aware") {
+    policy2.budgets.forEach((b, i) => {
+      if (b.scope === "session" && b.onExceed === "block") warn("W_SESSION_AWARE_BLOCK", `budgets[${i}]`, "estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold");
+    });
+  }
+  if (policy2.reservation.serverToolsWithoutMaxUses === "assume" && enforced.length > 0) {
+    warn("W_SERVER_TOOLS_ASSUME", "reservation.serverToolsWithoutMaxUses", "assume with an enforced budget: the budget guarantee does not hold for requests with a server tool and no max_uses");
+  }
+  if (flag) {
+    const subscriptionInUse = keys2.some((k) => k.billing === "subscription") || policy2.routes.some((r) => r.match.billing === "subscription");
+    const blocking = policy2.budgets.findIndex((b) => b.mode === "enforce" && b.onExceed === "block");
+    if (subscriptionInUse && blocking >= 0) warn("W_SUBSCRIPTION_BLOCK", `budgets[${blocking}]`, "subscription traffic is priced as API-equivalent cost; an enforced block budget can deny it (subscription budgets default to onExceed: warn)");
+  }
+  return { errors, warnings };
+}
+var ERROR_CODES, WARNING_CODES, LOAD_ERROR_CODES, OFFICIAL_HOST, ENV_NAME, WINDOW_RANK, SCOPE_RANK, MATCH_FIELDS;
+var init_validate = __esm({
+  "src/policy/validate.ts"() {
+    "use strict";
+    init_prices();
+    init_schema();
+    ERROR_CODES = [
+      "E_CHAIN_UNKNOWN_PROVIDER",
+      "E_CHAIN_LENGTH",
+      "E_CODING_AGENT_FORMAT",
+      "E_CODING_AGENT_NON_CLAUDE",
+      "E_BODY_REWRITE",
+      "E_PASSTHROUGH_HOST",
+      "E_SUBSCRIPTION_FLAG",
+      "E_UNPRICED_MODEL",
+      "E_MODEL_LIMITS",
+      "E_UNPRICED_SERVER_TOOL",
+      "E_BUDGET_DUP",
+      "E_BUDGET_WINDOW",
+      "E_BUDGET_USD",
+      "E_STORE_DOWN_UNSTATED",
+      "E_CREDENTIAL_ENV"
+    ];
+    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK"];
+    LOAD_ERROR_CODES = ["E_FILE_MISSING", "E_YAML_UNSAFE", "E_YAML_SYNTAX", "E_SCHEMA", "E_PRICES_INVALID", "E_MODEL_LIMITS_MISSING"];
+    OFFICIAL_HOST = { anthropic: "api.anthropic.com", openai: "api.openai.com" };
+    ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    WINDOW_RANK = { day: 1, week: 2, month: 3 };
+    SCOPE_RANK = { tenant: 3, team: 2, key: 1, session: 0 };
+    MATCH_FIELDS = ["surface", "traffic", "billing", "feature"];
+  }
+});
+
+// src/policy/json-schema.ts
+var json_schema_exports2 = {};
+__export(json_schema_exports2, {
+  policyJsonSchema: () => policyJsonSchema
+});
+function policyJsonSchema() {
+  return external_exports.toJSONSchema(policySchema, { io: "input", unrepresentable: "any" });
+}
+var init_json_schema2 = __esm({
+  "src/policy/json-schema.ts"() {
+    "use strict";
+    init_zod();
+    init_schema();
+  }
+});
+
 // node_modules/commander/lib/error.js
 var CommanderError = class extends Error {
   /**
@@ -55848,25 +56348,25 @@ var Argument = class {
    * @param {string} name
    * @param {string} [description]
    */
-  constructor(name, description) {
+  constructor(name2, description) {
     this.description = description || "";
     this.variadic = false;
     this.parseArg = void 0;
     this.defaultValue = void 0;
     this.defaultValueDescription = void 0;
     this.argChoices = void 0;
-    switch (name[0]) {
+    switch (name2[0]) {
       case "<":
         this.required = true;
-        this._name = name.slice(1, -1);
+        this._name = name2.slice(1, -1);
         break;
       case "[":
         this.required = false;
-        this._name = name.slice(1, -1);
+        this._name = name2.slice(1, -1);
         break;
       default:
         this.required = true;
-        this._name = name;
+        this._name = name2;
         break;
     }
     if (this._name.endsWith("...")) {
@@ -56664,8 +57164,8 @@ var Option = class {
    * @param {string} name
    * @return {Option}
    */
-  env(name) {
-    this.envVar = name;
+  env(name2) {
+    this.envVar = name2;
     return this;
   }
   /**
@@ -56947,7 +57447,7 @@ var Command = class _Command extends EventEmitter {
    *
    * @param {string} [name]
    */
-  constructor(name) {
+  constructor(name2) {
     super();
     this.commands = [];
     this.options = [];
@@ -56960,7 +57460,7 @@ var Command = class _Command extends EventEmitter {
     this.rawArgs = [];
     this.processedArgs = [];
     this._scriptPath = null;
-    this._name = name || "";
+    this._name = name2 || "";
     this._optionValues = {};
     this._optionValueSources = {};
     this._storeOptionsAsProperties = false;
@@ -57065,8 +57565,8 @@ var Command = class _Command extends EventEmitter {
       desc = null;
     }
     opts = opts || {};
-    const [, name, args] = nameAndArgs.match(/([^ ]+) *(.*)/);
-    const cmd = this.createCommand(name);
+    const [, name2, args] = nameAndArgs.match(/([^ ]+) *(.*)/);
+    const cmd = this.createCommand(name2);
     if (desc) {
       cmd.description(desc);
       cmd._executableHandler = true;
@@ -57090,8 +57590,8 @@ var Command = class _Command extends EventEmitter {
    * @param {string} [name]
    * @return {Command} new command
    */
-  createCommand(name) {
-    return new _Command(name);
+  createCommand(name2) {
+    return new _Command(name2);
   }
   /**
    * You can customise the help with a subclass of Help by overriding createHelp,
@@ -57197,8 +57697,8 @@ var Command = class _Command extends EventEmitter {
    * @param {string} [description]
    * @return {Argument} new argument
    */
-  createArgument(name, description) {
-    return new Argument(name, description);
+  createArgument(name2, description) {
+    return new Argument(name2, description);
   }
   /**
    * Define argument syntax for command.
@@ -57216,8 +57716,8 @@ var Command = class _Command extends EventEmitter {
    * @param {*} [defaultValue]
    * @return {Command} `this` command for chaining
    */
-  argument(name, description, parseArg, defaultValue) {
-    const argument = this.createArgument(name, description);
+  argument(name2, description, parseArg, defaultValue) {
+    const argument = this.createArgument(name2, description);
     if (typeof parseArg === "function") {
       argument.default(defaultValue).argParser(parseArg);
     } else {
@@ -57475,7 +57975,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
       return [cmd.name()].concat(cmd.aliases());
     };
     const alreadyUsed = knownBy(command).find(
-      (name) => this._findCommand(name)
+      (name2) => this._findCommand(name2)
     );
     if (alreadyUsed) {
       const existingCmd = knownBy(this._findCommand(alreadyUsed)).join("|");
@@ -57496,15 +57996,15 @@ Expecting one of '${allowedValues.join("', '")}'`);
   addOption(option) {
     this._registerOption(option);
     const oname = option.name();
-    const name = option.attributeName();
+    const name2 = option.attributeName();
     if (option.defaultValue !== void 0) {
-      this.setOptionValueWithSource(name, option.defaultValue, "default");
+      this.setOptionValueWithSource(name2, option.defaultValue, "default");
     }
     const handleOptionValue = (val, invalidValueMessage, valueSource) => {
       if (val == null && option.presetArg !== void 0) {
         val = option.presetArg;
       }
-      const oldValue = this.getOptionValue(name);
+      const oldValue = this.getOptionValue(name2);
       if (val !== null && option.parseArg) {
         val = this._callParseArg(option, val, oldValue, invalidValueMessage);
       } else if (val !== null && option.variadic) {
@@ -57519,7 +58019,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           val = "";
         }
       }
-      this.setOptionValueWithSource(name, val, valueSource);
+      this.setOptionValueWithSource(name2, val, valueSource);
     };
     this.on("option:" + oname, (val) => {
       const invalidValueMessage = `error: option '${option.flags}' argument '${val}' is invalid.`;
@@ -58306,10 +58806,10 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @private
    * @return {Command | undefined}
    */
-  _findCommand(name) {
-    if (!name) return void 0;
+  _findCommand(name2) {
+    if (!name2) return void 0;
     return this.commands.find(
-      (cmd) => cmd._name === name || cmd._aliases.includes(name)
+      (cmd) => cmd._name === name2 || cmd._aliases.includes(name2)
     );
   }
   /**
@@ -58590,8 +59090,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} name
    * @private
    */
-  missingArgument(name) {
-    const message = `error: missing required argument '${name}'`;
+  missingArgument(name2) {
+    const message = `error: missing required argument '${name2}'`;
     this.error(message, { code: "commander.missingArgument" });
   }
   /**
@@ -59524,9 +60024,9 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   beat?.unref();
   const { createGateway: createGateway2, DEFAULT_BODY_CAP_BYTES: DEFAULT_BODY_CAP_BYTES2 } = await Promise.resolve().then(() => (init_server(), server_exports));
   const { devPolicy: devPolicy2, DEV_KEY: DEV_KEY2, DEV_UPSTREAM_KEY_ENV: DEV_UPSTREAM_KEY_ENV2 } = await Promise.resolve().then(() => (init_dev_policy(), dev_policy_exports));
-  const policy = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 }, models: [] });
+  const policy2 = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 }, models: [] });
   const gw = createGateway2({
-    policy: () => policy,
+    policy: () => policy2,
     store: null,
     traces: writer,
     traceSalt,
@@ -59578,6 +60078,30 @@ keys.command("create").description("create a key: prints it once and appends its
   await appendKey2(o.file, { hash: hash2, keyId: `key_${hash2.slice(0, 8)}`, tenant: o.tenant, team: o.team ?? null, name: o.name, kind: o.kind, billing: o.billing });
   console.log(plaintext);
   console.error(`appended the hash to ${o.file}; the key is shown only once`);
+});
+var policy = program2.command("policy").description("policy files");
+policy.command("check").description("validate a policy directory: schema, then the semantic rules; exits 1 on errors").argument("[dir]", "policy directory (policy.yaml, prices.yaml, keys.yaml)", "policy").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
+  const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
+  const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
+  const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
+  let errors;
+  let warnings = [];
+  try {
+    const r = validatePolicy2(await loadPolicyDir2(dir), { experimentalSubscription: o.experimentalSubscription === true });
+    ({ errors, warnings } = r);
+  } catch (e) {
+    if (!(e instanceof PolicyLoadError2)) throw e;
+    errors = e.issues;
+  }
+  for (const i of errors) console.log(`error ${i.code} ${i.path}: ${i.message}`);
+  for (const i of warnings) console.log(`warning ${i.code} ${i.path}: ${i.message}`);
+  console.log(`${errors.length} errors, ${warnings.length} warnings`);
+  if (errors.length > 0) process.exit(1);
+});
+policy.command("schema").description("print the JSON Schema of policy.yaml for editor completion: tokenyard policy schema > policy.schema.json").action(async () => {
+  const { policyJsonSchema: policyJsonSchema2 } = await Promise.resolve().then(() => (init_json_schema2(), json_schema_exports2));
+  process.stdout.write(`${JSON.stringify(policyJsonSchema2(), null, 2)}
+`);
 });
 var traces = program2.command("traces").description("trace files written by serve --trace-dir");
 var sinceOf = (v, now) => /^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v);

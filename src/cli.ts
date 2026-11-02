@@ -122,6 +122,37 @@ keys
     console.log(plaintext);
     console.error(`appended the hash to ${o.file}; the key is shown only once`);
   });
+const policy = program.command('policy').description('policy files');
+policy
+  .command('check')
+  .description('validate a policy directory: schema, then the semantic rules; exits 1 on errors')
+  .argument('[dir]', 'policy directory (policy.yaml, prices.yaml, keys.yaml)', 'policy')
+  .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
+  .action(async (dir: string, o: { experimentalSubscription?: boolean }) => {
+    const { loadPolicyDir } = await import('./policy-loader/load-dir.js');
+    const { PolicyLoadError } = await import('./policy/load-dir.js');
+    const { validatePolicy } = await import('./policy/validate.js');
+    let errors: Array<{ code: string; path: string; message: string }>;
+    let warnings: Array<{ code: string; path: string; message: string }> = [];
+    try {
+      const r = validatePolicy(await loadPolicyDir(dir), { experimentalSubscription: o.experimentalSubscription === true });
+      ({ errors, warnings } = r);
+    } catch (e) {
+      if (!(e instanceof PolicyLoadError)) throw e;
+      errors = e.issues;
+    }
+    for (const i of errors) console.log(`error ${i.code} ${i.path}: ${i.message}`);
+    for (const i of warnings) console.log(`warning ${i.code} ${i.path}: ${i.message}`);
+    console.log(`${errors.length} errors, ${warnings.length} warnings`);
+    if (errors.length > 0) process.exit(1);
+  });
+policy
+  .command('schema')
+  .description('print the JSON Schema of policy.yaml for editor completion: tokenyard policy schema > policy.schema.json')
+  .action(async () => {
+    const { policyJsonSchema } = await import('./policy/json-schema.js');
+    process.stdout.write(`${JSON.stringify(policyJsonSchema(), null, 2)}\n`);
+  });
 const traces = program.command('traces').description('trace files written by serve --trace-dir');
 const sinceOf = (v: string, now: number): number => (/^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v));
 traces

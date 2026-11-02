@@ -1,5 +1,5 @@
 // Price table (spec 6.3): USD per million tokens, so tokens times price is micro-USD. Pure: parses text, no I/O.
-import { parse } from 'yaml';
+import { parseYamlSafe } from '../policy/safe-yaml.js';
 import { z } from 'zod';
 
 const rate = z.number().nonnegative();
@@ -41,7 +41,7 @@ export type PriceTable = z.infer<typeof tableSchema>;
 
 /** Parses and validates a price table. A model without `maxContextTokens` or `maxOutputTokens` is an error (the worst-case bound needs them). */
 export function parsePriceTable(text: string): PriceTable {
-  const raw: unknown = parse(text);
+  const raw: unknown = parseYamlSafe(text);
   // Tables are keyed by user text; a `__proto__` key would set a prototype instead of an entry, so refuse it outright.
   if (typeof raw === 'object' && raw !== null) {
     for (const section of ['models', 'modifiers', 'serverTools']) {
