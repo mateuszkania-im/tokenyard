@@ -53,6 +53,8 @@ interface InstanceAcc {
   firstTs: number;
   lastTs: number;
   seqs: Set<number>;
+  /** Request records inside the window (what the export emits). */
+  emitted: number;
   minSeq: number;
   maxSeq: number;
 }
@@ -66,7 +68,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
   const instances = new Map<string, InstanceAcc>();
   const acc = (id: string): InstanceAcc => {
     let a = instances.get(id);
-    if (!a) instances.set(id, (a = { hours: new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: new Set(), minSeq: Infinity, maxSeq: -Infinity }));
+    if (!a) instances.set(id, (a = { hours: new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: new Set(), emitted: 0, minSeq: Infinity, maxSeq: -Infinity }));
     return a;
   };
   const inWindow = (ms: number): boolean => ms >= o.sinceMs && ms <= o.untilMs;
@@ -79,28 +81,29 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
   for (const f of files) {
     acc(f.instance).hours.add(f.hourMs);
     for await (const line of readLedger([f.path])) {
+      // Seq numbers are assigned when a request finishes, so a request that started before `since` or after `until`
+      // still fills a seq slot. Every line counts for seq accounting; the window only decides what is emitted.
       if (line.kind === 'request') {
-        const ms = Date.parse(line.ts);
-        if (!inWindow(ms)) continue;
         const a = acc(line.instance);
-        seen(a, ms);
         a.seqs.add(line.seq);
         a.minSeq = Math.min(a.minSeq, line.seq);
         a.maxSeq = Math.max(a.maxSeq, line.seq);
+        const ms = Date.parse(line.ts);
+        if (!inWindow(ms)) continue;
+        seen(a, ms);
+        a.emitted++;
         records.push({ ms, r: line });
       } else if (line.kind === 'heartbeat' || line.kind === 'shutdown') {
-        const ms = Date.parse((line as HeartbeatRecord).ts);
-        if (!inWindow(ms)) continue;
         const a = acc(line.instance);
-        seen(a, ms);
         a.maxSeq = Math.max(a.maxSeq, line.seq);
+        const ms = Date.parse((line as HeartbeatRecord).ts);
+        if (inWindow(ms)) seen(a, ms);
       } else if (line.kind === 'segment') {
         const seg = line as SegmentRecord;
-        const ms = Date.parse(seg.startedAt);
-        if (!inWindow(ms)) continue;
         const a = acc(seg.instance);
-        seen(a, ms);
         a.minSeq = Math.min(a.minSeq, seg.firstSeq);
+        const ms = Date.parse(seg.startedAt);
+        if (inWindow(ms)) seen(a, ms);
       }
     }
   }
@@ -111,7 +114,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
     since: new Date(o.sinceMs).toISOString(),
     until: new Date(o.untilMs).toISOString(),
     instances: [...instances]
-      .filter(([, a]) => a.firstTs !== Infinity || a.seqs.size > 0)
+      .filter(([, a]) => a.firstTs !== Infinity)
       .sort(([x], [y]) => x.localeCompare(y))
       .map(([id, a]) => {
         const hours = [...a.hours];
@@ -125,7 +128,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
           id,
           firstTs: new Date(a.firstTs === Infinity ? first : a.firstTs).toISOString(),
           lastTs: new Date(a.lastTs === -Infinity ? last : a.lastTs).toISOString(),
-          records: a.seqs.size,
+          records: a.emitted,
           seqGaps,
           hoursWithoutFile,
         };

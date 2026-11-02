@@ -12,6 +12,8 @@ export interface TraceRecord {
     session: string | null; agent: string | null; parentAgent: string | null; promptId: string | null;
     requestClass: string | null; agentType: string | null;
     repo: string | null; branch: string | null; ticket: string | null; feature: string | null;
+    /** Not in spec 9.1: true when a client header value was cut or had non-printable or non-ASCII characters dropped at ingest. */
+    sanitized?: true;
   };
   features: { model: string; stream: boolean; inputTokensBound: number; boundKind: 'bytes' | 'context-window';
               maxOutputTokens: number | null; serverTools: Array<{ type: string; maxUses: number | null }>;

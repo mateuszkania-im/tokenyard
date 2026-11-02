@@ -135,3 +135,45 @@ test('parseDuration and prune', async () => {
   for await (const l of readLedger([out])) lines.push(l);
   expect(lines.filter((l): l is TraceRecord => l.kind === 'request')).toHaveLength(1);
 });
+
+test('export orders by ts then id even when a later hour file holds an earlier ts', async () => {
+  const root = join(dir, 't');
+  const seg = (h: number) => ({ v: 1, kind: 'segment', instance: 'i1', startedAt: iso(T(h)), firstSeq: 1 });
+  const req = (id: string, ts: number, seq: number) => ({ ...baseRecord({ id, ts: iso(ts) }), instance: 'i1', seq });
+  await writeFileLines(join(root, 'acme', '2026-11-02', '10.i1.ndjson'), [seg(10), req('b', T(10, 50), 1), req('z', T(10, 58), 2)]);
+  await writeFileLines(join(root, 'acme', '2026-11-02', '11.i1.ndjson'), [seg(11), req('d', T(10, 40), 3), req('a', T(10, 50), 4), req('c', T(10, 50), 5)]);
+  await exportTraces({ dir: root, sinceMs: T(0), untilMs: T(23), out });
+  expect((await parse(out)).slice(1).map((l) => l.id)).toEqual(['d', 'a', 'b', 'c', 'z']);
+});
+
+test('a request that started before since and finished inside the window leaves no false seq gap', async () => {
+  const root = join(dir, 't');
+  const seg = { v: 1, kind: 'segment', instance: 'i1', startedAt: iso(T(10)), firstSeq: 1 };
+  const req = (id: string, ts: number, seq: number) => ({ ...baseRecord({ id, ts: iso(ts) }), instance: 'i1', seq });
+  // seq 2 started at 09:59:30, before since, but finished (was written) at 10:00:05
+  await writeFileLines(join(root, 'acme', '2026-11-02', '10.i1.ndjson'), [seg, req('a', T(10, 0, 1), 1), req('edge', T(9, 59, 30), 2), req('c', T(10, 0, 8), 3)]);
+  // seq 4 started inside the window, seq 5 started after until but is in the last file read
+  await writeFileLines(join(root, 'acme', '2026-11-02', '11.i1.ndjson'), [{ ...seg, startedAt: iso(T(11)), firstSeq: 4 }, req('d', T(10, 59, 59), 4), req('late', T(11, 0, 3), 5)]);
+  const m = await exportTraces({ dir: root, sinceMs: T(10), untilMs: T(10, 59, 59) + 500, out });
+  expect(m.instances[0]).toMatchObject({ id: 'i1', seqGaps: 0, records: 3 });
+  expect((await parse(out)).slice(1).map((l) => l.id)).toEqual(['a', 'c', 'd']);
+});
+
+test('anonymizeRecord is deny by default: unknown attribution keys and free-text labels never survive', () => {
+  const r = baseRecord();
+  const attribution = {
+    ...r.attribution,
+    requestClass: 'SECRET-class',
+    agentType: 'SECRET-custom-agent',
+    feature: 'SECRET-feature',
+    repo: 'SECRET-repo',
+    extra: 'SECRET-unknown-key-value',
+    SECRETKEY: 'x',
+  } as TraceRecord['attribution'];
+  const a = anonymizeRecord({ ...r, attribution, instance: 'i', seq: 1 }, (k, v) => `${k}-${v.length}`);
+  expect(JSON.stringify(a)).not.toContain('SECRET');
+  expect(a.attribution.requestClass).toBe('requestClass-12');
+  // fixed enum values stay readable
+  const known = anonymizeRecord({ ...r, attribution: { ...r.attribution, requestClass: 'subagent', agentType: 'Explore' }, instance: 'i', seq: 1 }, () => 'x');
+  expect(known.attribution).toMatchObject({ requestClass: 'subagent', agentType: 'Explore', repo: 'x' });
+});

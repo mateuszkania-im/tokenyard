@@ -1,4 +1,5 @@
 import type { Report, ReportRow } from './report.js';
+import { stripControls } from './sanitize.js';
 
 /** Integer micro-USD as dollars with four decimals, without floats. */
 export function formatUsd(micro: number): string {
@@ -24,7 +25,7 @@ export function renderReportTerminal(r: Report): string {
   ];
   const rows = [
     header,
-    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => g.key[d] ?? '') : ['all'], g)),
+    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => stripControls(g.key[d] ?? '')) : ['all'], g)),
     row(['total', ...cols.slice(1).map(() => '')], r.totals),
   ];
   const widths = header.map((_, i) => Math.max(...rows.map((x) => (x[i] ?? '').length)));

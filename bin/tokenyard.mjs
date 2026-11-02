@@ -60,6 +60,30 @@ var init_hmac = __esm({
   }
 });
 
+// src/report/sanitize.ts
+function stripControls(s) {
+  let out = "";
+  for (const ch of s) if (!isControl(ch.codePointAt(0) ?? 0)) out += ch;
+  return out;
+}
+function sanitizeHeaderValue(s, max = MAX_LABEL_LENGTH) {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 32 && c <= 126) out += s[i];
+  }
+  const value = out.slice(0, max);
+  return { value, changed: value !== s };
+}
+var isControl, MAX_LABEL_LENGTH;
+var init_sanitize = __esm({
+  "src/report/sanitize.ts"() {
+    "use strict";
+    isControl = (code) => code <= 31 || code >= 127 && code <= 159;
+    MAX_LABEL_LENGTH = 128;
+  }
+});
+
 // src/mock/cache-sim.ts
 import { createHash } from "node:crypto";
 function canon(v) {
@@ -55096,29 +55120,36 @@ var init_forward = __esm({
 });
 
 // src/edge/attribution.ts
-function header(h, name) {
+function header(h, name, flag) {
   const v = h[name];
-  const s = (Array.isArray(v) ? v[0] : v)?.trim();
-  return s ? s : null;
+  const raw = (Array.isArray(v) ? v[0] : v)?.trim();
+  if (!raw) return null;
+  const { value, changed } = sanitizeHeaderValue(raw);
+  if (changed) flag.changed = true;
+  return value === "" ? null : value;
 }
 function readAttribution(h, surface) {
+  const f = { changed: false };
+  const read = (name) => header(h, name, f);
   const codex = surface === "openai-responses" || surface === "openai-chat";
   return {
-    session: codex ? header(h, "session_id") ?? header(h, "session-id") : header(h, "x-claude-code-session-id"),
-    agent: header(h, "x-claude-code-agent-id"),
-    parentAgent: header(h, "x-claude-code-parent-agent-id"),
-    requestClass: header(h, "x-claude-code-request-class"),
-    agentType: header(h, "x-claude-code-agent-type"),
-    promptId: header(h, "x-claude-code-prompt-id"),
-    repo: header(h, "x-tokenyard-repo"),
-    branch: header(h, "x-tokenyard-branch"),
-    ticket: header(h, "x-tokenyard-ticket"),
-    feature: header(h, "x-tokenyard-feature")
+    session: codex ? read("session_id") ?? read("session-id") : read("x-claude-code-session-id"),
+    agent: read("x-claude-code-agent-id"),
+    parentAgent: read("x-claude-code-parent-agent-id"),
+    requestClass: read("x-claude-code-request-class"),
+    agentType: read("x-claude-code-agent-type"),
+    promptId: read("x-claude-code-prompt-id"),
+    repo: read("x-tokenyard-repo"),
+    branch: read("x-tokenyard-branch"),
+    ticket: read("x-tokenyard-ticket"),
+    feature: read("x-tokenyard-feature"),
+    ...f.changed ? { sanitized: true } : {}
   };
 }
 var init_attribution = __esm({
   "src/edge/attribution.ts"() {
     "use strict";
+    init_sanitize();
   }
 });
 
@@ -55327,7 +55358,8 @@ function buildTraceRecord(o, salt) {
       repo: a.repo,
       branch: a.branch,
       ticket: a.ticket,
-      feature: a.feature
+      feature: a.feature,
+      ...a.sanitized ? { sanitized: true } : {}
     },
     features: {
       model: o.features.model ?? u?.responseModel ?? "",
@@ -55347,8 +55379,8 @@ function buildTraceRecord(o, salt) {
     policy: { revision: o.policyRevision },
     decision: {
       route: o.route?.name ?? null,
-      action: "forward",
-      reason: null,
+      action: o.decision?.action ?? "forward",
+      reason: o.decision?.reason ?? null,
       chain: o.route ? [...o.route.chain] : [],
       reservedMicroUsd: 0,
       boundAssumed: false,
@@ -55357,11 +55389,11 @@ function buildTraceRecord(o, salt) {
     },
     outcome: {
       provider: o.provider,
-      upstreamModel: u?.responseModel ?? o.features.model,
+      upstreamModel: o.provider === null ? null : u?.responseModel ?? o.features.model,
       attempts: 1,
       cacheColdRisk: false,
       status: o.status,
-      errorClass: null,
+      errorClass: o.errorClass ?? null,
       midStreamError: u?.midStreamError ?? null,
       ttfbMs: o.ttfbMs,
       totalMs: o.totalMs,
@@ -55491,6 +55523,27 @@ async function handle(deps, id, req, res) {
     return;
   }
   const surface = match.surface;
+  const early = (over) => afterResponse(deps, {
+    id,
+    key,
+    attribution: readAttribution(req.headers, surface),
+    surface,
+    features: NO_FEATURES,
+    provider: null,
+    usage: null,
+    aborted: false,
+    startedAt,
+    ttfbMs: null,
+    totalMs: deps.clock() - startedAt,
+    costMicroUsd: null,
+    costBasis: key.billing === "subscription" ? "api-equivalent" : "billed",
+    addedTtfbMs: null,
+    client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
+    policyRevision: policy.revision,
+    route: null,
+    priceTable: deps.prices?.version ?? "none",
+    ...over
+  });
   let body;
   try {
     body = await readBody(req, deps.bodyCapBytes);
@@ -55498,13 +55551,17 @@ async function handle(deps, id, req, res) {
     if (err instanceof BodyTooLargeError) {
       const msg = `request body is larger than the ${err.capBytes} byte limit`;
       sendError(req, res, anthropicError(413, "request_too_large", msg, null, id), true);
+      early({ status: 413, decision: { action: "block", reason: "body-too-large" }, errorClass: "request_too_large" });
+    } else {
+      early({ status: 499, aborted: true, errorClass: "client_abort" });
     }
     return;
   }
   const features = extractFeatures(surface, body);
   const target = forwardToFirstProvider(policy, surface);
   if (!target) {
-    return sendError(req, res, anthropicError(403, "permission_error", "no route allows this request", null, id));
+    sendError(req, res, anthropicError(403, "permission_error", "no route allows this request", null, id));
+    return early({ status: 403, features, decision: { action: "block", reason: "no-route" }, errorClass: "permission_error" });
   }
   const { provider, route } = target;
   const mode = provider.credential === "passthrough" ? "passthrough" : "api";
@@ -55519,13 +55576,15 @@ async function handle(deps, id, req, res) {
   try {
     up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
-    if (ac.signal.aborted) return;
-    return sendError(req, res, anthropicError(502, "api_error", `upstream ${provider.name} is unreachable`, null, id));
+    const common = { features, provider: provider.name, route: { name: route.name, chain: route.chain } };
+    if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
+    sendError(req, res, anthropicError(502, "api_error", `upstream ${provider.name} is unreachable`, null, id));
+    return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
   }
   if (ac.signal.aborted) {
     up.body.on("error", () => void 0);
     up.body.destroy();
-    return;
+    return early({ features, provider: provider.name, route: { name: route.name, chain: route.chain }, status: 499, aborted: true, errorClass: "client_abort" });
   }
   const upstreamHeadersAt = deps.clock();
   const ttfbMs = upstreamHeadersAt - startedAt;
@@ -55577,6 +55636,7 @@ function createHandler(deps) {
     });
   };
 }
+var NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -55595,6 +55655,20 @@ var init_handler = __esm({
     init_headers();
     init_paths();
     init_trace_record();
+    NO_FEATURES = {
+      model: null,
+      stream: false,
+      maxOutputTokens: null,
+      toolCount: 0,
+      thinking: false,
+      serverTools: [],
+      bodyBytes: 0,
+      prefixHash: null,
+      blockTypes: [],
+      expandsServerSide: false,
+      parseError: false,
+      lastTurn: null
+    };
   }
 });
 
@@ -59158,8 +59232,12 @@ import { gzipSync } from "node:zlib";
 
 // src/ledger/anonymize.ts
 init_hmac();
+var REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
+var AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
 function anonymizeRecord(r, p) {
   const opt = (kind, v) => v === null ? null : p(kind, v);
+  const enumOr = (kind, v, known) => v === null || known.has(v) ? v : p(kind, v);
+  const a = r.attribution;
   return {
     ...r,
     tenant: p("tenant", r.tenant),
@@ -59167,10 +59245,17 @@ function anonymizeRecord(r, p) {
     keyId: p("key", r.keyId),
     client: { ...r.client, version: null },
     attribution: {
-      ...r.attribution,
-      repo: opt("repo", r.attribution.repo),
-      branch: opt("branch", r.attribution.branch),
-      ticket: opt("ticket", r.attribution.ticket)
+      session: a.session,
+      agent: a.agent,
+      parentAgent: a.parentAgent,
+      promptId: a.promptId,
+      requestClass: enumOr("requestClass", a.requestClass, REQUEST_CLASSES),
+      agentType: enumOr("agentType", a.agentType, AGENT_TYPES),
+      repo: opt("repo", a.repo),
+      branch: opt("branch", a.branch),
+      ticket: opt("ticket", a.ticket),
+      feature: opt("feature", a.feature),
+      ...a.sanitized ? { sanitized: true } : {}
     }
   };
 }
@@ -59232,7 +59317,7 @@ async function exportTraces(o) {
   const instances = /* @__PURE__ */ new Map();
   const acc = (id) => {
     let a = instances.get(id);
-    if (!a) instances.set(id, a = { hours: /* @__PURE__ */ new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: /* @__PURE__ */ new Set(), minSeq: Infinity, maxSeq: -Infinity });
+    if (!a) instances.set(id, a = { hours: /* @__PURE__ */ new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: /* @__PURE__ */ new Set(), emitted: 0, minSeq: Infinity, maxSeq: -Infinity });
     return a;
   };
   const inWindow = (ms) => ms >= o.sinceMs && ms <= o.untilMs;
@@ -59245,27 +59330,26 @@ async function exportTraces(o) {
     acc(f.instance).hours.add(f.hourMs);
     for await (const line of readLedger([f.path])) {
       if (line.kind === "request") {
-        const ms = Date.parse(line.ts);
-        if (!inWindow(ms)) continue;
         const a = acc(line.instance);
-        seen(a, ms);
         a.seqs.add(line.seq);
         a.minSeq = Math.min(a.minSeq, line.seq);
         a.maxSeq = Math.max(a.maxSeq, line.seq);
-        records.push({ ms, r: line });
-      } else if (line.kind === "heartbeat" || line.kind === "shutdown") {
         const ms = Date.parse(line.ts);
         if (!inWindow(ms)) continue;
-        const a = acc(line.instance);
         seen(a, ms);
+        a.emitted++;
+        records.push({ ms, r: line });
+      } else if (line.kind === "heartbeat" || line.kind === "shutdown") {
+        const a = acc(line.instance);
         a.maxSeq = Math.max(a.maxSeq, line.seq);
+        const ms = Date.parse(line.ts);
+        if (inWindow(ms)) seen(a, ms);
       } else if (line.kind === "segment") {
         const seg = line;
-        const ms = Date.parse(seg.startedAt);
-        if (!inWindow(ms)) continue;
         const a = acc(seg.instance);
-        seen(a, ms);
         a.minSeq = Math.min(a.minSeq, seg.firstSeq);
+        const ms = Date.parse(seg.startedAt);
+        if (inWindow(ms)) seen(a, ms);
       }
     }
   }
@@ -59274,7 +59358,7 @@ async function exportTraces(o) {
     kind: "manifest",
     since: new Date(o.sinceMs).toISOString(),
     until: new Date(o.untilMs).toISOString(),
-    instances: [...instances].filter(([, a]) => a.firstTs !== Infinity || a.seqs.size > 0).sort(([x], [y]) => x.localeCompare(y)).map(([id, a]) => {
+    instances: [...instances].filter(([, a]) => a.firstTs !== Infinity).sort(([x], [y]) => x.localeCompare(y)).map(([id, a]) => {
       const hours = [...a.hours];
       const first2 = Math.min(...hours);
       const last = Math.max(...hours);
@@ -59286,7 +59370,7 @@ async function exportTraces(o) {
         id,
         firstTs: new Date(a.firstTs === Infinity ? first2 : a.firstTs).toISOString(),
         lastTs: new Date(a.lastTs === -Infinity ? last : a.lastTs).toISOString(),
-        records: a.seqs.size,
+        records: a.emitted,
         seqGaps,
         hoursWithoutFile
       };
@@ -59322,6 +59406,7 @@ async function loadTraceRecords(o) {
 }
 
 // src/report/render-terminal.ts
+init_sanitize();
 function formatUsd(micro) {
   const cents = Math.round(micro / 100);
   return `$${Math.floor(cents / 1e4)}.${String(cents % 1e4).padStart(4, "0")}`;
@@ -59342,7 +59427,7 @@ function renderReportTerminal(r) {
   ];
   const rows = [
     header2,
-    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => g.key[d] ?? "") : ["all"], g)),
+    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => stripControls(g.key[d] ?? "")) : ["all"], g)),
     row(["total", ...cols.slice(1).map(() => "")], r.totals)
   ];
   const widths = header2.map((_, i) => Math.max(...rows.map((x) => (x[i] ?? "").length)));

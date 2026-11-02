@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { buildReport } from '../../src/report/report.js';
+import { sanitizeHeaderValue, stripControls } from '../../src/report/sanitize.js';
 import { renderReportTerminal } from '../../src/report/render-terminal.js';
 import type { TraceRecord } from '../../src/ledger/record.js';
 import { baseRecord } from '../helpers/trace.js';
@@ -40,4 +41,22 @@ test('terminal report prints dollars, shares and totals without colour codes or 
   expect(text).toContain('total');
   expect(text).toContain('$4.0000');
   expect(text.includes(String.fromCharCode(27)) || text.includes('\u2192')).toBe(false);
+});
+
+test('terminal report strips C0, C1 and DEL control characters from every label', () => {
+  const nasty = ['\u001b[31mred\u001b[0m', '\u001b]8;;http://evil\u0007link\u001b]8;;\u0007', 'line1\nline2\r', 'a\u0085b\u009bc\u007fd', '`tick` | pipe <script>alert(1)</script>'];
+  const text = renderReportTerminal(buildReport(nasty.map((n, i) => rec(String(i), n, 'main', 1)), ['team']));
+  const hasControl = [...text].some((c) => {
+    const code = c.charCodeAt(0);
+    return (code <= 0x1f && code !== 10) || (code >= 0x7f && code <= 0x9f);
+  });
+  expect(hasControl).toBe(false);
+  expect(text.split('\n').length).toBe(nasty.length + 3); // header, rows, total, trailing empty
+  expect(text).toContain('<script>alert(1)</script>'); // markup escaping belongs to the markdown and HTML renderers
+});
+
+test('stripControls and sanitizeHeaderValue', () => {
+  expect(stripControls('a\u001bb\u0085c\u007fd\ne')).toBe('abcde');
+  expect(sanitizeHeaderValue('a\tb')).toEqual({ value: 'ab', changed: true });
+  expect(sanitizeHeaderValue('plain')).toEqual({ value: 'plain', changed: false });
 });

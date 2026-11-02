@@ -45,6 +45,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       branch: a.branch,
       ticket: a.ticket,
       feature: a.feature,
+      ...(a.sanitized ? { sanitized: true as const } : {}),
     },
     features: {
       model: o.features.model ?? u?.responseModel ?? '',
@@ -64,8 +65,8 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
     policy: { revision: o.policyRevision },
     decision: {
       route: o.route?.name ?? null,
-      action: 'forward',
-      reason: null,
+      action: o.decision?.action ?? 'forward',
+      reason: o.decision?.reason ?? null,
       chain: o.route ? [...o.route.chain] : [],
       reservedMicroUsd: 0,
       boundAssumed: false,
@@ -74,11 +75,11 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
     },
     outcome: {
       provider: o.provider,
-      upstreamModel: u?.responseModel ?? o.features.model,
+      upstreamModel: o.provider === null ? null : (u?.responseModel ?? o.features.model),
       attempts: 1,
       cacheColdRisk: false,
       status: o.status,
-      errorClass: null,
+      errorClass: o.errorClass ?? null,
       midStreamError: u?.midStreamError ?? null,
       ttfbMs: o.ttfbMs,
       totalMs: o.totalMs,

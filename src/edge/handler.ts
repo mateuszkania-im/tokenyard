@@ -51,12 +51,13 @@ export interface RequestOutcome {
   attribution: RawAttribution;
   surface: Surface;
   features: ExtractedFeatures;
-  provider: string;
+  /** Null when the request never reached a provider. */
+  provider: string | null;
   status: number;
   usage: UsageResult | null;
   aborted: boolean;
   startedAt: number;
-  ttfbMs: number;
+  ttfbMs: number | null;
   totalMs: number;
   /** Actual cost from the final or partial usage; null when there is no usage or the model is unpriced. */
   costMicroUsd: number | null;
@@ -70,6 +71,10 @@ export interface RequestOutcome {
   /** Route the request was sent through; null for a request no route served. */
   route: { name: string; chain: readonly string[] } | null;
   priceTable: string;
+  /** Block or forward, with the reason for a block; absent means forward. */
+  decision?: { action: 'forward' | 'block'; reason: string | null };
+  /** Set for requests that failed or were refused before a response came from upstream. */
+  errorClass?: string;
   /** Upstream `anthropic-ratelimit-unified-*` response headers. */
   rateLimitHeaders?: Record<string, string>;
 }
@@ -153,6 +158,11 @@ function afterResponse(deps: GatewayDeps, outcome: RequestOutcome): void {
   if (deps.traces) deps.traces.write(buildTraceRecord(outcome, deps.traceSalt ?? ''));
 }
 
+const NO_FEATURES: ExtractedFeatures = {
+  model: null, stream: false, maxOutputTokens: null, toolCount: 0, thinking: false, serverTools: [], bodyBytes: 0,
+  prefixHash: null, blockTypes: [], expandsServerSide: false, parseError: false, lastTurn: null,
+};
+
 async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const startedAt = deps.clock();
   const policy = deps.policy();
@@ -204,6 +214,30 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   }
   const surface = match.surface;
 
+  // An authenticated request that ends before a response came from upstream still gets its trace line (spec 9.1).
+  const early = (over: Partial<RequestOutcome> & Pick<RequestOutcome, 'status'>): void =>
+    afterResponse(deps, {
+      id,
+      key,
+      attribution: readAttribution(req.headers, surface),
+      surface,
+      features: NO_FEATURES,
+      provider: null,
+      usage: null,
+      aborted: false,
+      startedAt,
+      ttfbMs: null,
+      totalMs: deps.clock() - startedAt,
+      costMicroUsd: null,
+      costBasis: key.billing === 'subscription' ? 'api-equivalent' : 'billed',
+      addedTtfbMs: null,
+      client: parseClient(typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined),
+      policyRevision: policy.revision,
+      route: null,
+      priceTable: deps.prices?.version ?? 'none',
+      ...over,
+    });
+
   // 3. Read the body.
   let body: Buffer;
   try {
@@ -212,8 +246,11 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     if (err instanceof BodyTooLargeError) {
       const msg = `request body is larger than the ${err.capBytes} byte limit`;
       sendError(req, res, anthropicError(413, 'request_too_large', msg, null, id), true);
+      early({ status: 413, decision: { action: 'block', reason: 'body-too-large' }, errorClass: 'request_too_large' });
+    } else {
+      early({ status: 499, aborted: true, errorClass: 'client_abort' }); // the client went away mid-upload
     }
-    return; // otherwise the client went away mid-upload
+    return;
   }
 
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
@@ -222,7 +259,8 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   // 5 to 8. Guardrails, decide, admit, resolve: placeholder until Tasks 10 and 14.
   const target = forwardToFirstProvider(policy, surface);
   if (!target) {
-    return sendError(req, res, anthropicError(403, 'permission_error', 'no route allows this request', null, id));
+    sendError(req, res, anthropicError(403, 'permission_error', 'no route allows this request', null, id));
+    return early({ status: 403, features, decision: { action: 'block', reason: 'no-route' }, errorClass: 'permission_error' });
   }
 
   const { provider, route } = target;
@@ -241,13 +279,15 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   try {
     up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
-    if (ac.signal.aborted) return;
-    return sendError(req, res, anthropicError(502, 'api_error', `upstream ${provider.name} is unreachable`, null, id));
+    const common = { features, provider: provider.name, route: { name: route.name, chain: route.chain } };
+    if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
+    sendError(req, res, anthropicError(502, 'api_error', `upstream ${provider.name} is unreachable`, null, id));
+    return early({ ...common, status: 502, errorClass: 'upstream_unreachable' });
   }
   if (ac.signal.aborted) {
     up.body.on('error', () => undefined);
     up.body.destroy();
-    return;
+    return early({ features, provider: provider.name, route: { name: route.name, chain: route.chain }, status: 499, aborted: true, errorClass: 'client_abort' });
   }
 
   // 10. First response headers: written and flushed at once, never compressed.

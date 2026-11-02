@@ -33,3 +33,13 @@ test('attribution: codex session_id and session-id on the OpenAI surfaces', () =
   expect(readAttribution({ session_id: 'c1', 'session-id': 'c2' }, 'openai-responses').session).toBe('c1');
   expect(readAttribution({ session_id: 'c1' }, 'anthropic-messages').session).toBeNull();
 });
+
+test('attribution: values are cut to printable ASCII and 128 characters, and the record says so', () => {
+  const a = readAttribution({ 'x-tokenyard-repo': 'ok\u001b[31mred\u001b]8;;http://evil\u0007', 'x-tokenyard-branch': `b${'x'.repeat(300)}`, 'x-tokenyard-ticket': 'caf\u00e9-1', 'x-tokenyard-feature': '\u0001' }, 'anthropic-messages');
+  expect(a.repo).toBe('ok[31mred]8;;http://evil');
+  expect(a.branch).toHaveLength(128);
+  expect(a.ticket).toBe('caf-1');
+  expect(a.feature).toBeNull();
+  expect(a.sanitized).toBe(true);
+  expect(readAttribution({ 'x-tokenyard-repo': 'clean/repo' }, 'anthropic-messages').sanitized).toBeUndefined();
+});
