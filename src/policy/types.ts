@@ -96,8 +96,10 @@ export interface CompiledBudget {
   scope: 'tenant' | 'team' | 'key' | 'repo' | 'session';
   window: 'day' | 'week' | 'month' | null;
   limitMicroUsd: number;
-  /** `mode: enforce` with `onExceed: block`; audit and warn levels are reserved and reported, never block. */
+  /** `mode: enforce` with `onExceed: block` (stated or, by default, unstated); audit and warn levels are reserved and reported, never block. */
   enforce: boolean;
+  /** The same for subscription-billed requests, where an unstated `onExceed` means `warn` (spec 7.6). */
+  enforceSubscription: boolean;
 }
 
 export interface CompiledRate {

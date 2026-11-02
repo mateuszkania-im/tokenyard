@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { createServer, request, type IncomingHttpHeaders, type Server } from 'node:http';
+import { type Agent, createServer, request, type IncomingHttpHeaders, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { buildAgentSession } from '../../src/mock/session-fixture.js';
@@ -18,12 +18,12 @@ export interface Sent {
 /** One request, whole response collected. */
 export function send(
   base: string,
-  o: { method?: string; path: string; headers?: Record<string, string>; body?: Buffer | string },
+  o: { method?: string; path: string; headers?: Record<string, string>; body?: Buffer | string; agent?: Agent },
 ): Promise<Sent> {
   return new Promise((resolve, reject) => {
     const u = new URL(base);
     const req = request(
-      { host: u.hostname, port: u.port, method: o.method ?? 'POST', path: o.path, headers: o.headers ?? {} },
+      { host: u.hostname, port: u.port, method: o.method ?? 'POST', path: o.path, headers: o.headers ?? {}, ...(o.agent ? { agent: o.agent } : {}) },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
@@ -131,7 +131,7 @@ export async function startStack(
     mock?: Parameters<typeof startAnthropicMock>[0];
     policy?: Partial<Parameters<typeof testPolicy>[0]>;
     basePath?: string;
-    gw?: Pick<Parameters<typeof startGateway>[0], 'experimentalSubscription' | 'onSettled' | 'traces' | 'traceSalt'>;
+    gw?: Pick<Parameters<typeof startGateway>[0], 'experimentalSubscription' | 'onSettled' | 'traces' | 'traceSalt' | 'store' | 'runtime'>;
   } = {},
 ): Promise<{ mock: MockServer; gw: TestGateway; close(): Promise<void> }> {
   process.env[PROVIDER_KEY_ENV] = PROVIDER_KEY;

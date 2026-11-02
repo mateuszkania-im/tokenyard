@@ -17,12 +17,33 @@ export interface UsageResult {
   responseModel: string | null;
   /** True when source is 'final' but `usage.output` was estimated from streamed chars (no message_delta output count). */
   outputEstimated?: boolean;
+  /** The usage reported `speed: "fast"`: priced at the model's fast rates. Absent otherwise. */
+  fast?: true;
+  /** `usage.server_tool_use` counts by price table tool name (`web_search_requests` is `web_search`). Absent when none. */
+  serverToolUses?: Record<string, number>;
 }
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined;
+
+/** Billing details beside the token buckets: fast mode and server tool uses (cumulative, so later values replace). */
+interface Extras {
+  fast: boolean;
+  web: number;
+}
+
+function applyExtras(x: Extras, raw: unknown): void {
+  if (!isObj(raw)) return;
+  if (typeof raw.speed === 'string') x.fast = raw.speed === 'fast';
+  const web = isObj(raw.server_tool_use) ? num(raw.server_tool_use.web_search_requests) : undefined;
+  if (web !== undefined) x.web = web;
+}
+
+function extrasOf(x: Extras): Pick<UsageResult, 'fast' | 'serverToolUses'> {
+  return { ...(x.fast ? { fast: true as const } : {}), ...(x.web > 0 ? { serverToolUses: { web_search: x.web } } : {}) };
+}
 
 /** Overlay the fields present in an Anthropic usage object onto u. Returns true when output_tokens was present. */
 function applyUsage(u: Usage, raw: unknown): boolean {
@@ -58,6 +79,7 @@ export class AnthropicUsageAccumulator {
   private chars = 0;
   private error: string | null = null;
   private model: string | null = null;
+  private extras: Extras = { fast: false, web: 0 };
 
   onEvent(e: SseEvent): void {
     let d: unknown;
@@ -76,11 +98,13 @@ export class AnthropicUsageAccumulator {
         this.usage = emptyUsage();
         this.deltaOutput = false;
         applyUsage(this.usage, m.usage);
+        applyExtras(this.extras, m.usage);
         break;
       }
       case 'message_delta': {
         if (!this.usage) return;
         if (applyUsage(this.usage, d.usage)) this.deltaOutput = true;
+        applyExtras(this.extras, d.usage);
         break;
       }
       case 'content_block_delta': {
@@ -114,11 +138,12 @@ export class AnthropicUsageAccumulator {
     };
     if (!this.usage) return { ...base, usage: null, source: 'none' };
     const usage = { ...this.usage };
+    const extras = extrasOf(this.extras);
     if (!this.deltaOutput) {
       usage.output = Math.ceil(this.chars / 4);
-      return this.sawStop ? { ...base, usage, source: 'final', outputEstimated: true } : { ...base, usage, source: 'estimated' };
+      return this.sawStop ? { ...base, usage, source: 'final', outputEstimated: true, ...extras } : { ...base, usage, source: 'estimated', ...extras };
     }
-    return { ...base, usage, source: this.sawStop ? 'final' : 'partial' };
+    return { ...base, usage, source: this.sawStop ? 'final' : 'partial', ...extras };
   }
 }
 
@@ -143,5 +168,7 @@ export function parseAnthropicJsonUsage(body: Buffer): UsageResult {
   if (!isObj(d.usage)) return { ...none, responseModel };
   const usage = emptyUsage();
   applyUsage(usage, d.usage);
-  return { ...none, usage, source: 'final', sawStop: true, responseModel };
+  const extras: Extras = { fast: false, web: 0 };
+  applyExtras(extras, d.usage);
+  return { ...none, usage, source: 'final', sawStop: true, responseModel, ...extrasOf(extras) };
 }

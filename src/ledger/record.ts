@@ -23,7 +23,9 @@ export interface TraceRecord {
   policy: { revision: string; candidateRevision?: string; candidateError?: string };
   decision: { route: string | null; action: 'forward' | 'block'; reason: string | null;
               chain: string[]; reservedMicroUsd: number; boundAssumed: boolean; taintUnchecked: boolean;
-              audit: Array<{ name: string; wouldFail: boolean }> };
+              audit: Array<{ name: string; wouldFail: boolean }>;
+              /** Not in spec 9.1: set (true) when admit could not reach the counter store and failure.counterStoreDown applied. */
+              storeDown?: true };
   candidateDecision?: TraceRecord['decision'];
   outcome: {
     provider: string | null; upstreamModel: string | null; attempts: number; cacheColdRisk: boolean;
@@ -35,6 +37,10 @@ export interface TraceRecord {
     outputEstimated?: boolean;
     costMicroUsd: number | null; costBasis: 'billed' | 'api-equivalent'; priceTable: string;
     aborted: boolean; settledBy: 'request' | 'sweeper'; overrun: boolean;
+    /** Not in spec 9.1: set (true) when the actual cost could not be computed and the reservation estimate was settled instead; `costMicroUsd` is that estimate. */
+    settledAtEstimate?: true;
+    /** Not in spec 9.1: set (true) when the billed input exceeded `features.inputTokensBound` of a bytes bound (R11); the bytes bound is off from then on. */
+    boundExceeded?: true;
     rateLimitHeaders?: Record<string, string>;   // anthropic-ratelimit-unified-* only
   };
 }

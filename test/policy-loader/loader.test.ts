@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { Agent, createServer } from 'node:http';
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -58,6 +58,9 @@ test('swap under load: 200 concurrent requests during 5 swaps, zero failed', asy
   cleanups.push(() => g.close());
 
   const results: Array<{ status: number; rev: string }> = [];
+  // At most 64 client connections: below the OS listen backlog (128 on macOS), which a loaded test run could overflow.
+  const agent = new Agent({ keepAlive: true, maxSockets: 64 });
+  cleanups.push(async () => agent.destroy());
   const swapper = (async () => {
     for (let i = 1; i <= 5; i++) {
       await sleep(30);
@@ -66,7 +69,7 @@ test('swap under load: 200 concurrent requests during 5 swaps, zero failed', asy
   })();
   const requests = Array.from({ length: 200 }, async (_, i) => {
     await sleep((i % 40) * 4);
-    const r = await send(url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-sonnet-5-5' }) });
+    const r = await send(url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-sonnet-5-5' }), agent });
     results.push({ status: r.status, rev: String(r.headers['x-tokenyard-policy-revision']) });
   });
   await Promise.all([swapper, ...requests]);

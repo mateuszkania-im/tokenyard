@@ -10,6 +10,17 @@ const ROUTES: ReadonlyArray<{ methods: readonly string[]; path: string; surface:
 ];
 
 /**
+ * Every method and canonical path the gateway answers. `inference` marks the paths that run a model and so go through
+ * admission (spec 7.4 coverage: a test sends a request down each one). count_tokens is forwarded without a reservation
+ * (spec 5.3), models and hello are answered by tokenyard itself.
+ */
+export const ROUTE_TABLE: ReadonlyArray<{ method: string; path: string; inference: boolean }> = [
+  ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: r.canonical, inference: r.surface === 'anthropic-messages' }))),
+  { method: 'HEAD', path: '/api/hello', inference: false },
+  { method: 'GET', path: '/api/hello', inference: false },
+];
+
+/**
  * Match on the path, never the full URL; the query is kept verbatim (`/v1/messages?beta=true`).
  * The optional base path is stripped first. Paths are accepted with or without the `/v1` prefix,
  * so a base URL that already ends in `/v1` works too; upstream always gets the canonical `/v1/...` path.

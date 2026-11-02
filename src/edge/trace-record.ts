@@ -68,10 +68,11 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       action: o.decision?.action ?? 'forward',
       reason: o.decision?.reason ?? null,
       chain: o.route ? [...o.route.chain] : [],
-      reservedMicroUsd: 0,
+      reservedMicroUsd: o.reservedMicroUsd ?? 0,
       boundAssumed: o.boundAssumed ?? false,
-      taintUnchecked: false,
-      audit: [],
+      taintUnchecked: o.taintUnchecked ?? false,
+      audit: o.audit ? o.audit.map((a) => ({ ...a })) : [],
+      ...(o.storeDown ? { storeDown: true as const } : {}),
     },
     ...(o.candidate && !('error' in o.candidate)
       ? {
@@ -105,8 +106,10 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       costBasis: o.costBasis,
       priceTable: o.priceTable,
       aborted: o.aborted,
-      settledBy: 'request',
-      overrun: false,
+      settledBy: o.settledBy ?? 'request',
+      overrun: o.overrun ?? false,
+      ...(o.settledAtEstimate ? { settledAtEstimate: true as const } : {}),
+      ...(o.boundExceeded ? { boundExceeded: true as const } : {}),
       ...(o.rateLimitHeaders && Object.keys(o.rateLimitHeaders).length > 0 ? { rateLimitHeaders: o.rateLimitHeaders } : {}),
     },
   };

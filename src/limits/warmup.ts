@@ -2,7 +2,7 @@
 // contain `nowMs`, so a restarted gateway (or the live harness) starts from what was already spent. Keys and scope
 // values are derived exactly as `decide` derives them, "(unattributed)" for a missing header included.
 import type { LedgerLine } from '../ledger/record.js';
-import { levelValue, windowOf } from '../policy/decide.js';
+import { budgetEnforced, levelValue, windowOf } from '../policy/decide.js';
 import type { CompiledPolicy } from '../policy/types.js';
 import { budgetKey } from './keys.js';
 import { budgetExpiresAt } from './store.js';
@@ -17,7 +17,7 @@ export async function warmupEntries(records: AsyncIterable<LedgerLine>, policy: 
     const ts = Date.parse(r.ts);
     if (Number.isNaN(ts)) continue;
     for (const b of policy.budgets) {
-      const value = levelValue(b.scope, r, b.enforce);
+      const value = levelValue(b.scope, r, budgetEnforced(b, r.billing));
       if (value === null) continue;
       let start: string | null = null;
       let resetsAt: string | null = null;

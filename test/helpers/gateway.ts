@@ -17,6 +17,7 @@ export async function startGateway(o: {
   onSettled?: GatewayDeps['onSettled'];
   traces?: GatewayDeps['traces'];
   traceSalt?: string;
+  runtime?: GatewayDeps['runtime'];
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
@@ -30,6 +31,7 @@ export async function startGateway(o: {
     bodyCapBytes: o.bodyCapBytes ?? 32 * 1024 * 1024,
     experimentalSubscription: o.experimentalSubscription ?? false,
     onSettled: o.onSettled,
+    runtime: o.runtime,
   });
   const url = await gw.listen(0, '127.0.0.1');
   return { url, close: () => gw.close() };

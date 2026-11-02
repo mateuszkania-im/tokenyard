@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "test": "vitest run",
-    "test:redis": "node -e \"process.env.REDIS_URL || (console.error('test:redis needs REDIS_URL, for example redis://127.0.0.1:6379'), process.exit(1))\" && vitest run test/limits/redis-store.test.ts",
+    "test:redis": "node -e \"process.env.REDIS_URL || (console.error('test:redis needs REDIS_URL, for example redis://127.0.0.1:6379'), process.exit(1))\" && vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts",
     "bench": "node -e \"console.error('bench: not implemented yet'); process.exit(1)\"",
     "bench:check": "node -e \"console.error('bench:check: not implemented yet'); process.exit(1)\"",
     "live": "node -e \"console.error('live: not implemented yet'); process.exit(1)\"",

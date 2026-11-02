@@ -95,3 +95,16 @@ test('message_stop seen with no delta output is final, output estimated from cha
 test('outputEstimated is not set when message_delta carried the output count', () => {
   expect(run(fx('anthropic-basic')).outputEstimated).toBeUndefined();
 });
+
+test('usage.speed fast and server_tool_use web search counts are reported for pricing; absent when not sent', () => {
+  const acc = new AnthropicUsageAccumulator();
+  acc.onEvent(ev('message_start', { message: { model: 'm', usage: { input_tokens: 10, output_tokens: 1, speed: 'fast' } } }));
+  acc.onEvent(ev('message_delta', { usage: { output_tokens: 5, server_tool_use: { web_search_requests: 3 } } }));
+  acc.onEvent(ev('message_stop', {}));
+  expect(acc.result()).toMatchObject({ source: 'final', fast: true, serverToolUses: { web_search: 3 } });
+  const json = parseAnthropicJsonUsage(Buffer.from(JSON.stringify({ model: 'm', usage: { input_tokens: 1, output_tokens: 1, speed: 'fast', server_tool_use: { web_search_requests: 2 } } })));
+  expect(json).toMatchObject({ fast: true, serverToolUses: { web_search: 2 } });
+  const plain = parseAnthropicJsonUsage(Buffer.from(JSON.stringify({ model: 'm', usage: { input_tokens: 1, output_tokens: 1, speed: 'standard', server_tool_use: { web_search_requests: 0 } } })));
+  expect(plain).not.toHaveProperty('fast');
+  expect(plain).not.toHaveProperty('serverToolUses');
+});

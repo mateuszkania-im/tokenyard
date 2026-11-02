@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { budgetKey, deadlinesKey, gcraKey, keyTaintKey, reservationKey, streamKey, sweepLockKey, taintKey, tenantOfKey } from '../../src/limits/keys.js';
+import { budgetKey, deadlinesKey, gcraKey, keyTaintKey, reservationKey, streamKey, sweepLockKey, taintKey, tenantOfKey, SWEEP_LOCK_TENANT } from '../../src/limits/keys.js';
 
 test('every key starts with the tenant hash tag', () => {
   const keys = [
@@ -42,4 +42,8 @@ test('session taint and key taint never share a namespace', () => {
 test('tenantOfKey returns null for a key outside the ty:{tenant}: layout', () => {
   expect(tenantOfKey('other:{acme}:x')).toBeNull();
   expect(tenantOfKey('ty:acme:x')).toBeNull();
+});
+
+test('the sweep lock lives under the reserved tenant "_sweeper", keeping the {tenant} rule', () => {
+  expect(sweepLockKey(SWEEP_LOCK_TENANT)).toBe('ty:{_sweeper}:sweep-lock');
 });

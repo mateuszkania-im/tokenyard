@@ -94,7 +94,9 @@ export function compilePolicy(src: PolicySource, revision: string, o: { experime
     scope: b.scope,
     window: b.scope === 'session' ? null : (b.window as 'day' | 'week' | 'month'),
     limitMicroUsd: Math.round(b.usd * 1_000_000),
-    enforce: b.mode === 'enforce' && b.onExceed === 'block',
+    enforce: b.mode === 'enforce' && (b.onExceed ?? 'block') === 'block',
+    // Spec 7.6: subscription-billed traffic is priced as API-equivalent cost, so its budgets default to onExceed: warn.
+    enforceSubscription: b.mode === 'enforce' && b.onExceed === 'block',
   }));
   const rateLimits: CompiledRate[] = [];
   const streamLimits: CompiledStreamLimit[] = [];

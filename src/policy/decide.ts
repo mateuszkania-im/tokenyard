@@ -18,6 +18,14 @@ const hasModels = (t: PriceTable): boolean => Object.keys(t.models).length > 0;
 /** The model name when the table prices it, else null: unknown and missing models are priced as the table's envelope. */
 const pricedName = (t: PriceTable, model: string): string | null => (model !== '' && lookupModel(t, model) !== null ? model : null);
 
+export interface BuildFeaturesOptions {
+  /**
+   * R11: a settled request billed more input than its bytes bound, so the tokenizer assumption failed; every request
+   * uses the context-window bound until restart.
+   */
+  bytesBoundOff?: boolean;
+}
+
 /**
  * Request features for `decide` (spec 5.3 step 4 to 6). The input bound uses the requested model's limits, or for an
  * unknown, missing or unparseable model `reservationPrice(prices, null)` (every model's largest window), never a guess.
@@ -32,10 +40,12 @@ export function buildFeatures(
   id: string,
   ts: number,
   surface: Surface,
+  o: BuildFeaturesOptions = {},
 ): RequestFeatures {
   const model = x.parseError ? '' : (x.model ?? '');
   // An empty table (serve --dev-upstream) knows no context window: the bound is unknown, so it is as large as can be.
-  const bound = hasModels(prices) ? inputTokenBound(x, reservationPrice(prices, pricedName(prices, model)).price) : { tokens: Number.MAX_SAFE_INTEGER, kind: 'context-window' as const };
+  let bound = hasModels(prices) ? inputTokenBound(x, reservationPrice(prices, pricedName(prices, model)).price) : { tokens: Number.MAX_SAFE_INTEGER, kind: 'context-window' as const };
+  if (o.bytesBoundOff && bound.kind === 'bytes') bound = { tokens: reservationPrice(prices, pricedName(prices, model)).price.maxContextTokens, kind: 'context-window' };
   return {
     id,
     ts,
@@ -125,6 +135,11 @@ export function levelValue(scope: CompiledBudget['scope'], f: ScopeSource, enfor
   return (scope === 'session' || scope === 'repo') && enforce ? UNATTRIBUTED : null;
 }
 
+/** Whether a budget blocks this request: for subscription billing an unstated onExceed means warn (spec 7.6). */
+export function budgetEnforced(b: CompiledBudget, billing: RequestFeatures['billing']): boolean {
+  return billing === 'subscription' ? b.enforceSubscription : b.enforce;
+}
+
 /**
  * Provider order for this request. A weighted split puts one weighted entry first, chosen by a hash of the route
  * name and `seed` (session id, else request id), so a session keeps its provider and its prompt cache; every other
@@ -211,10 +226,11 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const levels = policy.budgets.flatMap((b) => {
     // A key without a team skips team levels; a missing session or repo header is charged to UNATTRIBUTED on enforced
     // levels, so leaving a header out cannot dodge a budget.
-    const value = levelValue(b.scope, f, b.enforce);
+    const enforce = budgetEnforced(b, f.billing);
+    const value = levelValue(b.scope, f, enforce);
     if (value === null) return [];
     const w = b.window === null ? null : windowOf(b.window, f.ts);
-    return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce: b.enforce, resetsAt: w?.end ?? null }];
+    return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce, resetsAt: w?.end ?? null }];
   });
 
   let est = 0;

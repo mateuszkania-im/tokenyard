@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from 'vitest';
+import { createMemoryStore } from '../../../src/limits/memory-store.js';
 import { authHeaders, send, startStack } from '../../helpers/conformance.js';
+import { spyStore } from '../../helpers/store-spy.js';
 
 let stack: Awaited<ReturnType<typeof startStack>> | undefined;
 afterEach(async () => {
@@ -8,7 +10,8 @@ afterEach(async () => {
 });
 
 test('C13 HEAD /api/hello does not error the client; count_tokens is forwarded [https://code.claude.com/docs/en/llm-gateway-protocol.md]', async () => {
-  stack = await startStack();
+  const spy = spyStore(createMemoryStore({ clock: Date.now }));
+  stack = await startStack({ gw: { store: spy.store } });
   const hello = await send(stack.gw.url, { method: 'HEAD', path: '/api/hello' });
   expect(hello.status).toBe(200);
   expect(hello.body.length).toBe(0);
@@ -19,4 +22,7 @@ test('C13 HEAD /api/hello does not error the client; count_tokens is forwarded [
   expect(stack.mock.received).toHaveLength(1);
   expect(stack.mock.received[0]?.pathAndQuery).toBe('/v1/messages/count_tokens?beta=true');
   expect(stack.mock.received[0]?.body.equals(body)).toBe(true);
+  // Forwarded with no reservation: the counter store is never called for count_tokens (spec 5.3).
+  expect(spy.admits).toHaveLength(0);
+  expect(spy.settles).toHaveLength(0);
 });

@@ -84,3 +84,19 @@ test('onError receives every lock or sweep failure and ticking continues', async
   stop();
   expect(errors.map((e) => (e as Error).message)).toEqual(['lock failed', 'sweep failed 1', 'sweep failed 2']);
 });
+
+test('a throwing onTick (trace heartbeat) goes to onError and the sweep still runs', async () => {
+  const errors: unknown[] = [];
+  const swept: number[] = [];
+  const stop = startSweeper(fakeStore(async (now) => (swept.push(now), 0)), {
+    intervalMs: 1_000,
+    onTick: () => {
+      throw new Error('heartbeat failed');
+    },
+    onError: (e) => errors.push(e),
+  });
+  await vi.advanceTimersByTimeAsync(2_000);
+  stop();
+  expect(swept).toHaveLength(2);
+  expect(errors.map((e) => (e as Error).message)).toEqual(['heartbeat failed', 'heartbeat failed']);
+});

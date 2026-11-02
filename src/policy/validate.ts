@@ -218,7 +218,7 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
 
   if (policy.reservation.estimator === 'session-aware') {
     policy.budgets.forEach((b, i) => {
-      if (b.scope === 'session' && b.onExceed === 'block') warn('W_SESSION_AWARE_BLOCK', `budgets[${i}]`, 'estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold');
+      if (b.scope === 'session' && (b.onExceed ?? 'block') === 'block') warn('W_SESSION_AWARE_BLOCK', `budgets[${i}]`, 'estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold');
     });
   }
   if (policy.reservation.serverToolsWithoutMaxUses === 'assume' && enforced.length > 0) {

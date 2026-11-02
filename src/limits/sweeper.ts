@@ -6,19 +6,26 @@ import type { CounterStore } from './store.js';
 
 export function startSweeper(store: CounterStore, o: { intervalMs: number; onTick?: () => void; onError?: (e: unknown) => void; lock?: { acquire(): Promise<boolean> } }): () => void {
   let running = false;
+  const report = (e: unknown): void => {
+    try {
+      o.onError?.(e);
+    } catch {
+      // a throwing error handler must not stop the sweeper
+    }
+  };
   const tick = async (): Promise<void> => {
-    o.onTick?.();
+    try {
+      o.onTick?.();
+    } catch (e) {
+      report(e); // a throwing heartbeat must not stop the sweep or become an unhandled rejection
+    }
     if (running) return;
     running = true;
     try {
       if (o.lock && !(await o.lock.acquire())) return;
       await store.sweep(Date.now());
     } catch (e) {
-      try {
-        o.onError?.(e);
-      } catch {
-        // a throwing error handler must not stop the sweeper
-      }
+      report(e);
     } finally {
       running = false;
     }

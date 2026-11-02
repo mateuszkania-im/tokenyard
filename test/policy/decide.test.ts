@@ -564,3 +564,25 @@ ${STORE}`);
   expect(req('ok')).toMatchObject({ route: 'summary-ok', preBlock: null, chain: [{ upstreamModel: 'claude-haiku-5-5' }] });
   expect(req('own')).toMatchObject({ route: 'own', preBlock: null, chain: [{ upstreamModel: 'claude-sonnet-5-5', rewritesModel: true }] });
 });
+
+test('spec 7.6: on subscription billing a budget without onExceed only warns; a stated block blocks; API billing blocks either way', () => {
+  const p = compile(`${HEAD}routes:
+  - { name: all, chain: [a] }
+budgets:
+  - { name: unstated, scope: tenant, window: day, usd: 1 }
+  - { name: stated, scope: team, window: day, usd: 1, onExceed: block }
+  - { name: warned, scope: key, window: day, usd: 1, onExceed: warn }
+${STORE}`, true);
+  const enforce = (billing: 'api' | 'subscription') => decide(p, features({ billing })).reservations.map((r) => [r.budget, r.enforce]);
+  expect(enforce('api')).toEqual([['unstated', true], ['stated', true], ['warned', false]]);
+  expect(enforce('subscription')).toEqual([['unstated', false], ['stated', true], ['warned', false]]);
+});
+
+test('an enforced reservation larger than its limit on its own is a 429 naming the reservation and the limit, before any admission', () => {
+  const p = compile(`${HEAD}routes:\n  - { name: all, chain: [a] }\nbudgets:\n  - { name: tiny, scope: tenant, window: day, usd: 0.000005 }\n${STORE}`);
+  const plan = decide(p, features());
+  const d = resolve(p, plan, null);
+  expect(d).toMatchObject({ action: 'block', block: { status: 429, type: 'rate_limit_error', reason: 'budget', retryAfterS: null } });
+  expect(d.block?.message).toContain('budget "tiny"');
+  expect(d.block?.message).toContain('($0.000005)');
+});

@@ -360,6 +360,9 @@ test('HEAD /api/hello returns empty 200; count_tokens is forwarded without reser
   expect(mock.received[0]?.pathAndQuery).toBe('/v1/messages/count_tokens?beta=true');
   expect(mock.received[0]?.body.equals(body)).toBe(true);
   expect(calls).toEqual([]);
+  // The same store is called for a messages request, so the assertion above is not vacuous.
+  await send(gw.url, { path: '/v1/messages?beta=true', headers: auth, body });
+  expect(calls).toEqual(['admit']);
 });
 
 test('invalid JSON body is forwarded unchanged and the provider 400 reaches the client', async () => {

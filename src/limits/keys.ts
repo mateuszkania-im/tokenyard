@@ -44,6 +44,9 @@ export function deadlinesKey(tenant: string): string {
   return `${prefix(tenant)}:deadlines`;
 }
 
+/** Reserved tenant name of the sweep lock: one sweep covers every tenant, and the key still follows the `{tenant}` rule. */
+export const SWEEP_LOCK_TENANT = '_sweeper';
+
 /** Short `SET NX PX` lock so one instance at a time runs the sweeper. */
 export function sweepLockKey(tenant: string): string {
   return `${prefix(tenant)}:sweep-lock`;

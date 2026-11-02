@@ -64,7 +64,9 @@ const budget = z.strictObject({
   // `window` and `usd` are checked in validate.ts (E_BUDGET_WINDOW, E_BUDGET_USD) so each failure has its own code.
   window: z.string().optional(),
   usd: z.number(),
-  onExceed: z.enum(['block', 'warn']).default('block'),
+  // No default here: an unstated onExceed is `block` for API keys and `warn` for subscription keys (spec 7.6), so
+  // compile must see whether the policy stated it.
+  onExceed: z.enum(['block', 'warn']).optional(),
   mode: z.enum(['enforce', 'audit']).default('enforce'),
 });
 

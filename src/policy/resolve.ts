@@ -8,7 +8,11 @@ const STREAMS_RETRY_S = 1;
 
 type Block = NonNullable<Decision['block']>;
 
-const usd = (micro: number): string => `$${(micro / 1_000_000).toFixed(2)}`;
+/** Dollars with cents; an amount under one cent shows its micro-dollars, so a small limit never reads as $0.00. */
+export const usd = (micro: number): string => {
+  const d = micro / 1_000_000;
+  return micro > 0 && micro < 10_000 ? `$${d.toFixed(6).replace(/0+$/, '')}` : `$${d.toFixed(2)}`;
+};
 const ADVICE = 'run /clear to drop it from the conversation, rotate the secret, and add a deny rule for the file it came from';
 
 /** Whole seconds from 1 to 60; anything not finite waits the longest allowed. */
@@ -49,7 +53,7 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
   switch (failed.kind) {
     case 'budget': {
       const level = plan.reservations.find((r) => r.budget === failed.name);
-      const spent = failed.spentMicroUsd === undefined || level === undefined ? '' : ` (spent ${usd(failed.spentMicroUsd)} of ${usd(level.limitMicroUsd)})`;
+      const spent = failed.spentMicroUsd === undefined || level === undefined ? '' : ` (spent ${usd(failed.spentMicroUsd)} of ${usd(level.limitMicroUsd)}; this request's reservation is ${usd(level.estMicroUsd)})`;
       const resets = level?.resetsAt ? `; it resets at ${level.resetsAt}` : level ? '; it does not reset (session budget)' : '';
       // No retry-after: that is how Anthropic answers a reached spend cap (spec 5.6).
       return block(429, 'rate_limit_error', 'budget', `budget "${failed.name}" is exhausted${spent}${resets}`);
@@ -65,9 +69,23 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
   }
 }
 
+/**
+ * An enforced level whose limit is below this request's own reservation: no amount of waiting admits it, so it is
+ * refused before the store is asked and nothing is reserved (spec 7.4 premise: each reservation fits on its own).
+ */
+export function oversizedReservation(plan: Plan): Plan['reservations'][number] | null {
+  return plan.reservations.find((r) => r.enforce && r.estMicroUsd > r.limitMicroUsd) ?? null;
+}
+
 export function resolve(policy: CompiledPolicy, plan: Plan, admission: Admission | null): Decision {
   const decision = (b: Block | null): Decision => ({ action: b === null ? 'forward' : 'block', block: b, plan, admission });
   if (plan.preBlock !== null) return decision(preBlock(policy, plan, plan.preBlock));
+  const big = oversizedReservation(plan);
+  if (big !== null) {
+    // No retry-after: retrying cannot help (spec 5.6 budget answer).
+    const msg = `this request's reservation of ${usd(big.estMicroUsd)} is larger than budget "${big.budget}" allows in total (${usd(big.limitMicroUsd)}); lower max_tokens or the context sent, or raise the budget`;
+    return decision(block(429, 'rate_limit_error', 'budget', msg));
+  }
   if (admission === null) return decision(null);
   if (admission.storeDown) {
     const down = policy.failure.counterStoreDown;

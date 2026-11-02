@@ -36,7 +36,9 @@ program
   .option('--trace-dir <dir>', 'write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson')
   .option('--instance-id <id>', 'instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)')
   .option('--trace-salt <salt>', 'HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string }) => {
+  .option('--store <kind>', 'counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis', 'memory')
+  .option('--redis-url <url>', 'Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)')
+  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; store: string; redisUrl?: string }) => {
     if (!o.devUpstream && !o.policy && !o.policyUrl) {
       console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
       process.exit(1);
@@ -53,6 +55,15 @@ program
       console.error('tokenyard serve: --candidate-policy needs --policy or --policy-url');
       process.exit(1);
     }
+    if (o.store !== 'memory' && o.store !== 'redis') {
+      console.error('tokenyard serve: --store must be memory or redis');
+      process.exit(1);
+    }
+    const redisUrl = o.redisUrl ?? process.env.TOKENYARD_REDIS_URL;
+    if (o.store === 'redis' && !redisUrl) {
+      console.error('tokenyard serve: --store redis needs --redis-url or TOKENYARD_REDIS_URL');
+      process.exit(1);
+    }
     const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
     if (o.traceDir && !traceSalt) {
       console.error('tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)');
@@ -61,12 +72,8 @@ program
     const { hostname } = await import('node:os');
     const { ulid } = await import('./edge/ulid.js');
     const { defaultInstanceId, TraceWriter } = await import('./ledger/writer.js');
-    const writer = o.traceDir
-      ? new TraceWriter({ dir: o.traceDir, instanceId: o.instanceId ?? defaultInstanceId(hostname(), Date.now()), queueMax: 10_000, clock: Date.now })
-      : null;
-    // Until the sweeper tick exists (Task 13) a timer writes the 60 s heartbeat.
-    const beat = writer ? setInterval(() => writer.heartbeat(), 60_000) : null;
-    beat?.unref();
+    const instanceId = o.instanceId ?? defaultInstanceId(hostname(), Date.now());
+    const writer = o.traceDir ? new TraceWriter({ dir: o.traceDir, instanceId, queueMax: 10_000, clock: Date.now }) : null;
     const { createGateway, DEFAULT_BODY_CAP_BYTES } = await import('./edge/server.js');
     let loader: import('./policy-loader/loader.js').PolicyLoader | null = null;
     let activePolicy: () => import('./policy/types.js').CompiledPolicy;
@@ -94,9 +101,36 @@ program
       loader = l;
       activePolicy = () => l.active();
     }
+    // Counter store: opened before the first request, seeded from the traces of the current windows (warm-up; a seed
+    // never lowers spend), and swept every 30 s. The sweeper tick also writes the trace heartbeat (every second tick, 60 s).
+    const { createGatewayRuntime } = await import('./edge/handler.js');
+    const { openCounterStore, SWEEP_INTERVAL_MS, warmUpFromTraces } = await import('./limits/open-store.js');
+    const { startSweeper } = await import('./limits/sweeper.js');
+    const runtime = createGatewayRuntime();
+    let counters: import('./limits/open-store.js').OpenedStore;
+    try {
+      counters = await openCounterStore({ kind: o.store, ...(redisUrl ? { redisUrl } : {}), instance: instanceId, onSwept: runtime.onSwept });
+      if (o.traceDir) {
+        const n = await warmUpFromTraces(counters.store, o.traceDir, activePolicy(), Date.now());
+        if (n > 0) console.error(`tokenyard: warm-up seeded ${n} budget counter(s) from ${o.traceDir}`);
+      }
+    } catch (e) {
+      console.error(`tokenyard serve: counter store: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+    let ticks = 0;
+    const stopSweeper = startSweeper(counters.store, {
+      intervalMs: SWEEP_INTERVAL_MS,
+      ...(counters.lock ? { lock: counters.lock } : {}),
+      onTick: () => {
+        if (++ticks % 2 === 0) writer?.heartbeat();
+      },
+      onError: (e) => console.error(`tokenyard: sweeper: ${e instanceof Error ? e.message : String(e)}`),
+    });
     const gw = createGateway({
       policy: activePolicy,
-      store: null,
+      store: counters.store,
+      runtime,
       traces: writer,
       traceSalt,
       clock: Date.now,
@@ -107,8 +141,8 @@ program
     });
     console.log(await gw.listen(Number(o.port), o.host));
     const stop = (): void => {
-      if (beat) clearInterval(beat);
-      void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => process.exit(0));
+      stopSweeper();
+      void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => counters.close()).then(() => process.exit(0));
     };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
