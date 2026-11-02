@@ -3,9 +3,10 @@
 // harness prints the gateway URL, a `ty_` client key made for this run and the remaining budget, nothing else.
 import { randomBytes } from 'node:crypto';
 import { access, constants, mkdir, readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createKey } from '../edge/keys.js';
 import { createGatewayRuntime } from '../edge/handler.js';
 import { createGateway, DEFAULT_BODY_CAP_BYTES } from '../edge/server.js';
@@ -28,8 +29,93 @@ export const LIVE_MAX_USD = 20;
 /** The live policy's one budget; the harness sets its `usd` from TOKENYARD_LIVE_BUDGET_USD. */
 export const LIVE_BUDGET = 'live-total';
 const LIVE_TENANT = 'live';
-/** Where `npm run live` (run from the repo root) finds the live policy. */
-const LIVE_POLICY_DIR = join('test', 'live');
+/** Lock file in the trace dir: one harness at a time, or two would each enforce the full remaining cap. */
+export const LIVE_LOCK_FILE = 'live.lock';
+const PACKAGE_NAME = '@mateuszkania-im/tokenyard';
+
+/**
+ * The package root: the nearest directory above this module (src/live in development, bin in the bundle) whose
+ * package.json is this package's. Never the cwd, so the cap's trace dir cannot change with where the harness starts.
+ */
+function packageRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const pkg = join(dir, 'package.json');
+    if (existsSync(pkg)) {
+      try {
+        if ((JSON.parse(readFileSync(pkg, 'utf8')) as { name?: unknown }).name === PACKAGE_NAME) return dir;
+      } catch {
+        // not ours; keep looking
+      }
+    }
+    const up = dirname(dir);
+    if (up === dir) throw new Error(`tokenyard live: cannot find the ${PACKAGE_NAME} package root above ${fileURLToPath(import.meta.url)}`);
+    dir = up;
+  }
+}
+
+/** Absolute live trace dir (`.live/traces`, gitignored) and live policy dir (`test/live`) under the package root. */
+export function defaultLivePaths(): { traceDir: string; policyDir: string } {
+  const root = packageRoot();
+  return { traceDir: join(root, '.live', 'traces'), policyDir: join(root, 'test', 'live') };
+}
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM'; // exists, owned by someone else
+  }
+};
+
+/**
+ * Takes the exclusive lock (`wx`) holding this pid. A lock whose pid is not alive is stale and replaced; a live one
+ * refuses. Returns the release function (idempotent; removes the file only while it still holds this pid).
+ */
+function acquireLock(traceDir: string): () => void {
+  const path = join(traceDir, LIVE_LOCK_FILE);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const fd = openSync(path, 'wx');
+      try {
+        writeSync(fd, `${process.pid}\n`);
+      } finally {
+        closeSync(fd);
+      }
+      break;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || attempt > 0) throw e;
+      let holder = Number.NaN;
+      try {
+        holder = Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
+      } catch {
+        // unreadable or gone: treated as stale below
+      }
+      if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
+        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path})`);
+      }
+      try {
+        unlinkSync(path);
+      } catch {
+        // already gone
+      }
+    }
+  }
+  let released = false;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    process.off('exit', release);
+    try {
+      if (readFileSync(path, 'utf8').trim() === String(process.pid)) unlinkSync(path);
+    } catch {
+      // already gone
+    }
+  };
+  process.on('exit', release);
+  return release;
+}
 /** Warm-up reads a month window, plus a day for a month that just started. */
 const WARMUP_LOOKBACK_MS = 32 * 86_400_000;
 
@@ -49,7 +135,7 @@ export function liveGuard(env: NodeJS.ProcessEnv, today: string): { ok: true; ca
  * `upstream` points the Anthropic provider elsewhere (tests: the mock).
  */
 export function loadLivePolicy(o: { capUsd: number; keyHash: string; dir?: string; upstream?: string }): CompiledPolicy {
-  const dir = o.dir ?? LIVE_POLICY_DIR;
+  const dir = o.dir ?? defaultLivePaths().policyDir;
   const read = (f: string): string => readFileSync(join(dir, f), 'utf8');
   const keys = `- ${JSON.stringify({ hash: o.keyHash, keyId: `key_${o.keyHash.slice(0, 8)}`, tenant: LIVE_TENANT, team: LIVE_TENANT, name: 'live', kind: 'developer', billing: 'api' })}\n`;
   const src = parsePolicyFiles(dir, { 'policy.yaml': read('policy.yaml'), 'prices.yaml': read('prices.yaml'), 'keys.yaml': keys });
@@ -83,15 +169,17 @@ const usd = (micro: number): string => `$${(micro / 1_000_000).toFixed(2)}`;
 export async function startLiveHarness(o: {
   env: NodeJS.ProcessEnv;
   today: string;
-  /** `.live/traces` for real runs (gitignored); tests give a temporary directory. */
-  traceDir: string;
+  /** Tests only: a temporary directory. Real runs always use `.live/traces` under the package root. */
+  traceDir?: string;
   port: number;
   /** Tests only: the mock in place of api.anthropic.com. */
   upstream?: string;
+  /** Tests only: the live policy directory (default `test/live` under the package root). */
   policyDir?: string;
 }): Promise<{ url: string; clientKey: string; spentMicroUsd: number; close(): Promise<void> }> {
   const guard = liveGuard(o.env, o.today);
   if (!guard.ok) throw new Error(`tokenyard live: ${guard.reason}`);
+  const traceDir = o.traceDir ?? defaultLivePaths().traceDir;
   const { plaintext: clientKey, hash } = createKey();
   const policy = loadLivePolicy({ capUsd: guard.capUsd, keyHash: hash, ...(o.policyDir ? { dir: o.policyDir } : {}), ...(o.upstream ? { upstream: o.upstream } : {}) });
 
@@ -101,9 +189,16 @@ export async function startLiveHarness(o: {
   const store = createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: (ids) => runtime.onSwept(ids) });
   const runtime = createGatewayRuntime();
   try {
-    await mkdir(o.traceDir, { recursive: true });
-    await assertReadable(o.traceDir);
-    const records = await loadTraceRecords({ path: o.traceDir, sinceMs: now - WARMUP_LOOKBACK_MS, untilMs: now });
+    await mkdir(traceDir, { recursive: true });
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code ? ` (${code})` : ''}`);
+  }
+  // The lock comes before the seed: two harnesses must never both seed the same spend and each enforce the rest.
+  const release = acquireLock(traceDir);
+  try {
+    await assertReadable(traceDir);
+    const records = await loadTraceRecords({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS, untilMs: now });
     const entries = await warmupEntries(
       (async function* (): AsyncIterable<LedgerLine> {
         yield* records;
@@ -114,11 +209,12 @@ export async function startLiveHarness(o: {
     await store.seed(entries);
     spentMicroUsd = entries.reduce((n, e) => n + e.spentMicroUsd, 0);
   } catch (e) {
+    release();
     const code = (e as NodeJS.ErrnoException).code;
-    throw new Error(`tokenyard live: cannot read the live trace dir ${o.traceDir}${code ? ` (${code})` : ''}; refusing to start without the earlier spend`);
+    throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code ? ` (${code})` : ''}; refusing to start without the earlier spend`);
   }
 
-  const writer = new TraceWriter({ dir: o.traceDir, instanceId: defaultInstanceId(hostname(), now), queueMax: 10_000, clock: Date.now });
+  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname(), now), queueMax: 10_000, clock: Date.now });
   let ticks = 0;
   const stopSweeper = startSweeper(store, {
     intervalMs: SWEEP_INTERVAL_MS,
@@ -145,6 +241,7 @@ export async function startLiveHarness(o: {
   } catch (e) {
     stopSweeper();
     await writer.close();
+    release();
     throw e;
   }
   const capMicro = Math.round(guard.capUsd * 1_000_000);
@@ -163,8 +260,12 @@ export async function startLiveHarness(o: {
     spentMicroUsd,
     async close() {
       stopSweeper();
-      await gw.close();
-      await writer.close();
+      try {
+        await gw.close();
+        await writer.close();
+      } finally {
+        release();
+      }
     },
   };
 }

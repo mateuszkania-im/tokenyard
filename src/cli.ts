@@ -152,12 +152,13 @@ program
   .command('live', { hidden: true })
   .description('live-test harness: the gateway with the live policy and the tokenyard-enforced cap (npm run live)')
   .option('--port <n>', 'port to listen on (0 picks a free one)', '4000')
-  .option('--trace-dir <dir>', 'live trace directory (gitignored)', '.live/traces')
-  .action(async (o: { port: string; traceDir: string }) => {
+  .action(async (o: { port: string }) => {
     const { startLiveHarness } = await import('./live/harness.js');
     let h: Awaited<ReturnType<typeof startLiveHarness>>;
     try {
-      h = await startLiveHarness({ env: process.env, today: new Date().toISOString().slice(0, 10), traceDir: o.traceDir, port: Number(o.port) });
+      // The trace dir and the live policy are fixed under the package root (never an option, never the cwd), so every
+      // run seeds the same spend.
+      h = await startLiveHarness({ env: process.env, today: new Date().toISOString().slice(0, 10), port: Number(o.port) });
     } catch (e) {
       console.error(e instanceof Error ? e.message : String(e));
       process.exit(1);

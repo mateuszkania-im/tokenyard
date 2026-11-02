@@ -43766,7 +43766,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir4 } = __require("node:fs/promises");
-    var { dirname, resolve: resolve2 } = __require("node:path");
+    var { dirname: dirname2, resolve: resolve2 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -43997,7 +43997,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         const resolvedPath = resolve2(path2);
-        await mkdir4(dirname(resolvedPath), { recursive: true });
+        await mkdir4(dirname2(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
           snapshot
@@ -102233,16 +102233,79 @@ var harness_exports = {};
 __export(harness_exports, {
   LIVE_BUDGET: () => LIVE_BUDGET,
   LIVE_LAST_DAY: () => LIVE_LAST_DAY,
+  LIVE_LOCK_FILE: () => LIVE_LOCK_FILE,
   LIVE_MAX_USD: () => LIVE_MAX_USD,
+  defaultLivePaths: () => defaultLivePaths,
   liveGuard: () => liveGuard,
   loadLivePolicy: () => loadLivePolicy,
   startLiveHarness: () => startLiveHarness
 });
 import { randomBytes as randomBytes4 } from "node:crypto";
 import { access, constants, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { closeSync, existsSync as existsSync2, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
 import { hostname as hostname3 } from "node:os";
-import { join as join6 } from "node:path";
+import { dirname, join as join6 } from "node:path";
+import { fileURLToPath } from "node:url";
+function packageRoot() {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (; ; ) {
+    const pkg = join6(dir, "package.json");
+    if (existsSync2(pkg)) {
+      try {
+        if (JSON.parse(readFileSync(pkg, "utf8")).name === PACKAGE_NAME) return dir;
+      } catch {
+      }
+    }
+    const up = dirname(dir);
+    if (up === dir) throw new Error(`tokenyard live: cannot find the ${PACKAGE_NAME} package root above ${fileURLToPath(import.meta.url)}`);
+    dir = up;
+  }
+}
+function defaultLivePaths() {
+  const root = packageRoot();
+  return { traceDir: join6(root, ".live", "traces"), policyDir: join6(root, "test", "live") };
+}
+function acquireLock(traceDir) {
+  const path2 = join6(traceDir, LIVE_LOCK_FILE);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const fd = openSync(path2, "wx");
+      try {
+        writeSync(fd, `${process.pid}
+`);
+      } finally {
+        closeSync(fd);
+      }
+      break;
+    } catch (e) {
+      if (e.code !== "EEXIST" || attempt > 0) throw e;
+      let holder = Number.NaN;
+      try {
+        holder = Number.parseInt(readFileSync(path2, "utf8").trim(), 10);
+      } catch {
+      }
+      if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
+        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path2})`);
+      }
+      try {
+        unlinkSync(path2);
+      } catch {
+      }
+    }
+  }
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    process.off("exit", release);
+    try {
+      if (readFileSync(path2, "utf8").trim() === String(process.pid)) unlinkSync(path2);
+    } catch {
+    }
+  };
+  process.on("exit", release);
+  return release;
+}
 function liveGuard(env, today) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || today > LIVE_LAST_DAY) return { ok: false, reason: `live tests end on ${LIVE_LAST_DAY} (the credits expire); today is ${today}` };
   if (!env.ANTHROPIC_API_KEY) return { ok: false, reason: "ANTHROPIC_API_KEY is not set (npm run live reads it from .env)" };
@@ -102253,7 +102316,7 @@ function liveGuard(env, today) {
   return { ok: true, capUsd, codexLive: Boolean(env.OPENAI_API_KEY) };
 }
 function loadLivePolicy(o) {
-  const dir = o.dir ?? LIVE_POLICY_DIR;
+  const dir = o.dir ?? defaultLivePaths().policyDir;
   const read = (f) => readFileSync(join6(dir, f), "utf8");
   const keys2 = `- ${JSON.stringify({ hash: o.keyHash, keyId: `key_${o.keyHash.slice(0, 8)}`, tenant: LIVE_TENANT, team: LIVE_TENANT, name: "live", kind: "developer", billing: "api" })}
 `;
@@ -102283,6 +102346,7 @@ async function assertReadable(dir) {
 async function startLiveHarness(o) {
   const guard = liveGuard(o.env, o.today);
   if (!guard.ok) throw new Error(`tokenyard live: ${guard.reason}`);
+  const traceDir = o.traceDir ?? defaultLivePaths().traceDir;
   const { plaintext: clientKey, hash: hash2 } = createKey();
   const policy2 = loadLivePolicy({ capUsd: guard.capUsd, keyHash: hash2, ...o.policyDir ? { dir: o.policyDir } : {}, ...o.upstream ? { upstream: o.upstream } : {} });
   const now = Date.now();
@@ -102290,9 +102354,15 @@ async function startLiveHarness(o) {
   const store = createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: (ids) => runtime.onSwept(ids) });
   const runtime = createGatewayRuntime();
   try {
-    await mkdir3(o.traceDir, { recursive: true });
-    await assertReadable(o.traceDir);
-    const records = await loadTraceRecords({ path: o.traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
+    await mkdir3(traceDir, { recursive: true });
+  } catch (e) {
+    const code = e.code;
+    throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code ? ` (${code})` : ""}`);
+  }
+  const release = acquireLock(traceDir);
+  try {
+    await assertReadable(traceDir);
+    const records = await loadTraceRecords({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
     const entries = await warmupEntries(
       (async function* () {
         yield* records;
@@ -102303,10 +102373,11 @@ async function startLiveHarness(o) {
     await store.seed(entries);
     spentMicroUsd = entries.reduce((n, e) => n + e.spentMicroUsd, 0);
   } catch (e) {
+    release();
     const code = e.code;
-    throw new Error(`tokenyard live: cannot read the live trace dir ${o.traceDir}${code ? ` (${code})` : ""}; refusing to start without the earlier spend`);
+    throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code ? ` (${code})` : ""}; refusing to start without the earlier spend`);
   }
-  const writer = new TraceWriter({ dir: o.traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
+  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
   let ticks = 0;
   const stopSweeper = startSweeper(store, {
     intervalMs: SWEEP_INTERVAL_MS,
@@ -102333,6 +102404,7 @@ async function startLiveHarness(o) {
   } catch (e) {
     stopSweeper();
     await writer.close();
+    release();
     throw e;
   }
   const capMicro = Math.round(guard.capUsd * 1e6);
@@ -102351,12 +102423,16 @@ async function startLiveHarness(o) {
     spentMicroUsd,
     async close() {
       stopSweeper();
-      await gw.close();
-      await writer.close();
+      try {
+        await gw.close();
+        await writer.close();
+      } finally {
+        release();
+      }
     }
   };
 }
-var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_POLICY_DIR, WARMUP_LOOKBACK_MS2, usd2;
+var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_LOCK_FILE, PACKAGE_NAME, alive, WARMUP_LOOKBACK_MS2, usd2;
 var init_harness = __esm({
   "src/live/harness.ts"() {
     "use strict";
@@ -102376,7 +102452,16 @@ var init_harness = __esm({
     LIVE_MAX_USD = 20;
     LIVE_BUDGET = "live-total";
     LIVE_TENANT = "live";
-    LIVE_POLICY_DIR = join6("test", "live");
+    LIVE_LOCK_FILE = "live.lock";
+    PACKAGE_NAME = "@mateuszkania-im/tokenyard";
+    alive = (pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    };
     WARMUP_LOOKBACK_MS2 = 32 * 864e5;
     usd2 = (micro) => `$${(micro / 1e6).toFixed(2)}`;
   }
@@ -106053,11 +106138,11 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 });
-program2.command("live", { hidden: true }).description("live-test harness: the gateway with the live policy and the tokenyard-enforced cap (npm run live)").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--trace-dir <dir>", "live trace directory (gitignored)", ".live/traces").action(async (o) => {
+program2.command("live", { hidden: true }).description("live-test harness: the gateway with the live policy and the tokenyard-enforced cap (npm run live)").option("--port <n>", "port to listen on (0 picks a free one)", "4000").action(async (o) => {
   const { startLiveHarness: startLiveHarness2 } = await Promise.resolve().then(() => (init_harness(), harness_exports));
   let h;
   try {
-    h = await startLiveHarness2({ env: process.env, today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), traceDir: o.traceDir, port: Number(o.port) });
+    h = await startLiveHarness2({ env: process.env, today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), port: Number(o.port) });
   } catch (e) {
     console.error(e instanceof Error ? e.message : String(e));
     process.exit(1);
@@ -106122,7 +106207,7 @@ policy.command("check").description("validate a policy directory: schema, then t
 });
 policy.command("build").description("write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256").argument("[dir]", "policy directory", "policy").option("--out <file>", "output file", "dist/policy-bundle.json").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
   const { mkdir: mkdir4, writeFile: writeFile3 } = await import("node:fs/promises");
-  const { dirname } = await import("node:path");
+  const { dirname: dirname2 } = await import("node:path");
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
   const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
   const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
@@ -106135,7 +106220,7 @@ policy.command("build").description("write one bundle file (manifest, policy, pr
       process.exit(1);
     }
     const bundle = buildBundle2(src, { createdAt: (/* @__PURE__ */ new Date()).toISOString(), ...process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {} });
-    await mkdir4(dirname(o.out), { recursive: true });
+    await mkdir4(dirname2(o.out), { recursive: true });
     await writeFile3(o.out, serializeBundle2(bundle));
     console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
   } catch (e) {

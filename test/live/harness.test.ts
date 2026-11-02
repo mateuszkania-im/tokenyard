@@ -1,12 +1,14 @@
 // Live-test harness (spec 14.1, R12): the guard, the live policy, the cap seeded from earlier live traces, and key
 // handling. Runs in CI against the mock: no real key is ever used here.
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFile, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, expect, test, vi } from 'vitest';
 import { hashKey } from '../../src/edge/auth.js';
 import { TraceWriter } from '../../src/ledger/writer.js';
-import { liveGuard, loadLivePolicy, startLiveHarness } from '../../src/live/harness.js';
+import { defaultLivePaths, LIVE_LOCK_FILE, liveGuard, loadLivePolicy, startLiveHarness } from '../../src/live/harness.js';
 import { startAnthropicMock } from '../../src/mock/anthropic.js';
 import { msgBody, send } from '../helpers/conformance.js';
 import { baseRecord } from '../helpers/trace.js';
@@ -169,4 +171,72 @@ test('harness output and trace files never contain the provider key value', asyn
   const lines = files.flatMap((f) => readFileSync(f, 'utf8').split('\n').filter(Boolean));
   expect(lines.filter((l) => l.includes('"kind":"request"'))).toHaveLength(3);
   for (const f of files) expect(readFileSync(f, 'utf8')).not.toContain('CANARY');
+});
+
+const REPO = resolve(import.meta.dirname, '..', '..');
+
+test('the CLI has no --trace-dir for live: an unknown option is refused before anything starts', async () => {
+  const r = await promisify(execFile)('node', [join(REPO, 'bin', 'tokenyard.mjs'), 'live', '--trace-dir', tmp(), '--port', '0'], {
+    env: { PATH: process.env.PATH, ANTHROPIC_API_KEY: KEY, TOKENYARD_LIVE_BUDGET_USD: '20' },
+    // A regression would start a gateway: kill it rather than leave it running.
+    timeout: 4_000,
+  }).then(
+    () => ({ code: 0, stderr: '' }),
+    (e: { code: number; stderr: string }) => e,
+  );
+  expect(r.code).not.toBe(0);
+  expect(r.stderr).toMatch(/unknown option '--trace-dir'/);
+  expect(r.stderr).not.toContain('CANARY');
+});
+
+test('live paths are anchored at the package root, never the cwd: the same from another working directory', () => {
+  const here = defaultLivePaths();
+  expect(here).toEqual({ traceDir: join(REPO, '.live', 'traces'), policyDir: join(REPO, 'test', 'live') });
+  expect(isAbsolute(here.traceDir) && isAbsolute(here.policyDir)).toBe(true);
+  // A child process whose cwd is an unrelated directory resolves the same paths.
+  const script = `import(${JSON.stringify(join(REPO, 'src', 'live', 'harness.ts'))}).then((m) => process.stdout.write(JSON.stringify(m.defaultLivePaths())))`;
+  const r = spawnSync(process.execPath, ['--import', join(REPO, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs'), '--input-type=module', '-e', script], { cwd: tmp(), encoding: 'utf8' });
+  expect(r.stderr).toBe('');
+  expect(JSON.parse(r.stdout)).toEqual(here);
+});
+
+test('a second harness on the same trace dir refuses while the first runs; close() releases the lock', async () => {
+  const m = await mock();
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const env = { ANTHROPIC_API_KEY: KEY, TOKENYARD_LIVE_BUDGET_USD: '20' };
+  const traceDir = tmp();
+  const first = await startLiveHarness({ env, today: TODAY, traceDir, port: 0, upstream: m.url });
+  closers.push(first.close);
+  expect(readFileSync(join(traceDir, LIVE_LOCK_FILE), 'utf8').trim()).toBe(String(process.pid));
+  await expect(startLiveHarness({ env, today: TODAY, traceDir, port: 0, upstream: m.url })).rejects.toThrow(new RegExp(`another live harness \\(pid ${process.pid}\\)`));
+  await first.close();
+  expect(existsSync(join(traceDir, LIVE_LOCK_FILE))).toBe(false);
+  const second = await startLiveHarness({ env, today: TODAY, traceDir, port: 0, upstream: m.url });
+  closers.push(second.close);
+  expect(existsSync(join(traceDir, LIVE_LOCK_FILE))).toBe(true);
+});
+
+test('a stale lock (its pid is not alive) is replaced', async () => {
+  const m = await mock();
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const env = { ANTHROPIC_API_KEY: KEY, TOKENYARD_LIVE_BUDGET_USD: '20' };
+  const traceDir = tmp();
+  const dead = spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout;
+  writeFileSync(join(traceDir, LIVE_LOCK_FILE), `${dead}\n`);
+  const h = await startLiveHarness({ env, today: TODAY, traceDir, port: 0, upstream: m.url });
+  closers.push(h.close);
+  expect(readFileSync(join(traceDir, LIVE_LOCK_FILE), 'utf8').trim()).toBe(String(process.pid));
+});
+
+test('a start that fails after taking the lock releases it', async () => {
+  const m = await mock();
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const env = { ANTHROPIC_API_KEY: KEY, TOKENYARD_LIVE_BUDGET_USD: '20' };
+  const traceDir = await seeded(1);
+  const tenantDir = join(traceDir, 'live');
+  if (process.platform === 'win32' || process.getuid?.() === 0) return;
+  chmodSync(tenantDir, 0o000);
+  closers.push(() => chmodSync(tenantDir, 0o700));
+  await expect(startLiveHarness({ env, today: TODAY, traceDir, port: 0, upstream: m.url })).rejects.toThrow(/trace/);
+  expect(existsSync(join(traceDir, LIVE_LOCK_FILE))).toBe(false);
 });
