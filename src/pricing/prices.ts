@@ -41,7 +41,17 @@ export type PriceTable = z.infer<typeof tableSchema>;
 
 /** Parses and validates a price table. A model without `maxContextTokens` or `maxOutputTokens` is an error (the worst-case bound needs them). */
 export function parsePriceTable(text: string): PriceTable {
-  const r = tableSchema.safeParse(parse(text));
+  const raw: unknown = parse(text);
+  // Tables are keyed by user text; a `__proto__` key would set a prototype instead of an entry, so refuse it outright.
+  if (typeof raw === 'object' && raw !== null) {
+    for (const section of ['models', 'modifiers', 'serverTools']) {
+      const map = (raw as Record<string, unknown>)[section];
+      if (typeof map === 'object' && map !== null && Object.hasOwn(map, '__proto__')) {
+        throw new Error(`invalid price table: ${section}: key __proto__ is not allowed`);
+      }
+    }
+  }
+  const r = tableSchema.safeParse(raw);
   if (!r.success) {
     const issues = r.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
     throw new Error(`invalid price table: ${issues.join('; ')}`);
@@ -51,8 +61,11 @@ export function parsePriceTable(text: string): PriceTable {
 
 /** Exact id, else the longest table id followed by `-` that prefixes the model, so dated ids resolve. */
 export function lookupModel(t: PriceTable, model: string): { id: string; price: ModelPrice } | null {
-  const exact = t.models[model];
-  if (exact) return { id: model, price: exact };
+  // Own properties only: `constructor` and friends must never resolve to a non-price object.
+  if (Object.hasOwn(t.models, model)) {
+    const exact = t.models[model];
+    if (exact) return { id: model, price: exact };
+  }
   let best: string | null = null;
   for (const id of Object.keys(t.models)) {
     if (model.startsWith(`${id}-`) && (best === null || id.length > best.length)) best = id;

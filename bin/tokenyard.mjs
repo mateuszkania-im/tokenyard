@@ -28144,8 +28144,10 @@ var init_zod = __esm({
 
 // src/pricing/prices.ts
 function lookupModel(t, model) {
-  const exact = t.models[model];
-  if (exact) return { id: model, price: exact };
+  if (Object.hasOwn(t.models, model)) {
+    const exact = t.models[model];
+    if (exact) return { id: model, price: exact };
+  }
   let best = null;
   for (const id of Object.keys(t.models)) {
     if (model.startsWith(`${id}-`) && (best === null || id.length > best.length)) best = id;
@@ -28206,17 +28208,19 @@ function costMicroUsd(t, modelId, u, o = {}) {
   }
   let tokenCost = u.input * p.input + u.cacheWrite5m * p.cacheWrite5m + u.cacheWrite1h * p.cacheWrite1h + u.cacheRead * p.cacheRead + u.output * p.output;
   for (const name of o.modifiers ?? []) {
-    const factor = t.modifiers[name];
+    const factor = Object.hasOwn(t.modifiers, name) ? t.modifiers[name] : void 0;
     if (factor === void 0) throw new Error(`unknown price modifier: ${name}`);
     tokenCost *= factor;
   }
   let toolCost = 0;
   for (const [name, uses] of Object.entries(o.serverToolUses ?? {})) {
-    const tool = t.serverTools[name];
+    const tool = Object.hasOwn(t.serverTools, name) ? t.serverTools[name] : void 0;
     if (!tool) throw new Error(`unpriced server tool: ${name}`);
     toolCost += uses * tool.perUseUsd * 1e6;
   }
-  return Math.round(tokenCost + toolCost);
+  const cost = Math.round(tokenCost + toolCost);
+  if (!Number.isSafeInteger(cost) || cost < 0) throw new Error(`invalid cost for ${modelId}: ${cost}`);
+  return cost;
 }
 var init_cost = __esm({
   "src/pricing/cost.ts"() {
@@ -55394,18 +55398,19 @@ function ticketOf(branch, pattern) {
   return m ? m[1] ?? m[0] : null;
 }
 function buildEnvExport(o) {
-  const lines = o.existing?.trim() ? [o.existing.trim()] : [];
+  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
   lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
   const ticket = ticketOf(o.branch, o.ticketPattern);
   if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
   return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
 `;
 }
-var DEFAULT_TICKET, oneLine, shellQuote;
+var DEFAULT_TICKET, OWN, oneLine, shellQuote;
 var init_env = __esm({
   "src/env.ts"() {
     "use strict";
     DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
+    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
     oneLine = (s) => s.replace(/[\r\n]+/g, " ").trim();
     shellQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
   }

@@ -51,3 +51,13 @@ serverTools:
   expect(costMicroUsd(st, 'claude-a', { ...zero, input: 1 })).toBe(1); // 0.5 rounds up
   expect(costMicroUsd(st, 'claude-a', { ...zero, input: 3 })).toBe(2); // 1.5 rounds up
 });
+
+test('costMicroUsd fails closed on ids that only exist on Object.prototype and on non-finite results', () => {
+  for (const id of ['__proto__', 'constructor', 'hasOwnProperty', 'constructor-20261102']) {
+    expect(() => costMicroUsd(t, id, zero), id).toThrow(/unpriced model/);
+  }
+  expect(() => costMicroUsd(t, 'claude-opus-5-5', zero, { modifiers: ['constructor'] })).toThrow(/modifier/);
+  expect(() => costMicroUsd(t, 'claude-opus-5-5', zero, { serverToolUses: { toString: 1 } })).toThrow(/server tool/);
+  expect(() => costMicroUsd(t, 'claude-opus-5-5', { ...zero, output: Number.NaN })).toThrow(/invalid cost/);
+  expect(() => costMicroUsd(t, 'claude-opus-5-5', { ...zero, output: -1 })).toThrow(/invalid cost/);
+});

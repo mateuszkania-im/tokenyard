@@ -57,3 +57,22 @@ serverTools:
 `);
   expect(t.serverTools.web_search?.perUseUsd).toBe(0.01);
 });
+
+test('lookupModel only resolves own table entries, never Object.prototype members', () => {
+  const t = loadPrices();
+  for (const id of ['__proto__', 'constructor', 'hasOwnProperty', 'toString', 'constructor-20261102', 'toString-20261102']) {
+    expect(lookupModel(t, id), id).toBeNull();
+  }
+});
+
+test('a price table with a __proto__ key is rejected and does not pollute Object.prototype', () => {
+  const entry = '{ input: 1, output: 1, cacheWrite5m: 1, cacheWrite1h: 1, cacheRead: 1, maxContextTokens: 10, maxOutputTokens: 10, source: s, retrieved: r }';
+  for (const text of [
+    `version: x\nmodels:\n  "__proto__": ${entry}\nmodifiers: {}\nserverTools: {}\n`,
+    `version: x\nmodels: {}\nmodifiers:\n  "__proto__": 2\nserverTools: {}\n`,
+    `version: x\nmodels: {}\nmodifiers: {}\nserverTools:\n  "__proto__": { perUseUsd: 1, maxIterations: 1, source: s, retrieved: r }\n`,
+  ]) {
+    expect(() => parsePriceTable(text)).toThrow(/__proto__/);
+  }
+  expect(({} as Record<string, unknown>).input).toBeUndefined();
+});

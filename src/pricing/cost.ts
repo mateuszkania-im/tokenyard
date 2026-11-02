@@ -29,15 +29,18 @@ export function costMicroUsd(t: PriceTable, modelId: string, u: Usage, o: CostOp
   }
   let tokenCost = u.input * p.input + u.cacheWrite5m * p.cacheWrite5m + u.cacheWrite1h * p.cacheWrite1h + u.cacheRead * p.cacheRead + u.output * p.output;
   for (const name of o.modifiers ?? []) {
-    const factor = t.modifiers[name];
+    const factor = Object.hasOwn(t.modifiers, name) ? t.modifiers[name] : undefined;
     if (factor === undefined) throw new Error(`unknown price modifier: ${name}`);
     tokenCost *= factor;
   }
   let toolCost = 0;
   for (const [name, uses] of Object.entries(o.serverToolUses ?? {})) {
-    const tool = t.serverTools[name];
+    const tool = Object.hasOwn(t.serverTools, name) ? t.serverTools[name] : undefined;
     if (!tool) throw new Error(`unpriced server tool: ${name}`);
     toolCost += uses * tool.perUseUsd * 1_000_000;
   }
-  return Math.round(tokenCost + toolCost);
+  const cost = Math.round(tokenCost + toolCost);
+  // Fail closed: a NaN or negative cost would slip past every budget comparison.
+  if (!Number.isSafeInteger(cost) || cost < 0) throw new Error(`invalid cost for ${modelId}: ${cost}`);
+  return cost;
 }

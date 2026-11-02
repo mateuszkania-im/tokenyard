@@ -7,12 +7,17 @@ function ticketOf(branch: string, pattern: string | null): string | null {
   return m ? (m[1] ?? m[0]) : null;
 }
 
+const OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
 const oneLine = (s: string): string => s.replace(/[\r\n]+/g, ' ').trim();
 const shellQuote = (s: string): string => `'${s.replaceAll("'", "'\\''")}'`;
 
 /** Headers already in `ANTHROPIC_CUSTOM_HEADERS` (`existing`) are kept; ours follow, one per line. */
 export function buildEnvExport(o: { repo: string; branch: string; ticketPattern: string | null; existing: string | null }): string {
-  const lines = o.existing?.trim() ? [o.existing.trim()] : [];
+  // Idempotent: earlier repo, branch and ticket lines are replaced, everything else is kept.
+  const lines = (o.existing ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !OWN.test(l));
   lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
   const ticket = ticketOf(o.branch, o.ticketPattern);
   if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
