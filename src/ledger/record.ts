@@ -39,6 +39,8 @@ export interface TraceRecord {
     aborted: boolean; settledBy: 'request' | 'sweeper'; overrun: boolean;
     /** Not in spec 9.1: set (true) when the actual cost could not be computed and the reservation estimate was settled instead; `costMicroUsd` is that estimate. */
     settledAtEstimate?: true;
+    /** Not in spec 9.1: what the counter store charged the budget levels at settlement (the estimate when the sweeper settled it); absent when nothing was reserved. Warm-up seeds this. */
+    chargedMicroUsd?: number;
     /** Not in spec 9.1: set (true) when the billed input exceeded `features.inputTokensBound` of a bytes bound (R11); the bytes bound is off from then on. */
     boundExceeded?: true;
     rateLimitHeaders?: Record<string, string>;   // anthropic-ratelimit-unified-* only

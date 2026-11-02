@@ -18,6 +18,8 @@ export interface ExtractedFeatures {
   expandsServerSide: boolean;
   /** `speed` is present and not `"standard"`: priced at the model's fast mode rates. */
   fastMode: boolean;
+  /** `inference_geo` when it is a string (for example "us"); it selects a price modifier (`inferenceGeoUs`). Absent otherwise. */
+  inferenceGeo?: string;
   parseError: boolean;
   /** Byte range of the last message in the original body, for the guardrail scanner. */
   lastTurn: { start: number; end: number } | null;

@@ -29628,6 +29628,7 @@ function extractAnthropicFeatures(body) {
     blockTypes,
     expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
     fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
+    ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
     parseError: false,
     lastTurn: messages.length > 0 ? lastMessageRange(body) : null
   };
@@ -56516,12 +56517,12 @@ var init_paths = __esm({
   "src/edge/paths.ts"() {
     "use strict";
     ROUTES = [
-      { methods: ["POST"], path: "/messages", surface: "anthropic-messages", canonical: "/v1/messages" },
-      { methods: ["POST"], path: "/messages/count_tokens", surface: "anthropic-count-tokens", canonical: "/v1/messages/count_tokens" },
-      { methods: ["GET"], path: "/models", surface: "models", canonical: "/v1/models" }
+      { methods: ["POST"], path: "/messages", surface: "anthropic-messages", canonical: "/v1/messages", inference: true },
+      { methods: ["POST"], path: "/messages/count_tokens", surface: "anthropic-count-tokens", canonical: "/v1/messages/count_tokens", inference: false },
+      { methods: ["GET"], path: "/models", surface: "models", canonical: "/v1/models", inference: false }
     ];
     ROUTE_TABLE = [
-      ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: r.canonical, inference: r.surface === "anthropic-messages" }))),
+      ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: r.canonical, inference: r.inference }))),
       { method: "HEAD", path: "/api/hello", inference: false },
       { method: "GET", path: "/api/hello", inference: false }
     ];
@@ -56627,6 +56628,7 @@ function buildTraceRecord(o, salt) {
       overrun: o.overrun ?? false,
       ...o.settledAtEstimate ? { settledAtEstimate: true } : {},
       ...o.boundExceeded ? { boundExceeded: true } : {},
+      ...o.chargedMicroUsd !== void 0 ? { chargedMicroUsd: o.chargedMicroUsd } : {},
       ...o.rateLimitHeaders && Object.keys(o.rateLimitHeaders).length > 0 ? { rateLimitHeaders: o.rateLimitHeaders } : {}
     }
   };
@@ -56641,10 +56643,18 @@ var init_trace_record = __esm({
 // src/edge/handler.ts
 var handler_exports = {};
 __export(handler_exports, {
+  DEFAULT_ADMIT_TIMEOUT_MS: () => DEFAULT_ADMIT_TIMEOUT_MS,
   createGatewayRuntime: () => createGatewayRuntime,
   createHandler: () => createHandler
 });
 import { pipeline } from "node:stream/promises";
+function withDeadline(p, ms) {
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new StoreTimeoutError(`counter store did not answer within ${ms} ms`)), ms);
+  });
+  return Promise.race([p, deadline]).finally(() => clearTimeout(timer));
+}
 function createGatewayRuntime() {
   const swept = /* @__PURE__ */ new Set();
   return {
@@ -56720,8 +56730,17 @@ function usageTap(surface, up, capBytes) {
     result: () => size <= capBytes ? parseAnthropicJsonUsage(Buffer.concat(chunks)) : null
   };
 }
-function actualCost(policy2, model, usage, r, fastRequested) {
-  return costMicroUsd(policy2.prices, model, usage, { fast: r.fast === true || fastRequested, ...r.serverToolUses ? { serverToolUses: r.serverToolUses } : {} });
+function requestModifiers(policy2, x) {
+  if (x.inferenceGeo === void 0 || x.inferenceGeo === "") return [];
+  const name2 = `inferenceGeo${x.inferenceGeo.charAt(0).toUpperCase()}${x.inferenceGeo.slice(1)}`;
+  return Object.hasOwn(policy2.prices.modifiers, name2) ? [name2] : [];
+}
+function actualCost(policy2, model, r, x) {
+  return costMicroUsd(policy2.prices, model, r.usage, {
+    fast: r.fast === true || x.fastMode,
+    modifiers: requestModifiers(policy2, x),
+    ...r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}
+  });
 }
 async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   const o = { ...outcome };
@@ -56731,14 +56750,15 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   let costFailed = false;
   if (r?.usage && model) {
     try {
-      cost = actualCost(policy2, model, r.usage, r, o.features.fastMode);
+      cost = actualCost(policy2, model, { ...r, usage: r.usage }, o.features);
     } catch {
       costFailed = true;
     }
-  } else if (r === null && o.provider !== null && o.status >= 200 && o.status < 300 && !held.streamed && !o.aborted) {
+  } else if (o.provider !== null && o.status >= 200 && o.status < 300 && !held.streamed) {
     costFailed = true;
   }
   if (held.admitted) {
+    held.settled = true;
     let actual = cost ?? 0;
     if (costFailed) {
       actual = held.est;
@@ -56748,12 +56768,13 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
     o.overrun = (held.plan?.reservations.length ?? 0) > 0 && actual > held.est;
     let result;
     try {
-      result = await deps.store.settle(o.id, actual);
+      result = await withDeadline(deps.store.settle(o.id, actual), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
       result = "failed";
     }
     const swept = runtime.takeSwept(o.id);
     o.settledBy = swept || result !== "settled" ? "sweeper" : "request";
+    o.chargedMicroUsd = o.settledBy === "sweeper" ? held.est : actual;
   } else {
     o.costMicroUsd = cost;
   }
@@ -56772,7 +56793,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   } catch {
   }
 }
-async function handle(deps, failure3, runtime, id, req, res) {
+async function handle(deps, failure3, runtime, held, id, req, res) {
   const startedAt = deps.clock();
   const policy2 = deps.policy();
   const ac = new AbortController();
@@ -56813,7 +56834,6 @@ async function handle(deps, failure3, runtime, id, req, res) {
     return;
   }
   const surface = match.surface;
-  const held = { plan: null, features: null, admitted: false, est: 0, streamed: false };
   const early = (over) => settleAndTrace(deps, runtime, policy2, held, {
     id,
     key,
@@ -56883,10 +56903,13 @@ async function handle(deps, failure3, runtime, id, req, res) {
   const taintWrite = plan.preBlock === "secret" && (plan.taint?.add.length ?? 0) > 0;
   let admission = null;
   if (deps.store !== null && (taintWrite || pre.block === null && holdsCounters(plan))) {
+    const store = deps.store;
+    const pending = store.admit(plan);
     try {
-      admission = await deps.store.admit(plan);
+      admission = await withDeadline(pending, deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
       admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
+      pending.then((late) => late.admitted ? store.settle(id, 0) : void 0).catch(() => void 0);
     }
   }
   held.admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
@@ -56983,6 +57006,7 @@ function holdsCounters(plan) {
 function createHandler(deps) {
   if (deps.traces && !deps.traceSalt) throw new Error("traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
   const runtime = deps.runtime ?? createGatewayRuntime();
+  const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   let state = null;
   const failureState = (policy2) => {
     const settings = JSON.stringify([policy2.failure.breaker, policy2.failure.retryBudgetRatio]);
@@ -56993,13 +57017,22 @@ function createHandler(deps) {
   };
   return (req, res) => {
     const id = deps.newId();
-    handle(deps, failureState(deps.policy()), runtime, id, req, res).catch(() => {
-      if (!res.headersSent) sendError(req, res, anthropicError(500, "api_error", "internal error", null, id));
-      else res.destroy();
+    const held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false };
+    handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
+      if (held.admitted && !held.settled && deps.store) {
+        held.settled = true;
+        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).catch(() => void 0);
+      }
+      try {
+        if (!res.headersSent) sendError(req, res, anthropicError(500, "api_error", "internal error", null, id));
+        else res.destroy();
+      } catch {
+        res.destroy();
+      }
     });
   };
 }
-var SWEPT_MAX, summary, totalInput, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, StoreTimeoutError, SWEPT_MAX, summary, totalInput, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -57024,6 +57057,9 @@ var init_handler = __esm({
     init_headers();
     init_paths();
     init_trace_record();
+    DEFAULT_ADMIT_TIMEOUT_MS = 1e3;
+    StoreTimeoutError = class extends Error {
+    };
     SWEPT_MAX = 1e5;
     summary = (d) => ({
       route: d.plan.route,
@@ -58226,7 +58262,7 @@ async function warmupEntries(records, policy2, nowMs) {
   const sums = /* @__PURE__ */ new Map();
   for await (const r of records) {
     if (r.kind !== "request") continue;
-    const cost = r.outcome.costMicroUsd;
+    const cost = r.outcome.chargedMicroUsd ?? r.outcome.costMicroUsd;
     if (cost === null || !(cost > 0)) continue;
     const ts = Date.parse(r.ts);
     if (Number.isNaN(ts)) continue;
@@ -102001,14 +102037,45 @@ __export(open_store_exports, {
   warmUpFromTraces: () => warmUpFromTraces
 });
 import { existsSync } from "node:fs";
+function redactUrl(url2) {
+  try {
+    const u = new URL(url2);
+    if (u.password) u.password = "***";
+    return u.toString();
+  } catch {
+    return "the given --redis-url";
+  }
+}
 async function openCounterStore(o) {
   if (o.kind === "memory") return { store: createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: o.onSwept }), close: async () => void 0 };
   if (!o.redisUrl) throw new Error("--store redis needs --redis-url");
   const { createClient } = await Promise.resolve().then(() => __toESM(require_dist3(), 1));
   const { createRedisStore: createRedisStore2, redisSweepLock: redisSweepLock2 } = await Promise.resolve().then(() => (init_redis_store(), redis_store_exports));
-  const client = createClient({ url: o.redisUrl });
+  let connected = false;
+  const client = createClient({
+    url: o.redisUrl,
+    disableOfflineQueue: true,
+    socket: {
+      connectTimeout: CONNECT_TIMEOUT_MS,
+      reconnectStrategy: (retries, cause) => connected ? Math.min(100 * 2 ** retries, 2e3) : cause
+    }
+  });
   client.on("error", () => void 0);
-  await client.connect();
+  let timer;
+  try {
+    await Promise.race([
+      client.connect(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`no answer from ${redactUrl(o.redisUrl)} within ${CONNECT_TIMEOUT_MS} ms`)), CONNECT_TIMEOUT_MS);
+      })
+    ]);
+  } catch (e) {
+    client.destroy();
+    throw new Error(`cannot connect to Redis at ${redactUrl(o.redisUrl)}: ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+  connected = true;
   return {
     store: createRedisStore2(client, { deadlineMs: RESERVATION_DEADLINE_MS, onSwept: o.onSwept }),
     lock: redisSweepLock2(client, { tenant: SWEEP_LOCK_TENANT, instance: o.instance }),
@@ -102025,7 +102092,7 @@ async function warmUpFromTraces(store, traceDir, policy2, nowMs) {
   await store.seed(entries);
   return entries.length;
 }
-var RESERVATION_DEADLINE_MS, SWEEP_INTERVAL_MS, WARMUP_LOOKBACK_MS;
+var RESERVATION_DEADLINE_MS, SWEEP_INTERVAL_MS, CONNECT_TIMEOUT_MS, WARMUP_LOOKBACK_MS;
 var init_open_store = __esm({
   "src/limits/open-store.ts"() {
     "use strict";
@@ -102035,6 +102102,7 @@ var init_open_store = __esm({
     init_warmup();
     RESERVATION_DEADLINE_MS = 20 * 6e4;
     SWEEP_INTERVAL_MS = 3e4;
+    CONNECT_TIMEOUT_MS = 5e3;
     WARMUP_LOOKBACK_MS = 32 * 864e5;
   }
 });

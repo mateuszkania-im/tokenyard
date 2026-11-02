@@ -75,3 +75,10 @@ test('seeded entries make the next admit see the recorded spend', async () => {
   const a = await store.admit({ id: 'x', policyRevision: 'r1', route: 'all', chain: [], reservations: [{ budget: 'org-month', key, limitMicroUsd: 6_000_000_000, estMicroUsd: 1, enforce: true, resetsAt: '2026-12-01T00:00:00.000Z' }], rateChecks: [], streamSlots: [], taint: null, preBlock: null, warnings: [] });
   expect(a.failed).toEqual({ kind: 'budget', name: 'org-month', spentMicroUsd: 6_000_000_000 });
 });
+
+test('warm-up seeds what the store charged (chargedMicroUsd), not the computed cost, when the trace has both', async () => {
+  const swept = rec('2026-11-04T10:00:00.000Z', 100);
+  const charged = { ...swept, outcome: { ...swept.outcome, chargedMicroUsd: 500, settledBy: 'sweeper' as const } };
+  const entries = await warmupEntries(lines([charged, rec('2026-11-04T11:00:00.000Z', 40)]), POLICY, NOW);
+  expect(entries.find((e) => e.key === budgetKey('acme', 'org-month', 'acme', '2026-11-01'))?.spentMicroUsd).toBe(540);
+});

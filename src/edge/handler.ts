@@ -54,6 +54,21 @@ export interface GatewayDeps {
   onSettled?: (outcome: RequestOutcome) => void;
   /** Process state that outlives requests (R11 latch, sweeper notices); one is created when absent. */
   runtime?: GatewayRuntime;
+  /** How long admit and settle may take before the store counts as down (default 1 s): a slow store must not hang requests. */
+  admitTimeoutMs?: number;
+}
+
+export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
+
+class StoreTimeoutError extends Error {}
+
+/** Rejects with StoreTimeoutError when `p` takes longer than `ms`; `p` keeps running. */
+function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StoreTimeoutError(`counter store did not answer within ${ms} ms`)), ms);
+  });
+  return Promise.race([p, deadline]).finally(() => clearTimeout(timer));
 }
 
 /** Per-process runtime state: never in `policy/`, which is pure, and gone on restart by design. */
@@ -152,6 +167,8 @@ export interface RequestOutcome {
   settledAtEstimate?: boolean;
   /** R11: the billed input exceeded the bytes bound. */
   boundExceeded?: boolean;
+  /** What the store charged the budget levels at settlement (the estimate when the sweeper settled); absent without a reservation. */
+  chargedMicroUsd?: number;
 }
 
 type ErrorReply = ReturnType<typeof anthropicError>;
@@ -239,13 +256,29 @@ interface Held {
   est: number;
   /** The response was an SSE stream: no `message_start` means nothing was billed. */
   streamed: boolean;
+  /** Settlement has started; the fault path in `createHandler` settles an admitted request that never got here. */
+  settled: boolean;
 }
 
 const totalInput = (u: NonNullable<UsageResult['usage']>): number => u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
 
-/** Actual cost from the usage (spec 7.6), fast mode from the response or the request; throws when it cannot be priced. */
-function actualCost(policy: CompiledPolicy, model: string, usage: NonNullable<UsageResult['usage']>, r: UsageResult, fastRequested: boolean): number {
-  return costMicroUsd(policy.prices, model, usage, { fast: r.fast === true || fastRequested, ...(r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}) });
+/** Price table modifiers the request selects: `inference_geo: "us"` is `inferenceGeoUs`; a geo without an entry has none. */
+function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures): string[] {
+  if (x.inferenceGeo === undefined || x.inferenceGeo === '') return [];
+  const name = `inferenceGeo${x.inferenceGeo.charAt(0).toUpperCase()}${x.inferenceGeo.slice(1)}`;
+  return Object.hasOwn(policy.prices.modifiers, name) ? [name] : [];
+}
+
+/**
+ * Actual cost from the usage (spec 7.6): fast mode from the response or the request, the request's modifiers, server
+ * tool uses. Throws when it cannot be priced.
+ */
+function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { usage: NonNullable<UsageResult['usage']> }, x: ExtractedFeatures): number {
+  return costMicroUsd(policy.prices, model, r.usage, {
+    fast: r.fast === true || x.fastMode,
+    modifiers: requestModifiers(policy, x),
+    ...(r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}),
+  });
 }
 
 /**
@@ -260,14 +293,17 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   let costFailed = false;
   if (r?.usage && model) {
     try {
-      cost = actualCost(policy, model, r.usage, r, o.features.fastMode);
+      cost = actualCost(policy, model, { ...r, usage: r.usage }, o.features);
     } catch {
       costFailed = true; // unpriced model or fast mode, an invalid cost: fail closed below
     }
-  } else if (r === null && o.provider !== null && o.status >= 200 && o.status < 300 && !held.streamed && !o.aborted) {
-    costFailed = true; // a successful JSON answer whose usage could not be read (larger than the cap)
+  } else if (o.provider !== null && o.status >= 200 && o.status < 300 && !held.streamed) {
+    // A successful JSON answer was billed even when its usage cannot be read: cut off by the upstream or by a client
+    // abort, unparsable, larger than the cap, or without a usage object. Fail closed: the estimate stands.
+    costFailed = true;
   }
   if (held.admitted) {
+    held.settled = true;
     let actual = cost ?? 0;
     if (costFailed) {
       actual = held.est;
@@ -277,7 +313,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     o.overrun = (held.plan?.reservations.length ?? 0) > 0 && actual > held.est;
     let result: 'settled' | 'unknown' | 'failed';
     try {
-      result = await (deps.store as CounterStore).settle(o.id, actual);
+      result = await withDeadline((deps.store as CounterStore).settle(o.id, actual), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
       result = 'failed'; // the record stays; the sweeper settles it at the estimate
     }
@@ -285,6 +321,8 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     // the sweeper ('failed'): in each case the sweeper settles it at its estimate.
     const swept = runtime.takeSwept(o.id);
     o.settledBy = swept || result !== 'settled' ? 'sweeper' : 'request';
+    // What the budget counters were charged: the sweeper always settles at the estimate. Warm-up seeds this.
+    o.chargedMicroUsd = o.settledBy === 'sweeper' ? held.est : actual;
   } else {
     o.costMicroUsd = cost;
   }
@@ -312,7 +350,7 @@ const NO_FEATURES: ExtractedFeatures = {
   prefixHash: null, blockTypes: [], expandsServerSide: false, fastMode: false, parseError: false, lastTurn: null,
 };
 
-async function handle(deps: GatewayDeps, failure: FailureState, runtime: GatewayRuntime, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handle(deps: GatewayDeps, failure: FailureState, runtime: GatewayRuntime, held: Held, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const startedAt = deps.clock();
   const policy = deps.policy();
   // A cancelled client turn must stop upstream generation: abort as soon as the client goes away.
@@ -363,8 +401,8 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   }
   const surface = match.surface;
 
-  // What this request holds in the counter store; every exit below settles it before the trace is queued.
-  const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false };
+  // `held` is what this request holds in the counter store; every exit below settles it before the trace is queued,
+  // and createHandler settles it if handle() throws instead.
 
   // An authenticated request that ends before a response came from upstream still gets its trace line (spec 9.1).
   const early = (over: Partial<RequestOutcome> & Pick<RequestOutcome, 'status'>): Promise<void> =>
@@ -452,10 +490,14 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const taintWrite = plan.preBlock === 'secret' && (plan.taint?.add.length ?? 0) > 0;
   let admission: Admission | null = null;
   if (deps.store !== null && (taintWrite || (pre.block === null && holdsCounters(plan)))) {
+    const store = deps.store;
+    const pending = store.admit(plan);
     try {
-      admission = await deps.store.admit(plan);
+      admission = await withDeadline(pending, deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
       admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
+      // An admit that lands after the deadline reserved for a request handled as store-down: release it at once.
+      pending.then((late) => (late.admitted ? store.settle(id, 0) : undefined)).catch(() => undefined);
     }
   }
   held.admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
@@ -569,6 +611,7 @@ function holdsCounters(plan: Plan): boolean {
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
   if (deps.traces && !deps.traceSalt) throw new Error('traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
   const runtime = deps.runtime ?? createGatewayRuntime();
+  const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   // Breaker and retry budget outlive requests; they are rebuilt only when a reload changes the `failure` settings.
   let state: { settings: string; failure: FailureState } | null = null;
   const failureState = (policy: CompiledPolicy): FailureState => {
@@ -580,9 +623,20 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
   };
   return (req, res) => {
     const id = deps.newId();
-    handle(deps, failureState(deps.policy()), runtime, id, req, res).catch(() => {
-      if (!res.headersSent) sendError(req, res, anthropicError(500, 'api_error', 'internal error', null, id));
-      else res.destroy();
+    const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false };
+    handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
+      // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
+      // (whether upstream billed is unknown, so fail closed).
+      if (held.admitted && !held.settled && deps.store) {
+        held.settled = true;
+        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).catch(() => undefined);
+      }
+      try {
+        if (!res.headersSent) sendError(req, res, anthropicError(500, 'api_error', 'internal error', null, id));
+        else res.destroy();
+      } catch {
+        res.destroy();
+      }
     });
   };
 }

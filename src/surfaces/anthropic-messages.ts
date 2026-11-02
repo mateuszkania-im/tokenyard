@@ -127,6 +127,7 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     blockTypes,
     expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
     fastMode: parsed.speed !== undefined && parsed.speed !== null && parsed.speed !== 'standard',
+    ...(typeof parsed.inference_geo === 'string' ? { inferenceGeo: parsed.inference_geo } : {}),
     parseError: false,
     lastTurn: messages.length > 0 ? lastMessageRange(body) : null,
   };

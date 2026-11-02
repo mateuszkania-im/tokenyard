@@ -3,19 +3,19 @@ import type { Surface } from '../policy/types.js';
 export type RouteMatch = { surface: Surface | 'models' | 'hello'; pathAndQuery: string };
 
 /** Canonical upstream paths, keyed by the path after the base path and an optional `/v1` mount prefix. */
-const ROUTES: ReadonlyArray<{ methods: readonly string[]; path: string; surface: RouteMatch['surface']; canonical: string }> = [
-  { methods: ['POST'], path: '/messages', surface: 'anthropic-messages', canonical: '/v1/messages' },
-  { methods: ['POST'], path: '/messages/count_tokens', surface: 'anthropic-count-tokens', canonical: '/v1/messages/count_tokens' },
-  { methods: ['GET'], path: '/models', surface: 'models', canonical: '/v1/models' },
+/**
+ * `inference` is stated per route, never derived: it marks the paths that run a model and so go through admission
+ * (spec 7.4 coverage). count_tokens is forwarded without a reservation (spec 5.3); models is answered by tokenyard.
+ */
+const ROUTES: ReadonlyArray<{ methods: readonly string[]; path: string; surface: RouteMatch['surface']; canonical: string; inference: boolean }> = [
+  { methods: ['POST'], path: '/messages', surface: 'anthropic-messages', canonical: '/v1/messages', inference: true },
+  { methods: ['POST'], path: '/messages/count_tokens', surface: 'anthropic-count-tokens', canonical: '/v1/messages/count_tokens', inference: false },
+  { methods: ['GET'], path: '/models', surface: 'models', canonical: '/v1/models', inference: false },
 ];
 
-/**
- * Every method and canonical path the gateway answers. `inference` marks the paths that run a model and so go through
- * admission (spec 7.4 coverage: a test sends a request down each one). count_tokens is forwarded without a reservation
- * (spec 5.3), models and hello are answered by tokenyard itself.
- */
+/** Every method and canonical path the gateway answers, with its `inference` flag (a test sends a request down each one). */
 export const ROUTE_TABLE: ReadonlyArray<{ method: string; path: string; inference: boolean }> = [
-  ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: r.canonical, inference: r.surface === 'anthropic-messages' }))),
+  ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: r.canonical, inference: r.inference }))),
   { method: 'HEAD', path: '/api/hello', inference: false },
   { method: 'GET', path: '/api/hello', inference: false },
 ];

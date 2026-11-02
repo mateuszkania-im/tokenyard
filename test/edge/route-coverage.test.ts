@@ -1,6 +1,7 @@
 // Spec 7.4 coverage: every inference route goes through the same admit hook. LiteLLM's budget bypasses were coverage
 // gaps (pass-through routes, another client path), not maths, so this enumerates the route table and sends a real
 // request down each path.
+import { readFileSync } from 'node:fs';
 import { afterEach, expect, test } from 'vitest';
 import { ROUTE_TABLE } from '../../src/edge/paths.js';
 import { createMemoryStore } from '../../src/limits/memory-store.js';
@@ -10,6 +11,7 @@ import { startGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV, testPolicy } from '../helpers/policy.js';
 import { spyStore } from '../helpers/store-spy.js';
 
+const ROUTES_SOURCE = readFileSync(new URL('../../src/edge/paths.ts', import.meta.url), 'utf8');
 const closers: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const c of closers.splice(0)) await c();
@@ -23,6 +25,9 @@ test('the route table lists messages as inference and count_tokens, models and h
   expect(by('GET', '/v1/models')).toBe(false);
   expect(by('HEAD', '/api/hello')).toBe(false);
   expect(ROUTE_TABLE.filter((r) => r.inference).length).toBeGreaterThan(0);
+  // Stated per route, never derived: a route added later must say whether it runs a model.
+  expect(ROUTES_SOURCE).toMatch(/inference: true/);
+  expect(ROUTES_SOURCE).not.toMatch(/inference: r\.surface/);
 });
 
 test('every inference route in ROUTE_TABLE calls admit; no other route does', async () => {

@@ -18,6 +18,7 @@ export async function startGateway(o: {
   traces?: GatewayDeps['traces'];
   traceSalt?: string;
   runtime?: GatewayDeps['runtime'];
+  admitTimeoutMs?: number;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
@@ -32,6 +33,7 @@ export async function startGateway(o: {
     experimentalSubscription: o.experimentalSubscription ?? false,
     onSettled: o.onSettled,
     runtime: o.runtime,
+    ...(o.admitTimeoutMs !== undefined ? { admitTimeoutMs: o.admitTimeoutMs } : {}),
   });
   const url = await gw.listen(0, '127.0.0.1');
   return { url, close: () => gw.close() };

@@ -12,7 +12,8 @@ export async function warmupEntries(records: AsyncIterable<LedgerLine>, policy: 
   const sums = new Map<string, { spent: number; expiresAt: number }>();
   for await (const r of records) {
     if (r.kind !== 'request') continue;
-    const cost = r.outcome.costMicroUsd;
+    // What the store charged (the estimate when the sweeper settled); older traces and requests without a reservation have only the cost.
+    const cost = r.outcome.chargedMicroUsd ?? r.outcome.costMicroUsd;
     if (cost === null || !(cost > 0)) continue;
     const ts = Date.parse(r.ts);
     if (Number.isNaN(ts)) continue;

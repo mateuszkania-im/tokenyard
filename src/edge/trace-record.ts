@@ -110,6 +110,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       overrun: o.overrun ?? false,
       ...(o.settledAtEstimate ? { settledAtEstimate: true as const } : {}),
       ...(o.boundExceeded ? { boundExceeded: true as const } : {}),
+      ...(o.chargedMicroUsd !== undefined ? { chargedMicroUsd: o.chargedMicroUsd } : {}),
       ...(o.rateLimitHeaders && Object.keys(o.rateLimitHeaders).length > 0 ? { rateLimitHeaders: o.rateLimitHeaders } : {}),
     },
   };

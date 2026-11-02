@@ -72,3 +72,13 @@ test('serve refuses an unknown --store and --store redis without a URL', async (
   await expect(run('node', [...base, '--store', 'disk'], { env })).rejects.toMatchObject({ stderr: expect.stringContaining('--store must be memory or redis') });
   await expect(run('node', [...base, '--store', 'redis'], { env })).rejects.toMatchObject({ stderr: expect.stringContaining('--redis-url') });
 });
+
+test('serve --store redis with an unreachable Redis exits 1 with a clear message', async () => {
+  const dir = tempDir();
+  writePolicyDir(dir, 'http://127.0.0.1:1', 'one');
+  const t0 = Date.now();
+  await expect(
+    run('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--store', 'redis', '--redis-url', 'redis://127.0.0.1:1'], { timeout: 15_000 }),
+  ).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('counter store') });
+  expect(Date.now() - t0).toBeLessThan(10_000);
+}, 20_000);
