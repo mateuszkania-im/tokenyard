@@ -10,6 +10,7 @@ import { DEFAULT_RULES } from '../guardrails/rules.js';
 import { findSpans, scanBody } from '../guardrails/scan.js';
 import { buildFeatures, decide } from '../policy/decide.js';
 import { modelsForKey } from '../policy/match.js';
+import { isAdmitted, planAdmission } from '../policy/admission.js';
 import { resolve } from '../policy/resolve.js';
 import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
 import { costMicroUsd } from '../pricing/cost.js';
@@ -89,6 +90,8 @@ export interface GatewayRuntime {
   bytesBoundOff: boolean;
   /** Requests whose billed input exceeded their bytes bound (a counter for /metrics). */
   boundViolations: number;
+  /** Admit calls made by this process, in call order; each request's number is traced so replay can order admits that share a millisecond. */
+  admits: number;
   /** Ids the sweeper settled at their estimate (pass as the store's `onSwept`); never throws. */
   onSwept(ids: string[]): void;
   /** Whether the sweeper settled this request; forgets the id. */
@@ -103,6 +106,7 @@ export function createGatewayRuntime(): GatewayRuntime {
   return {
     bytesBoundOff: false,
     boundViolations: 0,
+    admits: 0,
     onSwept(ids) {
       try {
         for (const id of ids) swept.add(id);
@@ -185,6 +189,8 @@ export interface RequestOutcome {
   chargedMicroUsd?: number;
   /** Price table modifiers the request selected, as the cost was priced (replay reprices with them). */
   costModifiers?: string[];
+  /** When admit was called, in ms after the request started, and the process's admit call number: replay admits in this order. */
+  admitAt?: { offsetMs: number; seq: number };
 }
 
 type ErrorReply = ReturnType<typeof anthropicError>;
@@ -549,11 +555,12 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // 7. Admit: one store call for rate checks, stream slots, taint and every reservation (spec 7). Blocks that need no
   // counters (preBlocks, a reservation larger than its limit on its own) are answered without one; a last-turn secret
   // still calls it to write the session taint. count_tokens plans hold nothing, so they never reach the store.
-  const pre = resolve(policy, plan, null);
-  const taintWrite = plan.preBlock === 'secret' && (plan.taint?.add.length ?? 0) > 0;
+  const { pre, callsAdmit } = planAdmission(policy, plan);
   let admission: Admission | null = null;
-  if (deps.store !== null && (taintWrite || (pre.block === null && holdsCounters(plan)))) {
+  let admitAt: RequestOutcome['admitAt'];
+  if (deps.store !== null && callsAdmit) {
     const store = deps.store;
+    admitAt = { offsetMs: Math.max(0, deps.clock() - startedAt), seq: ++runtime.admits };
     const pending = store.admit(plan);
     try {
       admission = await withDeadline(pending, deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
@@ -563,12 +570,13 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       pending.then((late) => (late.admitted ? store.settle(id, 0) : undefined)).catch(() => undefined);
     }
   }
-  held.admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+  held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? (plan.reservations[0]?.estMicroUsd ?? 0) : 0;
   const admitted = {
     reservedMicroUsd: held.est,
     ...(admission ? { audit: admission.audit } : {}),
     ...(admission?.storeDown ? { storeDown: true, taintUnchecked: plan.taint !== null } : {}),
+    ...(admitAt ? { admitAt } : {}),
   };
   if (held.admitted) {
     held.known = {
@@ -679,12 +687,6 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     priceTable: policy.priceTableVersion,
     rateLimitHeaders: rateLimitHeaders(up.headers),
   });
-}
-
-/** Whether admit has anything to check or write for this plan. */
-function holdsCounters(plan: Plan): boolean {
-  const t = plan.taint;
-  return plan.reservations.length + plan.rateChecks.length + plan.streamSlots.length > 0 || (t !== null && t.check.length + t.add.length > 0);
 }
 
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {

@@ -3,6 +3,7 @@
 import type { LedgerLine, ManifestRecord, TraceRecord } from '../ledger/record.js';
 import { warmupEntries } from '../limits/warmup.js';
 import { budgetEnforced, decide, levelValue } from '../policy/decide.js';
+import { isAdmitted, planAdmission } from '../policy/admission.js';
 import { oversizedReservation, resolve } from '../policy/resolve.js';
 import { REQUEST_CLASSES } from '../policy/schema.js';
 import type { Admission, BlockReason, CompiledPolicy, Plan, RequestFeatures, Surface } from '../policy/types.js';
@@ -117,11 +118,6 @@ export function featuresOf(r: TraceRecord): RequestFeatures {
   };
 }
 
-/** Whether the gateway calls admit for this plan (as `holdsCounters` in src/edge/handler.ts). */
-function holdsCounters(plan: Plan): boolean {
-  const t = plan.taint;
-  return plan.reservations.length + plan.rateChecks.length + plan.streamSlots.length > 0 || (t !== null && t.check.length + t.add.length > 0);
-}
 
 const uniqSorted = (xs: string[]): string[] => [...new Set(xs)].sort(cmp);
 
@@ -153,6 +149,19 @@ function blockName(plan: Plan, f: RequestFeatures, reason: BlockReason, admissio
 
 async function* iterate(xs: readonly TraceRecord[]): AsyncIterable<LedgerLine> {
   yield* xs;
+}
+
+/**
+ * The order the store saw the records in: each at the time its admit was called (ts plus the recorded offset; the
+ * body is read and scanned first, so a large body admits after a small one that started later), then by instance and
+ * the instance's admit call number for admits in the same millisecond, then by ts and id. Records without an admit
+ * take their ts.
+ */
+export function admitOrder(window: readonly TraceRecord[]): Array<{ i: number; at: number }> {
+  return window
+    .map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r }))
+    .sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i)
+    .map(({ i, at }) => ({ i, at }));
 }
 
 interface Pending {
@@ -201,7 +210,7 @@ async function simulate(
     return true;
   };
 
-  const one = async (r: TraceRecord, ms: number): Promise<Outcome> => {
+  const one = async (r: TraceRecord, admitMs: number): Promise<Outcome> => {
     const f = featuresOf(r);
     let plan: Plan;
     try {
@@ -215,15 +224,14 @@ async function simulate(
     if (bodyExit) return { ...NOTHING, kind: 'exit', decision: compared('block', r.decision.reason) };
 
     // Spec 5.3 steps 7 and 8, as src/edge/handler.ts runs them. A store that was down when recorded is down here too.
-    const pre = resolve(policy, plan, null);
-    const taintWrite = plan.preBlock === 'secret' && (plan.taint?.add.length ?? 0) > 0;
+    const { pre, callsAdmit } = planAdmission(policy, plan);
     let admission: Admission | null = null;
-    if (taintWrite || (pre.block === null && holdsCounters(plan))) admission = r.decision.storeDown ? STORE_DOWN : await store.admit(plan, ms);
-    const admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+    if (callsAdmit) admission = r.decision.storeDown ? STORE_DOWN : await store.admit(plan, admitMs);
+    const admitted = isAdmitted(plan, admission);
     const decision = admission === null ? pre : resolve(policy, plan, admission);
     const first = plan.chain[0];
     const provider = first === undefined ? undefined : policy.providers.get(first.provider);
-    const end = ms + Math.max(0, r.outcome.totalMs);
+    const end = Math.max(admitMs, Date.parse(r.ts) + Math.max(0, r.outcome.totalMs));
     const est = plan.reservations[0]?.estMicroUsd ?? 0;
     if (decision.block !== null || first === undefined || provider === undefined) {
       const reason: BlockReason = decision.block?.reason ?? 'no-route';
@@ -244,8 +252,8 @@ async function simulate(
   const outcomes: Outcome[] = [];
   const cuts: CutSession[] = [];
   const sessions = new Map<string, { index: number; forwarded: boolean; cut: CutSession | null }>();
-  for (const r of window) {
-    const ms = Date.parse(r.ts);
+  for (const { i, at: ms } of admitOrder(window)) {
+    const r = window[i] as TraceRecord;
     await drain(ms);
     now = ms;
     const session = r.attribution.session;
@@ -258,15 +266,15 @@ async function simulate(
     if (s?.cut) {
       s.cut.droppedRequests++;
       s.cut.droppedCostMicroUsd += r.outcome.costMicroUsd ?? 0;
-      outcomes.push({ ...NOTHING, kind: 'dropped', decision: null });
+      outcomes[i] = { ...NOTHING, kind: 'dropped', decision: null };
       continue;
     }
     if (r.decision.preDecision) {
-      outcomes.push({ ...NOTHING, kind: 'exit', decision: null });
+      outcomes[i] = { ...NOTHING, kind: 'exit', decision: null };
       continue;
     }
     const o = await one(r, ms);
-    outcomes.push(o);
+    outcomes[i] = o;
     if (s === null) continue;
     if (o.kind === 'forward') s.forwarded = true;
     // A block the recording also had is not a cut: the recorded session went on after it.

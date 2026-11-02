@@ -286,3 +286,22 @@ test('the exactness table is the spec 9.3 table verbatim', () => {
   expect(spec).toContain(EXACTNESS_TABLE);
   expect(EXACTNESS_TABLE.split('\n')).toHaveLength(10);
 });
+
+test('a guardrail settings change between base and head marks the new-rule row as applied', async () => {
+  const xs = [rec({ id: 'r0', min: 0 })];
+  const warn = policy({ revision: 'rev2' });
+  const head = compilePolicy(
+    source(`${HEAD}routes:
+  - { name: all, chain: [a] }
+guardrails:
+  secrets: { codingAgent: warn }
+failure:
+  counterStoreDown: { rateLimits: open, budgets: closed }
+`),
+    'rev2',
+    { experimentalSubscription: false },
+  );
+  const row = (r: ReplayResult) => r.exactness.find((e) => e.output === 'A new guardrail rule')?.applied;
+  expect(row(await run(policy(), head, xs))).toBe(true);
+  expect(row(await run(policy(), warn, xs))).toBe(false);
+});

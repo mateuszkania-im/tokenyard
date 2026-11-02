@@ -29865,6 +29865,26 @@ var init_resolve = __esm({
   }
 });
 
+// src/policy/admission.ts
+function holdsCounters(plan) {
+  const t = plan.taint;
+  return plan.reservations.length + plan.rateChecks.length + plan.streamSlots.length > 0 || t !== null && t.check.length + t.add.length > 0;
+}
+function planAdmission(policy2, plan) {
+  const pre = resolve(policy2, plan, null);
+  const taintWrite = plan.preBlock === "secret" && (plan.taint?.add.length ?? 0) > 0;
+  return { pre, taintWrite, callsAdmit: taintWrite || pre.block === null && holdsCounters(plan) };
+}
+function isAdmitted(plan, admission) {
+  return admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+}
+var init_admission = __esm({
+  "src/policy/admission.ts"() {
+    "use strict";
+    init_resolve();
+  }
+});
+
 // src/pricing/cost.ts
 function costMicroUsd(t, modelId2, u, o = {}) {
   const found = lookupModel(t, modelId2);
@@ -57229,7 +57249,8 @@ function buildTraceRecord(o, salt) {
       audit: o.audit ? o.audit.map((a2) => ({ ...a2 })) : [],
       ...o.storeDown ? { storeDown: true } : {},
       // Every exit after decide carries the bound it used; without one there was no plan to replay.
-      ...o.inputBound === void 0 ? { preDecision: true } : {}
+      ...o.inputBound === void 0 ? { preDecision: true } : {},
+      ...o.admitAt ? { admitOffsetMs: o.admitAt.offsetMs, admitSeq: o.admitAt.seq } : {}
     },
     ...o.candidate && !("error" in o.candidate) ? {
       candidateDecision: {
@@ -57301,6 +57322,7 @@ function createGatewayRuntime() {
   return {
     bytesBoundOff: false,
     boundViolations: 0,
+    admits: 0,
     onSwept(ids) {
       try {
         for (const id of ids) swept.add(id);
@@ -57565,11 +57587,12 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     }
     upstreamBody = rewritten;
   }
-  const pre = resolve(policy2, plan, null);
-  const taintWrite = plan.preBlock === "secret" && (plan.taint?.add.length ?? 0) > 0;
+  const { pre, callsAdmit } = planAdmission(policy2, plan);
   let admission = null;
-  if (deps.store !== null && (taintWrite || pre.block === null && holdsCounters(plan))) {
+  let admitAt;
+  if (deps.store !== null && callsAdmit) {
     const store = deps.store;
+    admitAt = { offsetMs: Math.max(0, deps.clock() - startedAt), seq: ++runtime.admits };
     const pending = store.admit(plan);
     try {
       admission = await withDeadline(pending, deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
@@ -57578,12 +57601,13 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
       pending.then((late) => late.admitted ? store.settle(id, 0) : void 0).catch(() => void 0);
     }
   }
-  held.admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+  held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? plan.reservations[0]?.estMicroUsd ?? 0 : 0;
   const admitted = {
     reservedMicroUsd: held.est,
     ...admission ? { audit: admission.audit } : {},
-    ...admission?.storeDown ? { storeDown: true, taintUnchecked: plan.taint !== null } : {}
+    ...admission?.storeDown ? { storeDown: true, taintUnchecked: plan.taint !== null } : {},
+    ...admitAt ? { admitAt } : {}
   };
   if (held.admitted) {
     held.known = {
@@ -57681,10 +57705,6 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     rateLimitHeaders: rateLimitHeaders(up.headers)
   });
 }
-function holdsCounters(plan) {
-  const t = plan.taint;
-  return plan.reservations.length + plan.rateChecks.length + plan.streamSlots.length > 0 || t !== null && t.check.length + t.add.length > 0;
-}
 function createHandler(deps) {
   if (deps.traces && !deps.traceSalt) throw new Error("traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
   if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes3(16).toString("hex") };
@@ -57755,6 +57775,7 @@ var init_handler = __esm({
     init_scan();
     init_decide();
     init_match();
+    init_admission();
     init_resolve();
     init_cost();
     init_anthropic_usage();
@@ -103391,6 +103412,7 @@ var init_sim_store = __esm({
 var engine_exports = {};
 __export(engine_exports, {
   RawTraceDirError: () => RawTraceDirError,
+  admitOrder: () => admitOrder,
   featuresOf: () => featuresOf,
   replay: () => replay
 });
@@ -103429,10 +103451,6 @@ function featuresOf(r) {
     guardrail: { hits: r.guardrail.hits.map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) }
   };
 }
-function holdsCounters2(plan) {
-  const t = plan.taint;
-  return plan.reservations.length + plan.rateChecks.length + plan.streamSlots.length > 0 || t !== null && t.check.length + t.add.length > 0;
-}
 function blockName(plan, f, reason, admission) {
   const failed = admission?.failed ?? null;
   switch (reason) {
@@ -103460,6 +103478,9 @@ function blockName(plan, f, reason, admission) {
 async function* iterate(xs) {
   yield* xs;
 }
+function admitOrder(window) {
+  return window.map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r })).sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i).map(({ i, at }) => ({ i, at }));
+}
 async function simulate(policy2, which, window, warm, startMs, ratios) {
   let now = startMs;
   const store = createSimStore(() => now);
@@ -103486,7 +103507,7 @@ async function simulate(policy2, which, window, warm, startMs, ratios) {
     switched.add(k);
     return true;
   };
-  const one = async (r, ms) => {
+  const one = async (r, admitMs) => {
     const f = featuresOf(r);
     let plan;
     try {
@@ -103497,15 +103518,14 @@ async function simulate(policy2, which, window, warm, startMs, ratios) {
     const compared = (action, reason) => ({ action, reason, route: plan.route, chain: plan.chain.map((c) => c.provider) });
     const bodyExit = plan.preBlock === null && r.decision.reason !== null && BODY_EXITS.has(r.decision.reason) && (r.decision.reason !== "model-rewrite-failed" || plan.chain[0]?.rewritesModel === true);
     if (bodyExit) return { ...NOTHING3, kind: "exit", decision: compared("block", r.decision.reason) };
-    const pre = resolve(policy2, plan, null);
-    const taintWrite = plan.preBlock === "secret" && (plan.taint?.add.length ?? 0) > 0;
+    const { pre, callsAdmit } = planAdmission(policy2, plan);
     let admission = null;
-    if (taintWrite || pre.block === null && holdsCounters2(plan)) admission = r.decision.storeDown ? STORE_DOWN : await store.admit(plan, ms);
-    const admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+    if (callsAdmit) admission = r.decision.storeDown ? STORE_DOWN : await store.admit(plan, admitMs);
+    const admitted = isAdmitted(plan, admission);
     const decision = admission === null ? pre : resolve(policy2, plan, admission);
     const first2 = plan.chain[0];
     const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
-    const end = ms + Math.max(0, r.outcome.totalMs);
+    const end = Math.max(admitMs, Date.parse(r.ts) + Math.max(0, r.outcome.totalMs));
     const est = plan.reservations[0]?.estMicroUsd ?? 0;
     if (decision.block !== null || first2 === void 0 || provider2 === void 0) {
       const reason = decision.block?.reason ?? "no-route";
@@ -103525,8 +103545,8 @@ async function simulate(policy2, which, window, warm, startMs, ratios) {
   const outcomes = [];
   const cuts = [];
   const sessions = /* @__PURE__ */ new Map();
-  for (const r of window) {
-    const ms = Date.parse(r.ts);
+  for (const { i, at: ms } of admitOrder(window)) {
+    const r = window[i];
     await drain(ms);
     now = ms;
     const session = r.attribution.session;
@@ -103539,15 +103559,15 @@ async function simulate(policy2, which, window, warm, startMs, ratios) {
     if (s2?.cut) {
       s2.cut.droppedRequests++;
       s2.cut.droppedCostMicroUsd += r.outcome.costMicroUsd ?? 0;
-      outcomes.push({ ...NOTHING3, kind: "dropped", decision: null });
+      outcomes[i] = { ...NOTHING3, kind: "dropped", decision: null };
       continue;
     }
     if (r.decision.preDecision) {
-      outcomes.push({ ...NOTHING3, kind: "exit", decision: null });
+      outcomes[i] = { ...NOTHING3, kind: "exit", decision: null };
       continue;
     }
     const o = await one(r, ms);
-    outcomes.push(o);
+    outcomes[i] = o;
     if (s2 === null) continue;
     if (o.kind === "forward") s2.forwarded = true;
     if (o.kind === "block" && s2.forwarded && r.decision.action === "forward") {
@@ -103681,6 +103701,7 @@ var init_engine = __esm({
     "use strict";
     init_warmup();
     init_decide();
+    init_admission();
     init_resolve();
     init_schema();
     init_cost_model();
@@ -103719,18 +103740,26 @@ async function openReplayTraces(paths) {
   return readLedger(paths);
 }
 function filesAtRef(ref, dir) {
+  if (ref === "" || ref.startsWith("-")) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const git = (args) => execFileSync("git", args, { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  let commit;
+  try {
+    commit = git(["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]).trim();
+  } catch {
+    throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+  }
+  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const top = git(["rev-parse", "--show-toplevel"]).trim();
   const rel = relative(top, resolve2(dir)).split("\\").join("/");
   const show = (name2) => {
     try {
-      return git(["show", `${ref}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
+      return git(["show", `${commit}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
     } catch {
       return void 0;
     }
   };
   const policy2 = show(POLICY_FILE);
-  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir} at ${ref}` }]);
+  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir} at ${ref} (${commit})` }]);
   const files = { [POLICY_FILE]: policy2 };
   for (const name2 of policyFileNames(policy2)) {
     if (name2 === POLICY_FILE) continue;

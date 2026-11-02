@@ -29,7 +29,11 @@ export interface TraceRecord {
               /** Not in spec 9.1: set (true) when admit could not reach the counter store and failure.counterStoreDown applied. */
               storeDown?: true;
               /** Not in spec 9.1: set (true) when the request ended before a decision (body too large, client gone while uploading, reservation not computable); replay skips it. */
-              preDecision?: true };
+              preDecision?: true;
+              /** Not in spec 9.1: ms after the request started when admit was called (absent when it was not). Replay admits at ts plus this. */
+              admitOffsetMs?: number;
+              /** Not in spec 9.1: the writer instance's admit call number, which orders admits within one millisecond. */
+              admitSeq?: number };
   candidateDecision?: TraceRecord['decision'];
   outcome: {
     provider: string | null; upstreamModel: string | null; attempts: number; cacheColdRisk: boolean;

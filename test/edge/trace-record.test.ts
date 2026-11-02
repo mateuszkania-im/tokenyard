@@ -69,3 +69,11 @@ test('a request that ended before a decision is marked preDecision, so replay sk
   expect(buildTraceRecord(outcome({ route: null, decision: { action: 'block', reason: 'body-too-large' } }), 'salt').decision.preDecision).toBe(true);
   expect(buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt').decision.preDecision).toBeUndefined();
 });
+
+test('records when admit was called, so replay admits in the order the store saw', () => {
+  const r = buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' }, admitAt: { offsetMs: 12, seq: 7 } }), 'salt');
+  expect(r.decision).toMatchObject({ admitOffsetMs: 12, admitSeq: 7 });
+  const none = buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt');
+  expect(none.decision.admitOffsetMs).toBeUndefined();
+  expect(none.decision.admitSeq).toBeUndefined();
+});

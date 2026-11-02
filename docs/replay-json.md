@@ -9,7 +9,8 @@ tokenyard traces export --trace-dir traces --since 7d --out traces.ndjson.gz
 tokenyard policy replay --base main --head policy --traces traces.ndjson.gz --json replay.json
 ```
 
-`--base` is a policy directory or a git ref (the `--head` directory's files at that ref). Replay refuses a directory of
+`--base` is a policy directory or a git ref (the `--head` directory's files at that ref). A ref starting with `-` is
+refused, and any other is resolved to a commit with `git rev-parse --verify` before its files are read. Replay refuses a directory of
 raw per-instance trace files and names `tokenyard traces export`: a partial set would undercount budgets. The command
 exits 1 when a `ci.failOn` gate of the head policy fails.
 
@@ -76,8 +77,10 @@ A low agreement or any missing instance means the diff should not be trusted.
 
 ## How the simulation runs
 
-Each policy runs on its own in-memory counter store on a virtual clock. Records are taken in `ts`, then `id` order;
-each is decided, admitted and resolved as the gateway does it, from the features and guardrail hits the trace recorded
+Each policy runs on its own in-memory counter store on a virtual clock. Records are admitted in the order the
+gateway's store saw them: at `ts` plus the recorded `decision.admitOffsetMs` (the body is read and scanned before
+admit, so a large body can admit after a small one that started later), then by instance and `decision.admitSeq`, then
+by `ts` and `id`. Each is decided, admitted and resolved as the gateway does it (the same `src/policy/admission.ts`), from the features and guardrail hits the trace recorded
 (the input bound and its kind are used as recorded, never derived again), and settled at `ts + totalMs`. A record whose
 admit found the store down is replayed with the store down. Settlement charges what the gateway charged
 (`outcome.chargedMicroUsd`) when the model, provider and price table are unchanged; the policy's reservation when the

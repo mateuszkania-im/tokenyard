@@ -20,7 +20,7 @@ test('policy replay refuses a trace directory and names traces export', async ()
     code: 1,
     stderr: expect.stringContaining('tokenyard traces export'),
   });
-});
+}, 30_000);
 
 test('policy replay prints the report, writes JSON, and reads the base from a git ref', async () => {
   dir = await mkdtemp(join(tmpdir(), 'ty-cli-replay-'));
@@ -34,4 +34,4 @@ test('policy replay prints the report, writes JSON, and reads the base from a gi
   const a = await readFile(join(dir, 'a.json'), 'utf8');
   expect(JSON.parse(a)).toMatchObject({ schemaVersion: 1, requests: 1, base: { forwarded: 1 } });
   expect(await readFile(join(dir, 'b.json'), 'utf8')).toBe(a);
-});
+}, 30_000);

@@ -20,20 +20,32 @@ export async function openReplayTraces(paths: string[]): Promise<AsyncIterable<L
   return readLedger(paths);
 }
 
-/** Policy files of `dir` at git ref `ref` (`git show <ref>:<path>`), relative to the repository that holds `dir`. */
+/**
+ * Policy files of `dir` at git ref `ref` (`git show <commit>:<path>`), relative to the repository that holds `dir`.
+ * A ref that starts with `-` would be read as a git option and is refused before git runs; any other ref is resolved
+ * to a commit id first (`rev-parse --verify --end-of-options`), and only that id reaches `git show`.
+ */
 function filesAtRef(ref: string, dir: string): Record<string, string> {
+  if (ref === '' || ref.startsWith('-')) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const git = (args: string[]): string => execFileSync('git', args, { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  let commit: string;
+  try {
+    commit = git(['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]).trim();
+  } catch {
+    throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+  }
+  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const top = git(['rev-parse', '--show-toplevel']).trim();
   const rel = relative(top, resolve(dir)).split('\\').join('/');
   const show = (name: string): string | undefined => {
     try {
-      return git(['show', `${ref}:${rel === '' ? name : `${rel}/${name}`}`]);
+      return git(['show', `${commit}:${rel === '' ? name : `${rel}/${name}`}`]);
     } catch {
       return undefined;
     }
   };
   const policy = show(POLICY_FILE);
-  if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${dir} at ${ref}` }]);
+  if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${dir} at ${ref} (${commit})` }]);
   const files: Record<string, string> = { [POLICY_FILE]: policy };
   for (const name of policyFileNames(policy)) {
     if (name === POLICY_FILE) continue;
