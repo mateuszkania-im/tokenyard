@@ -49,6 +49,8 @@ const route = z.strictObject({
   allowModels: z.array(name).optional(),
   rewriteModel: name.optional(),
   allowBodyRewrite: z.boolean().optional(),
+  /** Spec 8: a 429 other than a spend cap also falls back to the next provider (default: forwarded unchanged). */
+  fallbackOn429: z.boolean().optional(),
   because: z.string().optional(),
   /** Server tool types this route lets through (for example `web_search`); each needs a price or an explicit `failure.unpricedModel`. */
   serverTools: z.array(name).optional(),

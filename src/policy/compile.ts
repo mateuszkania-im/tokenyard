@@ -66,6 +66,7 @@ function compileRoute(r: RouteSpec, priced: readonly string[]): CompiledRoute {
     allowModels: r.allowModels?.map(globToRegExp) ?? null,
     rewriteModel: r.rewriteModel ?? null,
     allowBodyRewrite: r.allowBodyRewrite === true,
+    fallbackOn429: r.fallbackOn429 === true,
     serverTools: r.serverTools ?? null,
     criticality: r.criticality ?? 'standard',
     reserveOutputTokens: r.reserveOutputTokens ?? null,

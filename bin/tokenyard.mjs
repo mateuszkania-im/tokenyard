@@ -28676,6 +28676,8 @@ var init_schema = __esm({
       allowModels: external_exports.array(name).optional(),
       rewriteModel: name.optional(),
       allowBodyRewrite: external_exports.boolean().optional(),
+      /** Spec 8: a 429 other than a spend cap also falls back to the next provider (default: forwarded unchanged). */
+      fallbackOn429: external_exports.boolean().optional(),
       because: external_exports.string().optional(),
       /** Server tool types this route lets through (for example `web_search`); each needs a price or an explicit `failure.unpricedModel`. */
       serverTools: external_exports.array(name).optional(),
@@ -29556,6 +29558,61 @@ function modelsListBody(ids) {
 var init_anthropic_models = __esm({
   "src/surfaces/anthropic-models.ts"() {
     "use strict";
+  }
+});
+
+// src/upstream/breaker.ts
+var Breaker;
+var init_breaker = __esm({
+  "src/upstream/breaker.ts"() {
+    "use strict";
+    Breaker = class {
+      constructor(o, clock) {
+        this.o = o;
+        this.clock = clock;
+      }
+      o;
+      clock;
+      states = /* @__PURE__ */ new Map();
+      state(provider2) {
+        let s = this.states.get(provider2);
+        if (!s) this.states.set(provider2, s = { events: [], openUntil: 0, halfOpen: false });
+        return s;
+      }
+      allow(provider2) {
+        const s = this.states.get(provider2);
+        if (!s || s.openUntil === 0) return true;
+        if (this.clock() < s.openUntil) return false;
+        s.openUntil = 0;
+        s.halfOpen = true;
+        s.events = [];
+        return true;
+      }
+      record(provider2, ok) {
+        const s = this.state(provider2);
+        const now = this.clock();
+        if (s.openUntil > now) return;
+        if (s.halfOpen) {
+          s.halfOpen = false;
+          if (!ok) this.open(provider2, now + this.o.openSeconds * 1e3);
+          return;
+        }
+        const cutoff = now - this.o.windowSeconds * 1e3;
+        s.events = s.events.filter((e) => e.at > cutoff);
+        s.events.push({ at: now, ok });
+        const failures = s.events.filter((e) => !e.ok).length;
+        if (s.events.length >= this.o.minRequests && failures / s.events.length >= this.o.failureRatio) {
+          this.open(provider2, now + this.o.openSeconds * 1e3);
+        }
+      }
+      /** Opens the breaker until `untilMs` (a spend-cap 429 does this for `openSeconds`). */
+      open(provider2, untilMs) {
+        const s = this.state(provider2);
+        s.openUntil = untilMs;
+        s.halfOpen = false;
+        s.events = [];
+      }
+    };
   }
 });
 
@@ -41023,7 +41080,7 @@ var require_readable = __commonJS({
   "node_modules/undici/lib/api/readable.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable } = __require("node:stream");
+    var { Readable: Readable2 } = __require("node:stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError: InvalidArgumentError2, AbortError } = require_errors2();
     var util = require_util();
     var { ReadableStreamFrom } = require_util();
@@ -41037,7 +41094,7 @@ var require_readable = __commonJS({
     var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop = () => {
     };
-    var BodyReadable = class extends Readable {
+    var BodyReadable = class extends Readable2 {
       /**
        * @param {object} opts
        * @param {(this: Readable, size: number) => void} opts.resume
@@ -41426,7 +41483,7 @@ var require_api_request = __commonJS({
     "use strict";
     var assert2 = __require("node:assert");
     var { AsyncResource } = __require("node:async_hooks");
-    var { Readable } = require_readable();
+    var { Readable: Readable2 } = require_readable();
     var { InvalidArgumentError: InvalidArgumentError2, RequestAbortedError } = require_errors2();
     var util = require_util();
     function noop() {
@@ -41507,7 +41564,7 @@ var require_api_request = __commonJS({
         const parsedHeaders = responseHeaders === "raw" ? util.parseHeaders(rawHeaders) : headers;
         const contentType = parsedHeaders["content-type"];
         const contentLength = parsedHeaders["content-length"];
-        const res = new Readable({
+        const res = new Readable2({
           resume,
           abort,
           contentType,
@@ -41816,7 +41873,7 @@ var require_api_pipeline = __commonJS({
   "node_modules/undici/lib/api/api-pipeline.js"(exports, module) {
     "use strict";
     var {
-      Readable,
+      Readable: Readable2,
       Duplex,
       PassThrough
     } = __require("node:stream");
@@ -41832,7 +41889,7 @@ var require_api_pipeline = __commonJS({
     function noop() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
-    var PipelineRequest = class extends Readable {
+    var PipelineRequest = class extends Readable2 {
       constructor() {
         super({ autoDestroy: true });
         this[kResume] = null;
@@ -41849,7 +41906,7 @@ var require_api_pipeline = __commonJS({
         callback(err);
       }
     };
-    var PipelineResponse = class extends Readable {
+    var PipelineResponse = class extends Readable2 {
       constructor(resume) {
         super({ autoDestroy: true });
         this[kResume] = resume;
@@ -46867,7 +46924,7 @@ var require_cache2 = __commonJS({
   "node_modules/undici/lib/interceptor/cache.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable } = __require("node:stream");
+    var { Readable: Readable2 } = __require("node:stream");
     var util = require_util();
     var CacheHandler = require_cache_handler();
     var MemoryCacheStore = require_memory_cache_store();
@@ -47036,7 +47093,7 @@ var require_cache2 = __commonJS({
       return dispatch(opts, new CacheHandler(globalOpts, cacheKey, handler));
     }
     function sendCachedValue(handler, opts, result, age, context, isStale2) {
-      const stream = util.isStream(result.body) ? result.body : Readable.from(result.body ?? []);
+      const stream = util.isStream(result.body) ? result.body : Readable2.from(result.body ?? []);
       assert2(!stream.destroyed, "stream should not be destroyed");
       assert2(!stream.readableDidRead, "stream should not be readableDidRead");
       const controller = {
@@ -50432,7 +50489,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants3();
     var EE = __require("node:events");
-    var { Readable, pipeline: pipeline2, finished, isErrored, isReadable } = __require("node:stream");
+    var { Readable: Readable2, pipeline: pipeline2, finished, isErrored, isReadable } = __require("node:stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
@@ -51417,7 +51474,7 @@ var require_fetch = __commonJS({
                   }
                 }
               }
-              this.body = new Readable({ read: resume });
+              this.body = new Readable2({ read: resume });
               const onError = this.onError.bind(this);
               resolve2({
                 status,
@@ -55855,6 +55912,145 @@ var init_forward = __esm({
   }
 });
 
+// src/upstream/chain.ts
+import { Readable } from "node:stream";
+function workspaceOf(p) {
+  return `${new URL(p.baseUrl).origin}|${p.credential === "passthrough" ? "passthrough" : p.credential.env}`;
+}
+async function checkSpendCap(res) {
+  if (res.status !== 429 || res.headers["retry-after"] !== void 0) return { spendCap: false, response: res };
+  const chunks = [];
+  let size = 0;
+  try {
+    for await (const c of res.body) {
+      const b = c;
+      chunks.push(b);
+      size += b.length;
+      if (size > SPEND_CAP_PROBE_BYTES) break;
+    }
+  } catch {
+  }
+  const buf = Buffer.concat(chunks);
+  return { spendCap: buf.toString("utf8").includes("enforced_spend_limit_reached"), response: { ...res, body: Readable.from([buf]) } };
+}
+function discard(res) {
+  res.body.on("error", () => void 0);
+  res.body.destroy();
+}
+async function runChain(plan, policy2, req, signal, deps) {
+  const { breaker: breaker2, retry, tenant, clock } = deps;
+  const fallbackOn429 = policy2.routes.find((r) => r.name === plan.route)?.fallbackOn429 === true;
+  const openMs = policy2.failure.breaker.openSeconds * 1e3;
+  retry.request(tenant);
+  let attempts = 0;
+  let held = null;
+  let lastError = null;
+  let lastProvider = null;
+  for (const entry of plan.chain) {
+    if (signal.aborted) {
+      if (held) discard(held.response);
+      throw new ChainError(attempts, lastProvider, signal.reason ?? new Error("aborted"));
+    }
+    if (attempts >= MAX_ATTEMPTS) break;
+    const provider2 = policy2.providers.get(entry.provider);
+    if (!provider2 || !breaker2.allow(provider2.name)) continue;
+    if (attempts > 0 && !retry.tryRetry(tenant)) break;
+    attempts++;
+    lastProvider = provider2.name;
+    let res;
+    try {
+      res = await forward(provider2, { ...req, headers: deps.headersFor?.(provider2) ?? req.headers }, signal);
+    } catch (err) {
+      if (signal.aborted) {
+        if (held) discard(held.response);
+        throw new ChainError(attempts, provider2.name, err);
+      }
+      breaker2.record(provider2.name, false);
+      lastError = err;
+      continue;
+    }
+    const checked = await checkSpendCap(res);
+    res = checked.response;
+    let retryable = RETRYABLE.has(res.status);
+    if (checked.spendCap) {
+      breaker2.open(provider2.name, clock() + openMs);
+      retryable = true;
+    } else if (res.status === 429 && fallbackOn429) {
+      retryable = true;
+    }
+    if (!checked.spendCap) breaker2.record(provider2.name, !RETRYABLE.has(res.status));
+    if (!retryable) {
+      if (held) discard(held.response);
+      return { attempt: attempts, provider: provider2.name, response: res };
+    }
+    if (held) discard(held.response);
+    held = { attempt: attempts, provider: provider2.name, response: res };
+    lastError = null;
+  }
+  if (held) return held;
+  throw new ChainError(attempts, lastProvider, lastError);
+}
+var MAX_ATTEMPTS, RETRYABLE, SPEND_CAP_PROBE_BYTES, ChainError;
+var init_chain = __esm({
+  "src/upstream/chain.ts"() {
+    "use strict";
+    init_forward();
+    MAX_ATTEMPTS = 3;
+    RETRYABLE = /* @__PURE__ */ new Set([500, 502, 503, 504, 529]);
+    SPEND_CAP_PROBE_BYTES = 64 * 1024;
+    ChainError = class extends Error {
+      constructor(attempts, provider2, cause) {
+        super(cause instanceof Error ? cause.message : "no provider available");
+        this.attempts = attempts;
+        this.provider = provider2;
+        this.cause = cause;
+      }
+      attempts;
+      provider;
+      cause;
+    };
+  }
+});
+
+// src/upstream/retry-budget.ts
+var WINDOW_MS, RetryBudget;
+var init_retry_budget = __esm({
+  "src/upstream/retry-budget.ts"() {
+    "use strict";
+    WINDOW_MS = 6e4;
+    RetryBudget = class {
+      constructor(ratio, clock) {
+        this.ratio = ratio;
+        this.clock = clock;
+      }
+      ratio;
+      clock;
+      tallies = /* @__PURE__ */ new Map();
+      tally(tenant) {
+        const now = this.clock();
+        let t = this.tallies.get(tenant);
+        if (!t) this.tallies.set(tenant, t = { requests: [], retries: [] });
+        const cutoff = now - WINDOW_MS;
+        while (t.requests.length > 0 && t.requests[0] <= cutoff) t.requests.shift();
+        while (t.retries.length > 0 && t.retries[0] <= cutoff) t.retries.shift();
+        return t;
+      }
+      /** Counts one client request. */
+      request(tenant) {
+        this.tally(tenant).requests.push(this.clock());
+      }
+      /** Spends one retry when the budget has room. */
+      tryRetry(tenant) {
+        if (this.ratio <= 0) return false;
+        const t = this.tally(tenant);
+        if (t.retries.length >= Math.max(1, this.ratio * t.requests.length)) return false;
+        t.retries.push(this.clock());
+        return true;
+      }
+    };
+  }
+});
+
 // src/edge/attribution.ts
 function header(h, name2, flag) {
   const v = h[name2];
@@ -56138,8 +56334,8 @@ function buildTraceRecord(o, salt) {
     outcome: {
       provider: o.provider,
       upstreamModel: o.provider === null ? null : u?.responseModel ?? o.features.model,
-      attempts: 1,
-      cacheColdRisk: false,
+      attempts: o.attempts ?? 1,
+      cacheColdRisk: o.cacheColdRisk ?? false,
       status: o.status,
       errorClass: o.errorClass ?? null,
       midStreamError: u?.midStreamError ?? null,
@@ -56236,7 +56432,7 @@ function afterResponse(deps, outcome) {
   deps.onSettled?.(outcome);
   if (deps.traces) deps.traces.write(buildTraceRecord(outcome, deps.traceSalt ?? ""));
 }
-async function handle(deps, id, req, res) {
+async function handle(deps, failure3, id, req, res) {
   const startedAt = deps.clock();
   const policy2 = deps.policy();
   const ac = new AbortController();
@@ -56342,27 +56538,38 @@ async function handle(deps, id, req, res) {
     sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
     return early({ ...decided, status: b.status, decision: { action: "block", reason: b.reason }, errorClass: b.type });
   }
-  const mode = provider2.credential === "passthrough" ? "passthrough" : "api";
-  const headers = upstreamHeaders(req.headers, {
-    mode,
-    credential: providerCredential(provider2),
-    host: new URL(provider2.baseUrl).host,
+  const headersFor = (p) => upstreamHeaders(req.headers, {
+    mode: p.credential === "passthrough" ? "passthrough" : "api",
+    credential: providerCredential(p),
+    host: new URL(p.baseUrl).host,
     clientKeyHeaders: [...keyHeaders]
   });
   let up;
+  let answered = provider2;
+  let attempts;
   const forwardedAt = deps.clock();
   try {
-    up = await forward(provider2, { method, pathAndQuery: match.pathAndQuery, headers, body: upstreamBody }, ac.signal);
-  } catch {
-    const common = { ...decided, provider: provider2.name };
+    const r = await runChain(plan, policy2, { method, pathAndQuery: match.pathAndQuery, headers: headersFor(provider2), body: upstreamBody }, ac.signal, {
+      ...failure3,
+      tenant: key.tenant,
+      clock: deps.clock,
+      headersFor
+    });
+    up = r.response;
+    attempts = r.attempt;
+    answered = policy2.providers.get(r.provider) ?? provider2;
+  } catch (err) {
+    const n = err instanceof ChainError ? err.attempts : 1;
+    const common = { ...decided, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
-    sendError(req, res, anthropicError(502, "api_error", `upstream ${provider2.name} is unreachable`, null, id));
+    sendError(req, res, anthropicError(502, "api_error", `upstream ${common.provider} is unreachable`, null, id));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
   }
+  const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider2) };
   if (ac.signal.aborted) {
     up.body.on("error", () => void 0);
     up.body.destroy();
-    return early({ ...decided, provider: provider2.name, status: 499, aborted: true, errorClass: "client_abort" });
+    return early({ ...decided, ...answer, status: 499, aborted: true, errorClass: "client_abort" });
   }
   const upstreamHeadersAt = deps.clock();
   const ttfbMs = upstreamHeadersAt - startedAt;
@@ -56387,7 +56594,7 @@ async function handle(deps, id, req, res) {
     attribution: readAttribution(req.headers, surface),
     surface,
     ...decided,
-    provider: provider2.name,
+    ...answer,
     status: up.status,
     usage,
     aborted: ac.signal.aborted,
@@ -56405,9 +56612,17 @@ async function handle(deps, id, req, res) {
 }
 function createHandler(deps) {
   if (deps.traces && !deps.traceSalt) throw new Error("traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
+  let state = null;
+  const failureState = (policy2) => {
+    const settings = JSON.stringify([policy2.failure.breaker, policy2.failure.retryBudgetRatio]);
+    if (state?.settings !== settings) {
+      state = { settings, failure: { breaker: new Breaker(policy2.failure.breaker, deps.clock), retry: new RetryBudget(policy2.failure.retryBudgetRatio, deps.clock) } };
+    }
+    return state.failure;
+  };
   return (req, res) => {
     const id = deps.newId();
-    handle(deps, id, req, res).catch(() => {
+    handle(deps, failureState(deps.policy()), id, req, res).catch(() => {
       if (!res.headersSent) sendError(req, res, anthropicError(500, "api_error", "internal error", null, id));
       else res.destroy();
     });
@@ -56428,7 +56643,9 @@ var init_handler = __esm({
     init_anthropic_count_tokens();
     init_anthropic_messages();
     init_anthropic_models();
-    init_forward();
+    init_breaker();
+    init_chain();
+    init_retry_budget();
     init_attribution();
     init_auth();
     init_body();
@@ -56745,6 +56962,7 @@ function compileRoute(r, priced) {
     allowModels: r.allowModels?.map(globToRegExp) ?? null,
     rewriteModel: r.rewriteModel ?? null,
     allowBodyRewrite: r.allowBodyRewrite === true,
+    fallbackOn429: r.fallbackOn429 === true,
     serverTools: r.serverTools ?? null,
     criticality: r.criticality ?? "standard",
     reserveOutputTokens: r.reserveOutputTokens ?? null,

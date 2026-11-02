@@ -90,8 +90,8 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
     outcome: {
       provider: o.provider,
       upstreamModel: o.provider === null ? null : (u?.responseModel ?? o.features.model),
-      attempts: 1,
-      cacheColdRisk: false,
+      attempts: o.attempts ?? 1,
+      cacheColdRisk: o.cacheColdRisk ?? false,
       status: o.status,
       errorClass: o.errorClass ?? null,
       midStreamError: u?.midStreamError ?? null,

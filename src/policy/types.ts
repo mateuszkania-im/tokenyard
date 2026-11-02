@@ -83,6 +83,7 @@ export interface CompiledRoute {
   allowModels: readonly RegExp[] | null;
   rewriteModel: string | null;
   allowBodyRewrite: boolean;
+  fallbackOn429: boolean;
   serverTools: readonly string[] | null;
   criticality: 'standard' | 'sheddable';
   reserveOutputTokens: number | null;

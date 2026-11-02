@@ -15,7 +15,10 @@ import { extractCountTokensFeatures } from '../surfaces/anthropic-count-tokens.j
 import { extractAnthropicFeatures, rewriteTopLevelModel } from '../surfaces/anthropic-messages.js';
 import { modelsListBody } from '../surfaces/anthropic-models.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
-import { forward, type UpstreamResponse } from '../upstream/forward.js';
+import { Breaker } from '../upstream/breaker.js';
+import { ChainError, runChain, workspaceOf } from '../upstream/chain.js';
+import type { UpstreamResponse } from '../upstream/forward.js';
+import { RetryBudget } from '../upstream/retry-budget.js';
 import { readAttribution, type RawAttribution } from './attribution.js';
 import { extractCredentials, hashKey } from './auth.js';
 import { BodyTooLargeError, readBody } from './body.js';
@@ -27,6 +30,12 @@ import { buildTraceRecord, parseClient } from './trace-record.js';
 /** Where finished request records go. Implemented by `TraceWriter`; `null` when `--trace-dir` is not set. */
 export interface TraceSink {
   write(r: Omit<TraceRecord, 'instance' | 'seq'>): boolean;
+}
+
+/** Process-local failure state (spec 8): never in `policy/`, which is pure. */
+export interface FailureState {
+  breaker: Breaker;
+  retry: RetryBudget;
 }
 
 export interface GatewayDeps {
@@ -69,6 +78,10 @@ export interface RequestOutcome {
   /** From the User-Agent header. */
   client: { agent: 'claude-code' | 'codex' | 'other'; version: string | null };
   policyRevision: string;
+  /** Upstream attempts made (1 without fallback); absent before any attempt. */
+  attempts?: number;
+  /** The answering provider is in another workspace than the first in the chain, so its prompt cache starts cold (spec 8). */
+  cacheColdRisk?: boolean;
   /** Route the request was sent through; null for a request no route served. */
   route: { name: string; chain: readonly string[] } | null;
   priceTable: string;
@@ -182,7 +195,7 @@ const NO_FEATURES: ExtractedFeatures = {
   prefixHash: null, blockTypes: [], expandsServerSide: false, fastMode: false, parseError: false, lastTurn: null,
 };
 
-async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handle(deps: GatewayDeps, failure: FailureState, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const startedAt = deps.clock();
   const policy = deps.policy();
   // A cancelled client turn must stop upstream generation: abort as soon as the client goes away.
@@ -314,29 +327,41 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     return early({ ...decided, status: b.status, decision: { action: 'block', reason: b.reason }, errorClass: b.type });
   }
 
-  // 9. Forward.
-  const mode = provider.credential === 'passthrough' ? 'passthrough' : 'api';
+  // 9. Forward: the chain tries providers until one answers usably, and only before any byte reaches the client (spec 8).
   // A tokenyard key is never forwarded, in whichever header it came; any other Authorization (the OAuth token) is.
-  const headers = upstreamHeaders(req.headers, {
-    mode,
-    credential: providerCredential(provider),
-    host: new URL(provider.baseUrl).host,
-    clientKeyHeaders: [...keyHeaders],
-  });
+  const headersFor = (p: ProviderSpec): Record<string, string | string[]> =>
+    upstreamHeaders(req.headers, {
+      mode: p.credential === 'passthrough' ? 'passthrough' : 'api',
+      credential: providerCredential(p),
+      host: new URL(p.baseUrl).host,
+      clientKeyHeaders: [...keyHeaders],
+    });
   let up: UpstreamResponse;
+  let answered: ProviderSpec = provider;
+  let attempts: number;
   const forwardedAt = deps.clock();
   try {
-    up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body: upstreamBody }, ac.signal);
-  } catch {
-    const common = { ...decided, provider: provider.name };
+    const r = await runChain(plan, policy, { method, pathAndQuery: match.pathAndQuery, headers: headersFor(provider), body: upstreamBody }, ac.signal, {
+      ...failure,
+      tenant: key.tenant,
+      clock: deps.clock,
+      headersFor,
+    });
+    up = r.response;
+    attempts = r.attempt;
+    answered = policy.providers.get(r.provider) ?? provider;
+  } catch (err) {
+    const n = err instanceof ChainError ? err.attempts : 1;
+    const common = { ...decided, provider: err instanceof ChainError && err.provider ? err.provider : provider.name, attempts: n };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
-    sendError(req, res, anthropicError(502, 'api_error', `upstream ${provider.name} is unreachable`, null, id));
+    sendError(req, res, anthropicError(502, 'api_error', `upstream ${common.provider} is unreachable`, null, id));
     return early({ ...common, status: 502, errorClass: 'upstream_unreachable' });
   }
+  const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider) };
   if (ac.signal.aborted) {
     up.body.on('error', () => undefined);
     up.body.destroy();
-    return early({ ...decided, provider: provider.name, status: 499, aborted: true, errorClass: 'client_abort' });
+    return early({ ...decided, ...answer, status: 499, aborted: true, errorClass: 'client_abort' });
   }
 
   // 10. First response headers: written and flushed at once, never compressed.
@@ -368,7 +393,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     attribution: readAttribution(req.headers, surface),
     surface,
     ...decided,
-    provider: provider.name,
+    ...answer,
     status: up.status,
     usage,
     aborted: ac.signal.aborted,
@@ -387,9 +412,18 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
 
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
   if (deps.traces && !deps.traceSalt) throw new Error('traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
+  // Breaker and retry budget outlive requests; they are rebuilt only when a reload changes the `failure` settings.
+  let state: { settings: string; failure: FailureState } | null = null;
+  const failureState = (policy: CompiledPolicy): FailureState => {
+    const settings = JSON.stringify([policy.failure.breaker, policy.failure.retryBudgetRatio]);
+    if (state?.settings !== settings) {
+      state = { settings, failure: { breaker: new Breaker(policy.failure.breaker, deps.clock), retry: new RetryBudget(policy.failure.retryBudgetRatio, deps.clock) } };
+    }
+    return state.failure;
+  };
   return (req, res) => {
     const id = deps.newId();
-    handle(deps, id, req, res).catch(() => {
+    handle(deps, failureState(deps.policy()), id, req, res).catch(() => {
       if (!res.headersSent) sendError(req, res, anthropicError(500, 'api_error', 'internal error', null, id));
       else res.destroy();
     });
