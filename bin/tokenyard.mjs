@@ -17,15 +17,15 @@ var __esm = (fn, res, err) => function __init() {
   if (err) throw err[0];
   try {
     return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
-  } catch (e) {
-    throw err = [e], e;
+  } catch (e2) {
+    throw err = [e2], e2;
   }
 };
 var __commonJS = (cb, mod) => function __require2() {
   try {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
+  } catch (e2) {
+    throw mod = 0, e2;
   }
 };
 var __export = (target, all) => {
@@ -106,9 +106,9 @@ import { createGunzip } from "node:zlib";
 async function* readLedger(paths) {
   for (const path2 of paths) {
     const file2 = createReadStream(path2);
-    const input2 = path2.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
-    file2.on("error", (e) => input2.destroy(e));
-    for await (const text2 of createInterface({ input: input2, crlfDelay: Infinity })) {
+    const input3 = path2.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
+    file2.on("error", (e2) => input3.destroy(e2));
+    for await (const text2 of createInterface({ input: input3, crlfDelay: Infinity })) {
       if (text2 === "") continue;
       try {
         const line = JSON.parse(text2);
@@ -277,12 +277,36 @@ function sanitizeHeaderValue(s2, max = MAX_LABEL_LENGTH) {
   const value = out.slice(0, max);
   return { value, changed: value !== s2 };
 }
-var isControl, MAX_LABEL_LENGTH;
+function escapeMarkdown(s2, max = 256) {
+  let out = "";
+  for (const ch of s2.slice(0, max)) {
+    const code2 = ch.codePointAt(0) ?? 0;
+    if (code2 === 10 || code2 === 13 || code2 === 9 || code2 === 8232 || code2 === 8233) out += " ";
+    else if (isControl(code2)) continue;
+    else out += MD_ENTITY[ch] ?? ch;
+  }
+  return out;
+}
+var isControl, MAX_LABEL_LENGTH, MD_ENTITY;
 var init_sanitize = __esm({
   "src/report/sanitize.ts"() {
     "use strict";
-    isControl = (code) => code <= 31 || code >= 127 && code <= 159;
+    isControl = (code2) => code2 <= 31 || code2 >= 127 && code2 <= 159;
     MAX_LABEL_LENGTH = 128;
+    MD_ENTITY = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "|": "&#124;",
+      "`": "&#96;",
+      "*": "&#42;",
+      _: "&#95;",
+      "[": "&#91;",
+      "]": "&#93;",
+      "~": "&#126;",
+      "@": "&#64;",
+      "#": "&#35;"
+    };
   }
 });
 
@@ -358,7 +382,7 @@ function prefixUnits(body) {
   return out;
 }
 function countTokens(body) {
-  return tokensForBytes(prefixUnits(body).reduce((n, u) => n + u.bytes, 0));
+  return tokensForBytes(prefixUnits(body).reduce((n2, u) => n2 + u.bytes, 0));
 }
 function toObject(body) {
   const raw = Buffer.isBuffer(body) ? body.toString("utf8") : body;
@@ -409,11 +433,11 @@ var init_cache_sim = __esm({
         for (const b of bpIdx) {
           for (let j = b; j >= Math.max(0, b - LOOKBACK); j--) {
             if (j <= hitUnit) break;
-            const e = this.entries.get(keys2[j]);
-            if (e && e.expiresAt > nowMs) {
+            const e2 = this.entries.get(keys2[j]);
+            if (e2 && e2.expiresAt > nowMs) {
               hitUnit = j;
-              cacheRead = e.tokens;
-              e.expiresAt = nowMs + e.ttlMs;
+              cacheRead = e2.tokens;
+              e2.expiresAt = nowMs + e2.ttlMs;
               break;
             }
           }
@@ -479,11 +503,11 @@ function usageJson(u) {
   };
 }
 function splitTokens(output2) {
-  const n = Math.min(output2, MAX_DELTAS);
-  if (n === 0) return [];
-  const base = Math.floor(output2 / n);
-  const extra = output2 % n;
-  return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+  const n2 = Math.min(output2, MAX_DELTAS);
+  if (n2 === 0) return [];
+  const base = Math.floor(output2 / n2);
+  const extra = output2 % n2;
+  return Array.from({ length: n2 }, (_, i) => base + (i < extra ? 1 : 0));
 }
 function scriptedEvents(id, model, usage) {
   const head = [
@@ -670,8 +694,8 @@ var init_anthropic = __esm({
     init_scenarios();
     MAX_DELTAS = 100;
     sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    frame = (e) => `event: ${e.event}
-data: ${JSON.stringify(e.data)}
+    frame = (e2) => `event: ${e2.event}
+data: ${JSON.stringify(e2.data)}
 
 `;
   }
@@ -786,8 +810,8 @@ var init_writer = __esm({
         this.queuedRequests = 0;
         const byPath = /* @__PURE__ */ new Map();
         for (const p of batch) {
-          const list2 = byPath.get(p.path);
-          if (list2) list2.push(p);
+          const list3 = byPath.get(p.path);
+          if (list3) list3.push(p);
           else byPath.set(p.path, [p]);
         }
         for (const [path2, items] of byPath) {
@@ -862,12 +886,12 @@ function luhnValid(s2) {
   if (!/^\d{13,19}$/.test(digits)) return false;
   let sum = 0;
   for (let i = 0; i < digits.length; i++) {
-    let n = Number(digits[digits.length - 1 - i]);
+    let n2 = Number(digits[digits.length - 1 - i]);
     if (i % 2 === 1) {
-      n *= 2;
-      if (n > 9) n -= 9;
+      n2 *= 2;
+      if (n2 > 9) n2 -= 9;
     }
-    sum += n;
+    sum += n2;
   }
   return sum % 10 === 0;
 }
@@ -942,12 +966,12 @@ function redactProductBody(body, hits) {
       perRule = /* @__PURE__ */ new Map();
       numbers.set(h.rule, perRule);
     }
-    let n = perRule.get(value);
-    if (n === void 0) {
-      n = perRule.size + 1;
-      perRule.set(value, n);
+    let n2 = perRule.get(value);
+    if (n2 === void 0) {
+      n2 = perRule.size + 1;
+      perRule.set(value, n2);
     }
-    const text2 = placeholder(h.rule, n);
+    const text2 = placeholder(h.rule, n2);
     parts.push(Buffer.from(h.bare ? `"${text2}"` : text2, "latin1"));
   }
   parts.push(body.subarray(at));
@@ -957,7 +981,7 @@ var placeholder;
 var init_redact = __esm({
   "src/guardrails/redact.ts"() {
     "use strict";
-    placeholder = (rule, n) => `[REDACTED:${rule.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${n}]`;
+    placeholder = (rule, n2) => `[REDACTED:${rule.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${n2}]`;
   }
 });
 
@@ -1084,8 +1108,8 @@ function shannonEntropy(s2) {
   const counts = /* @__PURE__ */ new Map();
   for (const ch of s2) counts.set(ch, (counts.get(ch) ?? 0) + 1);
   let h = 0;
-  for (const n of counts.values()) {
-    const p = n / s2.length;
+  for (const n2 of counts.values()) {
+    const p = n2 / s2.length;
     h -= p * Math.log2(p);
   }
   return h;
@@ -1098,19 +1122,19 @@ function hex4(b, i) {
   const s2 = b.toString("latin1", i, i + 4);
   return /^[0-9A-Fa-f]{4}$/.test(s2) ? Number.parseInt(s2, 16) : -1;
 }
-function decodeEscape(b, e, end) {
-  const c = b[e + 1];
-  if (c === void 0 || e + 1 >= end) return { text: "\\", next: Math.min(e + 1, end) };
+function decodeEscape(b, e2, end) {
+  const c = b[e2 + 1];
+  if (c === void 0 || e2 + 1 >= end) return { text: "\\", next: Math.min(e2 + 1, end) };
   const simple = SIMPLE_ESCAPES[c];
-  if (simple !== void 0) return { text: simple, next: e + 2 };
-  if (c !== 117) return { text: b.toString("latin1", e, e + 2), next: e + 2 };
-  const u = hex4(b, e + 2);
-  if (u < 0 || e + 6 > end) return { text: b.toString("latin1", e, e + 2), next: e + 2 };
-  if (u >= 55296 && u <= 56319 && b[e + 6] === 92 && b[e + 7] === 117 && e + 12 <= end) {
-    const lo = hex4(b, e + 8);
-    if (lo >= 56320 && lo <= 57343) return { text: utf8Latin1(65536 + (u - 55296 << 10) + (lo - 56320)), next: e + 12 };
+  if (simple !== void 0) return { text: simple, next: e2 + 2 };
+  if (c !== 117) return { text: b.toString("latin1", e2, e2 + 2), next: e2 + 2 };
+  const u = hex4(b, e2 + 2);
+  if (u < 0 || e2 + 6 > end) return { text: b.toString("latin1", e2, e2 + 2), next: e2 + 2 };
+  if (u >= 55296 && u <= 56319 && b[e2 + 6] === 92 && b[e2 + 7] === 117 && e2 + 12 <= end) {
+    const lo = hex4(b, e2 + 8);
+    if (lo >= 56320 && lo <= 57343) return { text: utf8Latin1(65536 + (u - 55296 << 10) + (lo - 56320)), next: e2 + 12 };
   }
-  return { text: utf8Latin1(u >= 55296 && u <= 57343 ? 65533 : u), next: e + 6 };
+  return { text: utf8Latin1(u >= 55296 && u <= 57343 ? 65533 : u), next: e2 + 6 };
 }
 function rawViews(body, start, end) {
   const all = new View();
@@ -1344,7 +1368,7 @@ var init_scan = __esm({
         return this.textCache;
       }
       /** Byte ranges of decoded `[s, e)`; a separator or a gap between strings starts a new range. */
-      segments(s2, e) {
+      segments(s2, e2) {
         const r = this.runs;
         let lo = 0;
         let hi = r.length / 4 - 1;
@@ -1356,7 +1380,7 @@ var init_scan = __esm({
         const out = [];
         for (let k = lo; k * 4 < r.length; k++) {
           const t = r[k * 4];
-          if (t >= e) break;
+          if (t >= e2) break;
           const b = r[k * 4 + 1];
           const bEnd = r[k * 4 + 2];
           const kind = r[k * 4 + 3];
@@ -1364,7 +1388,7 @@ var init_scan = __esm({
           if (kind === SEPARATOR) continue;
           const linear = kind === PLAIN || kind === BARE;
           const from = linear ? b + Math.max(s2, t) - t : b;
-          const to = linear ? b + Math.min(e, t + tl) - t : bEnd;
+          const to = linear ? b + Math.min(e2, t + tl) - t : bEnd;
           const last = out[out.length - 1];
           if (last !== void 0 && last.end === from && last.bare === true === (kind === BARE)) last.end = to;
           else out.push(kind === BARE ? { start: from, end: to, bare: true } : { start: from, end: to });
@@ -2283,8 +2307,8 @@ var require_Collection = __commonJS({
         return this.items.every((node2) => {
           if (!identity.isPair(node2))
             return false;
-          const n = node2.value;
-          return n == null || allowScalar && identity.isScalar(n) && n.value == null && !n.commentBefore && !n.comment && !n.tag;
+          const n2 = node2.value;
+          return n2 == null || allowScalar && identity.isScalar(n2) && n2.value == null && !n2.commentBefore && !n2.comment && !n2.tag;
         });
       }
       /**
@@ -2526,8 +2550,8 @@ var require_stringifyString = __commonJS({
             case "u":
               {
                 str += json2.slice(start, i);
-                const code = json2.substr(i + 2, 4);
-                switch (code) {
+                const code2 = json2.substr(i + 2, 4);
+                switch (code2) {
                   case "0000":
                     str += "\\0";
                     break;
@@ -2553,8 +2577,8 @@ var require_stringifyString = __commonJS({
                     str += "\\P";
                     break;
                   default:
-                    if (code.substr(0, 2) === "00")
-                      str += "\\x" + code.substr(2);
+                    if (code2.substr(0, 2) === "00")
+                      str += "\\x" + code2.substr(2);
                     else
                       str += json2.substr(i, 6);
                 }
@@ -3727,18 +3751,18 @@ var require_stringifyNumber = __commonJS({
       const num2 = typeof value === "number" ? value : Number(value);
       if (!isFinite(num2))
         return isNaN(num2) ? ".nan" : num2 < 0 ? "-.inf" : ".inf";
-      let n = Object.is(value, -0) ? "-0" : JSON.stringify(value);
-      if (!format && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n) && !n.includes("e")) {
-        let i = n.indexOf(".");
+      let n2 = Object.is(value, -0) ? "-0" : JSON.stringify(value);
+      if (!format && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n2) && !n2.includes("e")) {
+        let i = n2.indexOf(".");
         if (i < 0) {
-          i = n.length;
-          n += ".";
+          i = n2.length;
+          n2 += ".";
         }
-        let d = minFractionDigits - (n.length - i - 1);
+        let d = minFractionDigits - (n2.length - i - 1);
         while (d-- > 0)
-          n += "0";
+          n2 += "0";
       }
-      return n;
+      return n2;
     }
     exports.stringifyNumber = stringifyNumber;
   }
@@ -3982,9 +4006,9 @@ var require_binary = __commonJS({
         type ?? (type = Scalar.Scalar.BLOCK_LITERAL);
         if (type !== Scalar.Scalar.QUOTE_DOUBLE) {
           const lineWidth = Math.max(ctx.options.lineWidth - ctx.indent.length, ctx.options.minContentWidth);
-          const n = Math.ceil(str.length / lineWidth);
-          const lines = new Array(n);
-          for (let i = 0, o = 0; i < n; ++i, o += lineWidth) {
+          const n2 = Math.ceil(str.length / lineWidth);
+          const lines = new Array(n2);
+          for (let i = 0, o = 0; i < n2; ++i, o += lineWidth) {
             lines[i] = str.substr(o, lineWidth);
           }
           str = lines.join(type === Scalar.Scalar.BLOCK_LITERAL ? "\n" : " ");
@@ -4256,11 +4280,11 @@ var require_int2 = __commonJS({
             str = `0x${str}`;
             break;
         }
-        const n2 = BigInt(str);
-        return sign === "-" ? BigInt(-1) * n2 : n2;
+        const n3 = BigInt(str);
+        return sign === "-" ? BigInt(-1) * n3 : n3;
       }
-      const n = parseInt(str, radix);
-      return sign === "-" ? -1 * n : n;
+      const n2 = parseInt(str, radix);
+      return sign === "-" ? -1 * n2 : n2;
     }
     function intStringify(node2, radix, prefix2) {
       const { value } = node2;
@@ -4409,15 +4433,15 @@ var require_timestamp = __commonJS({
     function parseSexagesimal(str, asBigInt) {
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
-      const num2 = (n) => asBigInt ? BigInt(n) : Number(n);
+      const num2 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
       const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num2(60) + num2(p), num2(0));
       return sign === "-" ? num2(-1) * res : res;
     }
     function stringifySexagesimal(node2) {
       let { value } = node2;
-      let num2 = (n) => n;
+      let num2 = (n2) => n2;
       if (typeof value === "bigint")
-        num2 = (n) => BigInt(n);
+        num2 = (n2) => BigInt(n2);
       else if (isNaN(value) || !isFinite(value))
         return stringifyNumber.stringifyNumber(node2);
       let sign = "";
@@ -4437,7 +4461,7 @@ var require_timestamp = __commonJS({
           parts.unshift(value);
         }
       }
-      return sign + parts.map((n) => String(n).padStart(2, "0")).join(":").replace(/000000\d*$/, "");
+      return sign + parts.map((n2) => String(n2).padStart(2, "0")).join(":").replace(/000000\d*$/, "");
     }
     var intTime = {
       identify: (value) => typeof value === "bigint" || Number.isInteger(value),
@@ -5053,22 +5077,22 @@ var require_errors = __commonJS({
   "node_modules/yaml/dist/errors.js"(exports) {
     "use strict";
     var YAMLError = class extends Error {
-      constructor(name2, pos, code, message) {
+      constructor(name2, pos, code2, message) {
         super();
         this.name = name2;
-        this.code = code;
+        this.code = code2;
         this.message = message;
         this.pos = pos;
       }
     };
     var YAMLParseError = class extends YAMLError {
-      constructor(pos, code, message) {
-        super("YAMLParseError", pos, code, message);
+      constructor(pos, code2, message) {
+        super("YAMLParseError", pos, code2, message);
       }
     };
     var YAMLWarning = class extends YAMLError {
-      constructor(pos, code, message) {
-        super("YAMLWarning", pos, code, message);
+      constructor(pos, code2, message) {
+        super("YAMLWarning", pos, code2, message);
       }
     };
     var prettifyError2 = (src, lc) => (error62) => {
@@ -5908,9 +5932,9 @@ var require_resolve_block_scalar = __commonJS({
         if (!chomp && (ch === "-" || ch === "+"))
           chomp = ch;
         else {
-          const n = Number(ch);
-          if (!indent && n)
-            indent = n;
+          const n2 = Number(ch);
+          if (!indent && n2)
+            indent = n2;
           else if (error62 === -1)
             error62 = offset + i;
         }
@@ -5977,7 +6001,7 @@ var require_resolve_flow_scalar = __commonJS({
       const { offset, type, source, end } = scalar;
       let _type;
       let value;
-      const _onError = (rel, code, msg) => onError(offset + rel, code, msg);
+      const _onError = (rel, code2, msg) => onError(offset + rel, code2, msg);
       switch (type) {
         case "scalar":
           _type = Scalar.Scalar.PLAIN;
@@ -6175,9 +6199,9 @@ var require_resolve_flow_scalar = __commonJS({
     function parseCharCode(source, offset, length, onError) {
       const cc = source.substr(offset, length);
       const ok = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
-      const code = ok ? parseInt(cc, 16) : NaN;
+      const code2 = ok ? parseInt(cc, 16) : NaN;
       try {
-        return String.fromCodePoint(code);
+        return String.fromCodePoint(code2);
       } catch {
         const raw = source.substr(offset - 2, length + 2);
         onError(offset - 2, "BAD_DQ_ESCAPE", `Invalid escape sequence ${raw}`);
@@ -6499,12 +6523,12 @@ var require_composer = __commonJS({
         this.prelude = [];
         this.errors = [];
         this.warnings = [];
-        this.onError = (source, code, message, warning) => {
+        this.onError = (source, code2, message, warning) => {
           const pos = getErrorPos(source);
           if (warning)
-            this.warnings.push(new errors.YAMLWarning(pos, code, message));
+            this.warnings.push(new errors.YAMLWarning(pos, code2, message));
           else
-            this.errors.push(new errors.YAMLParseError(pos, code, message));
+            this.errors.push(new errors.YAMLParseError(pos, code2, message));
         };
         this.directives = new directives.Directives({ version: options.version || "1.2" });
         this.options = options;
@@ -6666,12 +6690,12 @@ var require_cst_scalar = __commonJS({
     var stringifyString = require_stringifyString();
     function resolveAsScalar(token, strict = true, onError) {
       if (token) {
-        const _onError = (pos, code, message) => {
+        const _onError = (pos, code2, message) => {
           const offset = typeof pos === "number" ? pos : Array.isArray(pos) ? pos[0] : pos.offset;
           if (onError)
-            onError(offset, code, message);
+            onError(offset, code2, message);
           else
-            throw new errors.YAMLParseError([offset, offset + 1], code, message);
+            throw new errors.YAMLParseError([offset, offset + 1], code2, message);
         };
         switch (token.type) {
           case "scalar":
@@ -7131,8 +7155,8 @@ var require_lexer = __commonJS({
           return this.buffer[i + 1] === "\n";
         return false;
       }
-      charAt(n) {
-        return this.buffer[this.pos + n];
+      charAt(n2) {
+        return this.buffer[this.pos + n2];
       }
       continueScalar(offset) {
         let ch = this.buffer[offset];
@@ -7166,8 +7190,8 @@ var require_lexer = __commonJS({
           end -= 1;
         return this.buffer.substring(this.pos, end);
       }
-      hasChars(n) {
-        return this.pos + n <= this.buffer.length;
+      hasChars(n2) {
+        return this.pos + n2 <= this.buffer.length;
       }
       setNext(state) {
         this.buffer = this.buffer.substring(this.pos);
@@ -7176,8 +7200,8 @@ var require_lexer = __commonJS({
         this.next = state;
         return null;
       }
-      peek(n) {
-        return this.buffer.substr(this.pos, n);
+      peek(n2) {
+        return this.buffer.substr(this.pos, n2);
       }
       *parseNext(next) {
         switch (next) {
@@ -7226,8 +7250,8 @@ var require_lexer = __commonJS({
             else
               break;
           }
-          const n = (yield* this.pushCount(dirEnd)) + (yield* this.pushSpaces(true));
-          yield* this.pushCount(line.length - n);
+          const n2 = (yield* this.pushCount(dirEnd)) + (yield* this.pushSpaces(true));
+          yield* this.pushCount(line.length - n2);
           this.pushNewline();
           return "stream";
         }
@@ -7265,9 +7289,9 @@ var require_lexer = __commonJS({
         if (!ch1 && !this.atEnd)
           return this.setNext("block-start");
         if ((ch0 === "-" || ch0 === "?" || ch0 === ":") && isEmpty(ch1)) {
-          const n = (yield* this.pushCount(1)) + (yield* this.pushSpaces(true));
+          const n2 = (yield* this.pushCount(1)) + (yield* this.pushSpaces(true));
           this.indentNext = this.indentValue + 1;
-          this.indentValue += n;
+          this.indentValue += n2;
           return "block-start";
         }
         return "doc";
@@ -7277,10 +7301,10 @@ var require_lexer = __commonJS({
         const line = this.getLine();
         if (line === null)
           return this.setNext("doc");
-        let n = yield* this.pushIndicators();
-        switch (line[n]) {
+        let n2 = yield* this.pushIndicators();
+        switch (line[n2]) {
           case "#":
-            yield* this.pushCount(line.length - n);
+            yield* this.pushCount(line.length - n2);
           // fallthrough
           case void 0:
             yield* this.pushNewline();
@@ -7303,9 +7327,9 @@ var require_lexer = __commonJS({
             return yield* this.parseQuotedScalar();
           case "|":
           case ">":
-            n += yield* this.parseBlockScalarHeader();
-            n += yield* this.pushSpaces(true);
-            yield* this.pushCount(line.length - n);
+            n2 += yield* this.parseBlockScalarHeader();
+            n2 += yield* this.pushSpaces(true);
+            yield* this.pushCount(line.length - n2);
             yield* this.pushNewline();
             return yield* this.parseBlockScalar();
           default:
@@ -7336,18 +7360,18 @@ var require_lexer = __commonJS({
             return yield* this.parseLineStart();
           }
         }
-        let n = 0;
-        while (line[n] === ",") {
-          n += yield* this.pushCount(1);
-          n += yield* this.pushSpaces(true);
+        let n2 = 0;
+        while (line[n2] === ",") {
+          n2 += yield* this.pushCount(1);
+          n2 += yield* this.pushSpaces(true);
           this.flowKey = false;
         }
-        n += yield* this.pushIndicators();
-        switch (line[n]) {
+        n2 += yield* this.pushIndicators();
+        switch (line[n2]) {
           case void 0:
             return "flow";
           case "#":
-            yield* this.pushCount(line.length - n);
+            yield* this.pushCount(line.length - n2);
             return "flow";
           case "{":
           case "[":
@@ -7391,10 +7415,10 @@ var require_lexer = __commonJS({
             end = this.buffer.indexOf("'", end + 2);
         } else {
           while (end !== -1) {
-            let n = 0;
-            while (this.buffer[end - 1 - n] === "\\")
-              n += 1;
-            if (n % 2 === 0)
+            let n2 = 0;
+            while (this.buffer[end - 1 - n2] === "\\")
+              n2 += 1;
+            if (n2 % 2 === 0)
               break;
             end = this.buffer.indexOf('"', end + 1);
           }
@@ -7548,11 +7572,11 @@ var require_lexer = __commonJS({
         yield* this.pushToIndex(end + 1, true);
         return inFlow ? "flow" : "doc";
       }
-      *pushCount(n) {
-        if (n > 0) {
-          yield this.buffer.substr(this.pos, n);
-          this.pos += n;
-          return n;
+      *pushCount(n2) {
+        if (n2 > 0) {
+          yield this.buffer.substr(this.pos, n2);
+          this.pos += n2;
+          return n2;
         }
         return 0;
       }
@@ -7567,16 +7591,16 @@ var require_lexer = __commonJS({
         return 0;
       }
       *pushIndicators() {
-        let n = 0;
+        let n2 = 0;
         loop: while (true) {
           switch (this.charAt(0)) {
             case "!":
-              n += yield* this.pushTag();
-              n += yield* this.pushSpaces(true);
+              n2 += yield* this.pushTag();
+              n2 += yield* this.pushSpaces(true);
               continue loop;
             case "&":
-              n += yield* this.pushUntil(isNotAnchorChar);
-              n += yield* this.pushSpaces(true);
+              n2 += yield* this.pushUntil(isNotAnchorChar);
+              n2 += yield* this.pushSpaces(true);
               continue loop;
             case "-":
             // this is an error
@@ -7590,15 +7614,15 @@ var require_lexer = __commonJS({
                   this.indentNext = this.indentValue + 1;
                 else if (this.flowKey)
                   this.flowKey = false;
-                n += yield* this.pushCount(1);
-                n += yield* this.pushSpaces(true);
+                n2 += yield* this.pushCount(1);
+                n2 += yield* this.pushSpaces(true);
                 continue loop;
               }
             }
           }
           break loop;
         }
-        return n;
+        return n2;
       }
       *pushTag() {
         if (this.charAt(1) === "<") {
@@ -7636,12 +7660,12 @@ var require_lexer = __commonJS({
         do {
           ch = this.buffer[++i];
         } while (ch === " " || allowTabs && ch === "	");
-        const n = i - this.pos;
-        if (n > 0) {
-          yield this.buffer.substr(this.pos, n);
+        const n2 = i - this.pos;
+        if (n2 > 0) {
+          yield this.buffer.substr(this.pos, n2);
           this.pos = i;
         }
-        return n;
+        return n2;
       }
       *pushUntil(test) {
         let i = this.pos;
@@ -7693,15 +7717,15 @@ var require_parser = __commonJS({
     var node_process = __require("process");
     var cst = require_cst();
     var lexer = require_lexer();
-    function includesToken(list2, type) {
-      for (let i = 0; i < list2.length; ++i)
-        if (list2[i].type === type)
+    function includesToken(list3, type) {
+      for (let i = 0; i < list3.length; ++i)
+        if (list3[i].type === type)
           return true;
       return false;
     }
-    function findNonEmptyIndex(list2) {
-      for (let i = 0; i < list2.length; ++i) {
-        switch (list2[i].type) {
+    function findNonEmptyIndex(list3) {
+      for (let i = 0; i < list3.length; ++i) {
+        switch (list3[i].type) {
           case "space":
           case "comment":
           case "newline":
@@ -7916,8 +7940,8 @@ var require_parser = __commonJS({
         }
         yield* this.pop();
       }
-      peek(n) {
-        return this.stack[this.stack.length - n];
+      peek(n2) {
+        return this.stack[this.stack.length - n2];
       }
       *pop(error62) {
         const token = error62 ?? this.stack.pop();
@@ -8715,8 +8739,8 @@ function parseYamlSafe(text2) {
   let doc;
   try {
     doc = (0, import_yaml.parseDocument)(text2, { uniqueKeys: true, merge: false });
-  } catch (e) {
-    throw new YamlError("E_YAML_SYNTAX", e instanceof Error ? e.message : String(e));
+  } catch (e2) {
+    throw new YamlError("E_YAML_SYNTAX", e2 instanceof Error ? e2.message : String(e2));
   }
   const first2 = doc.errors[0];
   if (first2) throw new YamlError("E_YAML_SYNTAX", first2.message.split("\n")[0] ?? "syntax error");
@@ -8731,8 +8755,8 @@ function parseYamlSafe(text2) {
   });
   try {
     return doc.toJS({ maxAliasCount: 0 });
-  } catch (e) {
-    throw new YamlError("E_YAML_SYNTAX", e instanceof Error ? e.message : String(e));
+  } catch (e2) {
+    throw new YamlError("E_YAML_SYNTAX", e2 instanceof Error ? e2.message : String(e2));
   }
 }
 var import_yaml, YamlError, MAX_YAML_BYTES;
@@ -8741,9 +8765,9 @@ var init_safe_yaml = __esm({
     "use strict";
     import_yaml = __toESM(require_dist(), 1);
     YamlError = class extends Error {
-      constructor(code, message) {
+      constructor(code2, message) {
         super(message);
-        this.code = code;
+        this.code = code2;
         this.name = "YamlError";
       }
       code;
@@ -8864,8 +8888,8 @@ function jsonStringifyReplacer(_, value) {
 function cached(getter) {
   return new Cached(getter);
 }
-function nullish(input2) {
-  return input2 === null || input2 === void 0;
+function nullish(input3) {
+  return input3 === null || input3 === void 0;
 }
 function cleanRegex(source) {
   const start = source.startsWith("^") ? 1 : 0;
@@ -9001,8 +9025,8 @@ function randomString(length = 10) {
 function esc(str) {
   return JSON.stringify(str);
 }
-function slugify(input2) {
-  return input2.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
+function slugify(input3) {
+  return input3.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 function isObject(data) {
   return typeof data === "object" && data !== null && !Array.isArray(data);
@@ -9289,12 +9313,12 @@ function finalizeIssue(iss, ctx, config2) {
   }
   return full;
 }
-function getSizableOrigin(input2) {
-  if (input2 instanceof Set)
+function getSizableOrigin(input3) {
+  if (input3 instanceof Set)
     return "set";
-  if (input2 instanceof Map)
+  if (input3 instanceof Map)
     return "map";
-  if (input2 instanceof File)
+  if (input3 instanceof File)
     return "file";
   return "unknown";
 }
@@ -9311,10 +9335,10 @@ function codePointLength(str) {
   }
   return count;
 }
-function getLengthableOrigin(input2) {
-  if (Array.isArray(input2))
+function getLengthableOrigin(input3) {
+  if (Array.isArray(input3))
     return "array";
-  if (typeof input2 === "string")
+  if (typeof input3 === "string")
     return "string";
   return "unknown";
 }
@@ -9340,12 +9364,12 @@ function parsedType(data) {
   return t;
 }
 function issue(...args) {
-  const [iss, input2, inst] = args;
+  const [iss, input3, inst] = args;
   if (typeof iss === "string") {
     return {
       message: iss,
       code: "custom",
-      input: input2,
+      input: input3,
       inst
     };
   }
@@ -9955,8 +9979,8 @@ function failure(Err, issues, ctx) {
       }
       return error62;
     },
-    set error(e) {
-      error62 = e;
+    set error(e2) {
+      error62 = e2;
       issues = void 0;
       ctx = void 0;
     }
@@ -9991,9 +10015,9 @@ var init_parse = __esm({
           throw new $ZodAsyncError();
         }
         if (result.issues.length) {
-          const e = new (_params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
-          captureStackTrace(e, _params?.callee ?? fn);
-          throw e;
+          const e2 = new (_params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
+          captureStackTrace(e2, _params?.callee ?? fn);
+          throw e2;
         }
         return result.value;
       };
@@ -10007,9 +10031,9 @@ var init_parse = __esm({
         if (result instanceof Promise)
           result = await result;
         if (result.issues.length) {
-          const e = new (params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
-          captureStackTrace(e, params?.callee ?? fn);
-          throw e;
+          const e2 = new (params?.Err ?? _Err)(result.issues.map((iss) => finalizeIssue(iss, ctx, config())));
+          captureStackTrace(e2, params?.callee ?? fn);
+          throw e2;
         }
         return result.value;
       };
@@ -10380,23 +10404,23 @@ var init_checks = __esm({
       const origin = isInt ? "int" : "number";
       const [minimum, maximum] = NUMBER_FORMAT_RANGES[def.format];
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
+        const input3 = payload.value;
         if (isInt) {
-          if (!Number.isInteger(input2)) {
+          if (!Number.isInteger(input3)) {
             payload.issues.push({
               expected: origin,
               format: def.format,
               code: "invalid_type",
               continue: false,
-              input: input2,
+              input: input3,
               inst
             });
             return;
           }
-          if (!Number.isSafeInteger(input2)) {
-            if (input2 > 0) {
+          if (!Number.isSafeInteger(input3)) {
+            if (input3 > 0) {
               payload.issues.push({
-                input: input2,
+                input: input3,
                 code: "too_big",
                 maximum: Number.MAX_SAFE_INTEGER,
                 note: "Integers must be within the safe integer range.",
@@ -10407,7 +10431,7 @@ var init_checks = __esm({
               });
             } else {
               payload.issues.push({
-                input: input2,
+                input: input3,
                 code: "too_small",
                 minimum: Number.MIN_SAFE_INTEGER,
                 note: "Integers must be within the safe integer range.",
@@ -10420,10 +10444,10 @@ var init_checks = __esm({
             return;
           }
         }
-        if (input2 < minimum) {
+        if (input3 < minimum) {
           payload.issues.push({
             origin: "number",
-            input: input2,
+            input: input3,
             code: "too_small",
             minimum,
             inclusive: true,
@@ -10431,10 +10455,10 @@ var init_checks = __esm({
             continue: !def.abort
           });
         }
-        if (input2 > maximum) {
+        if (input3 > maximum) {
           payload.issues.push({
             origin: "number",
-            input: input2,
+            input: input3,
             code: "too_big",
             maximum,
             inclusive: true,
@@ -10448,11 +10472,11 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       const [minimum, maximum] = BIGINT_FORMAT_RANGES[def.format];
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        if (input2 < minimum) {
+        const input3 = payload.value;
+        if (input3 < minimum) {
           payload.issues.push({
             origin: "bigint",
-            input: input2,
+            input: input3,
             code: "too_small",
             minimum,
             inclusive: true,
@@ -10460,10 +10484,10 @@ var init_checks = __esm({
             continue: !def.abort
           });
         }
-        if (input2 > maximum) {
+        if (input3 > maximum) {
           payload.issues.push({
             origin: "bigint",
-            input: input2,
+            input: input3,
             code: "too_big",
             maximum,
             inclusive: true,
@@ -10478,16 +10502,16 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasSize);
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const size = input2.size;
+        const input3 = payload.value;
+        const size = input3.size;
         if (size <= def.maximum)
           return;
         payload.issues.push({
-          origin: getSizableOrigin(input2),
+          origin: getSizableOrigin(input3),
           code: "too_big",
           maximum: def.maximum,
           inclusive: true,
-          input: input2,
+          input: input3,
           inst,
           continue: !def.abort
         });
@@ -10498,16 +10522,16 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasSize);
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const size = input2.size;
+        const input3 = payload.value;
+        const size = input3.size;
         if (size >= def.minimum)
           return;
         payload.issues.push({
-          origin: getSizableOrigin(input2),
+          origin: getSizableOrigin(input3),
           code: "too_small",
           minimum: def.minimum,
           inclusive: true,
-          input: input2,
+          input: input3,
           inst,
           continue: !def.abort
         });
@@ -10518,13 +10542,13 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasSize);
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const size = input2.size;
+        const input3 = payload.value;
+        const size = input3.size;
         if (size === def.size)
           return;
         const tooBig = size > def.size;
         payload.issues.push({
-          origin: getSizableOrigin(input2),
+          origin: getSizableOrigin(input3),
           ...tooBig ? { code: "too_big", maximum: def.size } : { code: "too_small", minimum: def.size },
           inclusive: true,
           exact: true,
@@ -10539,18 +10563,18 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const units = input2.length;
-        const length = typeof input2 === "string" && units > def.maximum ? codePointLength(input2) : units;
+        const input3 = payload.value;
+        const units = input3.length;
+        const length = typeof input3 === "string" && units > def.maximum ? codePointLength(input3) : units;
         if (length <= def.maximum)
           return;
-        const origin = getLengthableOrigin(input2);
+        const origin = getLengthableOrigin(input3);
         payload.issues.push({
           origin,
           code: "too_big",
           maximum: def.maximum,
           inclusive: true,
-          input: input2,
+          input: input3,
           inst,
           continue: !def.abort
         });
@@ -10561,18 +10585,18 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const units = input2.length;
-        const length = typeof input2 === "string" && units >= def.minimum && units < def.minimum * 2 ? codePointLength(input2) : units;
+        const input3 = payload.value;
+        const units = input3.length;
+        const length = typeof input3 === "string" && units >= def.minimum && units < def.minimum * 2 ? codePointLength(input3) : units;
         if (length >= def.minimum)
           return;
-        const origin = getLengthableOrigin(input2);
+        const origin = getLengthableOrigin(input3);
         payload.issues.push({
           origin,
           code: "too_small",
           minimum: def.minimum,
           inclusive: true,
-          input: input2,
+          input: input3,
           inst,
           continue: !def.abort
         });
@@ -10583,12 +10607,12 @@ var init_checks = __esm({
       $ZodCheck.init(inst, def);
       (_a3 = inst._zod.def).when ?? (_a3.when = _whenHasLength);
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const units = input2.length;
-        const length = typeof input2 === "string" && units >= def.length && units <= def.length * 2 ? codePointLength(input2) : units;
+        const input3 = payload.value;
+        const units = input3.length;
+        const length = typeof input3 === "string" && units >= def.length && units <= def.length * 2 ? codePointLength(input3) : units;
         if (length === def.length)
           return;
-        const origin = getLengthableOrigin(input2);
+        const origin = getLengthableOrigin(input3);
         const tooBig = length > def.length;
         payload.issues.push({
           origin,
@@ -10729,10 +10753,10 @@ var init_checks = __esm({
           return void 0;
         }
         entries ?? (entries = Reflect.ownKeys(def.shape).map((key) => [key, def.shape[key]]));
-        const input2 = payload.value;
+        const input3 = payload.value;
         let proms;
         for (const [key, schema] of entries) {
-          const result = schema._zod.run({ value: input2[key], issues: [] }, {});
+          const result = schema._zod.run({ value: input3[key], issues: [] }, {});
           if (result instanceof Promise) {
             proms ?? (proms = []);
             proms.push(result.then((result2) => handleCheckPropertyResult(result2, payload, key)));
@@ -10848,11 +10872,11 @@ function standardProps(inst) {
     version: 1
   };
 }
-function canParseURL(input2) {
+function canParseURL(input3) {
   try {
     if (typeof URL !== "undefined" && typeof URL.canParse === "function")
-      return URL.canParse(input2);
-    new URL(input2);
+      return URL.canParse(input3);
+    new URL(input3);
     return true;
   } catch {
     return false;
@@ -10941,28 +10965,28 @@ function isLuhnAlgo(digits) {
   }
   return sum % 10 === 0;
 }
-function isValidCreditCard(input2) {
-  if (!creditCard.test(input2))
+function isValidCreditCard(input3) {
+  if (!creditCard.test(input3))
     return false;
-  return isLuhnAlgo(input2.replace(CC_SANITIZE, ""));
+  return isLuhnAlgo(input3.replace(CC_SANITIZE, ""));
 }
 function isIso7064Mod97(iban3) {
   let remainder = 0;
   const len = iban3.length;
   for (let i = 4; i < len; i++) {
-    const code = iban3.charCodeAt(i);
-    remainder = (code >= 65 ? remainder * 100 + (code - 55) : remainder * 10 + (code - 48)) % 97;
+    const code2 = iban3.charCodeAt(i);
+    remainder = (code2 >= 65 ? remainder * 100 + (code2 - 55) : remainder * 10 + (code2 - 48)) % 97;
   }
   for (let i = 0; i < 4; i++) {
-    const code = iban3.charCodeAt(i);
-    remainder = (code >= 65 ? remainder * 100 + (code - 55) : remainder * 10 + (code - 48)) % 97;
+    const code2 = iban3.charCodeAt(i);
+    remainder = (code2 >= 65 ? remainder * 100 + (code2 - 55) : remainder * 10 + (code2 - 48)) % 97;
   }
   return remainder === 1;
 }
-function isValidIBAN(input2) {
-  if (!iban.test(input2))
+function isValidIBAN(input3) {
+  if (!iban.test(input3))
     return false;
-  return isIso7064Mod97(input2);
+  return isIso7064Mod97(input3);
 }
 function isValidJWT(token, algorithm = null) {
   try {
@@ -10991,10 +11015,10 @@ function capSize(inst, size) {
   const cap = Math.min(...caps.map((c) => c[0]));
   const parse3 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
-    const n = size(payload.value);
-    if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
+    const n2 = size(payload.value);
+    if (n2 > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
       for (const [max, ch] of sizeCaps(inst._zod.def.checks)) {
-        if (n > max && ch._zod.def.when(payload)) {
+        if (n2 > max && ch._zod.def.when(payload)) {
           const start = payload.issues.length;
           ch._zod.check(payload);
           payload.issues[start].continue = false;
@@ -11012,8 +11036,8 @@ function handleArrayResult(result, final, index) {
   }
   final.value[index] = result.value;
 }
-function handlePropertyResult(result, final, key, input2, optin, optout) {
-  const isPresent = key in input2;
+function handlePropertyResult(result, final, key, input3, optin, optout) {
+  const isPresent = key in input3;
   const isOptionalOut = optout === "optional";
   if (!isPresent && isOptionalOut && optin === "optional") {
     return;
@@ -11064,7 +11088,7 @@ function normalizeDef(def) {
     optionalKeys: new Set(okeys)
   };
 }
-function handleCatchall(proms, input2, payload, ctx, def, inst, abortEarly) {
+function handleCatchall(proms, input3, payload, ctx, def, inst, abortEarly) {
   const unrecognized = [];
   const keySet = def.keySet;
   const _catchall = def.catchall._zod;
@@ -11072,7 +11096,7 @@ function handleCatchall(proms, input2, payload, ctx, def, inst, abortEarly) {
   const optin = _catchall.optin;
   const optout = _catchall.optout;
   let seen = 0;
-  for (const key in input2) {
+  for (const key in input3) {
     if (abortEarly && payload.issues.length !== seen) {
       if (aborted(payload, seen))
         break;
@@ -11089,18 +11113,18 @@ function handleCatchall(proms, input2, payload, ctx, def, inst, abortEarly) {
       unrecognized.push(key);
       continue;
     }
-    const r = _catchall.run({ value: input2[key], issues: [] }, ctx);
+    const r = _catchall.run({ value: input3[key], issues: [] }, ctx);
     if (r instanceof Promise) {
-      proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input2, optin, optout)));
+      proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input3, optin, optout)));
     } else {
-      handlePropertyResult(r, payload, key, input2, optin, optout);
+      handlePropertyResult(r, payload, key, input3, optin, optout);
     }
   }
   if (unrecognized.length) {
     payload.issues.push({
       code: "unrecognized_keys",
       keys: unrecognized,
-      input: input2,
+      input: input3,
       inst,
       // Describes the shape of the input, not the validity of the parsed value, so it never aborts. The parse still fails; the schema's own checks just get to run first, and an enclosing intersection can reconcile the key against a sibling operand.
       continue: true
@@ -11304,10 +11328,10 @@ function handleTupleResult(result, final, index) {
   }
   final.value[index] = result.value;
 }
-function handleTupleResults(itemResults, final, items, input2, optoutStart) {
+function handleTupleResults(itemResults, final, items, input3, optoutStart) {
   for (let i = 0; i < items.length; i++) {
     const r = itemResults[i];
-    const isPresent = i < input2.length;
+    const isPresent = i < input3.length;
     if (!isPresent && i >= optoutStart && items[i]._zod.optin === "optional") {
       final.value.length = i;
       break;
@@ -11321,7 +11345,7 @@ function handleTupleResults(itemResults, final, items, input2, optoutStart) {
     }
     final.value[i] = r.value;
   }
-  for (let i = final.value.length - 1; i >= input2.length; i--) {
+  for (let i = final.value.length - 1; i >= input3.length; i--) {
     if (items[i]._zod.optout === "optional" && final.value[i] === void 0) {
       final.value.length = i;
     } else {
@@ -11330,7 +11354,7 @@ function handleTupleResults(itemResults, final, items, input2, optoutStart) {
   }
   return final;
 }
-function handleMapResult(keyResult, valueResult, final, key, input2, inst, ctx) {
+function handleMapResult(keyResult, valueResult, final, key, input3, inst, ctx) {
   if (keyResult.issues.length) {
     if (propertyKeyTypes.has(typeof key)) {
       final.issues.push(...prefixIssues(key, keyResult.issues));
@@ -11338,7 +11362,7 @@ function handleMapResult(keyResult, valueResult, final, key, input2, inst, ctx) 
       final.issues.push({
         code: "invalid_key",
         origin: "map",
-        input: input2,
+        input: input3,
         inst,
         issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config()))
       });
@@ -11351,7 +11375,7 @@ function handleMapResult(keyResult, valueResult, final, key, input2, inst, ctx) 
       final.issues.push({
         origin: "map",
         code: "invalid_element",
-        input: input2,
+        input: input3,
         inst,
         key,
         issues: valueResult.issues.map((iss) => finalizeIssue(iss, ctx, config()))
@@ -11489,11 +11513,11 @@ function partPattern(schema) {
   }
   return leafPattern(schema);
 }
-function handleRefineResult(result, payload, input2, inst) {
+function handleRefineResult(result, payload, input3, inst) {
   if (!result) {
     const _iss = {
       code: "custom",
-      input: input2,
+      input: input3,
       inst,
       // incorporates params.error into issue reporting
       path: [...inst._zod.def.path ?? []],
@@ -11941,15 +11965,15 @@ var init_schemas = __esm({
             payload.value = Number(payload.value);
           } catch (_) {
           }
-        const input2 = payload.value;
-        if (typeof input2 === "number" && !Number.isNaN(input2) && Number.isFinite(input2)) {
+        const input3 = payload.value;
+        if (typeof input3 === "number" && !Number.isNaN(input3) && Number.isFinite(input3)) {
           return payload;
         }
-        const received = typeof input2 === "number" ? Number.isNaN(input2) ? "NaN" : !Number.isFinite(input2) ? String(input2) : void 0 : void 0;
+        const received = typeof input3 === "number" ? Number.isNaN(input3) ? "NaN" : !Number.isFinite(input3) ? String(input3) : void 0 : void 0;
         payload.issues.push({
           expected: "number",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst,
           ...received ? { received } : {}
         });
@@ -11969,13 +11993,13 @@ var init_schemas = __esm({
             payload.value = Boolean(payload.value);
           } catch (_) {
           }
-        const input2 = payload.value;
-        if (typeof input2 === "boolean")
+        const input3 = payload.value;
+        if (typeof input3 === "boolean")
           return payload;
         payload.issues.push({
           expected: "boolean",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12008,13 +12032,13 @@ var init_schemas = __esm({
     $ZodSymbol = /* @__PURE__ */ $constructor("$ZodSymbol", (inst, def) => {
       $ZodType.init(inst, def);
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (typeof input2 === "symbol")
+        const input3 = payload.value;
+        if (typeof input3 === "symbol")
           return payload;
         payload.issues.push({
           expected: "symbol",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12025,13 +12049,13 @@ var init_schemas = __esm({
       inst._zod.pattern = _undefined;
       inst._zod.values = /* @__PURE__ */ new Set([void 0]);
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (typeof input2 === "undefined")
+        const input3 = payload.value;
+        if (typeof input3 === "undefined")
           return payload;
         payload.issues.push({
           expected: "undefined",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12042,13 +12066,13 @@ var init_schemas = __esm({
       inst._zod.pattern = _null;
       inst._zod.values = /* @__PURE__ */ new Set([null]);
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (input2 === null)
+        const input3 = payload.value;
+        if (input3 === null)
           return payload;
         payload.issues.push({
           expected: "null",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12077,13 +12101,13 @@ var init_schemas = __esm({
     $ZodVoid = /* @__PURE__ */ $constructor("$ZodVoid", (inst, def) => {
       $ZodType.init(inst, def);
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (typeof input2 === "undefined")
+        const input3 = payload.value;
+        if (typeof input3 === "undefined")
           return payload;
         payload.issues.push({
           expected: "void",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12098,44 +12122,44 @@ var init_schemas = __esm({
           } catch (_err) {
           }
         }
-        const input2 = payload.value;
-        const isDate = input2 instanceof Date;
-        const isValidDate = isDate && !Number.isNaN(input2.getTime());
+        const input3 = payload.value;
+        const isDate = input3 instanceof Date;
+        const isValidDate = isDate && !Number.isNaN(input3.getTime());
         if (isValidDate)
           return payload;
         payload.issues.push({
           expected: "date",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           ...isDate ? { received: "Invalid Date" } : {},
           inst
         });
         return payload;
       };
     });
-    arraySize = (input2) => Array.isArray(input2) ? input2.length : -1;
-    mapSize = (input2) => input2 instanceof Map ? input2.size : -1;
-    setSize = (input2) => input2 instanceof Set ? input2.size : -1;
+    arraySize = (input3) => Array.isArray(input3) ? input3.length : -1;
+    mapSize = (input3) => input3 instanceof Map ? input3.size : -1;
+    setSize = (input3) => input3 instanceof Set ? input3.size : -1;
     $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
       $ZodType.init(inst, def);
       const memo2 = globalConfig.memoizer;
       memo2?.attach(inst);
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        if (!Array.isArray(input2)) {
+        const input3 = payload.value;
+        if (!Array.isArray(input3)) {
           payload.issues.push({
             expected: "array",
             code: "invalid_type",
-            input: input2,
+            input: input3,
             inst
           });
           return payload;
         }
-        payload.value = memo2 ? memo2.alloc(inst, payload, Array(input2.length), ctx) : Array(input2.length);
+        payload.value = memo2 ? memo2.alloc(inst, payload, Array(input3.length), ctx) : Array(input3.length);
         const proms = [];
         const abortEarly = ctx?.abortEarly;
-        for (let i = 0; i < input2.length; i++) {
-          const item = input2[i];
+        for (let i = 0; i < input3.length; i++) {
+          const item = input3[i];
           const result = def.element._zod.run({
             value: item,
             issues: []
@@ -12195,12 +12219,12 @@ var init_schemas = __esm({
       memo2?.attach(inst);
       inst._zod.parse = (payload, ctx) => {
         value ?? (value = _normalized.value);
-        const input2 = payload.value;
-        if (!isObject2(input2)) {
+        const input3 = payload.value;
+        if (!isObject2(input3)) {
           payload.issues.push({
             expected: "object",
             code: "invalid_type",
-            input: input2,
+            input: input3,
             inst
           });
           return payload;
@@ -12221,17 +12245,17 @@ var init_schemas = __esm({
           const el = shape[key];
           const optin = el._zod.optin;
           const optout = el._zod.optout;
-          const r = el._zod.run({ value: input2[key], issues: [] }, ctx);
+          const r = el._zod.run({ value: input3[key], issues: [] }, ctx);
           if (r instanceof Promise) {
-            proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input2, optin, optout)));
+            proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input3, optin, optout)));
           } else {
-            handlePropertyResult(r, payload, key, input2, optin, optout);
+            handlePropertyResult(r, payload, key, input3, optin, optout);
           }
         }
         if (!catchall) {
           return proms.length ? Promise.all(proms).then(() => payload) : payload;
         }
-        return handleCatchall(proms, input2, payload, ctx, _normalized.value, inst, abortEarly === true);
+        return handleCatchall(proms, input3, payload, ctx, _normalized.value, inst, abortEarly === true);
       };
     });
     $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) => {
@@ -12340,12 +12364,12 @@ var init_schemas = __esm({
       let value;
       inst._zod.parse = (payload, ctx) => {
         value ?? (value = _normalized.value);
-        const input2 = payload.value;
-        if (!isObject2(input2)) {
+        const input3 = payload.value;
+        if (!isObject2(input3)) {
           payload.issues.push({
             expected: "object",
             code: "invalid_type",
-            input: input2,
+            input: input3,
             inst
           });
           return payload;
@@ -12356,7 +12380,7 @@ var init_schemas = __esm({
           payload = fastpass(payload, ctx);
           if (!catchall)
             return payload;
-          return handleCatchall([], input2, payload, ctx, value, inst, ctx?.abortEarly === true);
+          return handleCatchall([], input3, payload, ctx, value, inst, ctx?.abortEarly === true);
         }
         return superParse(payload, ctx);
       };
@@ -12469,17 +12493,17 @@ var init_schemas = __esm({
       });
       const disc = cached(() => discriminatorMap(def));
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        if (!isObject(input2)) {
+        const input3 = payload.value;
+        if (!isObject(input3)) {
           payload.issues.push({
             code: "invalid_type",
             expected: "object",
-            input: input2,
+            input: input3,
             inst
           });
           return payload;
         }
-        const value = input2?.[def.discriminator];
+        const value = input3?.[def.discriminator];
         const opt = disc.value.get(value);
         if (opt && (value !== void 0 || ctx.direction !== "backward")) {
           return opt._zod.run(payload, ctx);
@@ -12493,7 +12517,7 @@ var init_schemas = __esm({
           note: "No matching discriminator",
           discriminator: def.discriminator,
           options: Array.from(disc.value.keys()).filter((value2) => disc.value.get(value2) !== null),
-          input: input2,
+          input: input3,
           path: [def.discriminator],
           inst
         });
@@ -12503,9 +12527,9 @@ var init_schemas = __esm({
     $ZodIntersection = /* @__PURE__ */ $constructor("$ZodIntersection", (inst, def) => {
       $ZodType.init(inst, def);
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        const left = def.left._zod.run({ value: input2, issues: [] }, ctx);
-        const right = def.right._zod.run({ value: input2, issues: [] }, ctx);
+        const input3 = payload.value;
+        const left = def.left._zod.run({ value: input3, issues: [] }, ctx);
+        const right = def.right._zod.run({ value: input3, issues: [] }, ctx);
         const async = left instanceof Promise || right instanceof Promise;
         if (async) {
           return Promise.all([left, right]).then(([left2, right2]) => {
@@ -12521,10 +12545,10 @@ var init_schemas = __esm({
       const memo2 = globalConfig.memoizer;
       memo2?.attach(inst);
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        if (!Array.isArray(input2)) {
+        const input3 = payload.value;
+        if (!Array.isArray(input3)) {
           payload.issues.push({
-            input: input2,
+            input: input3,
             inst,
             expected: "tuple",
             code: "invalid_type"
@@ -12536,23 +12560,23 @@ var init_schemas = __esm({
         const optinStart = getTupleOptStart(items, "optin");
         const optoutStart = getTupleOptStart(items, "optout");
         if (!def.rest) {
-          if (input2.length < optinStart) {
+          if (input3.length < optinStart) {
             payload.issues.push({
               code: "too_small",
               minimum: optinStart,
               inclusive: true,
-              input: input2,
+              input: input3,
               inst,
               origin: "array"
             });
             return payload;
           }
-          if (input2.length > items.length) {
+          if (input3.length > items.length) {
             payload.issues.push({
               code: "too_big",
               maximum: items.length,
               inclusive: true,
-              input: input2,
+              input: input3,
               inst,
               origin: "array"
             });
@@ -12562,7 +12586,7 @@ var init_schemas = __esm({
         const abortEarly = def.rest ? ctx?.abortEarly : void 0;
         let itemAborted = false;
         for (let i = 0; i < items.length; i++) {
-          const r = items[i]._zod.run({ value: input2[i], issues: [] }, ctx);
+          const r = items[i]._zod.run({ value: input3[i], issues: [] }, ctx);
           if (r instanceof Promise) {
             proms.push(r.then((rr) => {
               itemResults[i] = rr;
@@ -12575,7 +12599,7 @@ var init_schemas = __esm({
         }
         if (def.rest && !itemAborted) {
           let i = items.length - 1;
-          const rest = input2.slice(items.length);
+          const rest = input3.slice(items.length);
           let seen = payload.issues.length;
           for (const el of rest) {
             if (abortEarly && payload.issues.length !== seen) {
@@ -12593,9 +12617,9 @@ var init_schemas = __esm({
           }
         }
         if (proms.length) {
-          return Promise.all(proms).then(() => handleTupleResults(itemResults, payload, items, input2, optoutStart));
+          return Promise.all(proms).then(() => handleTupleResults(itemResults, payload, items, input3, optoutStart));
         }
-        return handleTupleResults(itemResults, payload, items, input2, optoutStart);
+        return handleTupleResults(itemResults, payload, items, input3, optoutStart);
       };
     });
     $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
@@ -12603,12 +12627,12 @@ var init_schemas = __esm({
       const memo2 = globalConfig.memoizer;
       memo2?.attach(inst);
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        if (!isPlainObject(input2)) {
+        const input3 = payload.value;
+        if (!isPlainObject(input3)) {
           payload.issues.push({
             expected: "record",
             code: "invalid_type",
-            input: input2,
+            input: input3,
             inst
           });
           return payload;
@@ -12641,7 +12665,7 @@ var init_schemas = __esm({
               const outKey = keyResult.value;
               if (outKey === "__proto__")
                 continue;
-              const result = def.valueType._zod.run({ value: input2[key], issues: [] }, ctx);
+              const result = def.valueType._zod.run({ value: input3[key], issues: [] }, ctx);
               if (result instanceof Promise) {
                 proms.push(result.then((result2) => {
                   if (result2.issues.length) {
@@ -12658,12 +12682,12 @@ var init_schemas = __esm({
             }
           }
           let unrecognized;
-          for (const key in input2) {
+          for (const key in input3) {
             if (!recordKeys.has(key)) {
               if (def.mode === "loose") {
                 if (key === "__proto__")
                   continue;
-                payload.value[key] = input2[key];
+                payload.value[key] = input3[key];
               } else {
                 unrecognized = unrecognized ?? [];
                 unrecognized.push(key);
@@ -12673,7 +12697,7 @@ var init_schemas = __esm({
           if (unrecognized && unrecognized.length > 0) {
             payload.issues.push({
               code: "unrecognized_keys",
-              input: input2,
+              input: input3,
               inst,
               keys: unrecognized,
               continue: true
@@ -12682,10 +12706,10 @@ var init_schemas = __esm({
         } else {
           payload.value = memo2 ? memo2.alloc(inst, payload, {}, ctx) : {};
           let unrecognized;
-          for (const key of Reflect.ownKeys(input2)) {
+          for (const key of Reflect.ownKeys(input3)) {
             if (key === "__proto__")
               continue;
-            if (!Object.prototype.propertyIsEnumerable.call(input2, key))
+            if (!Object.prototype.propertyIsEnumerable.call(input3, key))
               continue;
             let keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
             if (keyResult instanceof Promise) {
@@ -12703,7 +12727,7 @@ var init_schemas = __esm({
             }
             if (keyResult.issues.length) {
               if (def.mode === "loose") {
-                payload.value[key] = input2[key];
+                payload.value[key] = input3[key];
               } else if (values) {
                 unrecognized = unrecognized ?? [];
                 unrecognized.push(key);
@@ -12722,7 +12746,7 @@ var init_schemas = __esm({
             const outKey = keyResult.value;
             if (outKey === "__proto__")
               continue;
-            const result = def.valueType._zod.run({ value: input2[key], issues: [] }, ctx);
+            const result = def.valueType._zod.run({ value: input3[key], issues: [] }, ctx);
             if (result instanceof Promise) {
               proms.push(result.then((result2) => {
                 if (result2.issues.length) {
@@ -12740,7 +12764,7 @@ var init_schemas = __esm({
           if (unrecognized && unrecognized.length > 0) {
             payload.issues.push({
               code: "unrecognized_keys",
-              input: input2,
+              input: input3,
               inst,
               keys: unrecognized,
               continue: true
@@ -12758,12 +12782,12 @@ var init_schemas = __esm({
       const memo2 = globalConfig.memoizer;
       memo2?.attach(inst);
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        if (!(input2 instanceof Map)) {
+        const input3 = payload.value;
+        if (!(input3 instanceof Map)) {
           payload.issues.push({
             expected: "map",
             code: "invalid_type",
-            input: input2,
+            input: input3,
             inst
           });
           return payload;
@@ -12772,7 +12796,7 @@ var init_schemas = __esm({
         payload.value = memo2 ? memo2.alloc(inst, payload, /* @__PURE__ */ new Map(), ctx) : /* @__PURE__ */ new Map();
         const abortEarly = ctx?.abortEarly;
         let seen = payload.issues.length;
-        for (const [key, value] of input2) {
+        for (const [key, value] of input3) {
           if (abortEarly && payload.issues.length !== seen) {
             if (aborted(payload, seen))
               break;
@@ -12782,10 +12806,10 @@ var init_schemas = __esm({
           const valueResult = def.valueType._zod.run({ value, issues: [] }, ctx);
           if (keyResult instanceof Promise || valueResult instanceof Promise) {
             proms.push(Promise.all([keyResult, valueResult]).then(([keyResult2, valueResult2]) => {
-              handleMapResult(keyResult2, valueResult2, payload, key, input2, inst, ctx);
+              handleMapResult(keyResult2, valueResult2, payload, key, input3, inst, ctx);
             }));
           } else {
-            handleMapResult(keyResult, valueResult, payload, key, input2, inst, ctx);
+            handleMapResult(keyResult, valueResult, payload, key, input3, inst, ctx);
           }
         }
         if (proms.length)
@@ -12799,10 +12823,10 @@ var init_schemas = __esm({
       const memo2 = globalConfig.memoizer;
       memo2?.attach(inst);
       inst._zod.parse = (payload, ctx) => {
-        const input2 = payload.value;
-        if (!(input2 instanceof Set)) {
+        const input3 = payload.value;
+        if (!(input3 instanceof Set)) {
           payload.issues.push({
-            input: input2,
+            input: input3,
             inst,
             expected: "set",
             code: "invalid_type"
@@ -12813,7 +12837,7 @@ var init_schemas = __esm({
         payload.value = memo2 ? memo2.alloc(inst, payload, /* @__PURE__ */ new Set(), ctx) : /* @__PURE__ */ new Set();
         const abortEarly = ctx?.abortEarly;
         let seen = payload.issues.length;
-        for (const item of input2) {
+        for (const item of input3) {
           if (abortEarly && payload.issues.length !== seen) {
             if (aborted(payload, seen))
               break;
@@ -12841,14 +12865,14 @@ var init_schemas = __esm({
         return new RegExp(patternValues.length ? `^(${patternValues.map((o) => escapeRegex(o.toString())).join("|")})$` : "^[^\\s\\S]$");
       });
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (valuesSet.has(input2)) {
+        const input3 = payload.value;
+        if (valuesSet.has(input3)) {
           return payload;
         }
         payload.issues.push({
           code: "invalid_value",
           values,
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12863,14 +12887,14 @@ var init_schemas = __esm({
         return new RegExp(vals.length ? `^(${vals.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$` : "^[^\\s\\S]$");
       });
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (values.has(input2)) {
+        const input3 = payload.value;
+        if (values.has(input3)) {
           return payload;
         }
         payload.issues.push({
           code: "invalid_value",
           values: def.values,
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -12879,13 +12903,13 @@ var init_schemas = __esm({
     $ZodFile = /* @__PURE__ */ $constructor("$ZodFile", (inst, def) => {
       $ZodType.init(inst, def);
       inst._zod.parse = (payload, _ctx) => {
-        const input2 = payload.value;
-        if (input2 instanceof File)
+        const input3 = payload.value;
+        if (input3 instanceof File)
           return payload;
         payload.issues.push({
           expected: "file",
           code: "invalid_type",
-          input: input2,
+          input: input3,
           inst
         });
         return payload;
@@ -13270,12 +13294,12 @@ var init_schemas = __esm({
         return payload;
       };
       inst._zod.check = (payload) => {
-        const input2 = payload.value;
-        const r = def.fn(input2);
+        const input3 = payload.value;
+        const r = def.fn(input3);
         if (r instanceof Promise) {
-          return r.then((r2) => handleRefineResult(r2, payload, input2, inst));
+          return r.then((r2) => handleRefineResult(r2, payload, input3, inst));
         }
-        handleRefineResult(r, payload, input2, inst);
+        handleRefineResult(r, payload, input3, inst);
         return;
       };
     });
@@ -13510,8 +13534,8 @@ var init_memoizer = __esm({
               else
                 rechecked = true;
             }
-            const input2 = payload.value;
-            if (!isRef(input2))
+            const input3 = payload.value;
+            if (!isRef(input3))
               return base(payload, ctx);
             let state = ctx[STATE];
             if (!state) {
@@ -13526,7 +13550,7 @@ var init_memoizer = __esm({
               lastCtx = ctx;
               lastBucket = bucket;
             }
-            const hit = bucket.get(input2);
+            const hit = bucket.get(input3);
             if (hit) {
               payload.value = hit.value;
               if (hit.issues) {
@@ -15034,9 +15058,9 @@ var init_en = __esm({
         nan: "NaN"
         // All other type names omitted - they fall back to raw values via ?? operator
       };
-      function getTypeName(type, input2) {
-        if (type === "number" && typeof input2 === "number" && !Number.isFinite(input2)) {
-          return String(input2);
+      function getTypeName(type, input3) {
+        if (type === "number" && typeof input3 === "number" && !Number.isFinite(input3)) {
+          return String(input3);
         }
         return TypeDictionary[type] ?? type;
       }
@@ -16035,15 +16059,15 @@ var init_he = __esm({
       };
       const typeEntry = (t) => t ? TypeNames[t] : void 0;
       const typeLabel = (t) => {
-        const e = typeEntry(t);
-        if (e)
-          return e.label;
+        const e2 = typeEntry(t);
+        if (e2)
+          return e2.label;
         return t ?? TypeNames.unknown.label;
       };
       const withDefinite = (t) => `\u05D4${typeLabel(t)}`;
       const verbFor = (t) => {
-        const e = typeEntry(t);
-        const gender = e?.gender ?? "m";
+        const e2 = typeEntry(t);
+        const gender = e2?.gender ?? "m";
         return gender === "f" ? "\u05E6\u05E8\u05D9\u05DB\u05D4 \u05DC\u05D4\u05D9\u05D5\u05EA" : "\u05E6\u05E8\u05D9\u05DA \u05DC\u05D4\u05D9\u05D5\u05EA";
       };
       const getSizing = (origin) => {
@@ -21723,12 +21747,12 @@ function compileFn(schema, options) {
   doc.write(outputAccessor === null ? `return true;` : `return ${outputAccessor};`);
   const constantNames = ["INVALID", ...ctx.constants.keys()];
   const constantValues = [INVALID, ...ctx.constants.values()];
-  const code = doc.content.join("\n");
+  const code2 = doc.content.join("\n");
   const fullCode = options?.debug ? constantNames.length > 0 ? `// Constants: ${constantNames.join(", ")}
-${code}` : code : "";
+${code2}` : code2 : "";
   const F = Function;
   const factoryCode = `return (input) => {
-${code}
+${code2}
 }`;
   let fn;
   try {
@@ -23928,23 +23952,23 @@ function _overwrite(tx) {
 }
 // @__NO_SIDE_EFFECTS__
 function _normalize(form) {
-  return /* @__PURE__ */ _overwrite((input2) => input2.normalize(form));
+  return /* @__PURE__ */ _overwrite((input3) => input3.normalize(form));
 }
 // @__NO_SIDE_EFFECTS__
 function _trim() {
-  return /* @__PURE__ */ _overwrite((input2) => input2.trim());
+  return /* @__PURE__ */ _overwrite((input3) => input3.trim());
 }
 // @__NO_SIDE_EFFECTS__
 function _toLowerCase() {
-  return /* @__PURE__ */ _overwrite((input2) => input2.toLowerCase());
+  return /* @__PURE__ */ _overwrite((input3) => input3.toLowerCase());
 }
 // @__NO_SIDE_EFFECTS__
 function _toUpperCase() {
-  return /* @__PURE__ */ _overwrite((input2) => input2.toUpperCase());
+  return /* @__PURE__ */ _overwrite((input3) => input3.toUpperCase());
 }
 // @__NO_SIDE_EFFECTS__
 function _slugify() {
-  return /* @__PURE__ */ _overwrite((input2) => slugify(input2));
+  return /* @__PURE__ */ _overwrite((input3) => slugify(input3));
 }
 // @__NO_SIDE_EFFECTS__
 function _array(Class2, element, params) {
@@ -24250,8 +24274,8 @@ function _stringbool(Classes, _params) {
     type: "pipe",
     in: stringSchema,
     out: booleanSchema,
-    transform: ((input2, payload) => {
-      let data = input2;
+    transform: ((input3, payload) => {
+      let data = input3;
       if (params.case !== "sensitive")
         data = data.toLowerCase();
       if (truthySet.has(data)) {
@@ -24270,8 +24294,8 @@ function _stringbool(Classes, _params) {
         return {};
       }
     }),
-    reverseTransform: ((input2, _payload) => {
-      if (input2 === true) {
+    reverseTransform: ((input3, _payload) => {
+      if (input3 === true) {
         return truthyArray[0] || "true";
       } else {
         return falsyArray[0] || "false";
@@ -24858,8 +24882,8 @@ var init_to_json_schema = __esm({
 function aggregateChecks(schema) {
   const agg = {};
   const def = schema._zod.def;
-  const list2 = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
-  for (const ch of list2)
+  const list3 = schema._zod.traits.has("$ZodCheck") ? [schema, ...def.checks ?? []] : def.checks ?? [];
+  for (const ch of list3)
     contributors[ch._zod.def.check]?.(agg, ch._zod.def);
   const bag = schema._zod.bag;
   if (bag.minimum !== void 0)
@@ -24968,9 +24992,9 @@ function serializeDefaultValue(value, schema, ctx, json2, params) {
   handleUnrepresentable(schema, ctx, json2, params, "BigInt defaults cannot be represented in JSON Schema");
   return UNREPRESENTABLE_DEFAULT;
 }
-function toJSONSchema(input2, params) {
-  if ("_idmap" in input2) {
-    const registry2 = input2;
+function toJSONSchema(input3, params) {
+  if ("_idmap" in input3) {
+    const registry2 = input3;
     const ctx2 = initializeContext({ ...params, processors: allProcessors });
     const defs = {};
     for (const entry of registry2._idmap.entries()) {
@@ -24998,9 +25022,9 @@ function toJSONSchema(input2, params) {
     return { schemas };
   }
   const ctx = initializeContext({ ...params, processors: allProcessors });
-  processSchema(input2, ctx);
-  extractDefs(ctx, input2);
-  return finalize(ctx, input2);
+  processSchema(input3, ctx);
+  extractDefs(ctx, input3);
+  return finalize(ctx, input3);
 }
 var narrowMin, narrowMax, narrowBoth, addDivisor, addPattern, intersectMime, setFormat, minContributor, maxContributor, formatContributor, contributors, formatMap, exactPatterns, exactPattern, stringProcessor, numberProcessor, booleanProcessor, bigintProcessor, symbolProcessor, nullProcessor, undefinedProcessor, voidProcessor, neverProcessor, anyProcessor, unknownProcessor, dateProcessor, enumProcessor, literalProcessor, nanProcessor, templateLiteralProcessor, fileProcessor, successProcessor, customProcessor, functionProcessor, transformProcessor, mapProcessor, setProcessor, arrayProcessor, objectProcessor, unionProcessor, intersectionProcessor, tupleProcessor, pendingRecords, recordProcessor, nullableProcessor, nonoptionalProcessor, UNREPRESENTABLE_DEFAULT, defaultProcessor, prefaultProcessor, catchProcessor, pipeProcessor, readonlyProcessor, promiseProcessor, optionalProcessor, lazyProcessor, allProcessors;
 var init_json_schema_processors = __esm({
@@ -27463,17 +27487,17 @@ var init_schemas2 = __esm({
       inst._zod.processJSONSchema = (ctx, json2, params) => arrayProcessor(inst, ctx, json2, params);
       inst.element = def.element;
     }, {
-      min(n, params) {
-        return this.check(_minLength(n, params));
+      min(n2, params) {
+        return this.check(_minLength(n2, params));
       },
       nonempty(params) {
         return this.check(_minLength(1, params));
       },
-      max(n, params) {
-        return this.check(_maxLength(n, params));
+      max(n2, params) {
+        return this.check(_maxLength(n2, params));
       },
-      length(n, params) {
-        return this.check(_length(n, params));
+      length(n2, params) {
+        return this.check(_length(n2, params));
       },
       unwrap() {
         return this.element;
@@ -28017,8 +28041,8 @@ function containsRef(value) {
     return Object.values(sub).some(containsRef);
   });
 }
-function plural(n) {
-  return n === 1 ? "element" : "elements";
+function plural(n2) {
+  return n2 === 1 ? "element" : "elements";
 }
 function checkArrayGuards(arraySchema, guards) {
   const guard = z.transform((value) => value).check((payload) => {
@@ -29260,15 +29284,15 @@ function reservationPrice(t, model) {
   if (found) return { price: found.price, unpriced: false };
   const models = Object.values(t.models);
   if (models.length === 0) throw new Error("price table has no models");
-  const input2 = Math.max(...models.map((m) => maxInputRate(m, true)));
+  const input3 = Math.max(...models.map((m) => maxInputRate(m, true)));
   const output2 = Math.max(...models.map((m) => maxOutputRate(m, true)));
   return {
     price: {
-      input: input2,
+      input: input3,
       output: output2,
-      cacheWrite5m: input2,
-      cacheWrite1h: input2,
-      cacheRead: input2,
+      cacheWrite5m: input3,
+      cacheWrite1h: input3,
+      cacheRead: input3,
       maxContextTokens: Math.max(...models.map((m) => m.maxContextTokens)),
       maxOutputTokens: Math.max(...models.map((m) => m.maxOutputTokens)),
       source: "envelope of every model in the price table",
@@ -29558,7 +29582,7 @@ var init_schema = __esm({
       failure: failure2.prefault({}),
       ci: ci.prefault({})
     });
-    chainProvider = (e) => typeof e === "string" ? e : e.provider;
+    chainProvider = (e2) => typeof e2 === "string" ? e2 : e2.provider;
     keyRecordSchema = external_exports.strictObject({
       hash: external_exports.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 hex digest"),
       keyId: name,
@@ -29654,15 +29678,15 @@ function budgetEnforced(b, billing) {
   return billing === "subscription" ? b.enforceSubscription : b.enforce;
 }
 function orderChain(route2, seed) {
-  const names = route2.chain.map((e) => e.provider);
-  const total = route2.chain.reduce((s2, e) => s2 + (e.weight ?? 0), 0);
+  const names = route2.chain.map((e2) => e2.provider);
+  const total = route2.chain.reduce((s2, e2) => s2 + (e2.weight ?? 0), 0);
   if (total <= 0) return names;
   const h = createHash3("sha256").update(route2.name).update("\0").update(seed).digest().readUInt32BE(0);
   const x = h / 2 ** 32 * total;
   let acc = 0;
-  let pick2 = route2.chain.findIndex((e) => {
-    acc += e.weight ?? 0;
-    return (e.weight ?? 0) > 0 && x < acc;
+  let pick2 = route2.chain.findIndex((e2) => {
+    acc += e2.weight ?? 0;
+    return (e2.weight ?? 0) > 0 && x < acc;
   });
   for (let i = route2.chain.length - 1; pick2 < 0 && i >= 0; i--) if ((route2.chain[i]?.weight ?? 0) > 0) pick2 = i;
   return [names[pick2], ...names.filter((_, i) => i !== pick2)];
@@ -29938,8 +29962,8 @@ function extrasOf(x) {
 }
 function applyUsage(u, raw) {
   if (!isObj2(raw)) return false;
-  const input2 = num(raw.input_tokens);
-  if (input2 !== void 0) u.input = input2;
+  const input3 = num(raw.input_tokens);
+  if (input3 !== void 0) u.input = input3;
   const read = num(raw.cache_read_input_tokens);
   if (read !== void 0) u.cacheRead = read;
   const cc = raw.cache_creation;
@@ -29998,15 +30022,15 @@ var init_anthropic_usage = __esm({
       error = null;
       model = null;
       extras = { fast: false, web: 0 };
-      onEvent(e) {
+      onEvent(e2) {
         let d;
         try {
-          d = JSON.parse(e.data);
+          d = JSON.parse(e2.data);
         } catch {
           return;
         }
         if (!isObj2(d)) return;
-        const type = typeof d.type === "string" ? d.type : e.event;
+        const type = typeof d.type === "string" ? d.type : e2.event;
         switch (type) {
           case "message_start": {
             const m = d.message;
@@ -30174,8 +30198,8 @@ function hasExpandingField(parsed, tools) {
   const cm = parsed.context_management;
   if (cm !== void 0) {
     if (!isObj3(cm) || cm.edits !== void 0 && !Array.isArray(cm.edits)) return true;
-    for (const e of cm.edits ?? []) {
-      if (!isObj3(e) || typeof e.type !== "string" || !CLEARING_EDIT_PREFIXES.some((p) => e.type.startsWith(p))) return true;
+    for (const e2 of cm.edits ?? []) {
+      if (!isObj3(e2) || typeof e2.type !== "string" || !CLEARING_EDIT_PREFIXES.some((p) => e2.type.startsWith(p))) return true;
     }
   }
   for (const t of tools) {
@@ -30496,9 +30520,9 @@ var init_breaker = __esm({
           return;
         }
         const cutoff = now - this.o.windowSeconds * 1e3;
-        s2.events = s2.events.filter((e) => e.at > cutoff);
+        s2.events = s2.events.filter((e2) => e2.at > cutoff);
         s2.events.push({ at: now, ok });
-        const failures = s2.events.filter((e) => !e.ok).length;
+        const failures = s2.events.filter((e2) => !e2.ok).length;
         if (s2.events.length >= this.o.minRequests && failures / s2.events.length >= this.o.failureRatio) {
           this.open(provider2, now + this.o.openSeconds * 1e3);
         }
@@ -31085,10 +31109,10 @@ var require_errors2 = __commonJS({
     };
     var kHTTPParserError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_HTTP_PARSER");
     var HTTPParserError = class extends Error {
-      constructor(message, code, data) {
+      constructor(message, code2, data) {
         super(message);
         this.name = "HTTPParserError";
-        this.code = code ? `HPE_${code}` : void 0;
+        this.code = code2 ? `HPE_${code2}` : void 0;
         this.data = data ? data.toString() : void 0;
       }
       static [Symbol.hasInstance](instance) {
@@ -31115,12 +31139,12 @@ var require_errors2 = __commonJS({
     };
     var kRequestRetryError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_REQ_RETRY");
     var RequestRetryError = class extends UndiciError {
-      constructor(message, code, { headers, data }) {
+      constructor(message, code2, { headers, data }) {
         super(message);
         this.name = "RequestRetryError";
         this.message = message || "Request retry error";
         this.code = "UND_ERR_REQ_RETRY";
-        this.statusCode = code;
+        this.statusCode = code2;
         this.data = data;
         this.headers = headers;
       }
@@ -31133,12 +31157,12 @@ var require_errors2 = __commonJS({
     };
     var kResponseError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_RESPONSE");
     var ResponseError = class extends UndiciError {
-      constructor(message, code, { headers, body }) {
+      constructor(message, code2, { headers, body }) {
         super(message);
         this.name = "ResponseError";
         this.message = message || "Response error";
         this.code = "UND_ERR_RESPONSE";
-        this.statusCode = code;
+        this.statusCode = code2;
         this.body = body;
         this.headers = headers;
       }
@@ -31181,11 +31205,11 @@ var require_errors2 = __commonJS({
       }
     };
     var Socks5ProxyError = class extends UndiciError {
-      constructor(message, code) {
+      constructor(message, code2) {
         super(message);
         this.name = "Socks5ProxyError";
         this.message = message || "SOCKS5 proxy error";
-        this.code = code || "UND_ERR_SOCKS5";
+        this.code = code2 || "UND_ERR_SOCKS5";
       }
     };
     var kMessageSizeExceededError = /* @__PURE__ */ Symbol.for("undici.error.UND_ERR_WS_MESSAGE_SIZE_EXCEEDED");
@@ -31389,8 +31413,8 @@ var require_tree = __commonJS({
         if (index === void 0 || index >= key.length) {
           throw new TypeError("Unreachable");
         }
-        const code = this.code = key.charCodeAt(index);
-        if (code > 127) {
+        const code2 = this.code = key.charCodeAt(index);
+        if (code2 > 127) {
           throw new TypeError("key must be ascii string");
         }
         if (key.length !== ++index) {
@@ -31412,11 +31436,11 @@ var require_tree = __commonJS({
         let index = 0;
         let node2 = this;
         while (true) {
-          const code = key.charCodeAt(index);
-          if (code > 127) {
+          const code2 = key.charCodeAt(index);
+          if (code2 > 127) {
             throw new TypeError("key must be ascii string");
           }
-          if (node2.code === code) {
+          if (node2.code === code2) {
             if (length === ++index) {
               node2.value = value;
               break;
@@ -31426,7 +31450,7 @@ var require_tree = __commonJS({
               node2.middle = new _TstNode(key, value, index);
               break;
             }
-          } else if (node2.code < code) {
+          } else if (node2.code < code2) {
             if (node2.left !== null) {
               node2 = node2.left;
             } else {
@@ -31450,19 +31474,19 @@ var require_tree = __commonJS({
         let index = 0;
         let node2 = this;
         while (node2 !== null && index < keylength) {
-          let code = key[index];
-          if (code <= 90 && code >= 65) {
-            code |= 32;
+          let code2 = key[index];
+          if (code2 <= 90 && code2 >= 65) {
+            code2 |= 32;
           }
           while (node2 !== null) {
-            if (code === node2.code) {
+            if (code2 === node2.code) {
               if (keylength === ++index) {
                 return node2;
               }
               node2 = node2.middle;
               break;
             }
-            node2 = node2.code < code ? node2.left : node2.right;
+            node2 = node2.code < code2 ? node2.left : node2.right;
           }
         }
         return null;
@@ -31761,13 +31785,13 @@ var require_util = __commonJS({
       const ret = new Array(headersLength);
       let key;
       let val;
-      for (let n = 0; n < headersLength; n += 2) {
-        key = headers[n];
-        val = headers[n + 1];
+      for (let n2 = 0; n2 < headersLength; n2 += 2) {
+        key = headers[n2];
+        val = headers[n2 + 1];
         typeof key !== "string" && (key = key.toString());
         typeof val !== "string" && (val = val.toString("latin1"));
-        ret[n] = key;
-        ret[n + 1] = val;
+        ret[n2] = key;
+        ret[n2 + 1] = val;
       }
       return ret;
     }
@@ -32533,11 +32557,11 @@ var require_diagnostics = __commonJS({
       diagnosticsChannel.subscribe(
         "undici:websocket:close",
         (evt) => {
-          const { websocket, code, reason } = evt;
+          const { websocket, code: code2, reason } = evt;
           debugLog(
             "closed connection to %s - %s %s",
             websocket.url,
-            code,
+            code2,
             reason
           );
         }
@@ -34433,23 +34457,23 @@ var require_infra = __commonJS({
     "use strict";
     var assert2 = __require("node:assert");
     var { utf8DecodeBytes } = require_encoding();
-    function collectASequenceOfCodePoints(condition, input2, position) {
+    function collectASequenceOfCodePoints(condition, input3, position) {
       let result = "";
-      while (position.position < input2.length && condition(input2[position.position])) {
-        result += input2[position.position];
+      while (position.position < input3.length && condition(input3[position.position])) {
+        result += input3[position.position];
         position.position++;
       }
       return result;
     }
-    function collectASequenceOfCodePointsFast(char, input2, position) {
-      const idx = input2.indexOf(char, position.position);
+    function collectASequenceOfCodePointsFast(char, input3, position) {
+      const idx = input3.indexOf(char, position.position);
       const start = position.position;
       if (idx === -1) {
-        position.position = input2.length;
-        return input2.slice(start);
+        position.position = input3.length;
+        return input3.slice(start);
       }
       position.position = idx;
-      return input2.slice(start, position.position);
+      return input3.slice(start, position.position);
     }
     var ASCII_WHITESPACE_REPLACE_REGEX = /[\u0009\u000A\u000C\u000D\u0020]/g;
     var nonASCIIRegex = /[^\x00-\x7F]/;
@@ -34483,10 +34507,10 @@ var require_infra = __commonJS({
       char === 13 || // \r
       char === 32;
     }
-    function isomorphicDecode(input2) {
-      const length = input2.length;
+    function isomorphicDecode(input3) {
+      const length = input3.length;
       if ((2 << 15) - 1 > length) {
-        return String.fromCharCode.apply(null, input2);
+        return String.fromCharCode.apply(null, input3);
       }
       let result = "";
       let i = 0;
@@ -34495,14 +34519,14 @@ var require_infra = __commonJS({
         if (i + addition > length) {
           addition = length - i;
         }
-        result += String.fromCharCode.apply(null, input2.subarray(i, i += addition));
+        result += String.fromCharCode.apply(null, input3.subarray(i, i += addition));
       }
       return result;
     }
     var invalidIsomorphicEncodeValueRegex = /[^\x00-\xFF]/;
-    function isomorphicEncode(input2) {
-      assert2(!invalidIsomorphicEncodeValueRegex.test(input2));
-      return input2;
+    function isomorphicEncode(input3) {
+      assert2(!invalidIsomorphicEncodeValueRegex.test(input3));
+      return input3;
     }
     function parseJSONFromBytes(bytes) {
       return JSON.parse(utf8DecodeBytes(bytes));
@@ -34557,21 +34581,21 @@ var require_data_url = __commonJS({
     var HTTP_QUOTED_STRING_TOKENS = /^[\u0009\u0020-\u007E\u0080-\u00FF]+$/u;
     function dataURLProcessor(dataURL) {
       assert2(dataURL.protocol === "data:");
-      let input2 = URLSerializer(dataURL, true);
-      input2 = input2.slice(5);
+      let input3 = URLSerializer(dataURL, true);
+      input3 = input3.slice(5);
       const position = { position: 0 };
       let mimeType = collectASequenceOfCodePointsFast(
         ",",
-        input2,
+        input3,
         position
       );
       const mimeTypeLength = mimeType.length;
       mimeType = removeASCIIWhitespace(mimeType, true, true);
-      if (position.position >= input2.length) {
+      if (position.position >= input3.length) {
         return "failure";
       }
       position.position++;
-      const encodedBody = input2.slice(mimeTypeLength + 1);
+      const encodedBody = input3.slice(mimeTypeLength + 1);
       let body = stringPercentDecode(encodedBody);
       if (/;(?:\u0020*)base64$/ui.test(mimeType)) {
         const stringBody = isomorphicDecode(body);
@@ -34604,8 +34628,8 @@ var require_data_url = __commonJS({
       }
       return serialized;
     }
-    function stringPercentDecode(input2) {
-      const bytes = encoder.encode(input2);
+    function stringPercentDecode(input3) {
+      const bytes = encoder.encode(input3);
       return percentDecode(bytes);
     }
     function isHexCharByte(byte) {
@@ -34617,43 +34641,43 @@ var require_data_url = __commonJS({
         byte >= 48 && byte <= 57 ? byte - 48 : (byte & 223) - 55
       );
     }
-    function percentDecode(input2) {
-      const length = input2.length;
+    function percentDecode(input3) {
+      const length = input3.length;
       const output2 = new Uint8Array(length);
       let j = 0;
       let i = 0;
       while (i < length) {
-        const byte = input2[i];
+        const byte = input3[i];
         if (byte !== 37) {
           output2[j++] = byte;
-        } else if (byte === 37 && !(isHexCharByte(input2[i + 1]) && isHexCharByte(input2[i + 2]))) {
+        } else if (byte === 37 && !(isHexCharByte(input3[i + 1]) && isHexCharByte(input3[i + 2]))) {
           output2[j++] = 37;
         } else {
-          output2[j++] = hexByteToNumber(input2[i + 1]) << 4 | hexByteToNumber(input2[i + 2]);
+          output2[j++] = hexByteToNumber(input3[i + 1]) << 4 | hexByteToNumber(input3[i + 2]);
           i += 2;
         }
         ++i;
       }
       return length === j ? output2 : output2.subarray(0, j);
     }
-    function parseMIMEType(input2) {
-      input2 = removeHTTPWhitespace(input2, true, true);
+    function parseMIMEType(input3) {
+      input3 = removeHTTPWhitespace(input3, true, true);
       const position = { position: 0 };
       const type = collectASequenceOfCodePointsFast(
         "/",
-        input2,
+        input3,
         position
       );
       if (type.length === 0 || !HTTP_TOKEN_CODEPOINTS.test(type)) {
         return "failure";
       }
-      if (position.position >= input2.length) {
+      if (position.position >= input3.length) {
         return "failure";
       }
       position.position++;
       let subtype = collectASequenceOfCodePointsFast(
         ";",
-        input2,
+        input3,
         position
       );
       subtype = removeHTTPWhitespace(subtype, false, true);
@@ -34670,41 +34694,41 @@ var require_data_url = __commonJS({
         // https://mimesniff.spec.whatwg.org/#mime-type-essence
         essence: `${typeLowercase}/${subtypeLowercase}`
       };
-      while (position.position < input2.length) {
+      while (position.position < input3.length) {
         position.position++;
         collectASequenceOfCodePoints(
           // https://fetch.spec.whatwg.org/#http-whitespace
           (char) => HTTP_WHITESPACE_REGEX.test(char),
-          input2,
+          input3,
           position
         );
         let parameterName = collectASequenceOfCodePoints(
           (char) => char !== ";" && char !== "=",
-          input2,
+          input3,
           position
         );
         parameterName = parameterName.toLowerCase();
-        if (position.position < input2.length) {
-          if (input2[position.position] === ";") {
+        if (position.position < input3.length) {
+          if (input3[position.position] === ";") {
             continue;
           }
           position.position++;
         }
-        if (position.position >= input2.length) {
+        if (position.position >= input3.length) {
           break;
         }
         let parameterValue = null;
-        if (input2[position.position] === '"') {
-          parameterValue = collectAnHTTPQuotedString(input2, position, true);
+        if (input3[position.position] === '"') {
+          parameterValue = collectAnHTTPQuotedString(input3, position, true);
           collectASequenceOfCodePointsFast(
             ";",
-            input2,
+            input3,
             position
           );
         } else {
           parameterValue = collectASequenceOfCodePointsFast(
             ";",
-            input2,
+            input3,
             position
           );
           parameterValue = removeHTTPWhitespace(parameterValue, false, true);
@@ -34718,28 +34742,28 @@ var require_data_url = __commonJS({
       }
       return mimeType;
     }
-    function collectAnHTTPQuotedString(input2, position, extractValue = false) {
+    function collectAnHTTPQuotedString(input3, position, extractValue = false) {
       const positionStart = position.position;
       let value = "";
-      assert2(input2[position.position] === '"');
+      assert2(input3[position.position] === '"');
       position.position++;
       while (true) {
         value += collectASequenceOfCodePoints(
           (char) => char !== '"' && char !== "\\",
-          input2,
+          input3,
           position
         );
-        if (position.position >= input2.length) {
+        if (position.position >= input3.length) {
           break;
         }
-        const quoteOrBackslash = input2[position.position];
+        const quoteOrBackslash = input3[position.position];
         position.position++;
         if (quoteOrBackslash === "\\") {
-          if (position.position >= input2.length) {
+          if (position.position >= input3.length) {
             value += "\\";
             break;
           }
-          value += input2[position.position];
+          value += input3[position.position];
           position.position++;
         } else {
           assert2(quoteOrBackslash === '"');
@@ -34749,7 +34773,7 @@ var require_data_url = __commonJS({
       if (extractValue) {
         return value;
       }
-      return input2.slice(positionStart, position.position);
+      return input3.slice(positionStart, position.position);
     }
     function serializeAMimeType(mimeType) {
       assert2(mimeType !== "failure");
@@ -35110,9 +35134,9 @@ var require_webidl = __commonJS({
       }
       return x;
     };
-    webidl.util.IntegerPart = function(n) {
-      const r = Math.floor(Math.abs(n));
-      if (n < 0) {
+    webidl.util.IntegerPart = function(n2) {
+      const r = Math.floor(Math.abs(n2));
+      if (n2 < 0) {
         return -1 * r;
       }
       return r;
@@ -35532,7 +35556,7 @@ var require_webidl = __commonJS({
 var require_util2 = __commonJS({
   "node_modules/undici/lib/web/fetch/util.js"(exports, module) {
     "use strict";
-    var { Transform: Transform2 } = __require("node:stream");
+    var { Transform: Transform3 } = __require("node:stream");
     var zlib = __require("node:zlib");
     var { redirectStatusSet, referrerPolicyTokens, badPortsSet } = require_constants3();
     var { getGlobalOrigin } = require_global();
@@ -35566,9 +35590,9 @@ var require_util2 = __commonJS({
     }
     function isValidEncodedURL(url2) {
       for (let i = 0; i < url2.length; ++i) {
-        const code = url2.charCodeAt(i);
-        if (code > 126 || // Non-US-ASCII + DEL
-        code < 32) {
+        const code2 = url2.charCodeAt(i);
+        if (code2 > 126 || // Non-US-ASCII + DEL
+        code2 < 32) {
           return false;
         }
       }
@@ -35995,8 +36019,8 @@ var require_util2 = __commonJS({
       try {
         const reader = body.stream.getReader();
         readAllBytes(reader, successSteps, errorSteps);
-      } catch (e) {
-        errorSteps(e);
+      } catch (e2) {
+        errorSteps(e2);
       }
     }
     function readableStreamClose(controller) {
@@ -36026,8 +36050,8 @@ var require_util2 = __commonJS({
           bytes.push(chunk);
           byteLength += chunk.length;
         } while (true);
-      } catch (e) {
-        failureSteps(e);
+      } catch (e2) {
+        failureSteps(e2);
       }
     }
     function urlIsLocal(url2) {
@@ -36069,8 +36093,8 @@ var require_util2 = __commonJS({
       }
       const rangeStart = collectASequenceOfCodePoints(
         (char) => {
-          const code = char.charCodeAt(0);
-          return code >= 48 && code <= 57;
+          const code2 = char.charCodeAt(0);
+          return code2 >= 48 && code2 <= 57;
         },
         data,
         position
@@ -36096,8 +36120,8 @@ var require_util2 = __commonJS({
       }
       const rangeEnd = collectASequenceOfCodePoints(
         (char) => {
-          const code = char.charCodeAt(0);
-          return code >= 48 && code <= 57;
+          const code2 = char.charCodeAt(0);
+          return code2 >= 48 && code2 <= 57;
         },
         data,
         position
@@ -36123,7 +36147,7 @@ var require_util2 = __commonJS({
       contentRange += isomorphicEncode(`${fullLength}`);
       return contentRange;
     }
-    var InflateStream = class extends Transform2 {
+    var InflateStream = class extends Transform3 {
       #zlibOptions;
       /** @param {zlib.ZlibOptions} [zlibOptions] */
       constructor(zlibOptions) {
@@ -36184,27 +36208,27 @@ var require_util2 = __commonJS({
       return mimeType;
     }
     function gettingDecodingSplitting(value) {
-      const input2 = value;
+      const input3 = value;
       const position = { position: 0 };
       const values = [];
       let temporaryValue = "";
-      while (position.position < input2.length) {
+      while (position.position < input3.length) {
         temporaryValue += collectASequenceOfCodePoints(
           (char) => char !== '"' && char !== ",",
-          input2,
+          input3,
           position
         );
-        if (position.position < input2.length) {
-          if (input2.charCodeAt(position.position) === 34) {
+        if (position.position < input3.length) {
+          if (input3.charCodeAt(position.position) === 34) {
             temporaryValue += collectAnHTTPQuotedString(
-              input2,
+              input3,
               position
             );
-            if (position.position < input2.length) {
+            if (position.position < input3.length) {
               continue;
             }
           } else {
-            assert2(input2.charCodeAt(position.position) === 44);
+            assert2(input3.charCodeAt(position.position) === 44);
             position.position++;
           }
         }
@@ -36214,8 +36238,8 @@ var require_util2 = __commonJS({
       }
       return values;
     }
-    function getDecodeSplit(name2, list2) {
-      const value = list2.get(name2, true);
+    function getDecodeSplit(name2, list3) {
+      const value = list3.get(name2, true);
       if (value === null) {
         return null;
       }
@@ -36491,7 +36515,7 @@ var require_formdata_parser = __commonJS({
       }
       return true;
     }
-    function multipartFormDataParser(input2, mimeType) {
+    function multipartFormDataParser(input3, mimeType) {
       assert2(mimeType !== "failure" && mimeType.essence === "multipart/form-data");
       const boundaryString = mimeType.parameters.get("boundary");
       if (boundaryString === void 0) {
@@ -36500,40 +36524,40 @@ var require_formdata_parser = __commonJS({
       const boundary = Buffer.from(`--${boundaryString}`, "utf8");
       const entryList = [];
       const position = { position: 0 };
-      const firstBoundaryIndex = input2.indexOf(boundary);
+      const firstBoundaryIndex = input3.indexOf(boundary);
       if (firstBoundaryIndex === -1) {
         throw parsingError("no boundary found in multipart body");
       }
       position.position = firstBoundaryIndex;
       while (true) {
-        if (input2.subarray(position.position, position.position + boundary.length).equals(boundary)) {
+        if (input3.subarray(position.position, position.position + boundary.length).equals(boundary)) {
           position.position += boundary.length;
         } else {
           throw parsingError("expected a value starting with -- and the boundary");
         }
-        if (bufferStartsWith(input2, dd, position)) {
+        if (bufferStartsWith(input3, dd, position)) {
           return entryList;
         }
-        if (input2[position.position] !== 13 || input2[position.position + 1] !== 10) {
+        if (input3[position.position] !== 13 || input3[position.position + 1] !== 10) {
           throw parsingError("expected CRLF");
         }
         position.position += 2;
-        const result = parseMultipartFormDataHeaders(input2, position);
+        const result = parseMultipartFormDataHeaders(input3, position);
         let { name: name2, filename, contentType, encoding } = result;
         position.position += 2;
         let body;
         {
-          const boundaryIndex = input2.indexOf(boundary.subarray(2), position.position);
+          const boundaryIndex = input3.indexOf(boundary.subarray(2), position.position);
           if (boundaryIndex === -1) {
             throw parsingError("expected boundary after body");
           }
-          body = input2.subarray(position.position, boundaryIndex - 4);
+          body = input3.subarray(position.position, boundaryIndex - 4);
           position.position += body.length;
           if (encoding === "base64") {
             body = Buffer.from(body.toString(), "base64");
           }
         }
-        if (input2[position.position] !== 13 || input2[position.position + 1] !== 10) {
+        if (input3[position.position] !== 13 || input3[position.position + 1] !== 10) {
           throw parsingError("expected CRLF");
         } else {
           position.position += 2;
@@ -36553,36 +36577,36 @@ var require_formdata_parser = __commonJS({
         entryList.push(makeEntry(name2, value, filename));
       }
     }
-    function parseContentDispositionAttribute(input2, position) {
-      if (input2[position.position] === 59) {
+    function parseContentDispositionAttribute(input3, position) {
+      if (input3[position.position] === 59) {
         position.position++;
       }
       collectASequenceOfBytes(
         (char) => char === 32 || char === 9,
-        input2,
+        input3,
         position
       );
       const attributeName = collectASequenceOfBytes(
         (char) => isToken(char) && char !== 61 && char !== 42,
         // not = or *
-        input2,
+        input3,
         position
       );
       if (attributeName.length === 0) {
         return null;
       }
       const attrNameStr = attributeName.toString("ascii").toLowerCase();
-      const isExtended = input2[position.position] === 42;
+      const isExtended = input3[position.position] === 42;
       if (isExtended) {
         position.position++;
       }
-      if (input2[position.position] !== 61) {
+      if (input3[position.position] !== 61) {
         return null;
       }
       position.position++;
       collectASequenceOfBytes(
         (char) => char === 32 || char === 9,
-        input2,
+        input3,
         position
       );
       let value;
@@ -36590,7 +36614,7 @@ var require_formdata_parser = __commonJS({
         const headerValue = collectASequenceOfBytes(
           (char) => char !== 32 && char !== 13 && char !== 10 && char !== 59,
           // not space, CRLF, or ;
-          input2,
+          input3,
           position
         );
         if (headerValue[0] !== 117 && headerValue[0] !== 85 || // u or U
@@ -36601,15 +36625,15 @@ var require_formdata_parser = __commonJS({
           throw parsingError("unknown encoding, expected utf-8''");
         }
         value = decodeURIComponent(decoder.decode(headerValue.subarray(7)));
-      } else if (input2[position.position] === 34) {
+      } else if (input3[position.position] === 34) {
         position.position++;
         const quotedValue = collectASequenceOfBytes(
           (char) => char !== 10 && char !== 13 && char !== 34,
           // not LF, CR, or "
-          input2,
+          input3,
           position
         );
-        if (input2[position.position] !== 34) {
+        if (input3[position.position] !== 34) {
           throw parsingError("Closing quote not found");
         }
         position.position++;
@@ -36618,20 +36642,20 @@ var require_formdata_parser = __commonJS({
         const tokenValue = collectASequenceOfBytes(
           (char) => isToken(char) && char !== 59,
           // not ;
-          input2,
+          input3,
           position
         );
         value = decoder.decode(tokenValue);
       }
       return { name: attrNameStr, value, extended: isExtended };
     }
-    function parseMultipartFormDataHeaders(input2, position) {
+    function parseMultipartFormDataHeaders(input3, position) {
       let name2 = null;
       let filename = null;
       let contentType = null;
       let encoding = null;
       while (true) {
-        if (input2[position.position] === 13 && input2[position.position + 1] === 10) {
+        if (input3[position.position] === 13 && input3[position.position + 1] === 10) {
           if (name2 === null) {
             throw parsingError("header name is null");
           }
@@ -36639,20 +36663,20 @@ var require_formdata_parser = __commonJS({
         }
         let headerName = collectASequenceOfBytes(
           (char) => char !== 10 && char !== 13 && char !== 58,
-          input2,
+          input3,
           position
         );
         headerName = removeChars(headerName, true, true, (char) => char === 9 || char === 32);
         if (!HTTP_TOKEN_CODEPOINTS.test(headerName.toString())) {
           throw parsingError("header name does not match the field-name token production");
         }
-        if (input2[position.position] !== 58) {
+        if (input3[position.position] !== 58) {
           throw parsingError("expected :");
         }
         position.position++;
         collectASequenceOfBytes(
           (char) => char === 32 || char === 9,
-          input2,
+          input3,
           position
         );
         switch (bufferToLowerCasedHeaderName(headerName)) {
@@ -36661,14 +36685,14 @@ var require_formdata_parser = __commonJS({
             let filenameIsExtended = false;
             const dispositionType = collectASequenceOfBytes(
               (char) => isToken(char),
-              input2,
+              input3,
               position
             );
             if (dispositionType.toString("ascii").toLowerCase() !== "form-data") {
               throw parsingError("expected form-data for content-disposition header");
             }
-            while (position.position < input2.length && (input2[position.position] !== 13 || input2[position.position + 1] !== 10)) {
-              const attribute = parseContentDispositionAttribute(input2, position);
+            while (position.position < input3.length && (input3[position.position] !== 13 || input3[position.position + 1] !== 10)) {
+              const attribute = parseContentDispositionAttribute(input3, position);
               if (!attribute) {
                 break;
               }
@@ -36691,7 +36715,7 @@ var require_formdata_parser = __commonJS({
           case "content-type": {
             let headerValue = collectASequenceOfBytes(
               (char) => char !== 10 && char !== 13,
-              input2,
+              input3,
               position
             );
             headerValue = removeChars(headerValue, false, true, (char) => char === 9 || char === 32);
@@ -36701,7 +36725,7 @@ var require_formdata_parser = __commonJS({
           case "content-transfer-encoding": {
             let headerValue = collectASequenceOfBytes(
               (char) => char !== 10 && char !== 13,
-              input2,
+              input3,
               position
             );
             headerValue = removeChars(headerValue, false, true, (char) => char === 9 || char === 32);
@@ -36711,24 +36735,24 @@ var require_formdata_parser = __commonJS({
           default: {
             collectASequenceOfBytes(
               (char) => char !== 10 && char !== 13,
-              input2,
+              input3,
               position
             );
           }
         }
-        if (input2[position.position] !== 13 || input2[position.position + 1] !== 10) {
+        if (input3[position.position] !== 13 || input3[position.position + 1] !== 10) {
           throw parsingError("expected CRLF");
         } else {
           position.position += 2;
         }
       }
     }
-    function collectASequenceOfBytes(condition, input2, position) {
+    function collectASequenceOfBytes(condition, input3, position) {
       let start = position.position;
-      while (start < input2.length && condition(input2[start])) {
+      while (start < input3.length && condition(input3[start])) {
         ++start;
       }
-      return input2.subarray(position.position, position.position = start);
+      return input3.subarray(position.position, position.position = start);
     }
     function removeChars(buf, leading, trailing, predicate) {
       let lead = 0;
@@ -37043,8 +37067,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
     function consumeBody(object2, convertBytesToJSValue, instance, getInternalState) {
       try {
         webidl.brandCheck(object2, instance);
-      } catch (e) {
-        return Promise.reject(e);
+      } catch (e2) {
+        return Promise.reject(e2);
       }
       object2 = getInternalState(object2);
       if (bodyUnusable(object2)) {
@@ -37055,8 +37079,8 @@ Content-Type: ${value.type || "application/octet-stream"}\r
       const successSteps = (data) => {
         try {
           promise2.resolve(convertBytesToJSValue(data));
-        } catch (e) {
-          errorSteps(e);
+        } catch (e2) {
+          errorSteps(e2);
         }
       };
       if (object2.body == null) {
@@ -37157,7 +37181,7 @@ var require_client_h1 = __commonJS({
       let mod;
       let useWasmSIMD = true;
       if (process.arch === "ppc64") {
-        const [major, minor] = process.versions.node.split(".").map((n) => parseInt(n, 10));
+        const [major, minor] = process.versions.node.split(".").map((n2) => parseInt(n2, 10));
         if (major < 24 || major === 24 && minor < 12) {
           useWasmSIMD = false;
         }
@@ -38035,9 +38059,9 @@ upgrade: ${upgrade}\r
         header2 += "connection: close\r\n";
       }
       if (Array.isArray(headers)) {
-        for (let n = 0; n < headers.length; n += 2) {
-          const key = headers[n + 0];
-          const val = headers[n + 1];
+        for (let n2 = 0; n2 < headers.length; n2 += 2) {
+          const key = headers[n2 + 0];
+          const val = headers[n2 + 1];
           if (Array.isArray(val)) {
             for (let i = 0; i < val.length; i++) {
               header2 += `${key}: ${val[i]}\r
@@ -38368,7 +38392,7 @@ var require_client_h2 = __commonJS({
   "node_modules/undici/lib/dispatcher/client-h2.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { pipeline: pipeline2 } = __require("node:stream");
+    var { pipeline: pipeline3 } = __require("node:stream");
     var util = require_util();
     var {
       RequestContentLengthMismatchError,
@@ -38592,9 +38616,9 @@ var require_client_h2 = __commonJS({
       this[kSocket][kError] = err;
       this[kClient][kOnError](err);
     }
-    function onHttp2FrameError(type, code, id) {
+    function onHttp2FrameError(type, code2, id) {
       if (id === 0) {
-        const err = new InformationalError(`HTTP/2: "frameError" received - type ${type}, code ${code}`);
+        const err = new InformationalError(`HTTP/2: "frameError" received - type ${type}, code ${code2}`);
         this[kSocket][kError] = err;
         this[kClient][kOnError](err);
       }
@@ -38701,9 +38725,9 @@ var require_client_h2 = __commonJS({
         return false;
       }
       const headers = {};
-      for (let n = 0; n < reqHeaders.length; n += 2) {
-        const key = reqHeaders[n + 0];
-        const val = reqHeaders[n + 1];
+      for (let n2 = 0; n2 < reqHeaders.length; n2 += 2) {
+        const key = reqHeaders[n2 + 0];
+        const val = reqHeaders[n2 + 1];
         if (key === "cookie") {
           if (headers[key] != null) {
             headers[key] = Array.isArray(headers[key]) ? (headers[key].push(val), headers[key]) : [headers[key], val];
@@ -38921,9 +38945,9 @@ var require_client_h2 = __commonJS({
         stream.removeAllListeners("data");
         abort(err);
       });
-      stream.once("frameError", (type, code) => {
+      stream.once("frameError", (type, code2) => {
         stream.removeAllListeners("data");
-        abort(new InformationalError(`HTTP/2: "frameError" received - type ${type}, code ${code}`));
+        abort(new InformationalError(`HTTP/2: "frameError" received - type ${type}, code ${code2}`));
       });
       stream.on("aborted", () => {
         stream.removeAllListeners("data");
@@ -39040,7 +39064,7 @@ var require_client_h2 = __commonJS({
     }
     function writeStream(abort, socket, expectsPayload, h2stream, body, client, request2, contentLength) {
       assert2(contentLength !== 0 || client[kRunning] === 0, "stream body cannot be pipelined");
-      const pipe2 = pipeline2(
+      const pipe2 = pipeline3(
         body,
         h2stream,
         (err) => {
@@ -41696,7 +41720,7 @@ var require_retry_handler = __commonJS({
         this.handler.onRequestUpgrade?.(this.controllerProxy, statusCode, headers, socket);
       }
       static [kRetryHandlerDefaultRetry](err, { state, opts }, cb) {
-        const { statusCode, code, headers } = err;
+        const { statusCode, code: code2, headers } = err;
         const { method, retryOptions } = opts;
         const {
           maxRetries,
@@ -41708,7 +41732,7 @@ var require_retry_handler = __commonJS({
           methods
         } = retryOptions;
         const { counter } = state;
-        if (code && code !== "UND_ERR_REQ_RETRY" && !errorCodes.includes(code)) {
+        if (code2 && code2 !== "UND_ERR_REQ_RETRY" && !errorCodes.includes(code2)) {
           cb(err);
           return;
         }
@@ -41978,7 +42002,7 @@ var require_readable = __commonJS({
   "node_modules/undici/lib/api/readable.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable: Readable2 } = __require("node:stream");
+    var { Readable: Readable3 } = __require("node:stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError: InvalidArgumentError2, AbortError } = require_errors2();
     var util = require_util();
     var { ReadableStreamFrom } = require_util();
@@ -41992,7 +42016,7 @@ var require_readable = __commonJS({
     var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop = () => {
     };
-    var BodyReadable = class extends Readable2 {
+    var BodyReadable = class extends Readable3 {
       /**
        * @param {object} opts
        * @param {(this: Readable, size: number) => void} opts.resume
@@ -42281,8 +42305,8 @@ var require_readable = __commonJS({
       if (state.bufferIndex) {
         const start = state.bufferIndex;
         const end = state.buffer.length;
-        for (let n = start; n < end; n++) {
-          consumePush(consume2, state.buffer[n]);
+        for (let n2 = start; n2 < end; n2++) {
+          consumePush(consume2, state.buffer[n2]);
         }
       } else {
         for (const chunk of state.buffer) {
@@ -42381,7 +42405,7 @@ var require_api_request = __commonJS({
     "use strict";
     var assert2 = __require("node:assert");
     var { AsyncResource } = __require("node:async_hooks");
-    var { Readable: Readable2 } = require_readable();
+    var { Readable: Readable3 } = require_readable();
     var { InvalidArgumentError: InvalidArgumentError2, RequestAbortedError } = require_errors2();
     var util = require_util();
     function noop() {
@@ -42462,7 +42486,7 @@ var require_api_request = __commonJS({
         const parsedHeaders = responseHeaders === "raw" ? util.parseHeaders(rawHeaders) : headers;
         const contentType = parsedHeaders["content-type"];
         const contentLength = parsedHeaders["content-length"];
-        const res = new Readable2({
+        const res = new Readable3({
           resume,
           abort,
           contentType,
@@ -42771,7 +42795,7 @@ var require_api_pipeline = __commonJS({
   "node_modules/undici/lib/api/api-pipeline.js"(exports, module) {
     "use strict";
     var {
-      Readable: Readable2,
+      Readable: Readable3,
       Duplex,
       PassThrough
     } = __require("node:stream");
@@ -42787,7 +42811,7 @@ var require_api_pipeline = __commonJS({
     function noop() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
-    var PipelineRequest = class extends Readable2 {
+    var PipelineRequest = class extends Readable3 {
       constructor() {
         super({ autoDestroy: true });
         this[kResume] = null;
@@ -42804,7 +42828,7 @@ var require_api_pipeline = __commonJS({
         callback(err);
       }
     };
-    var PipelineResponse = class extends Readable2 {
+    var PipelineResponse = class extends Readable3 {
       constructor(resume) {
         super({ autoDestroy: true });
         this[kResume] = resume;
@@ -42954,7 +42978,7 @@ var require_api_pipeline = __commonJS({
         util.destroy(ret, err);
       }
     };
-    function pipeline2(opts, handler) {
+    function pipeline3(opts, handler) {
       try {
         const pipelineHandler = new PipelineHandler(opts, handler);
         this.dispatch({ ...opts, body: pipelineHandler.req }, pipelineHandler);
@@ -42963,7 +42987,7 @@ var require_api_pipeline = __commonJS({
         return new PassThrough().destroy(err);
       }
     }
-    module.exports = pipeline2;
+    module.exports = pipeline3;
   }
 });
 
@@ -44094,13 +44118,13 @@ var require_mock_pool = __commonJS({
 var require_pending_interceptors_formatter = __commonJS({
   "node_modules/undici/lib/mock/pending-interceptors-formatter.js"(exports, module) {
     "use strict";
-    var { Transform: Transform2 } = __require("node:stream");
+    var { Transform: Transform3 } = __require("node:stream");
     var { Console } = __require("node:console");
     var PERSISTENT = process.versions.icu ? "\u2705" : "Y ";
     var NOT_PERSISTENT = process.versions.icu ? "\u274C" : "N ";
     module.exports = class PendingInterceptorsFormatter {
       constructor({ disableColors } = {}) {
-        this.transform = new Transform2({
+        this.transform = new Transform3({
           transform(chunk, _enc, cb) {
             cb(null, chunk);
           }
@@ -44405,8 +44429,8 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir4 } = __require("node:fs/promises");
-    var { dirname: dirname2, resolve: resolve3 } = __require("node:path");
+    var { writeFile: writeFile4, readFile: readFile4, mkdir: mkdir5 } = __require("node:fs/promises");
+    var { dirname: dirname3, resolve: resolve3 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -44607,7 +44631,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile3(resolve3(path2), "utf8");
+          const data = await readFile4(resolve3(path2), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -44637,12 +44661,12 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         const resolvedPath = resolve3(path2);
-        await mkdir4(dirname2(resolvedPath), { recursive: true });
+        await mkdir5(dirname3(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
           snapshot
         }));
-        await writeFile3(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
+        await writeFile4(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
       }
       /**
        * Clears all recorded snapshots
@@ -46513,11 +46537,11 @@ var require_date = __commonJS({
       }
       let day = 0;
       if (date5[5] === "0") {
-        const code = date5.charCodeAt(6);
-        if (code < 49 || code > 57) {
+        const code2 = date5.charCodeAt(6);
+        if (code2 < 49 || code2 > 57) {
           return void 0;
         }
-        day = code - 48;
+        day = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(5);
         if (code1 < 49 || code1 > 51) {
@@ -46594,11 +46618,11 @@ var require_date = __commonJS({
       const year = (yearDigit1 - 48) * 1e3 + (yearDigit2 - 48) * 100 + (yearDigit3 - 48) * 10 + (yearDigit4 - 48);
       let hour = 0;
       if (date5[17] === "0") {
-        const code = date5.charCodeAt(18);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(18);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        hour = code - 48;
+        hour = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(17);
         if (code1 < 48 || code1 > 50) {
@@ -46615,11 +46639,11 @@ var require_date = __commonJS({
       }
       let minute = 0;
       if (date5[20] === "0") {
-        const code = date5.charCodeAt(21);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(21);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        minute = code - 48;
+        minute = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(20);
         if (code1 < 48 || code1 > 53) {
@@ -46633,11 +46657,11 @@ var require_date = __commonJS({
       }
       let second = 0;
       if (date5[23] === "0") {
-        const code = date5.charCodeAt(24);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(24);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        second = code - 48;
+        second = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(23);
         if (code1 < 48 || code1 > 53) {
@@ -46721,11 +46745,11 @@ var require_date = __commonJS({
       }
       let day = 0;
       if (date5[8] === " ") {
-        const code = date5.charCodeAt(9);
-        if (code < 49 || code > 57) {
+        const code2 = date5.charCodeAt(9);
+        if (code2 < 49 || code2 > 57) {
           return void 0;
         }
-        day = code - 48;
+        day = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(8);
         if (code1 < 49 || code1 > 51) {
@@ -46739,11 +46763,11 @@ var require_date = __commonJS({
       }
       let hour = 0;
       if (date5[11] === "0") {
-        const code = date5.charCodeAt(12);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(12);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        hour = code - 48;
+        hour = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(11);
         if (code1 < 48 || code1 > 50) {
@@ -46760,11 +46784,11 @@ var require_date = __commonJS({
       }
       let minute = 0;
       if (date5[14] === "0") {
-        const code = date5.charCodeAt(15);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(15);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        minute = code - 48;
+        minute = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(14);
         if (code1 < 48 || code1 > 53) {
@@ -46778,11 +46802,11 @@ var require_date = __commonJS({
       }
       let second = 0;
       if (date5[17] === "0") {
-        const code = date5.charCodeAt(18);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(18);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        second = code - 48;
+        second = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(17);
         if (code1 < 48 || code1 > 53) {
@@ -46849,11 +46873,11 @@ var require_date = __commonJS({
       }
       let day = 0;
       if (date5[commaIndex + 2] === "0") {
-        const code = date5.charCodeAt(commaIndex + 3);
-        if (code < 49 || code > 57) {
+        const code2 = date5.charCodeAt(commaIndex + 3);
+        if (code2 < 49 || code2 > 57) {
           return void 0;
         }
-        day = code - 48;
+        day = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(commaIndex + 2);
         if (code1 < 49 || code1 > 51) {
@@ -46905,11 +46929,11 @@ var require_date = __commonJS({
       year += year < 70 ? 2e3 : 1900;
       let hour = 0;
       if (date5[commaIndex + 12] === "0") {
-        const code = date5.charCodeAt(commaIndex + 13);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(commaIndex + 13);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        hour = code - 48;
+        hour = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(commaIndex + 12);
         if (code1 < 48 || code1 > 50) {
@@ -46926,11 +46950,11 @@ var require_date = __commonJS({
       }
       let minute = 0;
       if (date5[commaIndex + 15] === "0") {
-        const code = date5.charCodeAt(commaIndex + 16);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(commaIndex + 16);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        minute = code - 48;
+        minute = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(commaIndex + 15);
         if (code1 < 48 || code1 > 53) {
@@ -46944,11 +46968,11 @@ var require_date = __commonJS({
       }
       let second = 0;
       if (date5[commaIndex + 18] === "0") {
-        const code = date5.charCodeAt(commaIndex + 19);
-        if (code < 48 || code > 57) {
+        const code2 = date5.charCodeAt(commaIndex + 19);
+        if (code2 < 48 || code2 > 57) {
           return void 0;
         }
-        second = code - 48;
+        second = code2 - 48;
       } else {
         const code1 = date5.charCodeAt(commaIndex + 18);
         if (code1 < 48 || code1 > 53) {
@@ -47822,7 +47846,7 @@ var require_cache2 = __commonJS({
   "node_modules/undici/lib/interceptor/cache.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable: Readable2 } = __require("node:stream");
+    var { Readable: Readable3 } = __require("node:stream");
     var util = require_util();
     var CacheHandler = require_cache_handler();
     var MemoryCacheStore = require_memory_cache_store();
@@ -47991,7 +48015,7 @@ var require_cache2 = __commonJS({
       return dispatch(opts, new CacheHandler(globalOpts, cacheKey, handler));
     }
     function sendCachedValue(handler, opts, result, age, context, isStale2) {
-      const stream = util.isStream(result.body) ? result.body : Readable2.from(result.body ?? []);
+      const stream = util.isStream(result.body) ? result.body : Readable3.from(result.body ?? []);
       assert2(!stream.destroyed, "stream should not be destroyed");
       assert2(!stream.readableDidRead, "stream should not be readableDidRead");
       const controller = {
@@ -48240,7 +48264,7 @@ var require_decompress = __commonJS({
   "node_modules/undici/lib/interceptor/decompress.js"(exports, module) {
     "use strict";
     var { createInflate, createGunzip: createGunzip2, createBrotliDecompress, createZstdDecompress } = __require("node:zlib");
-    var { pipeline: pipeline2, Transform: TransformStream2 } = __require("node:stream");
+    var { pipeline: pipeline3, Transform: TransformStream2 } = __require("node:stream");
     var { InvalidArgumentError: InvalidArgumentError2, ResponseExceededMaxSizeError } = require_errors2();
     var DecoratorHandler = require_decorator_handler();
     var { runtimeFeatures } = require_runtime_features();
@@ -48557,7 +48581,7 @@ var require_decompress = __commonJS({
       #setupMultipleDecompressors() {
         const lastDecompressor = this.#decompressors[this.#decompressors.length - 1];
         this.#setupDecompressorEvents(lastDecompressor);
-        pipeline2(this.#decompressors, (err) => {
+        pipeline3(this.#decompressors, (err) => {
           if (this.#terminated) {
             return;
           }
@@ -49565,8 +49589,8 @@ var require_headers = __commonJS({
     var { webidl } = require_webidl();
     var assert2 = __require("node:assert");
     var util = __require("node:util");
-    function isHTTPWhiteSpaceCharCode(code) {
-      return code === 10 || code === 13 || code === 9 || code === 32;
+    function isHTTPWhiteSpaceCharCode(code2) {
+      return code2 === 10 || code2 === 13 || code2 === 9 || code2 === 32;
     }
     function headerValueNormalize(potentialValue) {
       let i = 0;
@@ -49927,9 +49951,9 @@ var require_headers = __commonJS({
       // https://fetch.spec.whatwg.org/#dom-headers-getsetcookie
       getSetCookie() {
         webidl.brandCheck(this, _Headers);
-        const list2 = this.#headersList.cookies;
-        if (list2) {
-          return [...list2];
+        const list3 = this.#headersList.cookies;
+        if (list3) {
+          return [...list3];
         }
         return [];
       }
@@ -49953,8 +49977,8 @@ var require_headers = __commonJS({
        * @param {Headers} target
        * @param {HeadersList} list
        */
-      static setHeadersList(target, list2) {
-        target.#headersList = list2;
+      static setHeadersList(target, list3) {
+        target.#headersList = list3;
       }
     };
     var { getHeadersGuard, setHeadersGuard, getHeadersList, setHeadersList } = Headers;
@@ -50508,39 +50532,39 @@ var require_request2 = __commonJS({
       #headers;
       #state;
       // https://fetch.spec.whatwg.org/#dom-request
-      constructor(input2, init = void 0) {
+      constructor(input3, init = void 0) {
         webidl.util.markAsUncloneable(this);
-        if (input2 === kConstruct) {
+        if (input3 === kConstruct) {
           return;
         }
         const prefix2 = "Request constructor";
         webidl.argumentLengthCheck(arguments, 1, prefix2);
-        input2 = webidl.converters.RequestInfo(input2);
+        input3 = webidl.converters.RequestInfo(input3);
         init = webidl.converters.RequestInit(init);
         let request2 = null;
         let fallbackMode = null;
         const baseUrl = environmentSettingsObject.settingsObject.baseUrl;
         let signal = null;
-        if (typeof input2 === "string") {
+        if (typeof input3 === "string") {
           this.#dispatcher = init.dispatcher;
           let parsedURL;
           try {
-            parsedURL = new URL(input2, baseUrl);
+            parsedURL = new URL(input3, baseUrl);
           } catch (err) {
-            throw new TypeError("Failed to parse URL from " + input2, { cause: err });
+            throw new TypeError("Failed to parse URL from " + input3, { cause: err });
           }
           if (parsedURL.username || parsedURL.password) {
             throw new TypeError(
-              "Request cannot be constructed from a URL that includes credentials: " + input2
+              "Request cannot be constructed from a URL that includes credentials: " + input3
             );
           }
           request2 = makeRequest({ urlList: [parsedURL] });
           fallbackMode = "cors";
         } else {
-          assert2(webidl.is.Request(input2));
-          request2 = input2.#state;
-          signal = input2.#signal;
-          this.#dispatcher = init.dispatcher || input2.#dispatcher;
+          assert2(webidl.is.Request(input3));
+          request2 = input3.#state;
+          signal = input3.#signal;
+          this.#dispatcher = init.dispatcher || input3.#dispatcher;
         }
         const origin = environmentSettingsObject.settingsObject.origin;
         let window = "client";
@@ -50732,7 +50756,7 @@ var require_request2 = __commonJS({
             fillHeaders(this.#headers, headers);
           }
         }
-        const inputBody = webidl.is.Request(input2) ? input2.#state.body : null;
+        const inputBody = webidl.is.Request(input3) ? input3.#state.body : null;
         if ((init.body != null || inputBody != null) && (request2.method === "GET" || request2.method === "HEAD")) {
           throw new TypeError("Request with GET/HEAD method cannot have body.");
         }
@@ -50761,7 +50785,7 @@ var require_request2 = __commonJS({
         }
         let finalBody = inputOrInitBody;
         if (initBody == null && inputBody != null) {
-          if (bodyUnusable(input2.#state)) {
+          if (bodyUnusable(input3.#state)) {
             throw new TypeError(
               "Cannot construct a Request with a Request object that has already been used."
             );
@@ -50905,13 +50929,13 @@ var require_request2 = __commonJS({
         if (this.signal.aborted) {
           ac.abort(this.signal.reason);
         } else {
-          let list2 = dependentControllerMap.get(this.signal);
-          if (list2 === void 0) {
-            list2 = /* @__PURE__ */ new Set();
-            dependentControllerMap.set(this.signal, list2);
+          let list3 = dependentControllerMap.get(this.signal);
+          if (list3 === void 0) {
+            list3 = /* @__PURE__ */ new Set();
+            dependentControllerMap.set(this.signal, list3);
           }
           const acRef = new WeakRef(ac);
-          list2.add(acRef);
+          list3.add(acRef);
           util.addAbortListener(
             ac.signal,
             buildAbort(acRef)
@@ -51387,7 +51411,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants3();
     var EE = __require("node:events");
-    var { Readable: Readable2, pipeline: pipeline2, finished, isErrored, isReadable } = __require("node:stream");
+    var { Readable: Readable3, pipeline: pipeline3, finished, isErrored, isReadable } = __require("node:stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
@@ -51434,14 +51458,14 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch2(input2, init = void 0) {
+    function fetch2(input3, init = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise();
       let requestObject;
       try {
-        requestObject = new Request(input2, init);
-      } catch (e) {
-        p.reject(e);
+        requestObject = new Request(input3, init);
+      } catch (e2) {
+        p.reject(e2);
         return p.promise;
       }
       const request2 = getRequestState(requestObject);
@@ -52163,14 +52187,14 @@ var require_fetch = __commonJS({
             fetchParams.processRequestEndOfBody();
           }
         };
-        const processBodyError = (e) => {
+        const processBodyError = (e2) => {
           if (isCancelled(fetchParams)) {
             return;
           }
-          if (e.name === "AbortError") {
+          if (e2.name === "AbortError") {
             fetchParams.controller.abort();
           } else {
-            fetchParams.controller.terminate(e);
+            fetchParams.controller.terminate(e2);
           }
         };
         requestBody = (async function* () {
@@ -52372,13 +52396,13 @@ var require_fetch = __commonJS({
                   }
                 }
               }
-              this.body = new Readable2({ read: resume });
+              this.body = new Readable3({ read: resume });
               const onError = this.onError.bind(this);
               resolve3({
                 status,
                 statusText,
                 headersList,
-                body: decoders.length ? pipeline2(this.body, ...decoders, (err) => {
+                body: decoders.length ? pipeline3(this.body, ...decoders, (err) => {
                   if (err) {
                     this.onError(err);
                   }
@@ -52650,8 +52674,8 @@ var require_cache3 = __commonJS({
         let errorData = null;
         try {
           this.#batchCacheOperations(operations);
-        } catch (e) {
-          errorData = e;
+        } catch (e2) {
+          errorData = e2;
         }
         queueMicrotask(() => {
           if (errorData === null) {
@@ -52731,8 +52755,8 @@ var require_cache3 = __commonJS({
         let errorData = null;
         try {
           this.#batchCacheOperations(operations);
-        } catch (e) {
-          errorData = e;
+        } catch (e2) {
+          errorData = e2;
         }
         queueMicrotask(() => {
           if (errorData === null) {
@@ -52771,8 +52795,8 @@ var require_cache3 = __commonJS({
         let requestResponses;
         try {
           requestResponses = this.#batchCacheOperations(operations);
-        } catch (e) {
-          errorData = e;
+        } catch (e2) {
+          errorData = e2;
         }
         queueMicrotask(() => {
           if (errorData === null) {
@@ -52908,10 +52932,10 @@ var require_cache3 = __commonJS({
             resultList.push([operation.request, operation.response]);
           }
           return resultList;
-        } catch (e) {
+        } catch (e2) {
           this.#relevantRequestResponseList.length = 0;
           this.#relevantRequestResponseList = backupCache;
-          throw e;
+          throw e2;
         }
       }
       /**
@@ -53180,8 +53204,8 @@ var require_util4 = __commonJS({
     "use strict";
     function isCTLExcludingHtab(value) {
       for (let i = 0; i < value.length; ++i) {
-        const code = value.charCodeAt(i);
-        if (code >= 0 && code <= 8 || code >= 10 && code <= 31 || code === 127) {
+        const code2 = value.charCodeAt(i);
+        if (code2 >= 0 && code2 <= 8 || code2 >= 10 && code2 <= 31 || code2 === 127) {
           return true;
         }
       }
@@ -53189,26 +53213,26 @@ var require_util4 = __commonJS({
     }
     function validateCookieName(name2) {
       for (let i = 0; i < name2.length; ++i) {
-        const code = name2.charCodeAt(i);
-        if (code < 33 || // exclude CTLs (0-31), SP and HT
-        code > 126 || // exclude non-ascii and DEL
-        code === 34 || // "
-        code === 40 || // (
-        code === 41 || // )
-        code === 60 || // <
-        code === 62 || // >
-        code === 64 || // @
-        code === 44 || // ,
-        code === 59 || // ;
-        code === 58 || // :
-        code === 92 || // \
-        code === 47 || // /
-        code === 91 || // [
-        code === 93 || // ]
-        code === 63 || // ?
-        code === 61 || // =
-        code === 123 || // {
-        code === 125) {
+        const code2 = name2.charCodeAt(i);
+        if (code2 < 33 || // exclude CTLs (0-31), SP and HT
+        code2 > 126 || // exclude non-ascii and DEL
+        code2 === 34 || // "
+        code2 === 40 || // (
+        code2 === 41 || // )
+        code2 === 60 || // <
+        code2 === 62 || // >
+        code2 === 64 || // @
+        code2 === 44 || // ,
+        code2 === 59 || // ;
+        code2 === 58 || // :
+        code2 === 92 || // \
+        code2 === 47 || // /
+        code2 === 91 || // [
+        code2 === 93 || // ]
+        code2 === 63 || // ?
+        code2 === 61 || // =
+        code2 === 123 || // {
+        code2 === 125) {
           throw new Error("Invalid cookie name");
         }
       }
@@ -53224,31 +53248,31 @@ var require_util4 = __commonJS({
         ++i;
       }
       while (i < len) {
-        const code = value.charCodeAt(i++);
-        if (code < 33 || // exclude CTLs (0-31)
-        code > 126 || // non-ascii and DEL (127)
-        code === 34 || // "
-        code === 44 || // ,
-        code === 59 || // ;
-        code === 92) {
+        const code2 = value.charCodeAt(i++);
+        if (code2 < 33 || // exclude CTLs (0-31)
+        code2 > 126 || // non-ascii and DEL (127)
+        code2 === 34 || // "
+        code2 === 44 || // ,
+        code2 === 59 || // ;
+        code2 === 92) {
           throw new Error("Invalid cookie value");
         }
       }
     }
     function validateCookiePath(path2) {
       for (let i = 0; i < path2.length; ++i) {
-        const code = path2.charCodeAt(i);
-        if (code < 32 || // exclude CTLs (0-31)
-        code > 126 || // exclude DEL and non-ascii
-        code === 59) {
+        const code2 = path2.charCodeAt(i);
+        if (code2 < 32 || // exclude CTLs (0-31)
+        code2 > 126 || // exclude DEL and non-ascii
+        code2 === 59) {
           throw new Error("Invalid cookie path");
         }
       }
     }
-    function isLetterOrDigit(code) {
-      return code >= 48 && code <= 57 || // 0-9
-      code >= 65 && code <= 90 || // A-Z
-      code >= 97 && code <= 122;
+    function isLetterOrDigit(code2) {
+      return code2 >= 48 && code2 <= 57 || // 0-9
+      code2 >= 65 && code2 <= 90 || // A-Z
+      code2 >= 97 && code2 <= 122;
     }
     function validateCookieDomain(domain2) {
       if (domain2 === " ") {
@@ -53259,8 +53283,8 @@ var require_util4 = __commonJS({
       }
       let labelLength = 0;
       for (let i = 0; i < domain2.length; ++i) {
-        const code = domain2.charCodeAt(i);
-        if (code === 46) {
+        const code2 = domain2.charCodeAt(i);
+        if (code2 === 46) {
           if (labelLength === 0) {
             throw new Error("Invalid cookie domain");
           }
@@ -53270,10 +53294,10 @@ var require_util4 = __commonJS({
           labelLength = 0;
           continue;
         }
-        if (labelLength === 0 && !isLetterOrDigit(code)) {
+        if (labelLength === 0 && !isLetterOrDigit(code2)) {
           throw new Error("Invalid cookie domain");
         }
-        if (!isLetterOrDigit(code) && code !== 45) {
+        if (!isLetterOrDigit(code2) && code2 !== 45) {
           throw new Error("Invalid cookie domain");
         }
         if (++labelLength > 63) {
@@ -54002,8 +54026,8 @@ var require_util5 = __commonJS({
     function isClosed(readyState) {
       return readyState === states.CLOSED;
     }
-    function fireEvent(e, target, eventFactory = (type, init) => new Event(type, init), eventInitDict = {}) {
-      const event = eventFactory(e, eventInitDict);
+    function fireEvent(e2, target, eventFactory = (type, init) => new Event(type, init), eventInitDict = {}) {
+      const event = eventFactory(e2, eventInitDict);
       target.dispatchEvent(event);
     }
     function websocketMessageReceived(handler, type, data) {
@@ -54020,37 +54044,37 @@ var require_util5 = __commonJS({
         return false;
       }
       for (let i = 0; i < protocol.length; ++i) {
-        const code = protocol.charCodeAt(i);
-        if (code < 33 || // CTL, contains SP (0x20) and HT (0x09)
-        code > 126 || code === 34 || // "
-        code === 40 || // (
-        code === 41 || // )
-        code === 44 || // ,
-        code === 47 || // /
-        code === 58 || // :
-        code === 59 || // ;
-        code === 60 || // <
-        code === 61 || // =
-        code === 62 || // >
-        code === 63 || // ?
-        code === 64 || // @
-        code === 91 || // [
-        code === 92 || // \
-        code === 93 || // ]
-        code === 123 || // {
-        code === 125) {
+        const code2 = protocol.charCodeAt(i);
+        if (code2 < 33 || // CTL, contains SP (0x20) and HT (0x09)
+        code2 > 126 || code2 === 34 || // "
+        code2 === 40 || // (
+        code2 === 41 || // )
+        code2 === 44 || // ,
+        code2 === 47 || // /
+        code2 === 58 || // :
+        code2 === 59 || // ;
+        code2 === 60 || // <
+        code2 === 61 || // =
+        code2 === 62 || // >
+        code2 === 63 || // ?
+        code2 === 64 || // @
+        code2 === 91 || // [
+        code2 === 92 || // \
+        code2 === 93 || // ]
+        code2 === 123 || // {
+        code2 === 125) {
           return false;
         }
       }
       return true;
     }
-    function isValidStatusCode(code) {
-      if (code >= 1e3 && code < 1015) {
-        return code !== 1004 && // reserved
-        code !== 1005 && // "MUST NOT be set as a status code"
-        code !== 1006;
+    function isValidStatusCode(code2) {
+      if (code2 >= 1e3 && code2 < 1015) {
+        return code2 !== 1004 && // reserved
+        code2 !== 1005 && // "MUST NOT be set as a status code"
+        code2 !== 1006;
       }
-      return code >= 3e3 && code <= 4999;
+      return code2 >= 3e3 && code2 <= 4999;
     }
     function isControlFrame(opcode) {
       return opcode === opcodes.CLOSE || opcode === opcodes.PING || opcode === opcodes.PONG;
@@ -54095,8 +54119,8 @@ var require_util5 = __commonJS({
       let urlRecord;
       try {
         urlRecord = new URL(url2, baseURL);
-      } catch (e) {
-        throw new DOMException(e, "SyntaxError");
+      } catch (e2) {
+        throw new DOMException(e2, "SyntaxError");
       }
       if (urlRecord.protocol === "http:") {
         urlRecord.protocol = "ws:";
@@ -54111,9 +54135,9 @@ var require_util5 = __commonJS({
       }
       return urlRecord;
     }
-    function validateCloseCodeAndReason(code, reason) {
-      if (code !== null) {
-        if (code !== 1e3 && (code < 3e3 || code > 4999)) {
+    function validateCloseCodeAndReason(code2, reason) {
+      if (code2 !== null) {
+        if (code2 !== 1e3 && (code2 < 3e3 || code2 > 4999)) {
           throw new DOMException("invalid code", "InvalidAccessError");
         }
       }
@@ -54368,28 +54392,28 @@ var require_connection = __commonJS({
       });
       return controller;
     }
-    function closeWebSocketConnection(object2, code, reason, validate2 = false) {
-      code ??= null;
+    function closeWebSocketConnection(object2, code2, reason, validate2 = false) {
+      code2 ??= null;
       reason ??= "";
-      if (validate2) validateCloseCodeAndReason(code, reason);
+      if (validate2) validateCloseCodeAndReason(code2, reason);
       if (isClosed(object2.readyState) || isClosing(object2.readyState)) {
       } else if (!isEstablished(object2.readyState)) {
         failWebsocketConnection(object2);
         object2.readyState = states.CLOSING;
       } else if (!object2.closeState.has(sentCloseFrameState.SENT) && !object2.closeState.has(sentCloseFrameState.RECEIVED)) {
         const frame2 = new WebsocketFrameSend();
-        if (reason.length !== 0 && code === null) {
-          code = 1e3;
+        if (reason.length !== 0 && code2 === null) {
+          code2 = 1e3;
         }
-        assert2(code === null || Number.isInteger(code));
-        if (code === null && reason.length === 0) {
+        assert2(code2 === null || Number.isInteger(code2));
+        if (code2 === null && reason.length === 0) {
           frame2.frameData = emptyBuffer;
-        } else if (code !== null && reason === null) {
+        } else if (code2 !== null && reason === null) {
           frame2.frameData = Buffer.allocUnsafe(2);
-          frame2.frameData.writeUInt16BE(code, 0);
-        } else if (code !== null && reason !== null) {
+          frame2.frameData.writeUInt16BE(code2, 0);
+        } else if (code2 !== null && reason !== null) {
           frame2.frameData = Buffer.allocUnsafe(2 + Buffer.byteLength(reason));
-          frame2.frameData.writeUInt16BE(code, 0);
+          frame2.frameData.writeUInt16BE(code2, 0);
           frame2.frameData.write(reason, 2, "utf-8");
         } else {
           frame2.frameData = emptyBuffer;
@@ -54401,15 +54425,15 @@ var require_connection = __commonJS({
         object2.readyState = states.CLOSING;
       }
     }
-    function failHandshake(handler, response, code, reason, cause) {
+    function failHandshake(handler, response, code2, reason, cause) {
       if (response.socket?.session != null && !response.socket.destroyed) {
         response.socket.destroy();
       }
-      failWebsocketConnection(handler, code, reason, cause);
+      failWebsocketConnection(handler, code2, reason, cause);
     }
-    function failWebsocketConnection(handler, code, reason, cause) {
+    function failWebsocketConnection(handler, code2, reason, cause) {
       if (isEstablished(handler.readyState)) {
-        closeWebSocketConnection(handler, code, reason, false);
+        closeWebSocketConnection(handler, code2, reason, false);
       }
       handler.controller.abort();
       if (isConnecting(handler.readyState)) {
@@ -54709,8 +54733,8 @@ var require_receiver = __commonJS({
                   this.#info.fin,
                   (error62, data) => {
                     if (error62) {
-                      const code = error62 instanceof MessageSizeExceededError ? 1009 : 1007;
-                      failWebsocketConnection(this.#handler, code, error62.message);
+                      const code2 = error62 instanceof MessageSizeExceededError ? 1009 : 1007;
+                      failWebsocketConnection(this.#handler, code2, error62.message);
                       return;
                     }
                     if (!this.writeFragments(data)) {
@@ -54745,31 +54769,31 @@ var require_receiver = __commonJS({
        * @param {number} n
        * @returns {Buffer}
        */
-      consume(n) {
-        if (n > this.#byteOffset) {
+      consume(n2) {
+        if (n2 > this.#byteOffset) {
           throw new Error("Called consume() before buffers satiated.");
-        } else if (n === 0) {
+        } else if (n2 === 0) {
           return emptyBuffer;
         }
-        this.#byteOffset -= n;
+        this.#byteOffset -= n2;
         const first2 = this.#buffers[0];
-        if (first2.length > n) {
-          this.#buffers[0] = first2.subarray(n, first2.length);
-          return first2.subarray(0, n);
-        } else if (first2.length === n) {
+        if (first2.length > n2) {
+          this.#buffers[0] = first2.subarray(n2, first2.length);
+          return first2.subarray(0, n2);
+        } else if (first2.length === n2) {
           return this.#buffers.shift();
         } else {
           let offset = 0;
-          const buffer = Buffer.allocUnsafeSlow(n);
-          while (offset !== n) {
+          const buffer = Buffer.allocUnsafeSlow(n2);
+          while (offset !== n2) {
             const next = this.#buffers[0];
             const length = next.length;
-            if (length + offset === n) {
+            if (length + offset === n2) {
               buffer.set(this.#buffers.shift(), offset);
               break;
-            } else if (length + offset > n) {
-              buffer.set(next.subarray(0, n - offset), offset);
-              this.#buffers[0] = next.subarray(n - offset);
+            } else if (length + offset > n2) {
+              buffer.set(next.subarray(0, n2 - offset), offset);
+              this.#buffers[0] = next.subarray(n2 - offset);
               break;
             } else {
               buffer.set(this.#buffers.shift(), offset);
@@ -54807,11 +54831,11 @@ var require_receiver = __commonJS({
       }
       parseCloseBody(data) {
         assert2(data.length !== 1);
-        let code;
+        let code2;
         if (data.length >= 2) {
-          code = data.readUInt16BE(0);
+          code2 = data.readUInt16BE(0);
         }
-        if (code !== void 0 && !isValidStatusCode(code)) {
+        if (code2 !== void 0 && !isValidStatusCode(code2)) {
           return { code: 1002, reason: "Invalid status code", error: true };
         }
         let reason = data.subarray(2);
@@ -54823,7 +54847,7 @@ var require_receiver = __commonJS({
         } catch {
           return { code: 1007, reason: "Invalid UTF-8", error: true };
         }
-        return { code, reason, error: false };
+        return { code: code2, reason, error: false };
       }
       /**
        * Parses control frames.
@@ -54838,8 +54862,8 @@ var require_receiver = __commonJS({
           }
           this.#info.closeInfo = this.parseCloseBody(body);
           if (this.#info.closeInfo.error) {
-            const { code, reason } = this.#info.closeInfo;
-            failWebsocketConnection(this.#handler, code, reason);
+            const { code: code2, reason } = this.#info.closeInfo;
+            failWebsocketConnection(this.#handler, code2, reason);
             return false;
           }
           if (!this.#handler.closeState.has(sentCloseFrameState.SENT) && !this.#handler.closeState.has(sentCloseFrameState.RECEIVED)) {
@@ -55097,18 +55121,18 @@ var require_websocket = __commonJS({
        * @param {number|undefined} code
        * @param {string|undefined} reason
        */
-      close(code = void 0, reason = void 0) {
+      close(code2 = void 0, reason = void 0) {
         webidl.brandCheck(this, _WebSocket);
         const prefix2 = "WebSocket.close";
-        if (code !== void 0) {
-          code = webidl.converters["unsigned short"](code, prefix2, "code", webidl.attributes.Clamp);
+        if (code2 !== void 0) {
+          code2 = webidl.converters["unsigned short"](code2, prefix2, "code", webidl.attributes.Clamp);
         }
         if (reason !== void 0) {
           reason = webidl.converters.USVString(reason);
         }
-        code ??= null;
+        code2 ??= null;
         reason ??= "";
-        closeWebSocketConnection(this.#handler, code, reason, true);
+        closeWebSocketConnection(this.#handler, code2, reason, true);
       }
       /**
        * @see https://websockets.spec.whatwg.org/#dom-websocket-send
@@ -55322,29 +55346,29 @@ var require_websocket = __commonJS({
        */
       #onSocketClose() {
         const wasClean = this.#handler.closeState.has(sentCloseFrameState.SENT) && this.#handler.closeState.has(sentCloseFrameState.RECEIVED);
-        let code = 1005;
+        let code2 = 1005;
         let reason = "";
         const result = this.#parser?.closingInfo;
         if (result && !result.error) {
-          code = result.code ?? 1005;
+          code2 = result.code ?? 1005;
           reason = result.reason;
         }
         this.#handler.readyState = states.CLOSED;
         if (!this.#handler.closeState.has(sentCloseFrameState.RECEIVED)) {
-          code = 1006;
+          code2 = 1006;
           fireEvent("error", this, (type, init) => new ErrorEvent(type, init), {
             error: new TypeError(reason)
           });
         }
         fireEvent("close", this, (type, init) => new CloseEvent(type, init), {
           wasClean,
-          code,
+          code: code2,
           reason
         });
         if (channels.close.hasSubscribers) {
           channels.close.publish({
             websocket: this,
-            code,
+            code: code2,
             reason
           });
         }
@@ -55489,13 +55513,13 @@ var require_websocketerror = __commonJS({
         } else if (init !== null) {
           init = webidl.converters.WebSocketCloseInfo(init);
         }
-        let code = init.closeCode ?? null;
+        let code2 = init.closeCode ?? null;
         const reason = init.reason ?? "";
-        validateCloseCodeAndReason(code, reason);
-        if (reason.length !== 0 && code === null) {
-          code = 1e3;
+        validateCloseCodeAndReason(code2, reason);
+        if (reason.length !== 0 && code2 === null) {
+          code2 = 1e3;
         }
-        this.#closeCode = code;
+        this.#closeCode = code2;
         this.#reason = reason;
       }
       get closeCode() {
@@ -55509,9 +55533,9 @@ var require_websocketerror = __commonJS({
        * @param {number|null} code
        * @param {string} reason
        */
-      static createUnvalidatedWebSocketError(message, code, reason) {
+      static createUnvalidatedWebSocketError(message, code2, reason) {
         const error62 = new _WebSocketError(message, kConstruct);
-        error62.#closeCode = code;
+        error62.#closeCode = code2;
         error62.#reason = reason;
         return error62;
       }
@@ -55669,9 +55693,9 @@ var require_websocketstream = __commonJS({
         if (closeInfo !== null) {
           closeInfo = webidl.converters.WebSocketCloseInfo(closeInfo);
         }
-        const code = closeInfo.closeCode ?? null;
+        const code2 = closeInfo.closeCode ?? null;
         const reason = closeInfo.reason;
-        closeWebSocketConnection(this.#handler, code, reason, true);
+        closeWebSocketConnection(this.#handler, code2, reason, true);
       }
       #write(chunk) {
         chunk = webidl.converters.WebSocketStreamWrite(chunk);
@@ -55685,8 +55709,8 @@ var require_websocketstream = __commonJS({
           let string4;
           try {
             string4 = webidl.converters.DOMString(chunk);
-          } catch (e) {
-            promise2.reject(e);
+          } catch (e2) {
+            promise2.reject(e2);
             return promise2.promise;
           }
           data = new TextEncoder().encode(string4);
@@ -55766,33 +55790,33 @@ var require_websocketstream = __commonJS({
           this.#openedPromise.reject(new WebSocketError("Socket never opened"));
         }
         const result = this.#parser?.closingInfo;
-        let code = result?.code ?? 1005;
+        let code2 = result?.code ?? 1005;
         if (!this.#handler.closeState.has(sentCloseFrameState.SENT) && !this.#handler.closeState.has(sentCloseFrameState.RECEIVED)) {
-          code = 1006;
+          code2 = 1006;
         }
         const reason = result?.reason == null ? "" : utf8DecodeBytes(Buffer.from(result.reason));
         if (wasClean) {
           this.#readableStreamController.close();
           this.#writableStreamController.error(new DOMException("A closed WebSocketStream cannot be written to", "InvalidStateError"));
           this.#closedPromise.resolve({
-            closeCode: code,
+            closeCode: code2,
             reason
           });
         } else {
-          const error62 = createUnvalidatedWebSocketError("unclean close", code, reason);
+          const error62 = createUnvalidatedWebSocketError("unclean close", code2, reason);
           this.#readableStreamController?.error(error62);
           this.#writableStreamController?.error(error62);
           this.#closedPromise.reject(error62);
         }
       }
       #closeUsingReason(reason) {
-        let code = null;
+        let code2 = null;
         let reasonString = "";
         if (webidl.is.WebSocketError(reason)) {
-          code = reason.closeCode;
+          code2 = reason.closeCode;
           reasonString = reason.reason;
         }
-        closeWebSocketConnection(this.#handler, code, reasonString);
+        closeWebSocketConnection(this.#handler, code2, reasonString);
       }
       //  To cancel a WebSocketStream stream given reason , close using reason giving stream and reason .
       #cancel(reason) {
@@ -55870,7 +55894,7 @@ var require_eventsource_stream = __commonJS({
   "node_modules/undici/lib/web/eventsource/eventsource-stream.js"(exports, module) {
     "use strict";
     var buffer = __require("node:buffer");
-    var { Transform: Transform2 } = __require("node:stream");
+    var { Transform: Transform3 } = __require("node:stream");
     var { isASCIINumber, isValidLastEventId } = require_util6();
     var BOM = [239, 187, 191];
     var LF = 10;
@@ -55920,7 +55944,7 @@ var require_eventsource_stream = __commonJS({
       error62.aborted = false;
       return error62;
     }
-    var EventSourceStream = class extends Transform2 {
+    var EventSourceStream = class extends Transform3 {
       /**
        * @type {eventSourceSettings}
        */
@@ -56275,7 +56299,7 @@ ${value}`;
 var require_eventsource = __commonJS({
   "node_modules/undici/lib/web/eventsource/eventsource.js"(exports, module) {
     "use strict";
-    var { pipeline: pipeline2 } = __require("node:stream");
+    var { pipeline: pipeline3 } = __require("node:stream");
     var { fetching } = require_fetch();
     var { makeRequest } = require_request2();
     var { webidl } = require_webidl();
@@ -56341,8 +56365,8 @@ var require_eventsource = __commonJS({
         try {
           urlRecord = new URL(url2, settings.settingsObject.baseUrl);
           this.#state.origin = urlRecord.origin;
-        } catch (e) {
-          throw new DOMException(e, "SyntaxError");
+        } catch (e2) {
+          throw new DOMException(e2, "SyntaxError");
         }
         this.#url = urlRecord.href;
         let corsAttributeState = ANONYMOUS;
@@ -56435,7 +56459,7 @@ var require_eventsource = __commonJS({
               ));
             }
           });
-          pipeline2(
+          pipeline3(
             response.body.stream,
             eventSourceStream,
             (error62) => {
@@ -57045,7 +57069,7 @@ function readBody(req, capBytes) {
     };
     req.on("data", onData);
     req.once("end", () => finish(null));
-    req.once("error", (e) => finish(e));
+    req.once("error", (e2) => finish(e2));
     req.once("close", () => finish(req.complete ? null : new BodyAbortedError()));
   });
 }
@@ -57338,9 +57362,9 @@ function createGatewayRuntime() {
     }
   };
 }
-function sendError(req, res, e, closeConnection = false) {
+function sendError(req, res, e2, closeConnection = false) {
   req.resume();
-  res.writeHead(e.status, closeConnection ? { ...e.headers, connection: "close" } : e.headers).end(e.body);
+  res.writeHead(e2.status, closeConnection ? { ...e2.headers, connection: "close" } : e2.headers).end(e2.body);
 }
 function pseudonymised(a, salt) {
   if (!salt) return a;
@@ -57350,8 +57374,8 @@ function pseudonymised(a, salt) {
 function auditCandidate(cp, f) {
   try {
     return { revision: cp.revision, ...summary(resolve(cp, decide(cp, structuredClone(f)), null)) };
-  } catch (e) {
-    return { revision: cp.revision, error: e instanceof Error ? e.name : "Error" };
+  } catch (e2) {
+    return { revision: cp.revision, error: e2 instanceof Error ? e2.name : "Error" };
   }
 }
 function rateLimitHeaders(h) {
@@ -57378,7 +57402,7 @@ function usageTap(surface, up, capBytes) {
     const acc = new AnthropicUsageAccumulator();
     return {
       onChunk: (c) => {
-        for (const e of parser.push(c)) acc.onEvent(e);
+        for (const e2 of parser.push(c)) acc.onEvent(e2);
       },
       result: () => acc.result()
     };
@@ -57653,8 +57677,8 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     attempts = r.attempt;
     answered = policy2.providers.get(r.provider) ?? provider2;
   } catch (err) {
-    const n = err instanceof ChainError ? err.attempts : 1;
-    const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n };
+    const n2 = err instanceof ChainError ? err.attempts : 1;
+    const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n2 };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
     sendError(req, res, anthropicError(502, "api_error", `upstream ${common.provider} is unreachable`, null, id));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
@@ -57904,11 +57928,11 @@ function covers(earlier, later) {
 function validatePolicy(src, o) {
   const errors = [];
   const warnings = [];
-  const err = (code, path2, message) => void errors.push({ code, path: path2, message });
-  const warn = (code, path2, message) => void warnings.push({ code, path: path2, message });
+  const err = (code2, path2, message) => void errors.push({ code: code2, path: path2, message });
+  const warn = (code2, path2, message) => void warnings.push({ code: code2, path: path2, message });
   const { policy: policy2, prices, keys: keys2 } = src;
   const flag = o.experimentalSubscription;
-  const providers = new Map(Object.entries(policy2.providers).map(([n, p]) => [n, p.format]));
+  const providers = new Map(Object.entries(policy2.providers).map(([n2, p]) => [n2, p.format]));
   for (const [name2, p] of Object.entries(policy2.providers)) {
     const at = `providers.${name2}`;
     if (p.credential === "passthrough") {
@@ -58112,7 +58136,7 @@ function compileRoute(r, priced) {
       feature: m.feature ?? null,
       model: m.model === void 0 ? null : globToRegExp(m.model)
     },
-    chain: r.chain.map((e) => ({ provider: chainProvider(e), weight: typeof e === "string" ? null : e.weight })),
+    chain: r.chain.map((e2) => ({ provider: chainProvider(e2), weight: typeof e2 === "string" ? null : e2.weight })),
     allowModels: r.allowModels?.map(globToRegExp) ?? null,
     rewriteModel: r.rewriteModel ?? null,
     allowBodyRewrite: r.allowBodyRewrite === true,
@@ -58260,9 +58284,9 @@ function policyFileNames(policyText) {
 function yamlOf(file2, text2) {
   try {
     return parseYamlSafe(text2);
-  } catch (e) {
-    if (e instanceof YamlError) throw new PolicyLoadError(e.code, file2, [{ path: "", message: e.message }]);
-    throw e;
+  } catch (e2) {
+    if (e2 instanceof YamlError) throw new PolicyLoadError(e2.code, file2, [{ path: "", message: e2.message }]);
+    throw e2;
   }
 }
 function parsePolicyFiles(dir, files) {
@@ -58282,11 +58306,11 @@ function parsePolicyFiles(dir, files) {
   let prices;
   try {
     prices = parsePriceTable(pricesText);
-  } catch (e) {
-    if (e instanceof YamlError) throw new PolicyLoadError(e.code, pricesName, [{ path: "", message: e.message }]);
-    const message = e instanceof Error ? e.message.replace(/^invalid price table: /, "") : String(e);
-    const code = /\.(maxContextTokens|maxOutputTokens):/.test(message) ? "E_MODEL_LIMITS_MISSING" : "E_PRICES_INVALID";
-    throw new PolicyLoadError(code, pricesName, [{ path: "", message }]);
+  } catch (e2) {
+    if (e2 instanceof YamlError) throw new PolicyLoadError(e2.code, pricesName, [{ path: "", message: e2.message }]);
+    const message = e2 instanceof Error ? e2.message.replace(/^invalid price table: /, "") : String(e2);
+    const code2 = /\.(maxContextTokens|maxOutputTokens):/.test(message) ? "E_MODEL_LIMITS_MISSING" : "E_PRICES_INVALID";
+    throw new PolicyLoadError(code2, pricesName, [{ path: "", message }]);
   }
   const rawKeys = yamlOf(keysName, keysText) ?? [];
   const k = keysFileSchema.safeParse(rawKeys);
@@ -58312,13 +58336,13 @@ var init_load_dir = __esm({
     init_schema();
     init_safe_yaml();
     PolicyLoadError = class extends Error {
-      constructor(code, file2, issues) {
+      constructor(code2, file2, issues) {
         const first2 = issues[0];
-        super(`${code} ${file2}${first2 && first2.path ? ` ${first2.path}` : ""}: ${first2?.message ?? "invalid"}${issues.length > 1 ? ` (and ${issues.length - 1} more)` : ""}`);
-        this.code = code;
+        super(`${code2} ${file2}${first2 && first2.path ? ` ${first2.path}` : ""}: ${first2?.message ?? "invalid"}${issues.length > 1 ? ` (and ${issues.length - 1} more)` : ""}`);
+        this.code = code2;
         this.file = file2;
         this.name = "PolicyLoadError";
-        this.issues = issues.map((i) => ({ code, path: i.path ? `${file2}:${i.path}` : file2, message: i.message }));
+        this.issues = issues.map((i) => ({ code: code2, path: i.path ? `${file2}:${i.path}` : file2, message: i.message }));
       }
       code;
       file;
@@ -58377,8 +58401,8 @@ function parseBundle(text2) {
   let raw;
   try {
     raw = JSON.parse(text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2);
-  } catch (e) {
-    return bad(`bundle is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  } catch (e2) {
+    return bad(`bundle is not valid JSON: ${e2 instanceof Error ? e2.message : String(e2)}`);
   }
   rejectProtoKeys(raw);
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return bad("bundle must be a JSON object");
@@ -58397,8 +58421,8 @@ function parseBundle(text2) {
   let prices;
   try {
     prices = parsePriceTable(JSON.stringify(b.prices));
-  } catch (e) {
-    return bad(e instanceof Error ? e.message : String(e));
+  } catch (e2) {
+    return bad(e2 instanceof Error ? e2.message : String(e2));
   }
   const k = keysFileSchema.safeParse(b.keys);
   if (!k.success) throw new PolicyLoadError("E_BUNDLE", "bundle", k.error.issues.map((i) => ({ path: `keys.${i.path.join(".")}`, message: i.message })));
@@ -58491,14 +58515,14 @@ function fetchBundle(rawUrl, o) {
         const etag = res.headers.etag;
         done(() => resolve3({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
       });
-      res.on("error", (e) => done(() => reject(e)));
+      res.on("error", (e2) => done(() => reject(e2)));
       res.on("aborted", () => done(() => reject(new Error("policy response was cut off"))));
     });
     const timer = setTimeout(() => {
       req.destroy();
       done(() => reject(new Error(`policy URL did not answer within ${o.timeoutMs ?? FETCH_TIMEOUT_MS} ms`)));
     }, o.timeoutMs ?? FETCH_TIMEOUT_MS);
-    req.on("error", (e) => done(() => reject(e)));
+    req.on("error", (e2) => done(() => reject(e2)));
     req.end();
   });
 }
@@ -58523,9 +58547,9 @@ import { join as join3 } from "node:path";
 async function readOrMissing(dir, name2) {
   try {
     return await readFile(join3(dir, name2), "utf8");
-  } catch (e) {
-    if (e.code === "ENOENT" || e.code === "ENOTDIR") return void 0;
-    throw e;
+  } catch (e2) {
+    if (e2.code === "ENOENT" || e2.code === "ENOTDIR") return void 0;
+    throw e2;
   }
 }
 async function loadPolicyDir(dir) {
@@ -58557,18 +58581,18 @@ async function writeLkg(stateDir, bundleText) {
   try {
     await writeFile2(tmp, JSON.stringify({ sha256: sha(bundleText), bundle: bundleText }), { mode: 384 });
     await rename(tmp, join4(stateDir, LKG_FILE));
-  } catch (e) {
+  } catch (e2) {
     await unlink2(tmp).catch(() => void 0);
-    throw e;
+    throw e2;
   }
 }
 async function readLkg(stateDir) {
   let text2;
   try {
     text2 = await readFile2(join4(stateDir, LKG_FILE), "utf8");
-  } catch (e2) {
-    if (e2.code === "ENOENT") return null;
-    throw e2;
+  } catch (e3) {
+    if (e3.code === "ENOENT") return null;
+    throw e3;
   }
   if (text2.length > MAX_BUNDLE_BYTES * 2) throw new Error("last-known-good file is too large");
   let env;
@@ -58577,10 +58601,10 @@ async function readLkg(stateDir) {
   } catch {
     throw new Error("last-known-good file is not valid JSON");
   }
-  const e = env;
-  if (typeof e !== "object" || e === null || typeof e.sha256 !== "string" || typeof e.bundle !== "string") throw new Error("last-known-good file has the wrong shape");
-  if (sha(e.bundle) !== e.sha256) throw new Error("last-known-good sha256 mismatch: the file was modified");
-  return parseBundle(e.bundle);
+  const e2 = env;
+  if (typeof e2 !== "object" || e2 === null || typeof e2.sha256 !== "string" || typeof e2.bundle !== "string") throw new Error("last-known-good file has the wrong shape");
+  if (sha(e2.bundle) !== e2.sha256) throw new Error("last-known-good sha256 mismatch: the file was modified");
+  return parseBundle(e2.bundle);
 }
 var LKG_FILE, sha;
 var init_lkg = __esm({
@@ -58647,8 +58671,8 @@ var init_loader = __esm({
         if (hasSource) {
           try {
             await this.reload("start", true);
-          } catch (e) {
-            failure3 = e;
+          } catch (e2) {
+            failure3 = e2;
           }
         }
         if (this.current === null) {
@@ -58656,30 +58680,30 @@ var init_loader = __esm({
           let lkgError;
           try {
             lkg = await readLkg(this.o.stateDir);
-          } catch (e) {
-            lkgError = e;
+          } catch (e2) {
+            lkgError = e2;
           }
           if (!lkg) {
             throw new Error(`cannot start: ${msgOf(failure3)}; no usable last-known-good in ${this.o.stateDir}${lkgError ? ` (${msgOf(lkgError)})` : ""}`);
           }
           try {
             this.swap(lkg);
-          } catch (e) {
-            throw new Error(`cannot start: ${msgOf(failure3)}; the last-known-good does not compile (${msgOf(e)})`);
+          } catch (e2) {
+            throw new Error(`cannot start: ${msgOf(failure3)}; the last-known-good does not compile (${msgOf(e2)})`);
           }
           this.emit("loaded", this.base);
         }
         if (this.o.candidateDir) {
           const c = new _PolicyLoader({ dir: this.o.candidateDir, stateDir: join5(this.o.stateDir, "candidate"), experimentalSubscription: this.o.experimentalSubscription, ...this.o.pollMs !== void 0 ? { pollMs: this.o.pollMs } : {}, ...this.o.debounceMs !== void 0 ? { debounceMs: this.o.debounceMs } : {} });
           c.on("loaded", () => this.recompose());
-          c.on("error", (e) => this.report(e));
+          c.on("error", (e2) => this.report(e2));
           try {
             await c.start();
             this.candidate = c;
             this.recompose();
-          } catch (e) {
+          } catch (e2) {
             this.errors++;
-            this.report(e);
+            this.report(e2);
             await c.stop();
           }
         }
@@ -58729,15 +58753,15 @@ var init_loader = __esm({
             this.etag = got.etag;
             this.lastError = null;
             this.emit("loaded", this.base);
-            await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e) => this.report(new Error(`could not write last-known-good: ${msgOf(e)}`)));
-          } catch (e) {
-            const message = msgOf(e);
+            await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e2) => this.report(new Error(`could not write last-known-good: ${msgOf(e2)}`)));
+          } catch (e2) {
+            const message = msgOf(e2);
             if (!(trigger === "poll" && message === this.lastError)) {
               this.errors++;
               this.lastError = message;
-              this.report(e);
+              this.report(e2);
             }
-            if (throwOnError) throw e;
+            if (throwOnError) throw e2;
           }
         });
         this.queue = run.catch(() => void 0);
@@ -58763,11 +58787,11 @@ var init_loader = __esm({
         if (!this.base) return;
         this.current = attachCandidate(this.base, this.candidate?.base ?? null);
       }
-      report(e) {
-        if (this.listenerCount("error") > 0) this.emit("error", e instanceof Error ? e : new Error(String(e)));
+      report(e2) {
+        if (this.listenerCount("error") > 0) this.emit("error", e2 instanceof Error ? e2 : new Error(String(e2)));
       }
     };
-    msgOf = (e) => e instanceof Error ? e.message : String(e);
+    msgOf = (e2) => e2 instanceof Error ? e2.message : String(e2);
   }
 });
 
@@ -58789,8 +58813,8 @@ var init_gcra = __esm({
 function budgetExpiresAt(resetsAt, nowMs) {
   return resetsAt === null ? nowMs + SESSION_BUDGET_TTL_MS : Date.parse(resetsAt) + WINDOW_GRACE_MS;
 }
-function assertMicroUsd(n, what) {
-  if (!isMicro(n)) throw new Error(`${what} must be a non-negative integer number of micro-USD, got ${n}`);
+function assertMicroUsd(n2, what) {
+  if (!isMicro(n2)) throw new Error(`${what} must be a non-negative integer number of micro-USD, got ${n2}`);
 }
 function planTenant(plan) {
   const keys2 = [
@@ -58821,7 +58845,7 @@ var init_store = __esm({
     WINDOW_GRACE_MS = DAY_MS3;
     SESSION_BUDGET_TTL_MS = 30 * DAY_MS3;
     DEFAULT_DEADLINE_MS = 20 * 6e4;
-    isMicro = (n) => Number.isSafeInteger(n) && n >= 0;
+    isMicro = (n2) => Number.isSafeInteger(n2) && n2 >= 0;
   }
 });
 
@@ -58849,9 +58873,9 @@ function createMemoryStore(o) {
       b.s += actual(l.est);
     }
     for (const key of res.streams) {
-      const n = streams.get(key) ?? 0;
-      if (n <= 1) streams.delete(key);
-      else streams.set(key, n - 1);
+      const n2 = streams.get(key) ?? 0;
+      if (n2 <= 1) streams.delete(key);
+      else streams.set(key, n2 - 1);
     }
     reservations.delete(id);
   }
@@ -58963,17 +58987,17 @@ function createMemoryStore(o) {
     },
     async seed(entries) {
       const now = o.clock();
-      for (const e of entries) {
-        if (tenantOfKey(e.key) === null) throw new Error(`counter key without a tenant tag: ${e.key}`);
-        assertMicroUsd(e.spentMicroUsd, "seeded spend");
-        if (e.ttlMs <= 0) continue;
-        let b = live(budgets, e.key, now);
+      for (const e2 of entries) {
+        if (tenantOfKey(e2.key) === null) throw new Error(`counter key without a tenant tag: ${e2.key}`);
+        assertMicroUsd(e2.spentMicroUsd, "seeded spend");
+        if (e2.ttlMs <= 0) continue;
+        let b = live(budgets, e2.key, now);
         if (b === void 0) {
           b = { s: 0, r: 0, exp: 0 };
-          budgets.set(e.key, b);
+          budgets.set(e2.key, b);
         }
-        b.s = Math.max(b.s, e.spentMicroUsd);
-        b.exp = Math.max(b.exp, now + e.ttlMs);
+        b.s = Math.max(b.s, e2.spentMicroUsd);
+        b.exp = Math.max(b.exp, now + e2.ttlMs);
       }
     },
     keys() {
@@ -60774,8 +60798,8 @@ var require_generic_transformers = __commonJS({
         return null;
       if (reply instanceof Map) {
         const ret = /* @__PURE__ */ new Map();
-        for (const [n, rawMessages] of reply) {
-          const name2 = n;
+        for (const [n2, rawMessages] of reply) {
+          const name2 = n2;
           ret.set(name2.toString(), transformStreamMessagesReply(rawMessages, typeMapping));
         }
         return ret;
@@ -64439,12 +64463,12 @@ var require_FUNCTION_LOAD = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = {
-      parseCommand(parser, code, options) {
+      parseCommand(parser, code2, options) {
         parser.push("FUNCTION", "LOAD");
         if (options?.REPLACE) {
           parser.push("REPLACE");
         }
-        parser.push(code);
+        parser.push(code2);
       },
       transformReply: void 0
     };
@@ -70132,7 +70156,7 @@ var require_LATENCY_HISTOGRAM = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
-    var id = (n) => n;
+    var id = (n2) => n2;
     exports.default = {
       IS_READ_ONLY: true,
       parseCommand(parser, ...commands) {
@@ -76529,13 +76553,13 @@ var require_tracing = __commonJS({
       return pointChannels?.[name2];
     }
     exports.getChannel = getChannel;
-    function publish(name2, factory) {
+    function publish2(name2, factory) {
       const ch = pointChannels?.[name2];
       if (ch?.hasSubscribers) {
         ch.publish(factory());
       }
     }
-    exports.publish = publish;
+    exports.publish = publish2;
   }
 });
 
@@ -86121,9 +86145,9 @@ var require_cache4 = __commonJS({
        */
       deleteOldest() {
         const it = this.#cacheKeyToEntryMap[Symbol.iterator]();
-        const n = it.next();
-        if (!n.done) {
-          const key = n.value[0];
+        const n2 = it.next();
+        if (!n2.done) {
+          const key = n2.value[0];
           const entry = this.#cacheKeyToEntryMap.get(key);
           if (entry) {
             entry.invalidate();
@@ -86310,7 +86334,7 @@ var require_identity2 = __commonJS({
     exports.generateClientId = generateClientId;
     var generateClusterClientId = (nodes) => {
       const hash2 = (0, node_crypto_1.randomBytes)(4).toString("hex");
-      const prefix2 = nodes.map((n) => `${n?.socket?.host ?? "unknown"}:${n?.socket?.port ?? "unknown"}`).join(",");
+      const prefix2 = nodes.map((n2) => `${n2?.socket?.host ?? "unknown"}:${n2?.socket?.port ?? "unknown"}`).join(",");
       return truncateId(prefix2, hash2);
     };
     exports.generateClusterClientId = generateClusterClientId;
@@ -88486,8 +88510,8 @@ var require_client2 = __commonJS({
               cp.onReAuthenticationError(new authx_1.CredentialsError(errorMessage));
             });
           },
-          onError: (e) => {
-            const errorMessage = `Error from streaming credentials provider: ${e.message}`;
+          onError: (e2) => {
+            const errorMessage = `Error from streaming credentials provider: ${e2.message}`;
             cp.onReAuthenticationError(new authx_1.UnableToObtainNewCredentialsError(errorMessage));
           }
         });
@@ -90810,8 +90834,8 @@ var require_ft_cursor = __commonJS({
     function maxIdleFromAggregateArgs(redisArgs) {
       for (let i = 0; i < redisArgs.length - 1; i++) {
         if (argToString(redisArgs[i]).toUpperCase() === "MAXIDLE") {
-          const n = Number(argToString(redisArgs[i + 1]));
-          return Number.isNaN(n) || n <= 0 ? void 0 : n;
+          const n2 = Number(argToString(redisArgs[i + 1]));
+          return Number.isNaN(n2) || n2 <= 0 ? void 0 : n2;
         }
       }
       return void 0;
@@ -93076,11 +93100,11 @@ var require_sentinel = __commonJS({
             this.#setReady(true);
             this.#trace("#connect: returning");
             return;
-          } catch (e) {
-            const err = e;
+          } catch (e2) {
+            const err = e2;
             this.#trace(`#connect: exception ${err.message}`);
             if (++count > this.#maxCommandRediscovers) {
-              throw e;
+              throw e2;
             }
             await (0, promises_1.setTimeout)(1e3);
           } finally {
@@ -102646,9 +102670,9 @@ function createRedisStore(client, o) {
   let loaded = null;
   const load = () => loaded ??= Promise.all([ADMIT, SETTLE, SWEEP, SEED].map((s2) => client.sendCommand(["SCRIPT", "LOAD", s2.source]))).then(
     () => void 0,
-    (e) => {
+    (e2) => {
       loaded = null;
-      throw e;
+      throw e2;
     }
   );
   async function run(s2, keys2, args) {
@@ -102656,8 +102680,8 @@ function createRedisStore(client, o) {
     const tail = [String(keys2.length), ...keys2, ...args];
     try {
       return await client.sendCommand(["EVALSHA", s2.sha, ...tail]);
-    } catch (e) {
-      if (!(e instanceof Error && e.message.startsWith("NOSCRIPT"))) throw e;
+    } catch (e2) {
+      if (!(e2 instanceof Error && e2.message.startsWith("NOSCRIPT"))) throw e2;
       return client.sendCommand(["EVAL", s2.source, ...tail]);
     }
   }
@@ -102714,7 +102738,7 @@ function createRedisStore(client, o) {
       return Number(done) === 1 ? "settled" : "unknown";
     },
     async sweep() {
-      let n = 0;
+      let n2 = 0;
       let cursor = "0";
       do {
         const [next, found] = await client.sendCommand(["SCAN", cursor, "MATCH", "ty:{*}:deadlines", "COUNT", "1000"]);
@@ -102722,7 +102746,7 @@ function createRedisStore(client, o) {
         for (const key of found.map(String).filter((k) => DEADLINES.test(k))) {
           for (; ; ) {
             const done = list(await run(SWEEP, [key], [String(SWEEP_BATCH)])).map(String);
-            n += done.length;
+            n2 += done.length;
             const ids = done.map((resKey) => decodeURIComponent(resKey.slice(resKey.lastIndexOf(":") + 1)));
             for (const id of ids) open2.delete(id);
             if (ids.length > 0) o.onSwept?.(ids);
@@ -102730,7 +102754,7 @@ function createRedisStore(client, o) {
           }
         }
       } while (cursor !== "0");
-      return n;
+      return n2;
     },
     async snapshot(keys2) {
       const rows = await Promise.all(keys2.map((k) => client.sendCommand(["HMGET", k, "s", "r"])));
@@ -102740,11 +102764,11 @@ function createRedisStore(client, o) {
       }));
     },
     async seed(entries) {
-      for (const e of entries) {
-        if (tenantOfKey(e.key) === null) throw new Error(`counter key without a tenant tag: ${e.key}`);
-        assertMicroUsd(e.spentMicroUsd, "seeded spend");
+      for (const e2 of entries) {
+        if (tenantOfKey(e2.key) === null) throw new Error(`counter key without a tenant tag: ${e2.key}`);
+        assertMicroUsd(e2.spentMicroUsd, "seeded spend");
       }
-      await Promise.all(entries.filter((e) => e.ttlMs > 0).map((e) => run(SEED, [e.key], [String(e.spentMicroUsd), String(Math.ceil(e.ttlMs))])));
+      await Promise.all(entries.filter((e2) => e2.ttlMs > 0).map((e2) => run(SEED, [e2.key], [String(e2.spentMicroUsd), String(Math.ceil(e2.ttlMs))])));
     }
   };
 }
@@ -102814,9 +102838,9 @@ async function openCounterStore(o) {
         timer = setTimeout(() => reject(new Error(`no answer from ${redactUrl(o.redisUrl)} within ${CONNECT_TIMEOUT_MS} ms`)), CONNECT_TIMEOUT_MS);
       })
     ]);
-  } catch (e) {
+  } catch (e2) {
     client.destroy();
-    throw new Error(`cannot connect to Redis at ${redactUrl(o.redisUrl)}: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`cannot connect to Redis at ${redactUrl(o.redisUrl)}: ${e2 instanceof Error ? e2.message : String(e2)}`);
   } finally {
     clearTimeout(timer);
   }
@@ -102859,25 +102883,25 @@ __export(sweeper_exports, {
 });
 function startSweeper(store, o) {
   let running = false;
-  const report = (e) => {
+  const report = (e2) => {
     try {
-      o.onError?.(e);
+      o.onError?.(e2);
     } catch {
     }
   };
   const tick = async () => {
     try {
       o.onTick?.();
-    } catch (e) {
-      report(e);
+    } catch (e2) {
+      report(e2);
     }
     if (running) return;
     running = true;
     try {
       if (o.lock && !await o.lock.acquire()) return;
       await store.sweep(Date.now());
-    } catch (e) {
-      report(e);
+    } catch (e2) {
+      report(e2);
     } finally {
       running = false;
     }
@@ -102972,8 +102996,8 @@ async function generateTraffic(o) {
     const dayStart = startMs + d * DAY_MS4;
     const weekend = new Date(dayStart).getUTCDay() % 6 === 0;
     for (const dev of DEMO_DEVELOPERS) {
-      const n = Math.floor(dev.load * (weekend ? 0.3 : 1.7) + rng());
-      for (let s2 = 0; s2 < n; s2++) {
+      const n2 = Math.floor(dev.load * (weekend ? 0.3 : 1.7) + rng());
+      for (let s2 = 0; s2 < n2; s2++) {
         const startAt = dayStart + (8 + s2 * 4) * 36e5 + between(rng, 0, 90) * 6e4 + between(rng, 0, 59) * 1e3;
         const secret = dev.name === SECRET_DEV && d === SECRET_DAY && s2 === 0;
         sessions.push(planSession(rng, dev, startAt, secret, planned, counter));
@@ -103034,7 +103058,7 @@ var init_traffic = __esm({
     WORDS = ["alpha", "build", "cache", "diff", "edit", "file", "grep", "hook", "index", "jest", "kind", "lint", "merge", "node", "patch", "query", "route", "state", "token", "view"];
     text = (rng, words) => Array.from({ length: words }, () => WORDS[Math.floor(rng() * WORDS.length)]).join(" ");
     between = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
-    hex3 = (rng, n) => Array.from({ length: n }, () => Math.floor(rng() * 16).toString(16)).join("");
+    hex3 = (rng, n2) => Array.from({ length: n2 }, () => Math.floor(rng() * 16).toString(16)).join("");
     toolDefs = (names) => names.map((name2) => ({
       name: name2,
       description: `${name2} tool for the coding agent. `.repeat(20),
@@ -103255,9 +103279,9 @@ function missingInstances(manifests, records) {
   };
   const byInstance = /* @__PURE__ */ new Map();
   for (const r of records) {
-    const list2 = byInstance.get(r.instance) ?? [];
-    list2.push(r);
-    byInstance.set(r.instance, list2);
+    const list3 = byInstance.get(r.instance) ?? [];
+    list3.push(r);
+    byInstance.set(r.instance, list3);
   }
   for (const m of manifests) {
     const untilMs = Date.parse(m.until);
@@ -103658,7 +103682,7 @@ function renderTerminal(r) {
       ["forwarded", String(r.base.forwarded), String(r.head.forwarded), ""],
       ["blocked", String(r.base.blocked), String(r.head.blocked), ""],
       ["sessions cut", String(r.cutSessions.filter((c) => c.policy === "base").length), String(r.cutSessions.filter((c) => c.policy === "head").length), ""],
-      ["requests rerouted", "", String(r.rerouted.reduce((n, x) => n + x.count, 0)), ""]
+      ["requests rerouted", "", String(r.rerouted.reduce((n2, x) => n2 + x.count, 0)), ""]
     ])
   );
   section("Fidelity notes", [
@@ -103685,7 +103709,7 @@ function renderTerminal(r) {
   );
   section(
     "How exact is this",
-    r.exactness.map((e) => `[${e.applied ? "x" : " "}] ${e.output}: ${EXACTNESS_LABEL[e.exactness]}`)
+    r.exactness.map((e2) => `[${e2.applied ? "x" : " "}] ${e2.output}: ${EXACTNESS_LABEL[e2.exactness]}`)
   );
   out.push("", r.gates.failed.length === 0 ? "Check: passed." : `Check: failed (${r.gates.failed.map(s).join(", ")}).`);
   return `${out.join("\n")}
@@ -103783,7 +103807,7 @@ function outputTokens(seed, body) {
   return 120 + Math.floor(rng() * 1300);
 }
 async function recordDemo(o) {
-  const days = o.days ?? DEMO_DAYS;
+  const days2 = o.days ?? DEMO_DAYS;
   let now = DEMO_START_MS;
   const clock = () => now;
   const prevKey = process.env[DEMO_CREDENTIAL_ENV];
@@ -103817,7 +103841,7 @@ async function recordDemo(o) {
       gatewayUrl: url2,
       keys: Object.fromEntries(DEMO_DEVELOPERS.map((d) => [d.name, demoKey(d.name)])),
       seed: o.seed,
-      days,
+      days: days2,
       setTime: (ms) => {
         for (let h = Math.max(heartbeatHour + HOUR_MS3, Math.ceil(DEMO_START_MS / HOUR_MS3) * HOUR_MS3); h <= ms; h += HOUR_MS3) {
           now = h;
@@ -103833,7 +103857,7 @@ async function recordDemo(o) {
       }
     });
     await writer.close();
-    await exportTraces({ dir, sinceMs: DEMO_START_MS, untilMs: DEMO_START_MS + days * DAY_MS5, out: o.traceFile });
+    await exportTraces({ dir, sinceMs: DEMO_START_MS, untilMs: DEMO_START_MS + days2 * DAY_MS5, out: o.traceFile });
     return { ...result, base, head };
   } finally {
     await gw.close();
@@ -103896,11 +103920,11 @@ __export(keys_exports, {
 import { randomBytes as randomBytes4 } from "node:crypto";
 import { appendFile as appendFile2 } from "node:fs/promises";
 function base62(bytes) {
-  let n = BigInt(`0x${bytes.toString("hex")}`);
+  let n2 = BigInt(`0x${bytes.toString("hex")}`);
   let out = "";
-  while (n > 0n) {
-    out = B62[Number(n % 62n)] + out;
-    n /= 62n;
+  while (n2 > 0n) {
+    out = B62[Number(n2 % 62n)] + out;
+    n2 /= 62n;
   }
   return out.padStart(B62_LEN, "0");
 }
@@ -103971,8 +103995,8 @@ function acquireLock(traceDir) {
         closeSync(fd);
       }
       break;
-    } catch (e) {
-      if (e.code !== "EEXIST" || attempt > 0) throw e;
+    } catch (e2) {
+      if (e2.code !== "EEXIST" || attempt > 0) throw e2;
       let holder = Number.NaN;
       try {
         holder = Number.parseInt(readFileSync(path2, "utf8").trim(), 10);
@@ -104031,9 +104055,9 @@ function loadLivePolicy(o) {
   return compilePolicy(src, "live", { experimentalSubscription: false });
 }
 async function assertReadable(dir) {
-  for (const e of await readdir2(dir, { withFileTypes: true })) {
-    const p = join7(dir, e.name);
-    if (e.isDirectory()) await assertReadable(p);
+  for (const e2 of await readdir2(dir, { withFileTypes: true })) {
+    const p = join7(dir, e2.name);
+    if (e2.isDirectory()) await assertReadable(p);
     else await access(p, constants.R_OK);
   }
 }
@@ -104049,9 +104073,9 @@ async function startLiveHarness(o) {
   const runtime = createGatewayRuntime();
   try {
     await mkdir3(traceDir, { recursive: true });
-  } catch (e) {
-    const code = e.code;
-    throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code ? ` (${code})` : ""}`);
+  } catch (e2) {
+    const code2 = e2.code;
+    throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code2 ? ` (${code2})` : ""}`);
   }
   const release = acquireLock(traceDir);
   try {
@@ -104065,11 +104089,11 @@ async function startLiveHarness(o) {
       now
     );
     await store.seed(entries);
-    spentMicroUsd = entries.reduce((n, e) => n + e.spentMicroUsd, 0);
-  } catch (e) {
+    spentMicroUsd = entries.reduce((n2, e2) => n2 + e2.spentMicroUsd, 0);
+  } catch (e2) {
     release();
-    const code = e.code;
-    throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code ? ` (${code})` : ""}; refusing to start without the earlier spend`);
+    const code2 = e2.code;
+    throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code2 ? ` (${code2})` : ""}; refusing to start without the earlier spend`);
   }
   const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
   let ticks = 0;
@@ -104078,7 +104102,7 @@ async function startLiveHarness(o) {
     onTick: () => {
       if (++ticks % 2 === 0) writer.heartbeat();
     },
-    onError: (e) => console.error(`tokenyard live: sweeper: ${e instanceof Error ? e.message : String(e)}`)
+    onError: (e2) => console.error(`tokenyard live: sweeper: ${e2 instanceof Error ? e2.message : String(e2)}`)
   });
   const gw = createGateway({
     policy: () => policy2,
@@ -104095,11 +104119,11 @@ async function startLiveHarness(o) {
   let url2;
   try {
     url2 = await gw.listen(o.port, "127.0.0.1");
-  } catch (e) {
+  } catch (e2) {
     stopSweeper();
     await writer.close();
     release();
-    throw e;
+    throw e2;
   }
   const capMicro = Math.round(guard.capUsd * 1e6);
   process.stdout.write(
@@ -104152,8 +104176,8 @@ var init_harness = __esm({
       try {
         process.kill(pid, 0);
         return true;
-      } catch (e) {
-        return e.code === "EPERM";
+      } catch (e2) {
+        return e2.code === "EPERM";
       }
     };
     WARMUP_LOOKBACK_MS2 = 32 * 864e5;
@@ -104298,7 +104322,7 @@ function renderJson(r) {
       droppedCostMicroUsd: c.droppedCostMicroUsd
     })),
     budgetHits: r.budgetHits.map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: h.firstHitTs, days: h.days })),
-    exactness: r.exactness.map((e) => ({ output: e.output, exactness: e.exactness, applied: e.applied })),
+    exactness: r.exactness.map((e2) => ({ output: e2.output, exactness: e2.exactness, applied: e2.applied })),
     gates: { failed: [...r.gates.failed] }
   };
   return `${JSON.stringify(ordered, null, 2)}
@@ -104312,6 +104336,292 @@ var init_render_json = __esm({
   }
 });
 
+// src/replay/render-markdown.ts
+function days(r) {
+  const d = Math.round((r.window.untilMs - r.window.sinceMs) / 864e5 * 10) / 10;
+  return `${d} day${d === 1 ? "" : "s"}`;
+}
+function change2(base, head) {
+  const d = head.costMicroUsd - base.costMicroUsd;
+  const sign = d < 0 ? "-" : "+";
+  const rel = base.costMicroUsd === 0 ? "" : ` (${sign}${(Math.abs(d) / base.costMicroUsd * 100).toFixed(1)}%)`;
+  return `**${sign}${formatUsd(Math.abs(d))}${rel}**${base.estimated || head.estimated ? ", estimated (model change)" : ""}`;
+}
+function renderMarkdown(r, o) {
+  const basis = r.base.costBasis === r.head.costBasis ? r.base.costBasis : "mixed";
+  const headCuts = r.cutSessions.filter((c) => c.policy === "head");
+  const baseCuts = r.cutSessions.filter((c) => c.policy === "base");
+  const droppedRequests = headCuts.reduce((s2, c) => s2 + c.droppedRequests, 0);
+  const droppedCost = headCuts.reduce((s2, c) => s2 + c.droppedCostMicroUsd, 0);
+  const rerouted = r.rerouted.reduce((s2, x) => s2 + x.count, 0);
+  const classes = [...new Set(r.rerouted.map((x) => x.requestClass ?? "unclassified"))].sort();
+  const targets = [...new Set(r.rerouted.map((x) => x.toRoute))].sort();
+  const blockedBy = (p) => {
+    const by = /* @__PURE__ */ new Map();
+    for (const b of r.blocked.filter((x) => x.policy === p)) by.set(b.name === "" ? b.reason : b.name, (by.get(b.name === "" ? b.reason : b.name) ?? 0) + b.count);
+    return list2([...by].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([k, c]) => `${n(c)} ${e(k)}`));
+  };
+  const blockedN = (p) => r.blocked.filter((x) => x.policy === p).reduce((s2, x) => s2 + x.count, 0);
+  const hits = (p) => r.budgetHits.filter((h) => h.policy === p).map((h) => `${e(h.budget)} ${e(h.scopeValue)} on ${h.days} day${h.days === 1 ? "" : "s"}, first hit ${e(h.firstHitTs)}`);
+  const headHits = hits("head");
+  const untrusted = r.fidelity.disagreements.length > 0 || r.fidelity.missingInstances.length > 0;
+  const out = [COMMENT_MARKER, `### tokenyard policy replay: ${code(o.baseRev)} (base) vs ${code(o.headRev)} (head)`, ""];
+  out.push(`Traffic: ${days(r)}, ${n(r.requests)} requests, ${n(r.sessions)} sessions, tenant ${r.tenant === null ? "all" : code(r.tenant)}. Fidelity: base replay matches recorded decisions on ${pctDown2(r.fidelity.agreement)} of requests (details below).`, "");
+  if (untrusted) {
+    out.push("> **Do not trust the diff below until the fidelity notes are explained.**", ">");
+    for (const d of r.fidelity.disagreements) out.push(`> - ${n(d.count)} x ${e(d.reason)}`);
+    for (const m of r.fidelity.missingInstances) out.push(`> - instance ${e(m.instance)}: ${m.kind} in ${m.hours.map((h) => e(h)).join(", ") || "unknown hours"}`);
+    out.push("");
+  }
+  out.push(
+    "| | Base | Head | Change |",
+    "|---|---|---|---|",
+    `| Cost (${basis}) | ${formatUsd(r.base.costMicroUsd)} | ${formatUsd(r.head.costMicroUsd)} | ${change2(r.base, r.head)} |`,
+    `| Requests rerouted | | ${n(rerouted)} | ${rerouted === 0 ? "none" : `${classes.map(e).join(" and ")} to ${targets.map(e).join(", ")}`} |`,
+    `| Requests blocked | ${n(blockedN("base"))} | ${n(blockedN("head"))} | ${blockedBy("head")} |`,
+    `| Sessions cut mid-task | ${n(baseCuts.length)} | ${headCuts.length > 0 ? `**${n(headCuts.length)}**` : "0"} | ${headCuts.length === 0 ? "none" : `${n(droppedRequests)} later requests (${formatUsd(droppedCost)}) would not have run as recorded`} |`,
+    `| Budget hits | ${list2(hits("base"))} | ${list2(headHits)} | |`,
+    ""
+  );
+  if (r.base.estimated || r.head.estimated) out.push("Cost figures that involve a model change are estimates; see how exact this is below.", "");
+  out.push(`<details><summary>Rerouted requests by route and request class</summary>
+
+${bullets(r.rerouted.map((x) => `${n(x.count)} x from ${e(x.fromRoute)} to ${e(x.toRoute)}, request class ${e(x.requestClass)}`))}
+
+</details>`);
+  out.push(
+    `<details><summary>Blocked requests</summary>
+
+${bullets(r.blocked.map((b) => `${b.policy}: ${n(b.count)} x ${b.reason}${b.name === "" ? "" : ` ${e(b.name)}`}`))}
+
+</details>`
+  );
+  out.push(
+    `<details><summary>Cut sessions</summary>
+
+${bullets(
+      r.cutSessions.map((c) => `${c.policy}: session ${e(c.session)}, team ${e(c.team)}, repo ${e(c.repo)}, request class ${e(c.requestClass)}, request ${c.requestIndex}, cause ${e(c.cause)}; ${n(c.droppedRequests)} later requests (${formatUsd(c.droppedCostMicroUsd)})`)
+    )}
+
+</details>`
+  );
+  out.push(`<details><summary>Fidelity notes</summary>
+
+${bullets([...r.fidelity.disagreements.map((d) => `${n(d.count)} x ${e(d.reason)}`), ...r.fidelity.missingInstances.map((m) => `instance ${e(m.instance)}: ${m.kind} in ${m.hours.map((h) => e(h)).join(", ") || "unknown hours"}`)])}
+
+</details>`);
+  const rows = EXACTNESS_TABLE.split("\n").slice(2);
+  const applied = rows.filter((_, i) => r.exactness[i]?.applied === true);
+  out.push(`<details><summary>How exact is this</summary>
+
+| Output | Exactness | Why |
+|---|---|---|
+${applied.length === 0 ? "| none of the rows applied | | |" : applied.join("\n")}
+
+</details>`, "");
+  const failed = r.gates.failed;
+  out.push(`Check: ${failed.length === 0 ? "**passed**" : `**failed** (${failed.map((g) => e(g)).join(", ")})`}. Policy check: ${o.checkSummary.errors} error${o.checkSummary.errors === 1 ? "" : "s"}, ${o.checkSummary.warnings} warning${o.checkSummary.warnings === 1 ? "" : "s"}.`);
+  return `${out.join("\n")}
+`;
+}
+var COMMENT_MARKER, MAX_LIST, e, n, pctDown2, code, more, bullets, list2;
+var init_render_markdown = __esm({
+  "src/replay/render-markdown.ts"() {
+    "use strict";
+    init_render_terminal();
+    init_sanitize();
+    init_diff();
+    COMMENT_MARKER = "<!-- tokenyard-replay -->";
+    MAX_LIST = 50;
+    e = (v) => v === null ? "-" : escapeMarkdown(v);
+    n = (x) => x.toLocaleString("en-US");
+    pctDown2 = (x) => `${(Math.floor(x * 1e3) / 10).toFixed(1)}%`;
+    code = (v) => /^[A-Za-z0-9._/+-]{1,64}$/.test(v) ? `\`${v}\`` : e(v);
+    more = (xs) => xs.length > MAX_LIST ? [...xs.slice(0, MAX_LIST), `and ${xs.length - MAX_LIST} more`] : xs;
+    bullets = (xs) => xs.length === 0 ? "none" : more(xs).map((x) => `- ${x}`).join("\n");
+    list2 = (xs, max = 3) => xs.length === 0 ? "none" : xs.length > max ? `${xs.slice(0, max).join(", ")} and ${xs.length - max} more` : xs.join(", ");
+  }
+});
+
+// src/action/main.ts
+var main_exports = {};
+__export(main_exports, {
+  githubClient: () => githubClient,
+  runAction: () => runAction
+});
+import { appendFile as appendFile3, mkdir as mkdir4, readFile as readFile3, writeFile as writeFile3 } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { dirname as dirname2, join as join9 } from "node:path";
+import { Readable as Readable2, Transform as Transform2 } from "node:stream";
+import { pipeline as pipeline2 } from "node:stream/promises";
+async function readEvent(env) {
+  const path2 = env.GITHUB_EVENT_PATH;
+  if (!path2) return null;
+  try {
+    const ev = JSON.parse(await readFile3(path2, "utf8"));
+    const pr = ev.pull_request;
+    if (!pr) return null;
+    const headRepo = pr.head?.repo;
+    const fork = headRepo == null || headRepo.fork === true || pr.base?.repo?.full_name !== void 0 && headRepo.full_name !== pr.base.repo.full_name;
+    return { number: pr.number ?? 0, baseSha: pr.base?.sha ?? null, headSha: pr.head?.sha ?? null, fork };
+  } catch {
+    return null;
+  }
+}
+async function download(url2, token, dest) {
+  const u = new URL(url2);
+  const loopback = u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "[::1]";
+  if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback)) throw new Error("traces URL must be https");
+  const res = await fetch(u, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok || !res.body) throw new Error(`traces download failed with HTTP ${res.status}`);
+  let seen = 0;
+  const cap = new Transform2({
+    transform(chunk, _enc, cb) {
+      seen += chunk.length;
+      cb(seen > MAX_TRACES_BYTES ? new Error("traces download is larger than 512 MiB") : null, chunk);
+    }
+  });
+  await pipeline2(Readable2.fromWeb(res.body), cap, createWriteStream(dest));
+}
+function clip(body) {
+  if (body.length <= MAX_COMMENT) return body;
+  return `${body.slice(0, MAX_COMMENT)}
+
+</details>
+
+(comment cut at ${MAX_COMMENT} characters; the full result is in replay.json)
+`;
+}
+async function publish(env, gh, body, wantComment, fork) {
+  const summary2 = env.GITHUB_STEP_SUMMARY;
+  if (summary2) await appendFile3(summary2, `${body}
+`);
+  if (!wantComment || fork) return;
+  try {
+    const existing = (await gh.listComments()).find((c) => c.body.startsWith(COMMENT_MARKER));
+    if (existing) await gh.updateComment(existing.id, clip(body));
+    else await gh.createComment(clip(body));
+  } catch (e2) {
+    console.error(`tokenyard action: could not post the comment (${e2 instanceof Error ? e2.message : String(e2)}); the job summary has the result`);
+  }
+}
+async function runAction(env, gh) {
+  try {
+    const event = await readEvent(env);
+    const fork = event?.fork ?? false;
+    const wantComment = input2(env, "comment") !== "false";
+    const headDir = input2(env, "policy-dir") || "policy";
+    const baseRef = input2(env, "base-ref") || env.GITHUB_BASE_REF || "";
+    const tracesInput = input2(env, "traces");
+    if (tracesInput === "") throw new Error("the traces input is required");
+    if (baseRef === "") throw new Error("base-ref is empty and this is not a pull request event");
+    const tracesToken = fork ? "" : input2(env, "traces-token");
+    const headRev = (event?.headSha ?? env.GITHUB_SHA ?? "head").slice(0, 7);
+    let errors = [];
+    let warnings = [];
+    try {
+      ({ errors, warnings } = validatePolicy(await loadPolicyDir(headDir), { experimentalSubscription: false }));
+    } catch (e2) {
+      if (!(e2 instanceof PolicyLoadError)) throw e2;
+      errors = e2.issues.map((i) => ({ code: e2.code, path: i.path, message: i.message }));
+    }
+    if (errors.length > 0) {
+      for (const i of errors) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+      const body2 = [COMMENT_MARKER, "### tokenyard policy replay", "", `Policy check failed: ${errors.length} error${errors.length === 1 ? "" : "s"}. Replay did not run.`, "", ...errors.slice(0, 20).map((i) => `- ${escapeMarkdown(i.code)} ${escapeMarkdown(i.path)}: ${escapeMarkdown(i.message, 400)}`), ""].join("\n");
+      await publish(env, gh, body2, wantComment, fork);
+      return 1;
+    }
+    const work = env.RUNNER_TEMP || process.cwd();
+    let tracesPath = tracesInput;
+    if (/^https?:\/\//i.test(tracesInput)) {
+      tracesPath = join9(work, new URL(tracesInput).pathname.endsWith(".gz") ? "traces.ndjson.gz" : "traces.ndjson");
+      await mkdir4(dirname2(tracesPath), { recursive: true });
+      await download(tracesInput, tracesToken === "" ? null : tracesToken, tracesPath);
+    }
+    const sinceInput = input2(env, "since");
+    const sinceMs = sinceInput === "" ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
+    if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error("the since input must be a duration such as 7d, or an ISO time");
+    const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false });
+    let base;
+    try {
+      base = await loadReplayPolicy({ source: baseRef, headDir, experimentalSubscription: false });
+    } catch (e2) {
+      if (baseRef.includes("/")) throw e2;
+      base = await loadReplayPolicy({ source: `origin/${baseRef}`, headDir, experimentalSubscription: false });
+    }
+    const result = await replay({ base, head, traces: await openReplayTraces([tracesPath]), sinceMs, tenant: null });
+    const jsonPath = join9(work, "replay.json");
+    await writeFile3(jsonPath, renderJson(result));
+    if (env.GITHUB_OUTPUT) await appendFile3(env.GITHUB_OUTPUT, `replay-json=${jsonPath}
+`);
+    const baseRev = event?.baseSha?.slice(0, 7) ?? baseRef;
+    const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length } });
+    await publish(env, gh, body, wantComment, fork);
+    return result.gates.failed.length > 0 ? 1 : 0;
+  } catch (e2) {
+    console.error(`tokenyard action: ${e2 instanceof Error ? e2.message : String(e2)}`);
+    return 1;
+  }
+}
+function githubClient(env) {
+  const api = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "");
+  const call = async (method, path2, body) => {
+    const token = input2(env, "token");
+    if (token === "") throw new Error("the token input is empty");
+    const res = await fetch(`${api}${path2}`, {
+      method,
+      headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "tokenyard-action", ...body === void 0 ? {} : { "content-type": "application/json" } },
+      ...body === void 0 ? {} : { body: JSON.stringify(body) }
+    });
+    if (!res.ok) throw new Error(`GitHub API ${method} ${path2} answered HTTP ${res.status}`);
+    return res.status === 204 ? null : res.json();
+  };
+  const target = async () => {
+    const repo = env.GITHUB_REPOSITORY ?? "";
+    const pr = (await readEvent(env))?.number ?? 0;
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || pr <= 0) throw new Error("not a pull request event");
+    return { repo, pr };
+  };
+  return {
+    async listComments() {
+      const { repo, pr } = await target();
+      const out = [];
+      for (let page = 1; page <= 20; page++) {
+        const rows = await call("GET", `/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`);
+        for (const r of rows) out.push({ id: r.id, body: r.body ?? "" });
+        if (rows.length < 100) break;
+      }
+      return out;
+    },
+    async createComment(body) {
+      const { repo, pr } = await target();
+      await call("POST", `/repos/${repo}/issues/${pr}/comments`, { body });
+    },
+    async updateComment(id, body) {
+      const { repo } = await target();
+      await call("PATCH", `/repos/${repo}/issues/comments/${id}`, { body });
+    }
+  };
+}
+var MAX_COMMENT, MAX_TRACES_BYTES, input2;
+var init_main = __esm({
+  "src/action/main.ts"() {
+    "use strict";
+    init_export();
+    init_load_dir2();
+    init_replay_input();
+    init_load_dir();
+    init_validate();
+    init_engine();
+    init_render_json();
+    init_render_markdown();
+    init_sanitize();
+    MAX_COMMENT = 6e4;
+    MAX_TRACES_BYTES = 512 * 1024 * 1024;
+    input2 = (env, name2) => (env[`INPUT_${name2.toUpperCase().replace(/ /g, "_")}`] ?? "").trim();
+  }
+});
+
 // node_modules/commander/lib/error.js
 var CommanderError = class extends Error {
   /**
@@ -104320,11 +104630,11 @@ var CommanderError = class extends Error {
    * @param {string} code an id string representing the error
    * @param {string} message human-readable description of the error
    */
-  constructor(exitCode, code, message) {
+  constructor(exitCode, code2, message) {
     super(message);
     Error.captureStackTrace(this, this.constructor);
     this.name = this.constructor.name;
-    this.code = code;
+    this.code = code2;
     this.exitCode = exitCode;
     this.nestedError = void 0;
   }
@@ -105881,9 +106191,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @return never
    * @private
    */
-  _exit(exitCode, code, message) {
+  _exit(exitCode, code2, message) {
     if (this._exitCallback) {
-      this._exitCallback(new CommanderError(exitCode, code, message));
+      this._exitCallback(new CommanderError(exitCode, code2, message));
     }
     process2.exit(exitCode);
   }
@@ -106270,12 +106580,12 @@ Expecting one of '${allowedValues.join("', '")}'`);
    *
    * @private
    */
-  _prepareUserArgs(argv, parseOptions) {
-    if (argv !== void 0 && !Array.isArray(argv)) {
+  _prepareUserArgs(argv2, parseOptions) {
+    if (argv2 !== void 0 && !Array.isArray(argv2)) {
       throw new Error("first parameter to parse must be array or undefined");
     }
     parseOptions = parseOptions || {};
-    if (argv === void 0 && parseOptions.from === void 0) {
+    if (argv2 === void 0 && parseOptions.from === void 0) {
       if (process2.versions?.electron) {
         parseOptions.from = "electron";
       }
@@ -106284,30 +106594,30 @@ Expecting one of '${allowedValues.join("', '")}'`);
         parseOptions.from = "eval";
       }
     }
-    if (argv === void 0) {
-      argv = process2.argv;
+    if (argv2 === void 0) {
+      argv2 = process2.argv;
     }
-    this.rawArgs = argv.slice();
+    this.rawArgs = argv2.slice();
     let userArgs;
     switch (parseOptions.from) {
       case void 0:
       case "node":
-        this._scriptPath = argv[1];
-        userArgs = argv.slice(2);
+        this._scriptPath = argv2[1];
+        userArgs = argv2.slice(2);
         break;
       case "electron":
         if (process2.defaultApp) {
-          this._scriptPath = argv[1];
-          userArgs = argv.slice(2);
+          this._scriptPath = argv2[1];
+          userArgs = argv2.slice(2);
         } else {
-          userArgs = argv.slice(1);
+          userArgs = argv2.slice(1);
         }
         break;
       case "user":
-        userArgs = argv.slice(0);
+        userArgs = argv2.slice(0);
         break;
       case "eval":
-        userArgs = argv.slice(1);
+        userArgs = argv2.slice(1);
         break;
       default:
         throw new Error(
@@ -106341,9 +106651,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [parseOptions.from] - where the args are from: 'node', 'user', 'electron'
    * @return {Command} `this` command for chaining
    */
-  parse(argv, parseOptions) {
+  parse(argv2, parseOptions) {
     this._prepareForParse();
-    const userArgs = this._prepareUserArgs(argv, parseOptions);
+    const userArgs = this._prepareUserArgs(argv2, parseOptions);
     this._parseCommand([], userArgs);
     return this;
   }
@@ -106367,9 +106677,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} parseOptions.from - where the args are from: 'node', 'user', 'electron'
    * @return {Promise}
    */
-  async parseAsync(argv, parseOptions) {
+  async parseAsync(argv2, parseOptions) {
     this._prepareForParse();
-    const userArgs = this._prepareUserArgs(argv, parseOptions);
+    const userArgs = this._prepareUserArgs(argv2, parseOptions);
     await this._parseCommand([], userArgs);
     return this;
   }
@@ -106523,14 +106833,14 @@ Expecting one of '${allowedValues.join("', '")}'`);
       });
     }
     const exitCallback = this._exitCallback;
-    proc.on("close", (code) => {
-      code = code ?? 1;
+    proc.on("close", (code2) => {
+      code2 = code2 ?? 1;
       if (!exitCallback) {
-        process2.exit(code);
+        process2.exit(code2);
       } else {
         exitCallback(
           new CommanderError(
-            code,
+            code2,
             "commander.executeSubCommandAsync",
             "(close)"
           )
@@ -107037,8 +107347,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
     }
     const config2 = errorOptions || {};
     const exitCode = config2.exitCode || 1;
-    const code = config2.code || "commander.error";
-    this._exit(exitCode, code, message);
+    const code2 = config2.code || "commander.error";
+    this._exit(exitCode, code2, message);
   }
   /**
    * Apply any option related environment variables, if option does
@@ -107859,12 +108169,12 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
       stateDir: o.stateDir,
       experimentalSubscription: o.experimentalSubscription === true
     });
-    l.on("error", (e) => console.error(`tokenyard: policy load failed, keeping the active revision: ${e.message}`));
+    l.on("error", (e2) => console.error(`tokenyard: policy load failed, keeping the active revision: ${e2.message}`));
     l.on("loaded", (p) => console.error(`tokenyard: policy revision ${p.revision} active`));
     try {
       await l.start();
-    } catch (e) {
-      console.error(`tokenyard serve: ${e instanceof Error ? e.message : String(e)}`);
+    } catch (e2) {
+      console.error(`tokenyard serve: ${e2 instanceof Error ? e2.message : String(e2)}`);
       process.exit(1);
     }
     loader = l;
@@ -107878,11 +108188,11 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   try {
     counters = await openCounterStore2({ kind: o.store, ...redisUrl ? { redisUrl } : {}, instance: instanceId, onSwept: runtime.onSwept });
     if (o.traceDir) {
-      const n = await warmUpFromTraces2(counters.store, o.traceDir, activePolicy(), Date.now());
-      if (n > 0) console.error(`tokenyard: warm-up seeded ${n} budget counter(s) from ${o.traceDir}`);
+      const n2 = await warmUpFromTraces2(counters.store, o.traceDir, activePolicy(), Date.now());
+      if (n2 > 0) console.error(`tokenyard: warm-up seeded ${n2} budget counter(s) from ${o.traceDir}`);
     }
-  } catch (e) {
-    console.error(`tokenyard serve: counter store: ${e instanceof Error ? e.message : String(e)}`);
+  } catch (e2) {
+    console.error(`tokenyard serve: counter store: ${e2 instanceof Error ? e2.message : String(e2)}`);
     process.exit(1);
   }
   let ticks = 0;
@@ -107892,7 +108202,7 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     onTick: () => {
       if (++ticks % 2 === 0) writer?.heartbeat();
     },
-    onError: (e) => console.error(`tokenyard: sweeper: ${e instanceof Error ? e.message : String(e)}`)
+    onError: (e2) => console.error(`tokenyard: sweeper: ${e2 instanceof Error ? e2.message : String(e2)}`)
   });
   const gw = createGateway2({
     policy: activePolicy,
@@ -107925,8 +108235,8 @@ program2.command("live", { hidden: true }).description("live-test harness: the g
   let h;
   try {
     h = await startLiveHarness2({ env: process.env, today: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), port: Number(o.port) });
-  } catch (e) {
-    console.error(e instanceof Error ? e.message : String(e));
+  } catch (e2) {
+    console.error(e2 instanceof Error ? e2.message : String(e2));
     process.exit(1);
   }
   const stop = () => void h.close().then(() => process.exit(0));
@@ -107979,9 +108289,9 @@ policy.command("check").description("validate a policy directory: schema, then t
   try {
     const r = validatePolicy2(await loadPolicyDir2(dir), { experimentalSubscription: o.experimentalSubscription === true });
     ({ errors, warnings } = r);
-  } catch (e) {
-    if (!(e instanceof PolicyLoadError2)) throw e;
-    errors = e.issues;
+  } catch (e2) {
+    if (!(e2 instanceof PolicyLoadError2)) throw e2;
+    errors = e2.issues;
   }
   for (const i of errors) console.log(`error ${i.code} ${i.path}: ${i.message}`);
   for (const i of warnings) console.log(`warning ${i.code} ${i.path}: ${i.message}`);
@@ -107989,8 +108299,8 @@ policy.command("check").description("validate a policy directory: schema, then t
   if (errors.length > 0) process.exit(1);
 });
 policy.command("build").description("write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256").argument("[dir]", "policy directory", "policy").option("--out <file>", "output file", "dist/policy-bundle.json").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
-  const { mkdir: mkdir4, writeFile: writeFile3 } = await import("node:fs/promises");
-  const { dirname: dirname2 } = await import("node:path");
+  const { mkdir: mkdir5, writeFile: writeFile4 } = await import("node:fs/promises");
+  const { dirname: dirname3 } = await import("node:path");
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
   const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
   const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
@@ -108003,12 +108313,12 @@ policy.command("build").description("write one bundle file (manifest, policy, pr
       process.exit(1);
     }
     const bundle = buildBundle2(src, { createdAt: (/* @__PURE__ */ new Date()).toISOString(), ...process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {} });
-    await mkdir4(dirname2(o.out), { recursive: true });
-    await writeFile3(o.out, serializeBundle2(bundle));
+    await mkdir5(dirname3(o.out), { recursive: true });
+    await writeFile4(o.out, serializeBundle2(bundle));
     console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
-  } catch (e) {
-    if (!(e instanceof PolicyLoadError2)) throw e;
-    for (const i of e.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+  } catch (e2) {
+    if (!(e2 instanceof PolicyLoadError2)) throw e2;
+    for (const i of e2.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
     process.exit(1);
   }
 });
@@ -108018,7 +108328,7 @@ policy.command("schema").description("print the JSON Schema of policy.yaml for e
 `);
 });
 policy.command("replay").description("replay a merged trace export against a base and a head policy: fidelity, cost, reroutes, blocks, cut sessions, budget hits; exits 1 when a ci.failOn gate fails").requiredOption("--base <dir or git ref>", "base policy directory, or a git ref whose copy of the --head directory is the base").requiredOption("--head <dir>", "head policy directory").requiredOption("--traces <files...>", "export file(s) written by tokenyard traces export (.ndjson or .ndjson.gz); a trace directory is refused").option("--since <when>", "duration such as 7d, or an ISO time; earlier records only seed budget windows (default: the export window)").option("--tenant <tenant>", "only this tenant").option("--json <file>", "also write the full result as JSON (docs/replay-json.md)").option("--base-revision <rev>", "revision the base was recorded under (default: the content revision serve --policy records)").option("--head-revision <rev>", "revision of the head (default: its content revision)").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (o) => {
-  const { writeFile: writeFile3 } = await import("node:fs/promises");
+  const { writeFile: writeFile4 } = await import("node:fs/promises");
   const { loadReplayPolicy: loadReplayPolicy2, openReplayTraces: openReplayTraces2 } = await Promise.resolve().then(() => (init_replay_input(), replay_input_exports));
   const { replay: replay2 } = await Promise.resolve().then(() => (init_engine(), engine_exports));
   const { renderJson: renderJson2 } = await Promise.resolve().then(() => (init_render_json(), render_json_exports));
@@ -108030,11 +108340,11 @@ policy.command("replay").description("replay a merged trace export against a bas
     const base = await loadReplayPolicy2({ source: o.base, headDir: o.head, experimentalSubscription, ...o.baseRevision ? { revision: o.baseRevision } : {} });
     const head = await loadReplayPolicy2({ source: o.head, headDir: o.head, experimentalSubscription, ...o.headRevision ? { revision: o.headRevision } : {} });
     const result = await replay2({ base, head, traces: await openReplayTraces2(o.traces), sinceMs, tenant: o.tenant ?? null });
-    if (o.json) await writeFile3(o.json, renderJson2(result));
+    if (o.json) await writeFile4(o.json, renderJson2(result));
     process.stdout.write(renderTerminal2(result));
     if (result.gates.failed.length > 0) process.exitCode = 1;
-  } catch (e) {
-    console.error(`tokenyard policy replay: ${e instanceof Error ? e.message : String(e)}`);
+  } catch (e2) {
+    console.error(`tokenyard policy replay: ${e2 instanceof Error ? e2.message : String(e2)}`);
     process.exit(1);
   }
 });
@@ -108048,7 +108358,7 @@ traces.command("export").description("merge every instance file in a window into
   if (Number.isNaN(sinceMs) || Number.isNaN(untilMs)) return void (console.error("tokenyard traces export: --since and --until must be a duration or an ISO time"), process.exit(1));
   const m = await exportTraces({ dir: o.traceDir, sinceMs, untilMs, out: o.out, ...o.anonymize && salt ? { anonymizeSalt: salt } : {} });
   const gaps = m.instances.filter((i) => i.seqGaps > 0 || i.hoursWithoutFile.length > 0);
-  console.error(`wrote ${o.out}: ${m.instances.reduce((n, i) => n + i.records, 0)} records from ${m.instances.length} instance(s)`);
+  console.error(`wrote ${o.out}: ${m.instances.reduce((n2, i) => n2 + i.records, 0)} records from ${m.instances.length} instance(s)`);
   for (const i of gaps) console.error(`warning: instance ${i.id}: ${i.seqGaps} missing seq numbers, hours without a file: ${i.hoursWithoutFile.join(", ") || "none"}`);
 });
 traces.command("prune").description("delete trace files older than a duration").requiredOption("--trace-dir <dir>", "trace directory").requiredOption("--older-than <duration>", "for example 30d").action(async (o) => {
@@ -108063,4 +108373,9 @@ program2.command("report").description("cost report from a trace dir or an expor
   const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...o.tenant ? { tenant: o.tenant } : {} });
   process.stdout.write(renderReportTerminal(buildReport(records, dims)));
 });
-await program2.parseAsync(process.argv);
+program2.command("action").description("GitHub Action entry point: policy check, replay against the base ref, sticky PR comment, job summary (inputs come from INPUT_* variables, action.yml)").action(async () => {
+  const { githubClient: githubClient2, runAction: runAction2 } = await Promise.resolve().then(() => (init_main(), main_exports));
+  process.exitCode = await runAction2(process.env, githubClient2(process.env));
+});
+var argv = process.argv.length === 2 && process.env.GITHUB_ACTIONS === "true" && process.env["INPUT_POLICY-DIR"] !== void 0 ? [...process.argv, "action"] : process.argv;
+await program2.parseAsync(argv);

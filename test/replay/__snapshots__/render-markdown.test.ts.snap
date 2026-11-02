@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`markdown matches spec 9.4 layout and starts with the sticky marker 1`] = `
+"<!-- tokenyard-replay -->
+### tokenyard policy replay: \`a1b2c3d\` (base) vs \`e4f5a6b\` (head)
+
+Traffic: 7 days, 3,587 requests, 75 sessions, tenant all. Fidelity: base replay matches recorded decisions on 100.0% of requests (details below).
+
+| | Base | Head | Change |
+|---|---|---|---|
+| Cost (billed) | $50.7159 | $47.8451 | **-$2.8708 (-5.7%)**, estimated (model change) |
+| Requests rerouted | | 200 | auxiliary and compaction to claude-code-auxiliary, claude-code-compaction |
+| Requests blocked | 2 | 7 | 5 team-day, 2 aws-access-key-id |
+| Sessions cut mid-task | 0 | **5** | 117 later requests ($1.6773) would not have run as recorded |
+| Budget hits | none | team-day web on 3 days, first hit 2026-10-26T16:27:20.000Z | |
+
+Cost figures that involve a model change are estimates; see how exact this is below.
+
+<details><summary>Rerouted requests by route and request class</summary>
+
+- 184 x from claude-code to claude-code-auxiliary, request class auxiliary
+- 16 x from claude-code to claude-code-compaction, request class compaction
+
+</details>
+<details><summary>Blocked requests</summary>
+
+- base: 1 x secret aws-access-key-id
+- base: 1 x taint aws-access-key-id
+- head: 5 x budget team-day
+- head: 1 x secret aws-access-key-id
+- head: 1 x taint aws-access-key-id
+
+</details>
+<details><summary>Cut sessions</summary>
+
+- head: session 681647518a3badb4b66ccc9ba1822405, team web, repo shop-web, request class main, request 43, cause budget team-day; 2 later requests ($0.0376)
+- head: session 238ce07308191b3519938695ec1fd435, team web, repo shop-web, request class main, request 20, cause budget team-day; 80 later requests ($1.0270)
+- head: session 20d3ad45080203e79081e762b1ae7882, team web, repo shop-web, request class main, request 25, cause budget team-day; 20 later requests ($0.3822)
+- head: session 2b47d838c6efed98d1cee1fb660a18a2, team web, repo shop-web, request class main, request 23, cause budget team-day; 5 later requests ($0.1041)
+- head: session 167cb43a0ef224ea79c600ec1c42de18, team web, repo shop-web, request class main, request 21, cause budget team-day; 10 later requests ($0.1264)
+
+</details>
+<details><summary>Fidelity notes</summary>
+
+none
+
+</details>
+<details><summary>How exact is this</summary>
+
+| Output | Exactness | Why |
+|---|---|---|
+| Route and provider per request, model allowlist blocks, guardrail blocks for rules that fired at record time | **Exact** | Pure function of recorded features |
+| Budget hits, rate-limit blocks, session cuts | **Exact given the simulation's assumptions**: when cost is exact; a cut session stops; a rate-limited request is not retried | Counter state is rebuilt from the replay itself; Claude Code's retries after a 429 cannot be simulated |
+| Cost delta when the model does not change (price table change, budget change) | **Exact** | Same tokens, different prices or admissions |
+| Cost delta when the model changes | **Estimated** | Output tokens of a model that never ran are unknown: scaled by the per-model, per-request-class output ratio observed in the traces, or kept equal and flagged when no data exists |
+| Latency | **Not computed in v0.1** | Would need per-provider distributions; listed as future work |
+| Answer quality | **Never** | Logs hold no outcome for routes not taken; offline replay is unbiased only when the logging policy chose at random ([Li et al., WSDM 2011](https://arxiv.org/abs/1003.5956)) |
+
+</details>
+
+Check: **failed** (ci.failOn.cutSessions: 0). Policy check: 0 errors, 1 warning.
+"
+`;

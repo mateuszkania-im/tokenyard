@@ -1,0 +1,28 @@
+name: policy replay
+on:
+  pull_request:
+    paths:
+      - 'examples/policy/**'
+      - 'examples/traces/**'
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # This repository replays itself with the bundle in the checkout. Other repositories pin a released tag
+      # (uses: mateuszkania-im/tokenyard@v0.1.0), so a policy PR never changes the code that judges it.
+      - id: replay
+        uses: ./
+        with:
+          policy-dir: examples/policy
+          traces: examples/traces/demo.ndjson.gz
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.replay.outputs.replay-json != ''
+        with:
+          name: replay-json
+          path: ${{ steps.replay.outputs.replay-json }}

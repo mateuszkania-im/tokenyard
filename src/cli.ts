@@ -374,4 +374,13 @@ program
     const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...(o.tenant ? { tenant: o.tenant } : {}) });
     process.stdout.write(renderReportTerminal(buildReport(records, dims as ReportDimension[])));
   });
-await program.parseAsync(process.argv);
+program
+  .command('action')
+  .description('GitHub Action entry point: policy check, replay against the base ref, sticky PR comment, job summary (inputs come from INPUT_* variables, action.yml)')
+  .action(async () => {
+    const { githubClient, runAction } = await import('./action/main.js');
+    process.exitCode = await runAction(process.env, githubClient(process.env));
+  });
+// `runs: using: node24, main: bin/tokenyard.mjs` starts the bundle without arguments: inside an Action that means `action`.
+const argv = process.argv.length === 2 && process.env.GITHUB_ACTIONS === 'true' && process.env['INPUT_POLICY-DIR'] !== undefined ? [...process.argv, 'action'] : process.argv;
+await program.parseAsync(argv);
