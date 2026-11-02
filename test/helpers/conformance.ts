@@ -126,13 +126,20 @@ export async function cacheIntegrity(viaUrl: string, mockUrl: string): Promise<b
 
 /** Gateway in front of the mock (or any upstream url), with the provider key env var set; `close` undoes it. */
 export async function startStack(
-  o: { upstream?: string; mock?: Parameters<typeof startAnthropicMock>[0]; policy?: Partial<Parameters<typeof testPolicy>[0]>; basePath?: string } = {},
+  o: {
+    upstream?: string;
+    mock?: Parameters<typeof startAnthropicMock>[0];
+    policy?: Partial<Parameters<typeof testPolicy>[0]>;
+    basePath?: string;
+    gw?: Pick<Parameters<typeof startGateway>[0], 'prices' | 'experimentalSubscription' | 'onSettled'>;
+  } = {},
 ): Promise<{ mock: MockServer; gw: TestGateway; close(): Promise<void> }> {
   process.env[PROVIDER_KEY_ENV] = PROVIDER_KEY;
   const mock = await startAnthropicMock(o.mock);
   const gw = await startGateway({
     policy: testPolicy({ upstream: o.upstream ?? mock.url, ...o.policy }),
     basePath: o.basePath ?? null,
+    ...o.gw,
   });
   return {
     mock,

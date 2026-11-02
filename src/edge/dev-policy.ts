@@ -15,6 +15,8 @@ export function devPolicy(o: {
   keys: string[];
   credential: ProviderSpec['credential'];
   models: string[];
+  /** Billing of every key; defaults to `api`. */
+  billing?: KeyRecord['billing'];
 }): CompiledPolicy {
   const provider: ProviderSpec = { name: 'dev-upstream', format: 'anthropic', baseUrl: o.upstream, credential: o.credential };
   const keys = o.keys.map((plaintext, i): KeyRecord => ({
@@ -24,7 +26,7 @@ export function devPolicy(o: {
     team: null,
     name: `dev key ${i + 1}`,
     kind: 'developer',
-    billing: 'api',
+    billing: o.billing ?? 'api',
   }));
   return {
     revision: 'dev',

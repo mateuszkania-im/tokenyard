@@ -1,8 +1,10 @@
-import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import type { TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
-import type { CompiledPolicy, ProviderSpec, Surface } from '../policy/types.js';
+import type { CompiledPolicy, KeyRecord, ProviderSpec, Surface } from '../policy/types.js';
+import { costMicroUsd } from '../pricing/cost.js';
+import type { PriceTable } from '../pricing/prices.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
 import { SseParser } from '../stream/sse.js';
 import { createTee } from '../stream/tee.js';
@@ -11,7 +13,8 @@ import { extractAnthropicFeatures } from '../surfaces/anthropic-messages.js';
 import { modelsListBody } from '../surfaces/anthropic-models.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { forward, type UpstreamResponse } from '../upstream/forward.js';
-import { extractCredential, hashKey } from './auth.js';
+import { readAttribution, type RawAttribution } from './attribution.js';
+import { extractCredentials, hashKey } from './auth.js';
 import { BodyTooLargeError, readBody } from './body.js';
 import { anthropicError } from './errors.js';
 import { clientHeaders, upstreamHeaders } from './headers.js';
@@ -30,11 +33,19 @@ export interface GatewayDeps {
   newId(): string;
   basePath: string | null;
   bodyCapBytes: number;
+  /** Price table for actual cost; without it no cost is computed. Task 10 takes it from the compiled policy. */
+  prices?: PriceTable | null;
+  /** `serve --experimental-subscription` (spec 6.8): without it keys with `billing: subscription` get 401. */
+  experimentalSubscription?: boolean;
+  /** Called after the response has ended with what the request knew; the trace writer (Task 7) and settlement (Task 14) replace it. */
+  onSettled?: (outcome: RequestOutcome) => void;
 }
 
 /** What the end of a request knows; settlement (Task 14) and the trace (Task 7) are built from it. */
-interface RequestOutcome {
+export interface RequestOutcome {
   id: string;
+  key: KeyRecord;
+  attribution: RawAttribution;
   surface: Surface;
   features: ExtractedFeatures;
   provider: string;
@@ -44,6 +55,10 @@ interface RequestOutcome {
   startedAt: number;
   ttfbMs: number;
   totalMs: number;
+  /** Actual cost from the final or partial usage; null when there is no usage or the model is unpriced. */
+  costMicroUsd: number | null;
+  /** `api-equivalent` for subscription keys (spec 7.6), else `billed`. */
+  costBasis: 'billed' | 'api-equivalent';
 }
 
 type ErrorReply = ReturnType<typeof anthropicError>;
@@ -100,8 +115,20 @@ function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { o
   };
 }
 
+function priceOutcome(deps: GatewayDeps, features: ExtractedFeatures, usage: UsageResult | null): number | null {
+  const model = usage?.responseModel ?? features.model;
+  if (!deps.prices || !usage?.usage || !model) return null;
+  try {
+    return costMicroUsd(deps.prices, model, usage.usage);
+  } catch {
+    return null; // unpriced model: Task 10's `unpricedModel` policy decides what that means
+  }
+}
+
 /** Settlement (Task 14) and the trace record (Task 7) hook in here, after `res.end()`. */
-function afterResponse(_deps: GatewayDeps, _outcome: RequestOutcome): void {}
+function afterResponse(deps: GatewayDeps, outcome: RequestOutcome): void {
+  deps.onSettled?.(outcome);
+}
 
 async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const startedAt = deps.clock();
@@ -126,10 +153,22 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   }
 
   // 2. Authenticate.
-  const cred = extractCredential(req.headers);
-  const key = cred ? policy.keysByHash.get(hashKey(cred.value)) : undefined;
-  if (!cred || !key) {
+  // In subscription mode `Authorization` carries the user's OAuth token, so every credential is tried, not only the first.
+  const creds = extractCredentials(req.headers);
+  let key: KeyRecord | undefined;
+  const keyHeaders = new Set<'authorization' | 'x-api-key'>();
+  for (const c of creds) {
+    const k = policy.keysByHash.get(hashKey(c.value));
+    if (!k) continue;
+    key ??= k;
+    if (c.source === 'bearer') keyHeaders.add('authorization');
+    else if (c.source === 'x-api-key') keyHeaders.add('x-api-key');
+  }
+  if (!key) {
     return sendError(req, res, anthropicError(401, 'authentication_error', 'missing or unknown tokenyard key', null, id));
+  }
+  if (key.billing === 'subscription' && !deps.experimentalSubscription) {
+    return sendError(req, res, anthropicError(401, 'authentication_error', 'subscription keys are not enabled on this gateway', null, id));
   }
 
   if (match.surface === 'models') {
@@ -165,13 +204,13 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
 
   // 9. Forward.
   const mode = provider.credential === 'passthrough' ? 'passthrough' : 'api';
-  let inbound: IncomingHttpHeaders = req.headers;
-  if (mode === 'passthrough' && cred.source !== 'x-tokenyard-key') {
-    // The header that carried the tokenyard key is never forwarded, whatever the mode.
-    inbound = { ...req.headers };
-    delete inbound[cred.source === 'bearer' ? 'authorization' : 'x-api-key'];
-  }
-  const headers = upstreamHeaders(inbound, { mode, credential: providerCredential(provider), host: new URL(provider.baseUrl).host });
+  // A tokenyard key is never forwarded, in whichever header it came; any other Authorization (the OAuth token) is.
+  const headers = upstreamHeaders(req.headers, {
+    mode,
+    credential: providerCredential(provider),
+    host: new URL(provider.baseUrl).host,
+    clientKeyHeaders: [...keyHeaders],
+  });
   let up: UpstreamResponse;
   try {
     up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
@@ -206,17 +245,22 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   }
 
   // 12. End.
+  const usage = tap.result();
   afterResponse(deps, {
     id,
+    key,
+    attribution: readAttribution(req.headers, surface),
     surface,
     features,
     provider: provider.name,
     status: up.status,
-    usage: tap.result(),
+    usage,
     aborted: ac.signal.aborted,
     startedAt,
     ttfbMs,
     totalMs: deps.clock() - startedAt,
+    costMicroUsd: priceOutcome(deps, features, usage),
+    costBasis: key.billing === 'subscription' ? 'api-equivalent' : 'billed',
   });
 }
 

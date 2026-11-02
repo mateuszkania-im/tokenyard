@@ -1,5 +1,5 @@
 import { devPolicy } from '../../src/edge/dev-policy.js';
-import type { CompiledPolicy, ProviderSpec } from '../../src/policy/types.js';
+import type { CompiledPolicy, KeyRecord, ProviderSpec } from '../../src/policy/types.js';
 
 /** Plaintext tokenyard key accepted by the test policy. */
 export const TEST_KEY = 'ty_live_test';
@@ -14,11 +14,13 @@ export function testPolicy(o: {
   upstream: string;
   credential?: ProviderSpec['credential'];
   models?: string[];
+  billing?: KeyRecord['billing'];
 }): CompiledPolicy {
   return devPolicy({
     upstream: o.upstream,
     keys: [TEST_KEY],
     credential: o.credential ?? { env: PROVIDER_KEY_ENV },
     models: o.models ?? [],
+    billing: o.billing,
   });
 }

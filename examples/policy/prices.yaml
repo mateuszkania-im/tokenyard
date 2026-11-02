@@ -1,0 +1,59 @@
+# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.
+# Pricing: https://platform.claude.com/docs/en/about-claude/pricing
+# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview
+version: 2026-11-02
+models:
+  claude-fable-5-1:
+    input: 10
+    output: 50
+    cacheWrite5m: 12.5
+    cacheWrite1h: 20
+    cacheRead: 0.25
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  claude-opus-5-5:
+    input: 4
+    output: 20
+    cacheWrite5m: 5
+    cacheWrite1h: 8
+    cacheRead: 0.2
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  claude-sonnet-5-5:
+    input: 2
+    output: 10
+    cacheWrite5m: 2.5
+    cacheWrite1h: 4
+    cacheRead: 0.1
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  claude-haiku-5-5:
+    input: 0.1
+    output: 0.5
+    cacheWrite5m: 0.125
+    cacheWrite1h: 0.2
+    cacheRead: 0.01
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.
+    tiers:
+      - aboveInputTokens: 100000
+        input: 0.5
+        output: 2.5
+        cacheWrite5m: 0.625
+        cacheWrite1h: 1
+        cacheRead: 0.05
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+modifiers:
+  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).
+  inferenceGeoUs: 1.1
+# Server tools: web search is $10 per 1,000 searches, but the pages give no maxIterations value,
+# so the entry is left out until one is documented; requests with a server tool are then unpriced.
+serverTools: {}

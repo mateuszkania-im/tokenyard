@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createHandler, type GatewayDeps } from './handler.js';
 
-export type { GatewayDeps, TraceSink } from './handler.js';
+export type { GatewayDeps, RequestOutcome, TraceSink } from './handler.js';
 
 /** Anthropic's documented request size limit for the Messages and token counting endpoints (32 MB). */
 export const DEFAULT_BODY_CAP_BYTES = 32 * 1024 * 1024;
