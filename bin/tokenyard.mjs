@@ -358,9 +358,9 @@ async function startAnthropicMock(opts = {}) {
     }
     let closed = false;
     res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve) => {
-      if (closed || res.destroyed) return resolve();
-      res.write(chunk, () => resolve());
+    const write = (chunk) => new Promise((resolve2) => {
+      if (closed || res.destroyed) return resolve2();
+      res.write(chunk, () => resolve2());
     });
     const { head, deltas, tail } = scriptedEvents(id, model, usage);
     const all = [...head, ...deltas, ...tail];
@@ -408,7 +408,7 @@ async function startAnthropicMock(opts = {}) {
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve) => server.listen(opts.port ?? 0, "127.0.0.1", resolve));
+  await new Promise((resolve2) => server.listen(opts.port ?? 0, "127.0.0.1", resolve2));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -417,8 +417,8 @@ async function startAnthropicMock(opts = {}) {
       scenario = s;
     },
     close() {
-      return new Promise((resolve) => {
-        server.close(() => resolve());
+      return new Promise((resolve2) => {
+        server.close(() => resolve2());
         server.closeAllConnections();
       });
     }
@@ -880,8 +880,8 @@ var require_directives = __commonJS({
               if (parts.length < 2)
                 return false;
             }
-            const [handle2, prefix] = parts;
-            this.tags[handle2] = prefix;
+            const [handle2, prefix2] = parts;
+            this.tags[handle2] = prefix2;
             return true;
           }
           case "%YAML": {
@@ -931,10 +931,10 @@ var require_directives = __commonJS({
         const [, handle2, suffix] = source.match(/^(.*!)([^!]*)$/s);
         if (!suffix)
           onError(`The ${source} tag has no suffix`);
-        const prefix = this.tags[handle2];
-        if (prefix) {
+        const prefix2 = this.tags[handle2];
+        if (prefix2) {
           try {
-            return prefix + decodeURIComponent(suffix);
+            return prefix2 + decodeURIComponent(suffix);
           } catch (error62) {
             onError(String(error62));
             return null;
@@ -950,9 +950,9 @@ var require_directives = __commonJS({
        * taking into account current tag prefixes and defaults.
        */
       tagString(tag) {
-        for (const [handle2, prefix] of Object.entries(this.tags)) {
-          if (tag.startsWith(prefix))
-            return handle2 + escapeTagName(tag.substring(prefix.length));
+        for (const [handle2, prefix2] of Object.entries(this.tags)) {
+          if (tag.startsWith(prefix2))
+            return handle2 + escapeTagName(tag.substring(prefix2.length));
         }
         return tag[0] === "!" ? tag : `!<${tag}>`;
       }
@@ -969,11 +969,11 @@ var require_directives = __commonJS({
           tagNames = Object.keys(tags);
         } else
           tagNames = [];
-        for (const [handle2, prefix] of tagEntries) {
-          if (handle2 === "!!" && prefix === "tag:yaml.org,2002:")
+        for (const [handle2, prefix2] of tagEntries) {
+          if (handle2 === "!!" && prefix2 === "tag:yaml.org,2002:")
             continue;
-          if (!doc || tagNames.some((tn) => tn.startsWith(prefix)))
-            lines.push(`%TAG ${handle2} ${prefix}`);
+          if (!doc || tagNames.some((tn) => tn.startsWith(prefix2)))
+            lines.push(`%TAG ${handle2} ${prefix2}`);
         }
         return lines.join("\n");
       }
@@ -1008,14 +1008,14 @@ var require_anchors = __commonJS({
       });
       return anchors;
     }
-    function findNewAnchor(prefix, exclude) {
+    function findNewAnchor(prefix2, exclude) {
       for (let i = 1; true; ++i) {
-        const name2 = `${prefix}${i}`;
+        const name2 = `${prefix2}${i}`;
         if (!exclude.has(name2))
           return name2;
       }
     }
-    function createNodeAnchors(doc, prefix) {
+    function createNodeAnchors(doc, prefix2) {
       const aliasObjects = [];
       const sourceObjects = /* @__PURE__ */ new Map();
       let prevAnchors = null;
@@ -1023,7 +1023,7 @@ var require_anchors = __commonJS({
         onAnchor: (source) => {
           aliasObjects.push(source);
           prevAnchors ?? (prevAnchors = anchorNames(doc));
-          const anchor2 = findNewAnchor(prefix, prevAnchors);
+          const anchor2 = findNewAnchor(prefix2, prevAnchors);
           prevAnchors.add(anchor2);
           return anchor2;
         },
@@ -3016,10 +3016,10 @@ var require_int = __commonJS({
     var stringifyNumber = require_stringifyNumber();
     var intIdentify = (value) => typeof value === "bigint" || Number.isInteger(value);
     var intResolve = (str, offset, radix, { intAsBigInt }) => intAsBigInt ? BigInt(str) : parseInt(str.substring(offset), radix);
-    function intStringify(node2, radix, prefix) {
+    function intStringify(node2, radix, prefix2) {
       const { value } = node2;
       if (intIdentify(value) && value >= 0)
-        return prefix + value.toString(radix);
+        return prefix2 + value.toString(radix);
       return stringifyNumber.stringifyNumber(node2);
     }
     var intOct = {
@@ -3481,11 +3481,11 @@ var require_int2 = __commonJS({
       const n = parseInt(str, radix);
       return sign === "-" ? -1 * n : n;
     }
-    function intStringify(node2, radix, prefix) {
+    function intStringify(node2, radix, prefix2) {
       const { value } = node2;
       if (intIdentify(value)) {
         const str = value.toString(radix);
-        return value < 0 ? "-" + prefix + str.substr(1) : prefix + str;
+        return value < 0 ? "-" + prefix2 + str.substr(1) : prefix2 + str;
       }
       return stringifyNumber.stringifyNumber(node2);
     }
@@ -10118,11 +10118,11 @@ function isValidCIDRv6(value) {
   const parts = value.split("/");
   if (parts.length !== 2)
     return false;
-  const [address, prefix] = parts;
-  if (!prefix)
+  const [address, prefix2] = parts;
+  if (!prefix2)
     return false;
-  const prefixNum = Number(prefix);
-  if (`${prefixNum}` !== prefix)
+  const prefixNum = Number(prefix2);
+  if (`${prefixNum}` !== prefix2)
     return false;
   if (prefixNum < 0 || prefixNum > 128)
     return false;
@@ -12344,17 +12344,17 @@ var init_schemas = __esm({
     $ZodTemplateLiteral = /* @__PURE__ */ $constructor("$ZodTemplateLiteral", (inst, def) => {
       $ZodType.init(inst, def);
       const regexParts = [];
-      for (const part of def.parts) {
-        if (typeof part === "object" && part !== null) {
-          const source = partPattern(part);
+      for (const part2 of def.parts) {
+        if (typeof part2 === "object" && part2 !== null) {
+          const source = partPattern(part2);
           if (!source) {
-            throw new Error(`Invalid template literal part, no pattern found: ${[...part._zod.traits].shift()}`);
+            throw new Error(`Invalid template literal part, no pattern found: ${[...part2._zod.traits].shift()}`);
           }
           regexParts.push(cleanRegex(source));
-        } else if (part === null || primitiveTypes.has(typeof part)) {
-          regexParts.push(escapeRegex(`${part}`));
+        } else if (part2 === null || primitiveTypes.has(typeof part2)) {
+          regexParts.push(escapeRegex(`${part2}`));
         } else {
-          throw new Error(`Invalid template literal part: ${part}`);
+          throw new Error(`Invalid template literal part: ${part2}`);
         }
       }
       inst._zod.pattern = new RegExp(`^${regexParts.join("")}$`);
@@ -12508,7 +12508,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve) {
+function isRecursive(inst, stack, resolve2) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE2;
@@ -12518,7 +12518,7 @@ function isRecursive(inst, stack, resolve) {
   let result = NONE2;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve);
+      const answer = isRecursive(child, stack, resolve2);
       if (answer > result)
         result = answer;
     }
@@ -12529,7 +12529,7 @@ function isRecursive(inst, stack, resolve) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve) : NONE2;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve2) : NONE2;
       if (child > answer)
         answer = child;
     }
@@ -12593,7 +12593,7 @@ function isRecursive(inst, stack, resolve) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve2 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -21349,8 +21349,8 @@ function generateStringFormatCheck(doc, ctx, def, accessor, needsValue = true) {
       doc.write(`if (!${accessor}.includes(${esc(def.includes)})) return INVALID;`);
       break;
     case "starts_with": {
-      const prefix = def.prefix;
-      doc.write(`if (${accessor}.slice(0, ${prefix.length}) !== ${esc(prefix)}) return INVALID;`);
+      const prefix2 = def.prefix;
+      doc.write(`if (${accessor}.slice(0, ${prefix2.length}) !== ${esc(prefix2)}) return INVALID;`);
       break;
     }
     case "ends_with": {
@@ -22094,8 +22094,8 @@ function generateDiscriminatedUnionCheck(doc, ctx, def, accessor) {
       claimed.add(value);
     }
     const conditions = Array.from(values, (value) => literalEquality(ctx, discVar, value));
-    const prefix = firstBranch ? "if" : "else if";
-    doc.write(`${prefix} (${conditions.join(" || ")}) {`);
+    const prefix2 = firstBranch ? "if" : "else if";
+    doc.write(`${prefix2} (${conditions.join(" || ")}) {`);
     doc.indented((d) => {
       const branchOutput = generateCheck(d, ctx, option, accessor);
       d.write(`${outputVar} = ${branchOutput};`);
@@ -23096,12 +23096,12 @@ function _includes(includes, params) {
   });
 }
 // @__NO_SIDE_EFFECTS__
-function _startsWith(prefix, params) {
+function _startsWith(prefix2, params) {
   return new $ZodCheckStartsWith({
     check: "string_format",
     format: "starts_with",
     ...normalizeParams(params),
-    prefix
+    prefix: prefix2
   });
 }
 // @__NO_SIDE_EFFECTS__
@@ -23781,11 +23781,11 @@ function foldObjects(members2) {
         continue;
       const parts = [];
       for (const other of objects) {
-        const part = other.properties?.[key] ?? undeclaredConstraint(other);
-        if (part === null || part === void 0)
+        const part2 = other.properties?.[key] ?? undeclaredConstraint(other);
+        if (part2 === null || part2 === void 0)
           continue;
-        if (!parts.some((seen) => JSON.stringify(seen) === JSON.stringify(part)))
-          parts.push(part);
+        if (!parts.some((seen) => JSON.stringify(seen) === JSON.stringify(part2)))
+          parts.push(part2);
       }
       const merged = parts.length === 1 ? parts[0] : foldObjects(parts) ?? { allOf: parts };
       assignProp(properties, key, merged);
@@ -28455,6 +28455,547 @@ var init_prices = __esm({
   }
 });
 
+// src/limits/estimator.ts
+function inputTokenBound(x, m) {
+  const textOnly = !x.parseError && x.model !== null && !x.expandsServerSide && x.serverTools.length === 0 && x.blockTypes.every((t) => TEXT_TYPES.has(t));
+  if (!textOnly) return { tokens: m.maxContextTokens, kind: "context-window" };
+  return { tokens: Math.min(x.bodyBytes + OVERHEAD_TOKENS, m.maxContextTokens), kind: "bytes" };
+}
+function maxInputRate(m, fast = false) {
+  const sets = fast && m.fast ? [m.fast] : [m, ...m.tiers ?? []];
+  return Math.max(...sets.flatMap((p) => [p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead]));
+}
+function maxOutputRate(m, fast = false) {
+  const sets = fast && m.fast ? [m.fast] : [m, ...m.tiers ?? []];
+  return Math.max(...sets.map((p) => p.output));
+}
+function modifierProduct(t) {
+  let product = 1;
+  for (const factor of Object.values(t.modifiers)) if (factor > 1) product *= factor;
+  return product;
+}
+function reservationPrice(t, model) {
+  const found = model === null ? null : lookupModel(t, model);
+  if (found) return { price: found.price, unpriced: false };
+  const models = Object.values(t.models);
+  if (models.length === 0) throw new Error("price table has no models");
+  const input2 = Math.max(...models.map((m) => maxInputRate(m, true)));
+  const output2 = Math.max(...models.map((m) => maxOutputRate(m, true)));
+  return {
+    price: {
+      input: input2,
+      output: output2,
+      cacheWrite5m: input2,
+      cacheWrite1h: input2,
+      cacheRead: input2,
+      maxContextTokens: Math.max(...models.map((m) => m.maxContextTokens)),
+      maxOutputTokens: Math.max(...models.map((m) => m.maxOutputTokens)),
+      source: "envelope of every model in the price table",
+      retrieved: t.version
+    },
+    unpriced: true
+  };
+}
+function outputTokenBound(f, m, reserveOutputTokens) {
+  const asked = f.maxOutputTokens !== null && Number.isFinite(f.maxOutputTokens) && f.maxOutputTokens > 0 ? Math.ceil(f.maxOutputTokens) : m.maxOutputTokens;
+  return Math.min(asked, reserveOutputTokens ?? Number.POSITIVE_INFINITY, m.maxOutputTokens);
+}
+function serverToolKey(type) {
+  return type.replace(/_\d{8}$/, "");
+}
+function roundUp(micro, what) {
+  const nearest = Math.round(micro);
+  const result = Math.abs(micro - nearest) < NOISE_MICRO ? nearest : Math.ceil(micro);
+  if (!Number.isSafeInteger(result) || result < 0) throw new Error(`invalid estimate for ${what}: ${micro}`);
+  return result;
+}
+function worstCaseMicroUsd(f, m, t, o) {
+  const fast = f.fastMode && m.fast !== void 0;
+  let inputTokens = f.inputTokensBound;
+  let outputTokens = outputTokenBound(f, m, o.reserveOutputTokens);
+  let feeMicro = 0;
+  let unpriced = false;
+  let withoutMaxUses = false;
+  if (f.serverTools.length > 0) {
+    let iterations = 1;
+    for (const tool of f.serverTools) {
+      const key = serverToolKey(tool.type);
+      const price = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
+      if (!price) {
+        unpriced = true;
+        continue;
+      }
+      iterations = Math.max(iterations, price.maxIterations);
+      let uses = tool.maxUses;
+      if (uses === null) {
+        withoutMaxUses = true;
+        uses = o.assumedMaxUses;
+      }
+      feeMicro += Math.max(0, Math.ceil(uses)) * price.perUseUsd * 1e6;
+    }
+    inputTokens = iterations * m.maxContextTokens;
+    outputTokens = iterations * m.maxOutputTokens;
+  }
+  const tokenMicro = (inputTokens * maxInputRate(m, fast) + outputTokens * maxOutputRate(m, fast)) * modifierProduct(t);
+  const micro = roundUp(tokenMicro + feeMicro, f.model);
+  const block2 = unpriced ? "unpriced-server-tool" : withoutMaxUses && o.serverToolsWithoutMaxUses === "block" ? "server-tool-no-max-uses" : null;
+  return { micro, boundAssumed: unpriced || withoutMaxUses, block: block2 };
+}
+function sessionAwareMicroUsd(f, m, t, prevCacheReadShare, reserveOutputTokens) {
+  const fast = f.fastMode && m.fast !== void 0;
+  const share = prevCacheReadShare === null || Number.isNaN(prevCacheReadShare) ? 0 : Math.min(1, Math.max(0, prevCacheReadShare));
+  const sets = fast && m.fast ? [m.fast] : [m, ...m.tiers ?? []];
+  const readRate = Math.max(...sets.map((p) => p.cacheRead));
+  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * maxInputRate(m, fast));
+  const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast);
+  return roundUp((inputMicro + outputMicro) * modifierProduct(t), f.model);
+}
+var OVERHEAD_TOKENS, TEXT_BLOCK_TYPES, TEXT_TYPES, NOISE_MICRO;
+var init_estimator = __esm({
+  "src/limits/estimator.ts"() {
+    "use strict";
+    init_prices();
+    OVERHEAD_TOKENS = 4096;
+    TEXT_BLOCK_TYPES = ["text", "thinking", "redacted_thinking", "tool_use", "tool_result"];
+    TEXT_TYPES = new Set(TEXT_BLOCK_TYPES);
+    NOISE_MICRO = 1e-6;
+  }
+});
+
+// src/limits/keys.ts
+function budgetKey(tenant, budget2, scopeValue2, windowStart) {
+  const base = `${prefix(tenant)}:b:${part(budget2)}:${part(scopeValue2)}`;
+  return windowStart === null ? base : `${base}:${part(windowStart)}`;
+}
+function gcraKey(tenant, limit, scopeValue2) {
+  return `${prefix(tenant)}:g:${part(limit)}:${part(scopeValue2)}`;
+}
+function streamKey(tenant, limit, scopeValue2) {
+  return `${prefix(tenant)}:st:${part(limit)}:${part(scopeValue2)}`;
+}
+function taintKey(tenant, session) {
+  return `${prefix(tenant)}:taint:${part(session)}`;
+}
+var part, prefix;
+var init_keys = __esm({
+  "src/limits/keys.ts"() {
+    "use strict";
+    part = (s) => encodeURIComponent(s);
+    prefix = (tenant) => `ty:{${part(tenant)}}`;
+  }
+});
+
+// src/policy/match.ts
+function globToRegExp(glob) {
+  const body = glob.replace(/\*+/g, "*").split("*").map((lit) => lit.replace(/[.*+?^${}()|[\]\\/-]/g, "\\$&")).join(".*");
+  return new RegExp(`^${body}$`, "s");
+}
+function globTest(re, value) {
+  return value.length <= MAX_GLOB_INPUT && re.test(value);
+}
+function routeMatches(r, f, surface) {
+  const m = r.match;
+  const a = f.attribution;
+  return eq(m.surface, surface) && eq(m.traffic, f.traffic) && eq(m.billing, f.billing) && eq(m.tenant, f.tenant) && eq(m.team, f.team) && eq(m.requestClass, a.requestClass) && eq(m.agentType, a.agentType) && eq(m.repo, a.repo) && eq(m.feature, a.feature) && (m.model === null || globTest(m.model, f.model));
+}
+function findRoute(policy2, f) {
+  const direct = policy2.routes.find((r) => routeMatches(r, f, f.surface));
+  if (direct) return direct;
+  if (f.surface === "anthropic-count-tokens") return policy2.routes.find((r) => routeMatches(r, f, "anthropic-messages")) ?? null;
+  return null;
+}
+function modelsForKey(policy2, key) {
+  const traffic = key.kind === "service" ? "product" : "coding-agent";
+  const out = /* @__PURE__ */ new Set();
+  for (const r of policy2.routes) {
+    const m = r.match;
+    const reachable = (m.surface === null || m.surface === "anthropic-messages") && eq(m.traffic, traffic) && eq(m.billing, key.billing) && eq(m.tenant, key.tenant) && (m.team === null || m.team === key.team);
+    if (reachable) for (const id of r.listedModels) out.add(id);
+  }
+  return [...out];
+}
+var MAX_GLOB_INPUT, eq;
+var init_match = __esm({
+  "src/policy/match.ts"() {
+    "use strict";
+    MAX_GLOB_INPUT = 256;
+    eq = (want, have) => want === null || want === have;
+  }
+});
+
+// src/policy/schema.ts
+var SURFACES, name, fileRef, httpUrl2, REQUEST_CLASSES2, chainEntry, provider, route, budget, rateLimit, reservation, guardrails, failure2, ci, policySchema, chainProvider, keyRecordSchema, keysFileSchema, SURFACE_LIST;
+var init_schema = __esm({
+  "src/policy/schema.ts"() {
+    "use strict";
+    init_zod();
+    SURFACES = ["anthropic-messages", "anthropic-count-tokens", "openai-responses", "openai-chat"];
+    name = external_exports.string().min(1);
+    fileRef = external_exports.string().regex(/^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/, "must be a file name in the policy directory");
+    httpUrl2 = external_exports.string().refine((s) => {
+      try {
+        return ["http:", "https:"].includes(new URL(s).protocol);
+      } catch {
+        return false;
+      }
+    }, "must be an http(s) URL");
+    REQUEST_CLASSES2 = ["main", "subagent", "workflow", "compaction", "auxiliary"];
+    chainEntry = external_exports.union([name, external_exports.strictObject({ provider: name, weight: external_exports.number().int().nonnegative() })]);
+    provider = external_exports.strictObject({
+      format: external_exports.enum(["anthropic", "openai"]),
+      baseUrl: httpUrl2,
+      // The env var name is checked syntactically in validate.ts (E_CREDENTIAL_ENV); whether it is set is a runtime matter.
+      credential: external_exports.union([external_exports.strictObject({ env: external_exports.string() }), external_exports.literal("passthrough")])
+    });
+    route = external_exports.strictObject({
+      name,
+      match: external_exports.strictObject({
+        surface: external_exports.enum(SURFACES).optional(),
+        traffic: external_exports.enum(["coding-agent", "product"]).optional(),
+        billing: external_exports.enum(["api", "subscription"]).optional(),
+        tenant: name.optional(),
+        team: name.optional(),
+        requestClass: external_exports.enum(REQUEST_CLASSES2).optional(),
+        agentType: name.optional(),
+        repo: name.optional(),
+        feature: name.optional(),
+        /** Glob on the requested model (`*` matches any run of characters), anchored at both ends. */
+        model: name.optional()
+      }).default({}),
+      /**
+       * Providers in fallback order. Entries with a `weight` are a split: one of them is picked first by a hash of the
+       * session (or request) id, so a session sticks to one provider; the others stay as fallbacks in their listed order.
+       */
+      chain: external_exports.array(chainEntry),
+      allowModels: external_exports.array(name).optional(),
+      rewriteModel: name.optional(),
+      allowBodyRewrite: external_exports.boolean().optional(),
+      because: external_exports.string().optional(),
+      /** Server tool types this route lets through (for example `web_search`); each needs a price or an explicit `failure.unpricedModel`. */
+      serverTools: external_exports.array(name).optional(),
+      criticality: external_exports.enum(["standard", "sheddable"]).optional(),
+      reserveOutputTokens: external_exports.number().int().positive().optional()
+    });
+    budget = external_exports.strictObject({
+      name,
+      scope: external_exports.enum(["tenant", "team", "key", "repo", "session"]),
+      // `window` and `usd` are checked in validate.ts (E_BUDGET_WINDOW, E_BUDGET_USD) so each failure has its own code.
+      window: external_exports.string().optional(),
+      usd: external_exports.number(),
+      onExceed: external_exports.enum(["block", "warn"]).default("block"),
+      mode: external_exports.enum(["enforce", "audit"]).default("enforce")
+    });
+    rateLimit = external_exports.strictObject({
+      name,
+      scope: external_exports.enum(["tenant", "team", "key"]),
+      rpm: external_exports.number().positive().optional(),
+      burst: external_exports.number().int().positive().optional(),
+      concurrentStreams: external_exports.number().int().positive().optional()
+    }).refine((r) => r.rpm !== void 0 || r.concurrentStreams !== void 0, "needs rpm or concurrentStreams");
+    reservation = external_exports.strictObject({
+      estimator: external_exports.enum(["worst-case", "session-aware"]).default("worst-case"),
+      onOverrun: external_exports.enum(["allow-and-debit"]).default("allow-and-debit"),
+      serverToolsWithoutMaxUses: external_exports.enum(["block", "assume"]).default("block"),
+      assumedMaxUses: external_exports.number().int().positive().default(25)
+    });
+    guardrails = external_exports.strictObject({
+      secrets: external_exports.strictObject({
+        rules: external_exports.literal("default").default("default"),
+        codingAgent: external_exports.enum(["block", "warn"]).default("block"),
+        product: external_exports.enum(["block", "warn", "redact"]).default("redact"),
+        entropyOnly: external_exports.enum(["warn"]).default("warn"),
+        taintTtlHours: external_exports.number().positive().default(24)
+      }).prefault({}),
+      pii: external_exports.strictObject({ product: external_exports.enum(["block", "warn", "redact"]).default("redact") }).prefault({})
+    });
+    failure2 = external_exports.strictObject({
+      // Both fields stay optional on purpose: validate.ts requires `budgets` to be stated, and a server tool without a price
+      // is only covered when `unpricedModel` is stated (E_STORE_DOWN_UNSTATED, E_UNPRICED_SERVER_TOOL).
+      counterStoreDown: external_exports.strictObject({ rateLimits: external_exports.enum(["open", "closed"]).default("open"), budgets: external_exports.enum(["open", "closed"]).optional() }).prefault({}),
+      unpricedModel: external_exports.enum(["block", "allow-and-flag"]).optional(),
+      breaker: external_exports.strictObject({
+        minRequests: external_exports.number().int().positive().default(20),
+        failureRatio: external_exports.number().gt(0).max(1).default(0.5),
+        windowSeconds: external_exports.number().positive().default(30),
+        openSeconds: external_exports.number().positive().default(30)
+      }).prefault({}),
+      retryBudgetRatio: external_exports.number().min(0).max(1).default(0.1)
+    });
+    ci = external_exports.strictObject({
+      failOn: external_exports.strictObject({ cutSessions: external_exports.number().int().nonnegative().default(0), costIncreasePct: external_exports.number().nonnegative().default(10) }).prefault({})
+    });
+    policySchema = external_exports.strictObject({
+      apiVersion: external_exports.literal("tokenyard/v1"),
+      kind: external_exports.literal("Policy"),
+      metadata: external_exports.strictObject({ name, owners: external_exports.array(external_exports.string()).optional() }),
+      pricing: fileRef.default("./prices.yaml"),
+      keys: fileRef.default("./keys.yaml"),
+      providers: external_exports.record(name, provider),
+      tenants: external_exports.record(name, external_exports.strictObject({ teams: external_exports.array(name).default([]) })).default({}),
+      routes: external_exports.array(route),
+      budgets: external_exports.array(budget).default([]),
+      reservation: reservation.prefault({}),
+      rateLimits: external_exports.array(rateLimit).default([]),
+      guardrails: guardrails.prefault({}),
+      failure: failure2.prefault({}),
+      ci: ci.prefault({})
+    });
+    chainProvider = (e) => typeof e === "string" ? e : e.provider;
+    keyRecordSchema = external_exports.strictObject({
+      hash: external_exports.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 hex digest"),
+      keyId: name,
+      tenant: name,
+      team: name.nullable(),
+      name,
+      kind: external_exports.enum(["developer", "service"]),
+      billing: external_exports.enum(["api", "subscription"])
+    });
+    keysFileSchema = external_exports.array(keyRecordSchema);
+    SURFACE_LIST = SURFACES;
+  }
+});
+
+// src/policy/decide.ts
+import { createHash as createHash3 } from "node:crypto";
+function buildFeatures(x, key, attr, hits, prices, id, ts, surface) {
+  const model = x.parseError ? "" : x.model ?? "";
+  const bound = hasModels(prices) ? inputTokenBound(x, reservationPrice(prices, pricedName(prices, model)).price) : { tokens: Number.MAX_SAFE_INTEGER, kind: "context-window" };
+  return {
+    id,
+    ts,
+    surface,
+    traffic: key.kind === "service" ? "product" : "coding-agent",
+    billing: key.billing,
+    tenant: key.tenant,
+    team: key.team,
+    keyId: key.keyId,
+    model,
+    stream: x.stream,
+    inputTokensBound: bound.tokens,
+    boundKind: bound.kind,
+    maxOutputTokens: x.maxOutputTokens,
+    serverTools: x.serverTools.map((t) => ({ ...t })),
+    toolCount: x.toolCount,
+    thinking: x.thinking,
+    fastMode: x.fastMode,
+    attribution: {
+      session: attr.session,
+      agent: attr.agent,
+      parentAgent: attr.parentAgent,
+      requestClass: attr.requestClass !== null && CLASSES.has(attr.requestClass) ? attr.requestClass : null,
+      agentType: attr.agentType,
+      promptId: attr.promptId,
+      repo: attr.repo,
+      branch: attr.branch,
+      ticket: attr.ticket,
+      feature: attr.feature
+    },
+    guardrail: { hits: hits.map((h) => ({ ...h })) }
+  };
+}
+function windowOf(window, ts) {
+  const d = new Date(ts);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  let start;
+  let end;
+  if (window === "day") {
+    start = Date.UTC(y, m, day);
+    end = start + DAY_MS2;
+  } else if (window === "week") {
+    start = Date.UTC(y, m, day - (d.getUTCDay() + 6) % 7);
+    end = start + 7 * DAY_MS2;
+  } else {
+    start = Date.UTC(y, m, 1);
+    end = Date.UTC(y, m + 1, 1);
+  }
+  return { start: new Date(start).toISOString().slice(0, 10), end: new Date(end).toISOString() };
+}
+function scopeValue(scope, f) {
+  switch (scope) {
+    case "tenant":
+      return f.tenant;
+    case "team":
+      return f.team;
+    case "key":
+      return f.keyId;
+    case "repo":
+      return f.attribution.repo;
+    case "session":
+      return f.attribution.session;
+  }
+}
+function orderChain(route2, seed) {
+  const names = route2.chain.map((e) => e.provider);
+  const total = route2.chain.reduce((s, e) => s + (e.weight ?? 0), 0);
+  if (total <= 0) return names;
+  const h = createHash3("sha256").update(route2.name).update("\0").update(seed).digest().readUInt32BE(0);
+  const x = h / 2 ** 32 * total;
+  let acc = 0;
+  let pick2 = route2.chain.findIndex((e) => {
+    acc += e.weight ?? 0;
+    return (e.weight ?? 0) > 0 && x < acc;
+  });
+  for (let i = route2.chain.length - 1; pick2 < 0 && i >= 0; i--) if ((route2.chain[i]?.weight ?? 0) > 0) pick2 = i;
+  return [names[pick2], ...names.filter((_, i) => i !== pick2)];
+}
+function upstreamFeatures(f, t, upstreamModel, up) {
+  if (upstreamModel === f.model) return f;
+  const requested = reservationPrice(t, pricedName(t, f.model)).price;
+  if (f.boundKind === "bytes" && f.inputTokensBound < requested.maxContextTokens) {
+    return { ...f, model: upstreamModel, inputTokensBound: Math.min(f.inputTokensBound, up.maxContextTokens) };
+  }
+  return { ...f, model: upstreamModel, inputTokensBound: up.maxContextTokens, boundKind: "context-window" };
+}
+function decide(policy2, f) {
+  const hits = f.guardrail.hits;
+  const warnings = hits.filter((h) => h.action === "warn").map((h) => ({ kind: "guardrail", rule: h.rule, where: h.where }));
+  const lastTurnBlocks = hits.filter((h) => h.action === "block" && h.where === "last-turn");
+  const session = f.attribution.session;
+  const taint = session === null && !hits.some((h) => h.action === "block") ? null : {
+    key: taintKey(f.tenant, session ?? f.keyId),
+    check: [...new Set(hits.filter((h) => h.where === "history").map((h) => h.valueHmac))],
+    add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac })),
+    ttlMs: Math.round(policy2.guardrails.secrets.taintTtlHours * 36e5)
+  };
+  const plan = { policyRevision: policy2.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
+  const route2 = findRoute(policy2, f);
+  if (!route2) return { ...plan, preBlock: "no-route" };
+  plan.route = route2.name;
+  if (route2.allowModels !== null && !route2.allowModels.some((re) => globTest(re, f.model))) return { ...plan, preBlock: "model-not-allowed" };
+  const upstreamModel = route2.rewriteModel ?? f.model;
+  const rewritesModel = route2.rewriteModel !== null && route2.rewriteModel !== f.model;
+  plan.chain = orderChain(route2, session ?? f.id).map((provider2) => ({ provider: provider2, upstreamModel, rewritesModel }));
+  if (lastTurnBlocks.length > 0) return { ...plan, preBlock: "secret" };
+  if (f.surface === "anthropic-count-tokens") return plan;
+  const t = policy2.prices;
+  const known = pricedName(t, upstreamModel);
+  if (known === null) {
+    if (policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
+    warnings.push({ kind: "unpriced", model: upstreamModel });
+  }
+  const levels = policy2.budgets.flatMap((b) => {
+    const value = scopeValue(b.scope, f);
+    if (value === null) return [];
+    const w = b.window === null ? null : windowOf(b.window, f.ts);
+    return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce: b.enforce, resetsAt: w?.end ?? null }];
+  });
+  let est = 0;
+  if (hasModels(t)) {
+    const price = reservationPrice(t, known).price;
+    const uf = upstreamFeatures(f, t, upstreamModel, price);
+    const r = policy2.reservation;
+    const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route2.reserveOutputTokens });
+    est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price, t, null, route2.reserveOutputTokens) : worst.micro;
+    if (worst.block === "unpriced-server-tool") {
+      if (policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
+      warnings.push({ kind: "bound-assumed", reason: "unpriced-server-tool" });
+    }
+    if (f.serverTools.some((tool) => tool.maxUses === null && Object.hasOwn(t.serverTools, serverToolKey(tool.type)))) {
+      if (r.serverToolsWithoutMaxUses === "block" && levels.some((l) => l.enforce)) return { ...plan, preBlock: "server-tool-no-max-uses" };
+      warnings.push({ kind: "bound-assumed", reason: "server-tool-no-max-uses" });
+    }
+  } else if (levels.length > 0) {
+    throw new Error("the price table has no models, so no reservation can be priced");
+  }
+  plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
+  plan.rateChecks = policy2.rateLimits.flatMap((l) => {
+    const value = scopeValue(l.scope, f);
+    return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
+  });
+  plan.streamSlots = policy2.streamLimits.flatMap((l) => {
+    const value = scopeValue(l.scope, f);
+    return value === null ? [] : [{ limit: l.name, key: streamKey(f.tenant, l.name, value), max: l.max }];
+  });
+  return plan;
+}
+var DAY_MS2, CLASSES, hasModels, pricedName;
+var init_decide = __esm({
+  "src/policy/decide.ts"() {
+    "use strict";
+    init_estimator();
+    init_keys();
+    init_prices();
+    init_match();
+    init_schema();
+    DAY_MS2 = 864e5;
+    CLASSES = new Set(REQUEST_CLASSES2);
+    hasModels = (t) => Object.keys(t.models).length > 0;
+    pricedName = (t, model) => model !== "" && lookupModel(t, model) !== null ? model : null;
+  }
+});
+
+// src/policy/resolve.ts
+function rateRetryAfterS(ms) {
+  if (ms === void 0 || !Number.isFinite(ms)) return MAX_RETRY_AFTER_S;
+  return Math.min(MAX_RETRY_AFTER_S, Math.max(1, Math.ceil(ms / 1e3)));
+}
+function block(status, type, reason, message, retryAfterS = null) {
+  return { status, type, reason, message, retryAfterS };
+}
+function preBlock(policy2, plan, reason) {
+  const route2 = plan.route === null ? "" : ` on route "${plan.route}"`;
+  switch (reason) {
+    case "no-route":
+      return block(403, "permission_error", reason, `no route in policy ${policy2.revision} allows this request`);
+    case "model-not-allowed":
+      return block(403, "permission_error", reason, `this model is not allowed${route2}`);
+    case "unpriced":
+      return block(403, "permission_error", reason, `the model or a server tool has no price in table ${policy2.priceTableVersion}, and failure.unpricedModel is block`);
+    case "server-tool-no-max-uses":
+      return block(403, "permission_error", reason, "a server tool without max_uses has no cost bound under an enforced budget; set max_uses on the tool");
+    case "secret": {
+      const rules = [...new Set(plan.taint?.add.map((a) => a.rule) ?? [])].join(", ") || "a secret rule";
+      return block(400, "invalid_request_error", reason, `the last message contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);
+    }
+    default:
+      return block(403, "permission_error", reason, `request refused (${reason})`);
+  }
+}
+function failedBlock(plan, failed) {
+  switch (failed.kind) {
+    case "budget": {
+      const level = plan.reservations.find((r) => r.budget === failed.name);
+      const spent = failed.spentMicroUsd === void 0 || level === void 0 ? "" : ` (spent ${usd(failed.spentMicroUsd)} of ${usd(level.limitMicroUsd)})`;
+      const resets = level?.resetsAt ? `; it resets at ${level.resetsAt}` : level ? "; it does not reset (session budget)" : "";
+      return block(429, "rate_limit_error", "budget", `budget "${failed.name}" is exhausted${spent}${resets}`);
+    }
+    case "rate": {
+      const s = rateRetryAfterS(failed.retryAfterMs);
+      return block(429, "rate_limit_error", "rate", `rate limit "${failed.name}" reached; retry in ${s} s`, s);
+    }
+    case "streams":
+      return block(429, "rate_limit_error", "streams", `concurrent stream limit "${failed.name}" reached`, STREAMS_RETRY_S);
+    case "taint":
+      return block(400, "invalid_request_error", "taint", `this session's history holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+  }
+}
+function resolve(policy2, plan, admission) {
+  const decision = (b) => ({ action: b === null ? "forward" : "block", block: b, plan, admission });
+  if (plan.preBlock !== null) return decision(preBlock(policy2, plan, plan.preBlock));
+  if (admission === null) return decision(null);
+  if (admission.storeDown) {
+    const down = policy2.failure.counterStoreDown;
+    const budgets = down.budgets === "closed" && plan.reservations.some((r) => r.enforce);
+    const rates = down.rateLimits === "closed" && plan.rateChecks.length + plan.streamSlots.length > 0;
+    return decision(budgets || rates ? block(503, "api_error", "store-down", "the counter store is unreachable and this policy fails closed", STORE_DOWN_RETRY_S) : null);
+  }
+  if (admission.failed !== null) return decision(failedBlock(plan, admission.failed));
+  return decision(admission.admitted ? null : block(503, "api_error", "store-down", "admission was refused without a reason", STORE_DOWN_RETRY_S));
+}
+var MAX_RETRY_AFTER_S, STORE_DOWN_RETRY_S, STREAMS_RETRY_S, usd, ADVICE;
+var init_resolve = __esm({
+  "src/policy/resolve.ts"() {
+    "use strict";
+    MAX_RETRY_AFTER_S = 60;
+    STORE_DOWN_RETRY_S = 5;
+    STREAMS_RETRY_S = 1;
+    usd = (micro) => `$${(micro / 1e6).toFixed(2)}`;
+    ADVICE = "run /clear to drop it from the conversation, rotate the secret, and add a deny rule for the file it came from";
+  }
+});
+
 // src/pricing/cost.ts
 function costMicroUsd(t, modelId, u, o = {}) {
   const found = lookupModel(t, modelId);
@@ -28722,7 +29263,7 @@ var init_tee = __esm({
 });
 
 // src/surfaces/anthropic-messages.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 function hasExpandingField(parsed, tools) {
   for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS.has(key)) return true;
   if (parsed.output_config !== void 0 && !(isObj3(parsed.output_config) && parsed.output_config.format == null)) return true;
@@ -28757,10 +29298,10 @@ function emptyFeatures(bodyBytes, parseError) {
 }
 function collectBlockTypes(content, out) {
   if (!Array.isArray(content)) return;
-  for (const block of content) {
-    if (!isObj3(block) || typeof block.type !== "string") continue;
-    out.add(block.type);
-    if (block.type === "tool_result") collectBlockTypes(block.content, out);
+  for (const block2 of content) {
+    if (!isObj3(block2) || typeof block2.type !== "string") continue;
+    out.add(block2.type);
+    if (block2.type === "tool_result") collectBlockTypes(block2.content, out);
   }
 }
 function extractAnthropicFeatures(body) {
@@ -28787,7 +29328,7 @@ function extractAnthropicFeatures(body) {
   for (const m of messages) if (isObj3(m)) collectBlockTypes(m.content, types);
   const blockTypes = [...types];
   const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
-  const prefixHash = hasPrefix ? createHash3("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
+  const prefixHash = hasPrefix ? createHash4("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
   const thinking = parsed.thinking;
   return {
     model: typeof parsed.model === "string" ? parsed.model : null,
@@ -31672,9 +32213,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve, reject) => {
+          return new Promise((resolve2, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve(data);
+              return err ? reject(err) : resolve2(data);
             });
           });
         }
@@ -31712,9 +32253,9 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve, reject) => {
+          return new Promise((resolve2, reject) => {
             this.destroy(err, (err2, data) => {
-              return err2 ? reject(err2) : resolve(data);
+              return err2 ? reject(err2) : resolve2(data);
             });
           });
         }
@@ -33574,10 +34115,10 @@ var require_webidl = __commonJS({
       return typeof flags === "number" && (flags & attributes) === attributes;
     };
     webidl.sequenceConverter = function(converter) {
-      return (V, prefix, argument, Iterable) => {
+      return (V, prefix2, argument, Iterable) => {
         if (webidl.util.Type(V) !== OBJECT) {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: `${argument} (${webidl.util.Stringify(V)}) is not iterable.`
           });
         }
@@ -33586,7 +34127,7 @@ var require_webidl = __commonJS({
         let index = 0;
         if (method === void 0 || typeof method.next !== "function") {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: `${argument} is not iterable.`
           });
         }
@@ -33595,16 +34136,16 @@ var require_webidl = __commonJS({
           if (done) {
             break;
           }
-          seq.push(converter(value, prefix, `${argument}[${index++}]`));
+          seq.push(converter(value, prefix2, `${argument}[${index++}]`));
         }
         return seq;
       };
     };
     webidl.recordConverter = function(keyConverter, valueConverter) {
-      return (O, prefix, argument) => {
+      return (O, prefix2, argument) => {
         if (webidl.util.Type(O) !== OBJECT) {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: `${argument} ("${webidl.util.TypeValueToString(O)}") is not an Object.`
           });
         }
@@ -33613,8 +34154,8 @@ var require_webidl = __commonJS({
           const keys3 = [...Object.getOwnPropertyNames(O), ...Object.getOwnPropertySymbols(O)];
           for (const key of keys3) {
             const keyName = webidl.util.Stringify(key);
-            const typedKey = keyConverter(key, prefix, `Key ${keyName} in ${argument}`);
-            const typedValue = valueConverter(O[key], prefix, `${argument}[${keyName}]`);
+            const typedKey = keyConverter(key, prefix2, `Key ${keyName} in ${argument}`);
+            const typedValue = valueConverter(O[key], prefix2, `${argument}[${keyName}]`);
             result[typedKey] = typedValue;
           }
           return result;
@@ -33623,8 +34164,8 @@ var require_webidl = __commonJS({
         for (const key of keys2) {
           const desc = Reflect.getOwnPropertyDescriptor(O, key);
           if (desc?.enumerable) {
-            const typedKey = keyConverter(key, prefix, argument);
-            const typedValue = valueConverter(O[key], prefix, argument);
+            const typedKey = keyConverter(key, prefix2, argument);
+            const typedValue = valueConverter(O[key], prefix2, argument);
             result[typedKey] = typedValue;
           }
         }
@@ -33632,10 +34173,10 @@ var require_webidl = __commonJS({
       };
     };
     webidl.interfaceConverter = function(TypeCheck, name2) {
-      return (V, prefix, argument) => {
+      return (V, prefix2, argument) => {
         if (!TypeCheck(V)) {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: `Expected ${argument} ("${webidl.util.Stringify(V)}") to be an instance of ${name2}.`
           });
         }
@@ -33644,11 +34185,11 @@ var require_webidl = __commonJS({
     };
     webidl.dictionaryConverter = function(converters) {
       converters.sort((a, b) => (a.key > b.key) - (a.key < b.key));
-      return (dictionary, prefix, argument) => {
+      return (dictionary, prefix2, argument) => {
         const dict = {};
         if (dictionary != null && webidl.util.Type(dictionary) !== OBJECT) {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: `Expected ${dictionary} to be one of: Null, Undefined, Object.`
           });
         }
@@ -33657,7 +34198,7 @@ var require_webidl = __commonJS({
           if (required2 === true) {
             if (dictionary == null || !Object.hasOwn(dictionary, key)) {
               throw webidl.errors.exception({
-                header: prefix,
+                header: prefix2,
                 message: `Missing required key "${key}".`
               });
             }
@@ -33668,10 +34209,10 @@ var require_webidl = __commonJS({
             value = defaultValue();
           }
           if (required2 || hasDefault || value !== void 0) {
-            value = converter(value, prefix, `${argument}.${key}`);
+            value = converter(value, prefix2, `${argument}.${key}`);
             if (options.allowedValues && !options.allowedValues.includes(value)) {
               throw webidl.errors.exception({
-                header: prefix,
+                header: prefix2,
                 message: `${value} is not an accepted type. Expected one of ${options.allowedValues.join(", ")}.`
               });
             }
@@ -33682,11 +34223,11 @@ var require_webidl = __commonJS({
       };
     };
     webidl.nullableConverter = function(converter) {
-      return (V, prefix, argument) => {
+      return (V, prefix2, argument) => {
         if (V === null) {
           return V;
         }
-        return converter(V, prefix, argument);
+        return converter(V, prefix2, argument);
       };
     };
     webidl.is.USVString = function(value) {
@@ -33723,22 +34264,22 @@ var require_webidl = __commonJS({
       bytes.set(view);
       return bytes;
     };
-    webidl.converters.DOMString = function(V, prefix, argument, flags) {
+    webidl.converters.DOMString = function(V, prefix2, argument, flags) {
       if (V === null && webidl.util.HasFlag(flags, webidl.attributes.LegacyNullToEmptyString)) {
         return "";
       }
       if (typeof V === "symbol") {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} is a symbol, which cannot be converted to a DOMString.`
         });
       }
       return String(V);
     };
-    webidl.converters.ByteString = function(V, prefix, argument) {
+    webidl.converters.ByteString = function(V, prefix2, argument) {
       if (typeof V === "symbol") {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} is a symbol, which cannot be converted to a ByteString.`
         });
       }
@@ -33765,153 +34306,153 @@ var require_webidl = __commonJS({
     webidl.converters.any = function(V) {
       return V;
     };
-    webidl.converters["long long"] = function(V, prefix, argument) {
-      const x = webidl.util.ConvertToInt(V, 64, "signed", 0, prefix, argument);
+    webidl.converters["long long"] = function(V, prefix2, argument) {
+      const x = webidl.util.ConvertToInt(V, 64, "signed", 0, prefix2, argument);
       return x;
     };
-    webidl.converters["unsigned long long"] = function(V, prefix, argument) {
-      const x = webidl.util.ConvertToInt(V, 64, "unsigned", 0, prefix, argument);
+    webidl.converters["unsigned long long"] = function(V, prefix2, argument) {
+      const x = webidl.util.ConvertToInt(V, 64, "unsigned", 0, prefix2, argument);
       return x;
     };
-    webidl.converters["unsigned long"] = function(V, prefix, argument) {
-      const x = webidl.util.ConvertToInt(V, 32, "unsigned", 0, prefix, argument);
+    webidl.converters["unsigned long"] = function(V, prefix2, argument) {
+      const x = webidl.util.ConvertToInt(V, 32, "unsigned", 0, prefix2, argument);
       return x;
     };
-    webidl.converters["unsigned short"] = function(V, prefix, argument, flags) {
-      const x = webidl.util.ConvertToInt(V, 16, "unsigned", flags, prefix, argument);
+    webidl.converters["unsigned short"] = function(V, prefix2, argument, flags) {
+      const x = webidl.util.ConvertToInt(V, 16, "unsigned", flags, prefix2, argument);
       return x;
     };
-    webidl.converters.ArrayBuffer = function(V, prefix, argument, flags) {
+    webidl.converters.ArrayBuffer = function(V, prefix2, argument, flags) {
       if (webidl.util.Type(V) !== OBJECT || !types.isArrayBuffer(V)) {
         throw webidl.errors.conversionFailed({
-          prefix,
+          prefix: prefix2,
           argument: `${argument} ("${webidl.util.Stringify(V)}")`,
           types: ["ArrayBuffer"]
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowResizable) && webidl.util.IsResizableArrayBuffer(V)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a resizable ArrayBuffer.`
         });
       }
       return V;
     };
-    webidl.converters.SharedArrayBuffer = function(V, prefix, argument, flags) {
+    webidl.converters.SharedArrayBuffer = function(V, prefix2, argument, flags) {
       if (webidl.util.Type(V) !== OBJECT || !types.isSharedArrayBuffer(V)) {
         throw webidl.errors.conversionFailed({
-          prefix,
+          prefix: prefix2,
           argument: `${argument} ("${webidl.util.Stringify(V)}")`,
           types: ["SharedArrayBuffer"]
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowResizable) && webidl.util.IsResizableArrayBuffer(V)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a resizable SharedArrayBuffer.`
         });
       }
       return V;
     };
-    webidl.converters.TypedArray = function(V, T, prefix, argument, flags) {
+    webidl.converters.TypedArray = function(V, T, prefix2, argument, flags) {
       if (webidl.util.Type(V) !== OBJECT || !types.isTypedArray(V) || V.constructor.name !== T.name) {
         throw webidl.errors.conversionFailed({
-          prefix,
+          prefix: prefix2,
           argument: `${argument} ("${webidl.util.Stringify(V)}")`,
           types: [T.name]
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowShared) && types.isSharedArrayBuffer(V.buffer)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a view on a shared array buffer.`
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowResizable) && webidl.util.IsResizableArrayBuffer(V.buffer)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a view on a resizable array buffer.`
         });
       }
       return V;
     };
-    webidl.converters.DataView = function(V, prefix, argument, flags) {
+    webidl.converters.DataView = function(V, prefix2, argument, flags) {
       if (webidl.util.Type(V) !== OBJECT || !types.isDataView(V)) {
         throw webidl.errors.conversionFailed({
-          prefix,
+          prefix: prefix2,
           argument: `${argument} ("${webidl.util.Stringify(V)}")`,
           types: ["DataView"]
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowShared) && types.isSharedArrayBuffer(V.buffer)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a view on a shared array buffer.`
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowResizable) && webidl.util.IsResizableArrayBuffer(V.buffer)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a view on a resizable array buffer.`
         });
       }
       return V;
     };
-    webidl.converters.ArrayBufferView = function(V, prefix, argument, flags) {
+    webidl.converters.ArrayBufferView = function(V, prefix2, argument, flags) {
       if (webidl.util.Type(V) !== OBJECT || !types.isArrayBufferView(V)) {
         throw webidl.errors.conversionFailed({
-          prefix,
+          prefix: prefix2,
           argument: `${argument} ("${webidl.util.Stringify(V)}")`,
           types: ["ArrayBufferView"]
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowShared) && types.isSharedArrayBuffer(V.buffer)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a view on a shared array buffer.`
         });
       }
       if (!webidl.util.HasFlag(flags, webidl.attributes.AllowResizable) && webidl.util.IsResizableArrayBuffer(V.buffer)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a view on a resizable array buffer.`
         });
       }
       return V;
     };
-    webidl.converters.BufferSource = function(V, prefix, argument, flags) {
+    webidl.converters.BufferSource = function(V, prefix2, argument, flags) {
       if (types.isArrayBuffer(V)) {
-        return webidl.converters.ArrayBuffer(V, prefix, argument, flags);
+        return webidl.converters.ArrayBuffer(V, prefix2, argument, flags);
       }
       if (types.isArrayBufferView(V)) {
         flags &= ~webidl.attributes.AllowShared;
-        return webidl.converters.ArrayBufferView(V, prefix, argument, flags);
+        return webidl.converters.ArrayBufferView(V, prefix2, argument, flags);
       }
       if (types.isSharedArrayBuffer(V)) {
         throw webidl.errors.exception({
-          header: prefix,
+          header: prefix2,
           message: `${argument} cannot be a SharedArrayBuffer.`
         });
       }
       throw webidl.errors.conversionFailed({
-        prefix,
+        prefix: prefix2,
         argument: `${argument} ("${webidl.util.Stringify(V)}")`,
         types: ["ArrayBuffer", "ArrayBufferView"]
       });
     };
-    webidl.converters.AllowSharedBufferSource = function(V, prefix, argument, flags) {
+    webidl.converters.AllowSharedBufferSource = function(V, prefix2, argument, flags) {
       if (types.isArrayBuffer(V)) {
-        return webidl.converters.ArrayBuffer(V, prefix, argument, flags);
+        return webidl.converters.ArrayBuffer(V, prefix2, argument, flags);
       }
       if (types.isSharedArrayBuffer(V)) {
-        return webidl.converters.SharedArrayBuffer(V, prefix, argument, flags);
+        return webidl.converters.SharedArrayBuffer(V, prefix2, argument, flags);
       }
       if (types.isArrayBufferView(V)) {
         flags |= webidl.attributes.AllowShared;
-        return webidl.converters.ArrayBufferView(V, prefix, argument, flags);
+        return webidl.converters.ArrayBufferView(V, prefix2, argument, flags);
       }
       throw webidl.errors.conversionFailed({
-        prefix,
+        prefix: prefix2,
         argument: `${argument} ("${webidl.util.Stringify(V)}")`,
         types: ["ArrayBuffer", "SharedArrayBuffer", "ArrayBufferView"]
       });
@@ -34743,11 +35284,11 @@ var require_formdata = __commonJS({
       }
       append(name2, value, filename = void 0) {
         webidl.brandCheck(this, _FormData);
-        const prefix = "FormData.append";
-        webidl.argumentLengthCheck(arguments, 2, prefix);
+        const prefix2 = "FormData.append";
+        webidl.argumentLengthCheck(arguments, 2, prefix2);
         name2 = webidl.converters.USVString(name2);
         if (arguments.length === 3 || webidl.is.Blob(value)) {
-          value = webidl.converters.Blob(value, prefix, "value");
+          value = webidl.converters.Blob(value, prefix2, "value");
           if (filename !== void 0) {
             filename = webidl.converters.USVString(filename);
           }
@@ -34759,15 +35300,15 @@ var require_formdata = __commonJS({
       }
       delete(name2) {
         webidl.brandCheck(this, _FormData);
-        const prefix = "FormData.delete";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "FormData.delete";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         name2 = webidl.converters.USVString(name2);
         this.#state = this.#state.filter((entry) => entry.name !== name2);
       }
       get(name2) {
         webidl.brandCheck(this, _FormData);
-        const prefix = "FormData.get";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "FormData.get";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         name2 = webidl.converters.USVString(name2);
         const idx = this.#state.findIndex((entry) => entry.name === name2);
         if (idx === -1) {
@@ -34777,25 +35318,25 @@ var require_formdata = __commonJS({
       }
       getAll(name2) {
         webidl.brandCheck(this, _FormData);
-        const prefix = "FormData.getAll";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "FormData.getAll";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         name2 = webidl.converters.USVString(name2);
         return this.#state.filter((entry) => entry.name === name2).map((entry) => entry.value);
       }
       has(name2) {
         webidl.brandCheck(this, _FormData);
-        const prefix = "FormData.has";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "FormData.has";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         name2 = webidl.converters.USVString(name2);
         return this.#state.findIndex((entry) => entry.name === name2) !== -1;
       }
       set(name2, value, filename = void 0) {
         webidl.brandCheck(this, _FormData);
-        const prefix = "FormData.set";
-        webidl.argumentLengthCheck(arguments, 2, prefix);
+        const prefix2 = "FormData.set";
+        webidl.argumentLengthCheck(arguments, 2, prefix2);
         name2 = webidl.converters.USVString(name2);
         if (arguments.length === 3 || webidl.is.Blob(value)) {
-          value = webidl.converters.Blob(value, prefix, "value");
+          value = webidl.converters.Blob(value, prefix2, "value");
           if (filename !== void 0) {
             filename = webidl.converters.USVString(filename);
           }
@@ -35220,8 +35761,8 @@ var require_promise = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise2 = new Promise((resolve, reject) => {
-        res = resolve;
+      const promise2 = new Promise((resolve2, reject) => {
+        res = resolve2;
         rej = reject;
       });
       return { promise: promise2, resolve: res, reject: rej };
@@ -35298,7 +35839,7 @@ var require_body = __commonJS({
         source = webidl.util.getCopyOfBytesHeldByBufferSource(object2);
       } else if (webidl.is.FormData(object2)) {
         const boundary = `----formdata-undici-0${`${random(1e11)}`.padStart(11, "0")}`;
-        const prefix = `--${boundary}\r
+        const prefix2 = `--${boundary}\r
 Content-Disposition: form-data`;
         const formdataEscape = (str) => str.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22");
         const normalizeLinefeeds = (value) => value.replace(/\r?\n|\r/g, "\r\n");
@@ -35308,14 +35849,14 @@ Content-Disposition: form-data`;
         let hasUnknownSizeValue = false;
         for (const [name2, value] of object2) {
           if (typeof value === "string") {
-            const chunk2 = textEncoder.encode(prefix + `; name="${formdataEscape(normalizeLinefeeds(name2))}"\r
+            const chunk2 = textEncoder.encode(prefix2 + `; name="${formdataEscape(normalizeLinefeeds(name2))}"\r
 \r
 ${normalizeLinefeeds(value)}\r
 `);
             blobParts.push(chunk2);
             length += chunk2.byteLength;
           } else {
-            const chunk2 = textEncoder.encode(`${prefix}; name="${formdataEscape(normalizeLinefeeds(name2))}"` + (value.name ? `; filename="${formdataEscape(value.name)}"` : "") + `\r
+            const chunk2 = textEncoder.encode(`${prefix2}; name="${formdataEscape(normalizeLinefeeds(name2))}"` + (value.name ? `; filename="${formdataEscape(value.name)}"` : "") + `\r
 Content-Type: ${value.type || "application/octet-stream"}\r
 \r
 `);
@@ -35336,11 +35877,11 @@ Content-Type: ${value.type || "application/octet-stream"}\r
         }
         source = object2;
         action = async function* () {
-          for (const part of blobParts) {
-            if (part.stream) {
-              yield* part.stream();
+          for (const part2 of blobParts) {
+            if (part2.stream) {
+              yield* part2.stream();
             } else {
-              yield part;
+              yield part2;
             }
           }
         };
@@ -36630,12 +37171,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve, reject) => {
+      const waitForDrain = () => new Promise((resolve2, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve;
+          callback = resolve2;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -37519,12 +38060,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve, reject) => {
+      const waitForDrain = () => new Promise((resolve2, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve;
+          callback = resolve2;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -37841,16 +38382,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       [kClose]() {
-        return new Promise((resolve) => {
+        return new Promise((resolve2) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve;
+            this[kClosedResolve] = resolve2;
           } else {
-            resolve(null);
+            resolve2(null);
           }
         });
       }
       [kDestroy](err) {
-        return new Promise((resolve) => {
+        return new Promise((resolve2) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request2 = requests[i];
@@ -37863,7 +38404,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve(null);
+            resolve2(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -38270,8 +38811,8 @@ var require_pool_base = __commonJS({
           }
           return Promise.all(closeAll);
         } else {
-          return new Promise((resolve) => {
-            this[kClosedResolve] = resolve;
+          return new Promise((resolve2) => {
+            this[kClosedResolve] = resolve2;
           });
         }
       }
@@ -38892,13 +39433,13 @@ var require_socks5_utils = __commonJS({
         const beforeParts = before === "" ? [] : before.split(":");
         const afterParts = after === "" ? [] : after.split(":");
         let bufferIndex = 0;
-        for (const part of beforeParts) {
-          buffer.writeUInt16BE(parseInt(part, 16), bufferIndex);
+        for (const part2 of beforeParts) {
+          buffer.writeUInt16BE(parseInt(part2, 16), bufferIndex);
           bufferIndex += 2;
         }
         bufferIndex = 16 - afterParts.length * 2;
-        for (const part of afterParts) {
-          buffer.writeUInt16BE(parseInt(part, 16), bufferIndex);
+        for (const part2 of afterParts) {
+          buffer.writeUInt16BE(parseInt(part2, 16), bufferIndex);
           bufferIndex += 2;
         }
       } else {
@@ -39393,7 +39934,7 @@ var require_socks5_proxy_agent = __commonJS({
         const proxyHost = this[kProxyUrl].hostname;
         const proxyPort = parseInt(this[kProxyUrl].port) || 1080;
         debug("creating SOCKS5 connection to", proxyHost, proxyPort);
-        const socket = await new Promise((resolve, reject) => {
+        const socket = await new Promise((resolve2, reject) => {
           this[kConnector]({
             hostname: proxyHost,
             host: proxyHost,
@@ -39403,7 +39944,7 @@ var require_socks5_proxy_agent = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve(socket2);
+              resolve2(socket2);
             }
           });
         });
@@ -39413,14 +39954,14 @@ var require_socks5_proxy_agent = __commonJS({
           socket.destroy();
         });
         await socks5Client.handshake();
-        await new Promise((resolve, reject) => {
+        await new Promise((resolve2, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 authentication timeout"));
           }, 5e3);
           const onAuthenticated = () => {
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve();
+            resolve2();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -39429,14 +39970,14 @@ var require_socks5_proxy_agent = __commonJS({
           };
           if (socks5Client.state === STATES.AUTHENTICATED) {
             clearTimeout(timeout);
-            resolve();
+            resolve2();
           } else {
             socks5Client.once("authenticated", onAuthenticated);
             socks5Client.once("error", onError);
           }
         });
         await socks5Client.connect(targetHost, targetPort);
-        await new Promise((resolve, reject) => {
+        await new Promise((resolve2, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 connection timeout"));
           }, 5e3);
@@ -39444,7 +39985,7 @@ var require_socks5_proxy_agent = __commonJS({
             debug("SOCKS5 tunnel established to", targetHost, targetPort, "via", info);
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve();
+            resolve2();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -39487,8 +40028,8 @@ var require_socks5_proxy_agent = __commonJS({
                       socket,
                       servername: this[kRequestTls]?.servername || targetHost
                     });
-                    await new Promise((resolve, reject) => {
-                      finalSocket.once("secureConnect", resolve);
+                    await new Promise((resolve2, reject) => {
+                      finalSocket.once("secureConnect", resolve2);
                       finalSocket.once("error", reject);
                     });
                   }
@@ -40621,7 +41162,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return Promise.resolve(null);
         }
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve2, reject) => {
           if (this[kContentLength] && this[kContentLength] > limit || this[kBytesRead] > limit) {
             this.destroy(new AbortError());
           }
@@ -40635,11 +41176,11 @@ var require_readable = __commonJS({
               if (signal.aborted) {
                 reject(signal.reason ?? new AbortError());
               } else {
-                resolve(null);
+                resolve2(null);
               }
             });
           } else {
-            this.on("close", resolve);
+            this.on("close", resolve2);
           }
           this.on("error", noop).on("data", () => {
             if (this[kBytesRead] > limit) {
@@ -40667,7 +41208,7 @@ var require_readable = __commonJS({
     }
     function consume(stream, type) {
       assert2(!stream[kConsume]);
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve2, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -40682,7 +41223,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve,
+              resolve: resolve2,
               reject,
               length: 0,
               body: []
@@ -40756,18 +41297,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2, encoding) {
-      const { type, body, resolve, stream, length } = consume2;
+      const { type, body, resolve: resolve2, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve(chunksDecode(body, length, encoding));
+          resolve2(chunksDecode(body, length, encoding));
         } else if (type === "json") {
-          resolve(JSON.parse(chunksDecode(body, length, encoding)));
+          resolve2(JSON.parse(chunksDecode(body, length, encoding)));
         } else if (type === "arrayBuffer") {
-          resolve(chunksConcat(body, length).buffer);
+          resolve2(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve(new Blob(body, { type: stream[kContentType] }));
+          resolve2(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve(chunksConcat(body, length));
+          resolve2(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -40957,9 +41498,9 @@ var require_api_request = __commonJS({
     };
     function request2(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve2, reject) => {
           request2.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve(data);
+            return err ? reject(err) : resolve2(data);
           });
         });
       }
@@ -41171,9 +41712,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve2, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve(data);
+            return err ? reject(err) : resolve2(data);
           });
         });
       }
@@ -41461,9 +42002,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve2, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve(data);
+            return err ? reject(err) : resolve2(data);
           });
         });
       }
@@ -41556,9 +42097,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve2, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve(data);
+            return err ? reject(err) : resolve2(data);
           });
         });
       }
@@ -42832,7 +43373,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile: writeFile2, readFile: readFile2, mkdir: mkdir2 } = __require("node:fs/promises");
-    var { dirname, resolve } = __require("node:path");
+    var { dirname, resolve: resolve2 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -43033,7 +43574,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile2(resolve(path2), "utf8");
+          const data = await readFile2(resolve2(path2), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -43062,7 +43603,7 @@ var require_snapshot_recorder = __commonJS({
         if (!path2) {
           throw new InvalidArgumentError2("Snapshot path is required");
         }
-        const resolvedPath = resolve(path2);
+        const resolvedPath = resolve2(path2);
         await mkdir2(dirname(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
@@ -48268,17 +48809,17 @@ var require_headers = __commonJS({
       append(name2, value) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 2, "Headers.append");
-        const prefix = "Headers.append";
-        name2 = webidl.converters.ByteString(name2, prefix, "name");
-        value = webidl.converters.ByteString(value, prefix, "value");
+        const prefix2 = "Headers.append";
+        name2 = webidl.converters.ByteString(name2, prefix2, "name");
+        value = webidl.converters.ByteString(value, prefix2, "value");
         return appendHeader(this, name2, value);
       }
       // https://fetch.spec.whatwg.org/#dom-headers-delete
       delete(name2) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 1, "Headers.delete");
-        const prefix = "Headers.delete";
-        name2 = webidl.converters.ByteString(name2, prefix, "name");
+        const prefix2 = "Headers.delete";
+        name2 = webidl.converters.ByteString(name2, prefix2, "name");
         if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
             prefix: "Headers.delete",
@@ -48298,11 +48839,11 @@ var require_headers = __commonJS({
       get(name2) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 1, "Headers.get");
-        const prefix = "Headers.get";
-        name2 = webidl.converters.ByteString(name2, prefix, "name");
+        const prefix2 = "Headers.get";
+        name2 = webidl.converters.ByteString(name2, prefix2, "name");
         if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
-            prefix,
+            prefix: prefix2,
             value: name2,
             type: "header name"
           });
@@ -48313,11 +48854,11 @@ var require_headers = __commonJS({
       has(name2) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 1, "Headers.has");
-        const prefix = "Headers.has";
-        name2 = webidl.converters.ByteString(name2, prefix, "name");
+        const prefix2 = "Headers.has";
+        name2 = webidl.converters.ByteString(name2, prefix2, "name");
         if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
-            prefix,
+            prefix: prefix2,
             value: name2,
             type: "header name"
           });
@@ -48328,19 +48869,19 @@ var require_headers = __commonJS({
       set(name2, value) {
         webidl.brandCheck(this, _Headers);
         webidl.argumentLengthCheck(arguments, 2, "Headers.set");
-        const prefix = "Headers.set";
-        name2 = webidl.converters.ByteString(name2, prefix, "name");
-        value = webidl.converters.ByteString(value, prefix, "value");
+        const prefix2 = "Headers.set";
+        name2 = webidl.converters.ByteString(name2, prefix2, "name");
+        value = webidl.converters.ByteString(value, prefix2, "value");
         value = headerValueNormalize(value);
         if (!isValidHeaderName(name2)) {
           throw webidl.errors.invalidArgument({
-            prefix,
+            prefix: prefix2,
             value: name2,
             type: "header name"
           });
         } else if (!isValidHeaderValue(value)) {
           throw webidl.errors.invalidArgument({
-            prefix,
+            prefix: prefix2,
             value,
             type: "header value"
           });
@@ -48404,7 +48945,7 @@ var require_headers = __commonJS({
         enumerable: false
       }
     });
-    webidl.converters.HeadersInit = function(V, prefix, argument) {
+    webidl.converters.HeadersInit = function(V, prefix2, argument) {
       if (webidl.util.Type(V) === webidl.util.Types.OBJECT) {
         const iterator = Reflect.get(V, Symbol.iterator);
         if (!util.types.isProxy(V) && iterator === Headers.prototype.entries) {
@@ -48414,9 +48955,9 @@ var require_headers = __commonJS({
           }
         }
         if (typeof iterator === "function") {
-          return webidl.converters["sequence<sequence<ByteString>>"](V, prefix, argument, iterator.bind(V));
+          return webidl.converters["sequence<sequence<ByteString>>"](V, prefix2, argument, iterator.bind(V));
         }
-        return webidl.converters["record<ByteString, ByteString>"](V, prefix, argument);
+        return webidl.converters["record<ByteString, ByteString>"](V, prefix2, argument);
       }
       throw webidl.errors.conversionFailed({
         prefix: "Headers constructor",
@@ -48802,9 +49343,9 @@ var require_response = __commonJS({
       }
       return response;
     }
-    webidl.converters.XMLHttpRequestBodyInit = function(V, prefix, name2) {
+    webidl.converters.XMLHttpRequestBodyInit = function(V, prefix2, name2) {
       if (typeof V === "string") {
-        return webidl.converters.USVString(V, prefix, name2);
+        return webidl.converters.USVString(V, prefix2, name2);
       }
       if (webidl.is.Blob(V)) {
         return V;
@@ -48818,16 +49359,16 @@ var require_response = __commonJS({
       if (webidl.is.URLSearchParams(V)) {
         return V;
       }
-      return webidl.converters.DOMString(V, prefix, name2);
+      return webidl.converters.DOMString(V, prefix2, name2);
     };
-    webidl.converters.BodyInit = function(V, prefix, argument) {
+    webidl.converters.BodyInit = function(V, prefix2, argument) {
       if (webidl.is.ReadableStream(V)) {
         return V;
       }
       if (V?.[Symbol.asyncIterator]) {
         return V;
       }
-      return webidl.converters.XMLHttpRequestBodyInit(V, prefix, argument);
+      return webidl.converters.XMLHttpRequestBodyInit(V, prefix2, argument);
     };
     webidl.converters.ResponseInit = webidl.dictionaryConverter([
       {
@@ -48939,8 +49480,8 @@ var require_request2 = __commonJS({
         if (input2 === kConstruct) {
           return;
         }
-        const prefix = "Request constructor";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "Request constructor";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         input2 = webidl.converters.RequestInfo(input2);
         init = webidl.converters.RequestInit(init);
         let request2 = null;
@@ -50712,7 +51253,7 @@ var require_fetch = __commonJS({
         const agent2 = fetchParams.controller.dispatcher;
         const path2 = url2.pathname + url2.search;
         const hasTrailingQuestionMark = url2.search.length === 0 && url2.href[url2.href.length - url2.hash.length - 1] === "?";
-        return new Promise((resolve, reject) => agent2.dispatch(
+        return new Promise((resolve2, reject) => agent2.dispatch(
           {
             path: hasTrailingQuestionMark ? `${path2}?` : path2,
             origin: url2.origin,
@@ -50800,7 +51341,7 @@ var require_fetch = __commonJS({
               }
               this.body = new Readable({ read: resume });
               const onError = this.onError.bind(this);
-              resolve({
+              resolve2({
                 status,
                 statusText,
                 headersList,
@@ -50853,7 +51394,7 @@ var require_fetch = __commonJS({
                   headersList.append(headerName, String(value), true);
                 }
               }
-              resolve({
+              resolve2({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -50877,7 +51418,7 @@ var require_fetch = __commonJS({
                   headersList.append(nameStr, value.toString("latin1"), true);
                 }
               }
-              resolve({
+              resolve2({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -50957,10 +51498,10 @@ var require_cache3 = __commonJS({
       }
       async match(request2, options = {}) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.match";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "Cache.match";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         request2 = webidl.converters.RequestInfo(request2);
-        options = webidl.converters.CacheQueryOptions(options, prefix, "options");
+        options = webidl.converters.CacheQueryOptions(options, prefix2, "options");
         const p = this.#internalMatchAll(request2, options, 1);
         if (p.length === 0) {
           return;
@@ -50969,15 +51510,15 @@ var require_cache3 = __commonJS({
       }
       async matchAll(request2 = void 0, options = {}) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.matchAll";
+        const prefix2 = "Cache.matchAll";
         if (request2 !== void 0) request2 = webidl.converters.RequestInfo(request2);
-        options = webidl.converters.CacheQueryOptions(options, prefix, "options");
+        options = webidl.converters.CacheQueryOptions(options, prefix2, "options");
         return this.#internalMatchAll(request2, options);
       }
       async add(request2) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.add";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "Cache.add";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         request2 = webidl.converters.RequestInfo(request2);
         const requests = [request2];
         const responseArrayPromise = this.addAll(requests);
@@ -50985,14 +51526,14 @@ var require_cache3 = __commonJS({
       }
       async addAll(requests) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.addAll";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "Cache.addAll";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         const responsePromises = [];
         const requestList = [];
         for (let request2 of requests) {
           if (request2 === void 0) {
             throw webidl.errors.conversionFailed({
-              prefix,
+              prefix: prefix2,
               argument: "Argument 1",
               types: ["undefined is not allowed"]
             });
@@ -51004,7 +51545,7 @@ var require_cache3 = __commonJS({
           const r = getRequestState(request2);
           if (!urlIsHttpHttpsScheme(r.url) || r.method !== "GET") {
             throw webidl.errors.exception({
-              header: prefix,
+              header: prefix2,
               message: "Expected http/s scheme when method is not GET."
             });
           }
@@ -51014,7 +51555,7 @@ var require_cache3 = __commonJS({
           const r = getRequestState(new Request(request2));
           if (!urlIsHttpHttpsScheme(r.url)) {
             throw webidl.errors.exception({
-              header: prefix,
+              header: prefix2,
               message: "Expected http/s scheme."
             });
           }
@@ -51090,10 +51631,10 @@ var require_cache3 = __commonJS({
       }
       async put(request2, response) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.put";
-        webidl.argumentLengthCheck(arguments, 2, prefix);
+        const prefix2 = "Cache.put";
+        webidl.argumentLengthCheck(arguments, 2, prefix2);
         request2 = webidl.converters.RequestInfo(request2);
-        response = webidl.converters.Response(response, prefix, "response");
+        response = webidl.converters.Response(response, prefix2, "response");
         let innerRequest = null;
         if (webidl.is.Request(request2)) {
           innerRequest = getRequestState(request2);
@@ -51102,14 +51643,14 @@ var require_cache3 = __commonJS({
         }
         if (!urlIsHttpHttpsScheme(innerRequest.url) || innerRequest.method !== "GET") {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: "Expected an http/s scheme when method is not GET"
           });
         }
         const innerResponse = getResponseState(response);
         if (innerResponse.status === 206) {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: "Got 206 status"
           });
         }
@@ -51118,7 +51659,7 @@ var require_cache3 = __commonJS({
           for (const fieldValue of fieldValues) {
             if (fieldValue === "*") {
               throw webidl.errors.exception({
-                header: prefix,
+                header: prefix2,
                 message: "Got * vary field value"
               });
             }
@@ -51126,7 +51667,7 @@ var require_cache3 = __commonJS({
         }
         if (innerResponse.body && (isDisturbed(innerResponse.body.stream) || innerResponse.body.stream.locked)) {
           throw webidl.errors.exception({
-            header: prefix,
+            header: prefix2,
             message: "Response body is locked or disturbed"
           });
         }
@@ -51171,10 +51712,10 @@ var require_cache3 = __commonJS({
       }
       async delete(request2, options = {}) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.delete";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "Cache.delete";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         request2 = webidl.converters.RequestInfo(request2);
-        options = webidl.converters.CacheQueryOptions(options, prefix, "options");
+        options = webidl.converters.CacheQueryOptions(options, prefix2, "options");
         let r = null;
         if (webidl.is.Request(request2)) {
           r = getRequestState(request2);
@@ -51217,9 +51758,9 @@ var require_cache3 = __commonJS({
        */
       async keys(request2 = void 0, options = {}) {
         webidl.brandCheck(this, _Cache);
-        const prefix = "Cache.keys";
+        const prefix2 = "Cache.keys";
         if (request2 !== void 0) request2 = webidl.converters.RequestInfo(request2);
-        options = webidl.converters.CacheQueryOptions(options, prefix, "options");
+        options = webidl.converters.CacheQueryOptions(options, prefix2, "options");
         let r = null;
         if (request2 !== void 0) {
           if (webidl.is.Request(request2)) {
@@ -51525,9 +52066,9 @@ var require_cachestorage = __commonJS({
        */
       async has(cacheName) {
         webidl.brandCheck(this, _CacheStorage);
-        const prefix = "CacheStorage.has";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        cacheName = webidl.converters.DOMString(cacheName, prefix, "cacheName");
+        const prefix2 = "CacheStorage.has";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        cacheName = webidl.converters.DOMString(cacheName, prefix2, "cacheName");
         return this.#caches.has(cacheName);
       }
       /**
@@ -51537,9 +52078,9 @@ var require_cachestorage = __commonJS({
        */
       async open(cacheName) {
         webidl.brandCheck(this, _CacheStorage);
-        const prefix = "CacheStorage.open";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        cacheName = webidl.converters.DOMString(cacheName, prefix, "cacheName");
+        const prefix2 = "CacheStorage.open";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        cacheName = webidl.converters.DOMString(cacheName, prefix2, "cacheName");
         if (this.#caches.has(cacheName)) {
           const cache2 = this.#caches.get(cacheName);
           return new Cache(kConstruct, cache2);
@@ -51555,9 +52096,9 @@ var require_cachestorage = __commonJS({
        */
       async delete(cacheName) {
         webidl.brandCheck(this, _CacheStorage);
-        const prefix = "CacheStorage.delete";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        cacheName = webidl.converters.DOMString(cacheName, prefix, "cacheName");
+        const prefix2 = "CacheStorage.delete";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        cacheName = webidl.converters.DOMString(cacheName, prefix2, "cacheName");
         return this.#caches.delete(cacheName);
       }
       /**
@@ -51788,11 +52329,11 @@ var require_util4 = __commonJS({
       if (cookie.sameSite) {
         out.push(`SameSite=${cookie.sameSite}`);
       }
-      for (const part of cookie.unparsed) {
-        if (!part.includes("=")) {
+      for (const part2 of cookie.unparsed) {
+        if (!part2.includes("=")) {
           throw new Error("Invalid unparsed");
         }
-        const [key, ...value] = part.split("=");
+        const [key, ...value] = part2.split("=");
         const trimmedKey = key.trim();
         const joinedValue = value.join("=");
         validateCookieName(trimmedKey);
@@ -51974,9 +52515,9 @@ var require_cookies = __commonJS({
     }
     function deleteCookie(headers, name2, attributes) {
       brandChecks(headers);
-      const prefix = "deleteCookie";
-      webidl.argumentLengthCheck(arguments, 2, prefix);
-      name2 = webidl.converters.DOMString(name2, prefix, "name");
+      const prefix2 = "deleteCookie";
+      webidl.argumentLengthCheck(arguments, 2, prefix2);
+      name2 = webidl.converters.DOMString(name2, prefix2, "name");
       attributes = webidl.converters.DeleteCookieAttributes(attributes);
       setCookie(headers, {
         name: name2,
@@ -52099,10 +52640,10 @@ var require_events = __commonJS({
           webidl.util.markAsUncloneable(this);
           return;
         }
-        const prefix = "MessageEvent constructor";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        type = webidl.converters.DOMString(type, prefix, "type");
-        eventInitDict = webidl.converters.MessageEventInit(eventInitDict, prefix, "eventInitDict");
+        const prefix2 = "MessageEvent constructor";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        type = webidl.converters.DOMString(type, prefix2, "type");
+        eventInitDict = webidl.converters.MessageEventInit(eventInitDict, prefix2, "eventInitDict");
         super(type, eventInitDict);
         this.#eventInit = eventInitDict;
         webidl.util.markAsUncloneable(this);
@@ -52159,9 +52700,9 @@ var require_events = __commonJS({
     var CloseEvent = class _CloseEvent extends Event {
       #eventInit;
       constructor(type, eventInitDict = {}) {
-        const prefix = "CloseEvent constructor";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        type = webidl.converters.DOMString(type, prefix, "type");
+        const prefix2 = "CloseEvent constructor";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        type = webidl.converters.DOMString(type, prefix2, "type");
         eventInitDict = webidl.converters.CloseEventInit(eventInitDict);
         super(type, eventInitDict);
         this.#eventInit = eventInitDict;
@@ -52183,11 +52724,11 @@ var require_events = __commonJS({
     var ErrorEvent = class _ErrorEvent extends Event {
       #eventInit;
       constructor(type, eventInitDict) {
-        const prefix = "ErrorEvent constructor";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "ErrorEvent constructor";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         super(type, eventInitDict);
         webidl.util.markAsUncloneable(this);
-        type = webidl.converters.DOMString(type, prefix, "type");
+        type = webidl.converters.DOMString(type, prefix2, "type");
         eventInitDict = webidl.converters.ErrorEventInit(eventInitDict ?? {});
         this.#eventInit = eventInitDict;
       }
@@ -53490,9 +54031,9 @@ var require_websocket = __commonJS({
       constructor(url2, protocols = []) {
         super();
         webidl.util.markAsUncloneable(this);
-        const prefix = "WebSocket constructor";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        const options = webidl.converters["DOMString or sequence<DOMString> or WebSocketInit"](protocols, prefix, "options");
+        const prefix2 = "WebSocket constructor";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        const options = webidl.converters["DOMString or sequence<DOMString> or WebSocketInit"](protocols, prefix2, "options");
         url2 = webidl.converters.USVString(url2);
         protocols = options.protocols;
         const baseURL = environmentSettingsObject.settingsObject.baseUrl;
@@ -53525,9 +54066,9 @@ var require_websocket = __commonJS({
        */
       close(code = void 0, reason = void 0) {
         webidl.brandCheck(this, _WebSocket);
-        const prefix = "WebSocket.close";
+        const prefix2 = "WebSocket.close";
         if (code !== void 0) {
-          code = webidl.converters["unsigned short"](code, prefix, "code", webidl.attributes.Clamp);
+          code = webidl.converters["unsigned short"](code, prefix2, "code", webidl.attributes.Clamp);
         }
         if (reason !== void 0) {
           reason = webidl.converters.USVString(reason);
@@ -53542,9 +54083,9 @@ var require_websocket = __commonJS({
        */
       send(data) {
         webidl.brandCheck(this, _WebSocket);
-        const prefix = "WebSocket.send";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
-        data = webidl.converters.WebSocketSendData(data, prefix, "data");
+        const prefix2 = "WebSocket.send";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
+        data = webidl.converters.WebSocketSendData(data, prefix2, "data");
         if (isConnecting(this.#handler.readyState)) {
           throw new DOMException("Sent before connected.", "InvalidStateError");
         }
@@ -53833,11 +54374,11 @@ var require_websocket = __commonJS({
     webidl.converters["sequence<DOMString>"] = webidl.sequenceConverter(
       webidl.converters.DOMString
     );
-    webidl.converters["DOMString or sequence<DOMString>"] = function(V, prefix, argument) {
+    webidl.converters["DOMString or sequence<DOMString>"] = function(V, prefix2, argument) {
       if (webidl.util.Type(V) === webidl.util.Types.OBJECT && Symbol.iterator in V) {
         return webidl.converters["sequence<DOMString>"](V);
       }
-      return webidl.converters.DOMString(V, prefix, argument);
+      return webidl.converters.DOMString(V, prefix2, argument);
     };
     webidl.converters.WebSocketInit = webidl.dictionaryConverter([
       {
@@ -54747,8 +55288,8 @@ var require_eventsource = __commonJS({
       constructor(url2, eventSourceInitDict = {}) {
         super();
         webidl.util.markAsUncloneable(this);
-        const prefix = "EventSource constructor";
-        webidl.argumentLengthCheck(arguments, 1, prefix);
+        const prefix2 = "EventSource constructor";
+        webidl.argumentLengthCheck(arguments, 1, prefix2);
         if (!experimentalWarned) {
           experimentalWarned = true;
           process.emitWarning("EventSource is experimental, expect them to change at any time.", {
@@ -54756,7 +55297,7 @@ var require_eventsource = __commonJS({
           });
         }
         url2 = webidl.converters.USVString(url2);
-        eventSourceInitDict = webidl.converters.EventSourceInitDict(eventSourceInitDict, prefix, "eventSourceInitDict");
+        eventSourceInitDict = webidl.converters.EventSourceInitDict(eventSourceInitDict, prefix2, "eventSourceInitDict");
         this.#dispatcher = eventSourceInitDict.node.dispatcher || eventSourceInitDict.dispatcher;
         this.#state = {
           lastEventId: "",
@@ -55271,7 +55812,7 @@ var init_attribution = __esm({
 });
 
 // src/edge/auth.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 function extractCredentials(h) {
   const out = [];
   const own2 = first(h["x-tokenyard-key"])?.trim();
@@ -55283,7 +55824,7 @@ function extractCredentials(h) {
   return out;
 }
 function hashKey(v) {
-  return createHash4("sha256").update(v).digest("hex");
+  return createHash5("sha256").update(v).digest("hex");
 }
 var first;
 var init_auth = __esm({
@@ -55295,7 +55836,7 @@ var init_auth = __esm({
 
 // src/edge/body.ts
 function readBody(req, capBytes) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve2, reject) => {
     const declared = Number(req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > capBytes) {
       req.resume();
@@ -55312,7 +55853,7 @@ function readBody(req, capBytes) {
       if (err) {
         req.resume();
         reject(err);
-      } else resolve(Buffer.concat(chunks, size));
+      } else resolve2(Buffer.concat(chunks, size));
     };
     const onData = (c) => {
       size += c.length;
@@ -55354,7 +55895,7 @@ function anthropicError(status, type, message, retryAfterS, requestId) {
     "content-length": String(body.length),
     "x-tokenyard-request-id": requestId
   };
-  if (retryAfterS !== null) headers["retry-after"] = String(Math.max(0, Math.ceil(retryAfterS)));
+  if (retryAfterS !== null) headers["retry-after"] = String(Number.isFinite(retryAfterS) ? Math.min(60, Math.max(0, Math.ceil(retryAfterS))) : 60);
   return { status, headers, body };
 }
 var init_errors3 = __esm({
@@ -55481,9 +56022,9 @@ function buildTraceRecord(o, salt) {
     features: {
       model: o.features.model ?? u?.responseModel ?? "",
       stream: o.features.stream,
-      // Until the estimator lands (Task 10) the request body size is the bound: one token per byte at most.
-      inputTokensBound: o.features.bodyBytes,
-      boundKind: "bytes",
+      // Exits before the decision have no bound: the body size stands in (at most one token per byte, spec 7.3).
+      inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
+      boundKind: o.inputBound?.kind ?? "bytes",
       maxOutputTokens: o.features.maxOutputTokens,
       serverTools: o.features.serverTools,
       toolCount: o.features.toolCount,
@@ -55493,17 +56034,29 @@ function buildTraceRecord(o, salt) {
       contextCompacted: false
     },
     guardrail: { hits: [] },
-    policy: { revision: o.policyRevision },
+    policy: { revision: o.policyRevision, ...o.candidate ? { candidateRevision: o.candidate.revision } : {} },
     decision: {
       route: o.route?.name ?? null,
       action: o.decision?.action ?? "forward",
       reason: o.decision?.reason ?? null,
       chain: o.route ? [...o.route.chain] : [],
       reservedMicroUsd: 0,
-      boundAssumed: false,
+      boundAssumed: o.boundAssumed ?? false,
       taintUnchecked: false,
       audit: []
     },
+    ...o.candidate ? {
+      candidateDecision: {
+        route: o.candidate.route,
+        action: o.candidate.action,
+        reason: o.candidate.reason,
+        chain: [...o.candidate.chain],
+        reservedMicroUsd: 0,
+        boundAssumed: false,
+        taintUnchecked: false,
+        audit: []
+      }
+    } : {},
     outcome: {
       provider: o.provider,
       upstreamModel: o.provider === null ? null : u?.responseModel ?? o.features.model,
@@ -55541,11 +56094,10 @@ function sendError(req, res, e, closeConnection = false) {
   req.resume();
   res.writeHead(e.status, closeConnection ? { ...e.headers, connection: "close" } : e.headers).end(e.body);
 }
-function forwardToFirstProvider(policy2, surface) {
-  const route2 = policy2.routes.find((r) => r.surfaces.includes(surface));
-  const name2 = route2?.chain[0];
-  const provider2 = name2 === void 0 ? void 0 : policy2.providers.get(name2);
-  return route2 && provider2 ? { provider: provider2, route: route2 } : null;
+function pseudonymised(a, salt) {
+  if (!salt) return a;
+  const h = (v) => v === null ? null : pseudonym(salt, v);
+  return { ...a, session: h(a.session), agent: h(a.agent), parentAgent: h(a.parentAgent), promptId: h(a.promptId) };
 }
 function rateLimitHeaders(h) {
   const out = {};
@@ -55586,11 +56138,11 @@ function usageTap(surface, up, capBytes) {
     result: () => size <= capBytes ? parseAnthropicJsonUsage(Buffer.concat(chunks)) : null
   };
 }
-function priceOutcome(deps, features, usage) {
+function priceOutcome(policy2, features, usage) {
   const model = usage?.responseModel ?? features.model;
-  if (!deps.prices || !usage?.usage || !model) return null;
+  if (!usage?.usage || !model) return null;
   try {
-    return costMicroUsd(deps.prices, model, usage.usage);
+    return costMicroUsd(policy2.prices, model, usage.usage);
   } catch {
     return null;
   }
@@ -55635,7 +56187,7 @@ async function handle(deps, id, req, res) {
   }
   if (match.surface === "models") {
     req.resume();
-    const body2 = modelsListBody(policy2.routes.flatMap((r) => r.models));
+    const body2 = modelsListBody(modelsForKey(policy2, key));
     res.writeHead(200, { "content-type": "application/json", "content-length": String(body2.length), "x-tokenyard-request-id": id }).end(body2);
     return;
   }
@@ -55658,7 +56210,7 @@ async function handle(deps, id, req, res) {
     client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
     policyRevision: policy2.revision,
     route: null,
-    priceTable: deps.prices?.version ?? "none",
+    priceTable: policy2.priceTableVersion,
     ...over
   });
   let body;
@@ -55675,12 +56227,26 @@ async function handle(deps, id, req, res) {
     return;
   }
   const features = extractFeatures(surface, body);
-  const target = forwardToFirstProvider(policy2, surface);
-  if (!target) {
-    sendError(req, res, anthropicError(403, "permission_error", "no route allows this request", null, id));
-    return early({ status: 403, features, decision: { action: "block", reason: "no-route" }, errorClass: "permission_error" });
+  const f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy2.prices, id, startedAt, surface);
+  const decision = resolve(policy2, decide(policy2, f), null);
+  const cp = policy2.candidate;
+  const candidate = cp ? { revision: cp.revision, ...summary(resolve(cp, decide(cp, f), null)) } : void 0;
+  const planned = summary(decision);
+  const routeInfo = planned.route === null ? null : { name: planned.route, chain: planned.chain };
+  const decided = {
+    features,
+    inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
+    boundAssumed: decision.plan.warnings.some((w) => w.kind === "bound-assumed"),
+    route: routeInfo,
+    ...candidate ? { candidate } : {}
+  };
+  const first2 = decision.plan.chain[0];
+  const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
+  if (decision.block || !provider2) {
+    const b = decision.block ?? { status: 403, type: "permission_error", reason: "no-route", message: "no provider serves this route", retryAfterS: null };
+    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
+    return early({ ...decided, status: b.status, decision: { action: "block", reason: b.reason }, errorClass: b.type });
   }
-  const { provider: provider2, route: route2 } = target;
   const mode = provider2.credential === "passthrough" ? "passthrough" : "api";
   const headers = upstreamHeaders(req.headers, {
     mode,
@@ -55693,7 +56259,7 @@ async function handle(deps, id, req, res) {
   try {
     up = await forward(provider2, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
-    const common = { features, provider: provider2.name, route: { name: route2.name, chain: route2.chain } };
+    const common = { ...decided, provider: provider2.name };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
     sendError(req, res, anthropicError(502, "api_error", `upstream ${provider2.name} is unreachable`, null, id));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
@@ -55701,7 +56267,7 @@ async function handle(deps, id, req, res) {
   if (ac.signal.aborted) {
     up.body.on("error", () => void 0);
     up.body.destroy();
-    return early({ features, provider: provider2.name, route: { name: route2.name, chain: route2.chain }, status: 499, aborted: true, errorClass: "client_abort" });
+    return early({ ...decided, provider: provider2.name, status: 499, aborted: true, errorClass: "client_abort" });
   }
   const upstreamHeadersAt = deps.clock();
   const ttfbMs = upstreamHeadersAt - startedAt;
@@ -55725,7 +56291,7 @@ async function handle(deps, id, req, res) {
     key,
     attribution: readAttribution(req.headers, surface),
     surface,
-    features,
+    ...decided,
     provider: provider2.name,
     status: up.status,
     usage,
@@ -55733,13 +56299,12 @@ async function handle(deps, id, req, res) {
     startedAt,
     ttfbMs,
     totalMs: deps.clock() - startedAt,
-    costMicroUsd: priceOutcome(deps, features, usage),
+    costMicroUsd: priceOutcome(policy2, features, usage),
     costBasis: key.billing === "subscription" ? "api-equivalent" : "billed",
     addedTtfbMs: Math.max(0, ttfbMs - (upstreamHeadersAt - forwardedAt)),
     client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
     policyRevision: policy2.revision,
-    route: { name: route2.name, chain: route2.chain },
-    priceTable: deps.prices?.version ?? "none",
+    priceTable: policy2.priceTableVersion,
     rateLimitHeaders: rateLimitHeaders(up.headers)
   });
 }
@@ -55753,10 +56318,14 @@ function createHandler(deps) {
     });
   };
 }
-var NO_FEATURES;
+var summary, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
+    init_hmac();
+    init_decide();
+    init_match();
+    init_resolve();
     init_cost();
     init_anthropic_usage();
     init_sse();
@@ -55772,6 +56341,12 @@ var init_handler = __esm({
     init_headers();
     init_paths();
     init_trace_record();
+    summary = (d) => ({
+      route: d.plan.route,
+      action: d.action,
+      reason: d.block?.reason ?? null,
+      chain: d.plan.chain.map((c) => c.provider)
+    });
     NO_FEATURES = {
       model: null,
       stream: false,
@@ -55801,19 +56376,19 @@ function createGateway(deps) {
   const server = createServer2(createHandler(deps));
   return {
     listen(port, host = "127.0.0.1") {
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve2, reject) => {
         server.once("error", reject);
         server.listen(port, host, () => {
           server.off("error", reject);
           const a = server.address();
           const h = a.family === "IPv6" ? `[${a.address}]` : a.address;
-          resolve(`http://${h}:${a.port}`);
+          resolve2(`http://${h}:${a.port}`);
         });
       });
     },
     close() {
-      return new Promise((resolve) => {
-        server.close(() => resolve());
+      return new Promise((resolve2) => {
+        server.close(() => resolve2());
         server.closeAllConnections();
       });
     }
@@ -55828,6 +56403,291 @@ var init_server = __esm({
   }
 });
 
+// src/policy/validate.ts
+var validate_exports = {};
+__export(validate_exports, {
+  ERROR_CODES: () => ERROR_CODES,
+  LOAD_ERROR_CODES: () => LOAD_ERROR_CODES,
+  WARNING_CODES: () => WARNING_CODES,
+  globMatch: () => globMatch,
+  validatePolicy: () => validatePolicy
+});
+function globMatch(pattern, text) {
+  let p = 0;
+  let t = 0;
+  let star = -1;
+  let mark = 0;
+  while (t < text.length) {
+    if (p < pattern.length && pattern[p] === "*") {
+      star = p++;
+      mark = t;
+    } else if (p < pattern.length && pattern[p] === text[t]) {
+      p++;
+      t++;
+    } else if (star >= 0) {
+      p = star + 1;
+      t = ++mark;
+    } else return false;
+  }
+  while (p < pattern.length && pattern[p] === "*") p++;
+  return p === pattern.length;
+}
+function covers(earlier, later) {
+  return MATCH_FIELDS.every((f) => earlier.match[f] === void 0 || earlier.match[f] === later.match[f]);
+}
+function validatePolicy(src, o) {
+  const errors = [];
+  const warnings = [];
+  const err = (code, path2, message) => void errors.push({ code, path: path2, message });
+  const warn = (code, path2, message) => void warnings.push({ code, path: path2, message });
+  const { policy: policy2, prices, keys: keys2 } = src;
+  const flag = o.experimentalSubscription;
+  const providers = new Map(Object.entries(policy2.providers).map(([n, p]) => [n, p.format]));
+  for (const [name2, p] of Object.entries(policy2.providers)) {
+    const at = `providers.${name2}`;
+    if (p.credential === "passthrough") {
+      let ok = false;
+      try {
+        const u = new URL(p.baseUrl);
+        ok = u.protocol === "https:" && u.hostname === OFFICIAL_HOST[p.format] && u.port === "" && u.username === "" && u.password === "";
+      } catch {
+        ok = false;
+      }
+      if (!ok) err("E_PASSTHROUGH_HOST", `${at}.baseUrl`, `credential: passthrough is only allowed with https://${OFFICIAL_HOST[p.format]} (a user's token must never reach another host)`);
+      if (!flag) err("E_SUBSCRIPTION_FLAG", `${at}.credential`, "credential: passthrough needs --experimental-subscription");
+    } else if (!ENV_NAME.test(p.credential.env)) {
+      err("E_CREDENTIAL_ENV", `${at}.credential.env`, `"${p.credential.env}" is not a valid environment variable name`);
+    }
+  }
+  keys2.forEach((k, i) => {
+    if (k.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `keys[${i}].billing`, `key ${k.keyId} has billing: subscription, which needs --experimental-subscription`);
+  });
+  const priced = (pattern) => pattern.includes("*") ? Object.keys(prices.models).some((id) => globMatch(pattern, id)) : lookupModel(prices, pattern) !== null;
+  policy2.routes.forEach((r, i) => {
+    const at = `routes[${i}]`;
+    const codingAgentSeen = r.match.traffic !== "product";
+    const codingMessages = r.match.surface === "anthropic-messages" && r.match.traffic === "coding-agent";
+    if (r.chain.length < 1 || r.chain.length > 3) err("E_CHAIN_LENGTH", `${at}.chain`, `a chain has 1 to 3 providers, this one has ${r.chain.length}`);
+    r.chain.forEach((entry, j) => {
+      const p = chainProvider(entry);
+      const format = providers.get(p);
+      if (format === void 0) return void err("E_CHAIN_UNKNOWN_PROVIDER", `${at}.chain[${j}]`, `provider "${p}" is not defined under providers`);
+      if (codingMessages && format !== "anthropic") err("E_CODING_AGENT_FORMAT", `${at}.chain[${j}]`, `coding-agent traffic on anthropic-messages may only chain format: anthropic providers; "${p}" is ${format}`);
+    });
+    if (codingMessages) {
+      r.allowModels?.forEach((m, j) => {
+        if (!m.startsWith("claude")) err("E_CODING_AGENT_NON_CLAUDE", `${at}.allowModels[${j}]`, `"${m}" is not a Claude model; Claude Code is not supported through a gateway that routes it to non-Claude models`);
+      });
+    }
+    if (codingAgentSeen) {
+      if (r.rewriteModel !== void 0 && r.allowBodyRewrite !== true) err("E_BODY_REWRITE", `${at}.rewriteModel`, "rewriteModel on coding-agent traffic needs allowBodyRewrite: true and a because: reason");
+      if (r.allowBodyRewrite === true && (r.because ?? "").trim() === "") err("E_BODY_REWRITE", `${at}.because`, "allowBodyRewrite: true must name the reason in because:");
+    }
+    r.allowModels?.forEach((m, j) => {
+      if (!priced(m)) err("E_UNPRICED_MODEL", `${at}.allowModels[${j}]`, `"${m}" has no entry in the price table`);
+    });
+    if (r.rewriteModel !== void 0 && lookupModel(prices, r.rewriteModel) === null) err("E_UNPRICED_MODEL", `${at}.rewriteModel`, `"${r.rewriteModel}" has no entry in the price table`);
+    r.serverTools?.forEach((t, j) => {
+      if (!Object.hasOwn(prices.serverTools, t) && policy2.failure.unpricedModel === void 0) {
+        err("E_UNPRICED_SERVER_TOOL", `${at}.serverTools[${j}]`, `server tool "${t}" has no price and failure.unpricedModel is not stated`);
+      }
+    });
+    if (r.match.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `${at}.match.billing`, "a route matching billing: subscription needs --experimental-subscription");
+  });
+  for (const [id, m] of Object.entries(prices.models)) {
+    if (m.maxOutputTokens > m.maxContextTokens) err("E_MODEL_LIMITS", `prices.models.${id}`, `maxOutputTokens (${m.maxOutputTokens}) is larger than maxContextTokens (${m.maxContextTokens})`);
+  }
+  const names = /* @__PURE__ */ new Set();
+  policy2.budgets.forEach((b, i) => {
+    const at = `budgets[${i}]`;
+    if (names.has(b.name)) err("E_BUDGET_DUP", `${at}.name`, `budget name "${b.name}" is used twice`);
+    names.add(b.name);
+    if (b.scope === "session") {
+      if (b.window !== void 0) err("E_BUDGET_WINDOW", `${at}.window`, "a session budget has no window");
+    } else if (b.window === void 0 || !Object.hasOwn(WINDOW_RANK, b.window)) {
+      err("E_BUDGET_WINDOW", `${at}.window`, `window must be day, week or month (UTC) for scope ${b.scope}`);
+    }
+    if (!(b.usd > 0) || !Number.isFinite(b.usd)) err("E_BUDGET_USD", `${at}.usd`, `usd must be greater than 0, got ${b.usd}`);
+  });
+  const enforced = policy2.budgets.filter((b) => b.mode === "enforce");
+  if (enforced.length > 0 && policy2.failure.counterStoreDown.budgets === void 0) {
+    err("E_STORE_DOWN_UNSTATED", "failure.counterStoreDown.budgets", "state open or closed explicitly: the policy has budgets with mode: enforce");
+  }
+  policy2.budgets.forEach((child, i) => {
+    const parent = policy2.budgets.find(
+      (b) => (SCOPE_RANK[b.scope] ?? 0) > (SCOPE_RANK[child.scope] ?? 0) && child.usd > b.usd && (WINDOW_RANK[child.window ?? ""] ?? 0) >= (WINDOW_RANK[b.window ?? ""] ?? 0) && child.window !== void 0
+    );
+    if (parent) warn("W_CHILD_BUDGET", `budgets[${i}]`, `${child.scope} budget "${child.name}" (${child.usd} USD) is larger than ${parent.scope} budget "${parent.name}" (${parent.usd} USD)`);
+  });
+  for (const s of SURFACE_LIST) {
+    const serves = (r) => r.match.surface === void 0 || r.match.surface === s || s === "anthropic-count-tokens" && r.match.surface === "anthropic-messages";
+    if (!policy2.routes.some(serves)) warn("W_SURFACE_NO_ROUTE", "routes", `no route matches surface ${s}; requests on it get 403 "no route"`);
+  }
+  policy2.routes.forEach((later, j) => {
+    const i = policy2.routes.findIndex((earlier, k) => k < j && covers(earlier, later));
+    if (i >= 0) warn("W_ROUTE_SHADOWED", `routes[${j}]`, `route "${later.name}" can never match: route "${policy2.routes[i]?.name}" before it covers it`);
+  });
+  if (policy2.reservation.estimator === "session-aware") {
+    policy2.budgets.forEach((b, i) => {
+      if (b.scope === "session" && b.onExceed === "block") warn("W_SESSION_AWARE_BLOCK", `budgets[${i}]`, "estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold");
+    });
+  }
+  if (policy2.reservation.serverToolsWithoutMaxUses === "assume" && enforced.length > 0) {
+    warn("W_SERVER_TOOLS_ASSUME", "reservation.serverToolsWithoutMaxUses", "assume with an enforced budget: the budget guarantee does not hold for requests with a server tool and no max_uses");
+  }
+  if (flag) {
+    const subscriptionInUse = keys2.some((k) => k.billing === "subscription") || policy2.routes.some((r) => r.match.billing === "subscription");
+    const blocking = policy2.budgets.findIndex((b) => b.mode === "enforce" && b.onExceed === "block");
+    if (subscriptionInUse && blocking >= 0) warn("W_SUBSCRIPTION_BLOCK", `budgets[${blocking}]`, "subscription traffic is priced as API-equivalent cost; an enforced block budget can deny it (subscription budgets default to onExceed: warn)");
+  }
+  return { errors, warnings };
+}
+var ERROR_CODES, WARNING_CODES, LOAD_ERROR_CODES, OFFICIAL_HOST, ENV_NAME, WINDOW_RANK, SCOPE_RANK, MATCH_FIELDS;
+var init_validate = __esm({
+  "src/policy/validate.ts"() {
+    "use strict";
+    init_prices();
+    init_schema();
+    ERROR_CODES = [
+      "E_CHAIN_UNKNOWN_PROVIDER",
+      "E_CHAIN_LENGTH",
+      "E_CODING_AGENT_FORMAT",
+      "E_CODING_AGENT_NON_CLAUDE",
+      "E_BODY_REWRITE",
+      "E_PASSTHROUGH_HOST",
+      "E_SUBSCRIPTION_FLAG",
+      "E_UNPRICED_MODEL",
+      "E_MODEL_LIMITS",
+      "E_UNPRICED_SERVER_TOOL",
+      "E_BUDGET_DUP",
+      "E_BUDGET_WINDOW",
+      "E_BUDGET_USD",
+      "E_STORE_DOWN_UNSTATED",
+      "E_CREDENTIAL_ENV"
+    ];
+    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK"];
+    LOAD_ERROR_CODES = ["E_FILE_MISSING", "E_YAML_UNSAFE", "E_YAML_SYNTAX", "E_SCHEMA", "E_PRICES_INVALID", "E_MODEL_LIMITS_MISSING"];
+    OFFICIAL_HOST = { anthropic: "api.anthropic.com", openai: "api.openai.com" };
+    ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+    WINDOW_RANK = { day: 1, week: 2, month: 3 };
+    SCOPE_RANK = { tenant: 3, team: 2, key: 1, repo: 0, session: 0 };
+    MATCH_FIELDS = ["surface", "traffic", "billing", "tenant", "team", "requestClass", "agentType", "repo", "feature", "model"];
+  }
+});
+
+// src/policy/compile.ts
+function frozenMap(entries) {
+  const m = new Map(entries);
+  for (const [k, v] of m) {
+    deepFreeze(k);
+    deepFreeze(v);
+  }
+  Object.defineProperties(m, { set: { value: refuse }, delete: { value: refuse }, clear: { value: refuse } });
+  return Object.freeze(m);
+}
+function deepFreeze(v) {
+  if (typeof v !== "object" || v === null || Object.isFrozen(v)) return v;
+  if (v instanceof Map) throw new TypeError("use frozenMap for maps in a compiled policy");
+  Object.freeze(v);
+  if (!(v instanceof RegExp)) for (const child of Object.values(v)) deepFreeze(child);
+  return v;
+}
+function listedModels(r, priced) {
+  if (r.allowModels !== void 0) {
+    const res = r.allowModels.map(globToRegExp);
+    return priced.filter((id) => res.some((re) => re.test(id)));
+  }
+  if (r.rewriteModel !== void 0) return [r.rewriteModel];
+  return [...priced];
+}
+function compileRoute(r, priced) {
+  const m = r.match;
+  return {
+    name: r.name,
+    match: {
+      surface: m.surface ?? null,
+      traffic: m.traffic ?? null,
+      billing: m.billing ?? null,
+      tenant: m.tenant ?? null,
+      team: m.team ?? null,
+      requestClass: m.requestClass ?? null,
+      agentType: m.agentType ?? null,
+      repo: m.repo ?? null,
+      feature: m.feature ?? null,
+      model: m.model === void 0 ? null : globToRegExp(m.model)
+    },
+    chain: r.chain.map((e) => ({ provider: chainProvider(e), weight: typeof e === "string" ? null : e.weight })),
+    allowModels: r.allowModels?.map(globToRegExp) ?? null,
+    rewriteModel: r.rewriteModel ?? null,
+    allowBodyRewrite: r.allowBodyRewrite === true,
+    serverTools: r.serverTools ?? null,
+    criticality: r.criticality ?? "standard",
+    reserveOutputTokens: r.reserveOutputTokens ?? null,
+    listedModels: listedModels(r, priced)
+  };
+}
+function compilePolicy(src, revision, o) {
+  const { errors } = validatePolicy(src, o);
+  if (errors.length > 0) throw new PolicyInvalidError(errors);
+  const { policy: policy2, prices, keys: keys2 } = src;
+  const priced = Object.keys(prices.models);
+  const providers = Object.entries(policy2.providers).map(([name2, p]) => [
+    name2,
+    { name: name2, format: p.format, baseUrl: p.baseUrl, credential: p.credential === "passthrough" ? "passthrough" : { env: p.credential.env } }
+  ]);
+  const budgets = policy2.budgets.map((b) => ({
+    name: b.name,
+    scope: b.scope,
+    window: b.scope === "session" ? null : b.window,
+    limitMicroUsd: Math.round(b.usd * 1e6),
+    enforce: b.mode === "enforce" && b.onExceed === "block"
+  }));
+  const rateLimits = [];
+  const streamLimits = [];
+  for (const r of policy2.rateLimits) {
+    if (r.rpm !== void 0) rateLimits.push({ name: r.name, scope: r.scope, emissionMs: Math.ceil(6e4 / r.rpm), burst: r.burst ?? 1 });
+    if (r.concurrentStreams !== void 0) streamLimits.push({ name: r.name, scope: r.scope, max: r.concurrentStreams });
+  }
+  const compiled = {
+    revision,
+    priceTableVersion: prices.version,
+    providers: frozenMap(providers),
+    keysByHash: frozenMap(keys2.map((k) => [k.hash, { ...k }])),
+    routes: policy2.routes.map((r) => compileRoute(r, priced)),
+    budgets,
+    rateLimits,
+    streamLimits,
+    reservation: structuredClone(policy2.reservation),
+    guardrails: structuredClone(policy2.guardrails),
+    failure: structuredClone(policy2.failure),
+    ci: structuredClone(policy2.ci),
+    prices: structuredClone(prices),
+    candidate: null
+  };
+  return deepFreeze(compiled);
+}
+var PolicyInvalidError, refuse;
+var init_compile2 = __esm({
+  "src/policy/compile.ts"() {
+    "use strict";
+    init_match();
+    init_schema();
+    init_validate();
+    PolicyInvalidError = class extends Error {
+      constructor(issues) {
+        const first2 = issues[0];
+        super(`policy is invalid: ${first2 ? `${first2.code} ${first2.path}: ${first2.message}` : "unknown error"}${issues.length > 1 ? ` (and ${issues.length - 1} more)` : ""}`);
+        this.issues = issues;
+        this.name = "PolicyInvalidError";
+      }
+      issues;
+    };
+    refuse = () => {
+      throw new TypeError("compiled policy is immutable");
+    };
+  }
+});
+
 // src/edge/dev-policy.ts
 var dev_policy_exports = {};
 __export(dev_policy_exports, {
@@ -55836,7 +56696,15 @@ __export(dev_policy_exports, {
   devPolicy: () => devPolicy
 });
 function devPolicy(o) {
-  const provider2 = { name: "dev-upstream", format: "anthropic", baseUrl: o.upstream, credential: o.credential };
+  const billing = o.billing ?? "api";
+  const policy2 = policySchema.parse({
+    apiVersion: "tokenyard/v1",
+    kind: "Policy",
+    metadata: { name: "dev" },
+    providers: { "dev-upstream": { format: "anthropic", baseUrl: o.upstream, credential: { env: o.credential.env } } },
+    routes: [{ name: "dev", chain: ["dev-upstream"] }],
+    failure: { unpricedModel: "allow-and-flag" }
+  });
   const keys2 = o.keys.map((plaintext, i) => ({
     hash: hashKey(plaintext),
     keyId: `dev${i + 1}`,
@@ -55844,20 +56712,17 @@ function devPolicy(o) {
     team: null,
     name: `dev key ${i + 1}`,
     kind: "developer",
-    billing: o.billing ?? "api"
+    billing
   }));
-  return {
-    revision: "dev",
-    providers: /* @__PURE__ */ new Map([[provider2.name, provider2]]),
-    keysByHash: new Map(keys2.map((k) => [k.hash, k])),
-    routes: [{ name: "dev", surfaces: ["anthropic-messages", "anthropic-count-tokens"], models: o.models, chain: [provider2.name] }],
-    candidate: null
-  };
+  const prices = { version: "none", models: {}, modifiers: {}, serverTools: {} };
+  return compilePolicy({ dir: "(dev)", policy: policy2, prices, keys: keys2, normalizedFiles: {} }, "dev", { experimentalSubscription: billing === "subscription" });
 }
 var DEV_KEY, DEV_UPSTREAM_KEY_ENV;
 var init_dev_policy = __esm({
   "src/edge/dev-policy.ts"() {
     "use strict";
+    init_compile2();
+    init_schema();
     init_auth();
     DEV_KEY = "ty_live_dev";
     DEV_UPSTREAM_KEY_ENV = "TOKENYARD_DEV_UPSTREAM_KEY";
@@ -55918,130 +56783,12 @@ async function appendKey(file2, rec) {
 `, "utf8");
 }
 var B62, B62_LEN;
-var init_keys = __esm({
+var init_keys2 = __esm({
   "src/edge/keys.ts"() {
     "use strict";
     init_auth();
     B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     B62_LEN = 43;
-  }
-});
-
-// src/policy/schema.ts
-var SURFACES, name, fileRef, httpUrl2, provider, route, budget, rateLimit, reservation, guardrails, failure2, ci, policySchema, keyRecordSchema, keysFileSchema, SURFACE_LIST;
-var init_schema = __esm({
-  "src/policy/schema.ts"() {
-    "use strict";
-    init_zod();
-    SURFACES = ["anthropic-messages", "anthropic-count-tokens", "openai-responses", "openai-chat"];
-    name = external_exports.string().min(1);
-    fileRef = external_exports.string().regex(/^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/, "must be a file name in the policy directory");
-    httpUrl2 = external_exports.string().refine((s) => {
-      try {
-        return ["http:", "https:"].includes(new URL(s).protocol);
-      } catch {
-        return false;
-      }
-    }, "must be an http(s) URL");
-    provider = external_exports.strictObject({
-      format: external_exports.enum(["anthropic", "openai"]),
-      baseUrl: httpUrl2,
-      // The env var name is checked syntactically in validate.ts (E_CREDENTIAL_ENV); whether it is set is a runtime matter.
-      credential: external_exports.union([external_exports.strictObject({ env: external_exports.string() }), external_exports.literal("passthrough")])
-    });
-    route = external_exports.strictObject({
-      name,
-      match: external_exports.strictObject({
-        surface: external_exports.enum(SURFACES).optional(),
-        traffic: external_exports.enum(["coding-agent", "product"]).optional(),
-        billing: external_exports.enum(["api", "subscription"]).optional(),
-        feature: name.optional()
-      }).default({}),
-      chain: external_exports.array(name),
-      allowModels: external_exports.array(name).optional(),
-      rewriteModel: name.optional(),
-      allowBodyRewrite: external_exports.boolean().optional(),
-      because: external_exports.string().optional(),
-      /** Server tool types this route lets through (for example `web_search`); each needs a price or an explicit `failure.unpricedModel`. */
-      serverTools: external_exports.array(name).optional(),
-      criticality: external_exports.enum(["standard", "sheddable"]).optional(),
-      reserveOutputTokens: external_exports.number().int().positive().optional()
-    });
-    budget = external_exports.strictObject({
-      name,
-      scope: external_exports.enum(["tenant", "team", "key", "session"]),
-      // `window` and `usd` are checked in validate.ts (E_BUDGET_WINDOW, E_BUDGET_USD) so each failure has its own code.
-      window: external_exports.string().optional(),
-      usd: external_exports.number(),
-      onExceed: external_exports.enum(["block", "warn"]).default("block"),
-      mode: external_exports.enum(["enforce", "audit"]).default("enforce")
-    });
-    rateLimit = external_exports.strictObject({
-      name,
-      scope: external_exports.enum(["tenant", "team", "key"]),
-      rpm: external_exports.number().positive().optional(),
-      burst: external_exports.number().int().positive().optional(),
-      concurrentStreams: external_exports.number().int().positive().optional()
-    }).refine((r) => r.rpm !== void 0 || r.concurrentStreams !== void 0, "needs rpm or concurrentStreams");
-    reservation = external_exports.strictObject({
-      estimator: external_exports.enum(["worst-case", "session-aware"]).default("worst-case"),
-      onOverrun: external_exports.enum(["allow-and-debit"]).default("allow-and-debit"),
-      serverToolsWithoutMaxUses: external_exports.enum(["block", "assume"]).default("block"),
-      assumedMaxUses: external_exports.number().int().positive().default(25)
-    });
-    guardrails = external_exports.strictObject({
-      secrets: external_exports.strictObject({
-        rules: external_exports.literal("default").default("default"),
-        codingAgent: external_exports.enum(["block", "warn"]).default("block"),
-        product: external_exports.enum(["block", "warn", "redact"]).default("redact"),
-        entropyOnly: external_exports.enum(["warn"]).default("warn"),
-        taintTtlHours: external_exports.number().positive().default(24)
-      }).prefault({}),
-      pii: external_exports.strictObject({ product: external_exports.enum(["block", "warn", "redact"]).default("redact") }).prefault({})
-    });
-    failure2 = external_exports.strictObject({
-      // Both fields stay optional on purpose: validate.ts requires `budgets` to be stated, and a server tool without a price
-      // is only covered when `unpricedModel` is stated (E_STORE_DOWN_UNSTATED, E_UNPRICED_SERVER_TOOL).
-      counterStoreDown: external_exports.strictObject({ rateLimits: external_exports.enum(["open", "closed"]).default("open"), budgets: external_exports.enum(["open", "closed"]).optional() }).prefault({}),
-      unpricedModel: external_exports.enum(["block", "allow-and-flag"]).optional(),
-      breaker: external_exports.strictObject({
-        minRequests: external_exports.number().int().positive().default(20),
-        failureRatio: external_exports.number().gt(0).max(1).default(0.5),
-        windowSeconds: external_exports.number().positive().default(30),
-        openSeconds: external_exports.number().positive().default(30)
-      }).prefault({}),
-      retryBudgetRatio: external_exports.number().min(0).max(1).default(0.1)
-    });
-    ci = external_exports.strictObject({
-      failOn: external_exports.strictObject({ cutSessions: external_exports.number().int().nonnegative().default(0), costIncreasePct: external_exports.number().nonnegative().default(10) }).prefault({})
-    });
-    policySchema = external_exports.strictObject({
-      apiVersion: external_exports.literal("tokenyard/v1"),
-      kind: external_exports.literal("Policy"),
-      metadata: external_exports.strictObject({ name, owners: external_exports.array(external_exports.string()).optional() }),
-      pricing: fileRef.default("./prices.yaml"),
-      keys: fileRef.default("./keys.yaml"),
-      providers: external_exports.record(name, provider),
-      tenants: external_exports.record(name, external_exports.strictObject({ teams: external_exports.array(name).default([]) })).default({}),
-      routes: external_exports.array(route),
-      budgets: external_exports.array(budget).default([]),
-      reservation: reservation.prefault({}),
-      rateLimits: external_exports.array(rateLimit).default([]),
-      guardrails: guardrails.prefault({}),
-      failure: failure2.prefault({}),
-      ci: ci.prefault({})
-    });
-    keyRecordSchema = external_exports.strictObject({
-      hash: external_exports.string().regex(/^[0-9a-f]{64}$/, "must be a SHA-256 hex digest"),
-      keyId: name,
-      tenant: name,
-      team: name.nullable(),
-      name,
-      kind: external_exports.enum(["developer", "service"]),
-      billing: external_exports.enum(["api", "subscription"])
-    });
-    keysFileSchema = external_exports.array(keyRecordSchema);
-    SURFACE_LIST = SURFACES;
   }
 });
 
@@ -56178,176 +56925,6 @@ var init_load_dir2 = __esm({
   "src/policy-loader/load-dir.ts"() {
     "use strict";
     init_load_dir();
-  }
-});
-
-// src/policy/validate.ts
-var validate_exports = {};
-__export(validate_exports, {
-  ERROR_CODES: () => ERROR_CODES,
-  LOAD_ERROR_CODES: () => LOAD_ERROR_CODES,
-  WARNING_CODES: () => WARNING_CODES,
-  globMatch: () => globMatch,
-  validatePolicy: () => validatePolicy
-});
-function globMatch(pattern, text) {
-  let p = 0;
-  let t = 0;
-  let star = -1;
-  let mark = 0;
-  while (t < text.length) {
-    if (p < pattern.length && pattern[p] === "*") {
-      star = p++;
-      mark = t;
-    } else if (p < pattern.length && pattern[p] === text[t]) {
-      p++;
-      t++;
-    } else if (star >= 0) {
-      p = star + 1;
-      t = ++mark;
-    } else return false;
-  }
-  while (p < pattern.length && pattern[p] === "*") p++;
-  return p === pattern.length;
-}
-function covers(earlier, later) {
-  return MATCH_FIELDS.every((f) => earlier.match[f] === void 0 || earlier.match[f] === later.match[f]);
-}
-function validatePolicy(src, o) {
-  const errors = [];
-  const warnings = [];
-  const err = (code, path2, message) => void errors.push({ code, path: path2, message });
-  const warn = (code, path2, message) => void warnings.push({ code, path: path2, message });
-  const { policy: policy2, prices, keys: keys2 } = src;
-  const flag = o.experimentalSubscription;
-  const providers = new Map(Object.entries(policy2.providers).map(([n, p]) => [n, p.format]));
-  for (const [name2, p] of Object.entries(policy2.providers)) {
-    const at = `providers.${name2}`;
-    if (p.credential === "passthrough") {
-      let ok = false;
-      try {
-        const u = new URL(p.baseUrl);
-        ok = u.protocol === "https:" && u.hostname === OFFICIAL_HOST[p.format] && u.port === "" && u.username === "" && u.password === "";
-      } catch {
-        ok = false;
-      }
-      if (!ok) err("E_PASSTHROUGH_HOST", `${at}.baseUrl`, `credential: passthrough is only allowed with https://${OFFICIAL_HOST[p.format]} (a user's token must never reach another host)`);
-      if (!flag) err("E_SUBSCRIPTION_FLAG", `${at}.credential`, "credential: passthrough needs --experimental-subscription");
-    } else if (!ENV_NAME.test(p.credential.env)) {
-      err("E_CREDENTIAL_ENV", `${at}.credential.env`, `"${p.credential.env}" is not a valid environment variable name`);
-    }
-  }
-  keys2.forEach((k, i) => {
-    if (k.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `keys[${i}].billing`, `key ${k.keyId} has billing: subscription, which needs --experimental-subscription`);
-  });
-  const priced = (pattern) => pattern.includes("*") ? Object.keys(prices.models).some((id) => globMatch(pattern, id)) : lookupModel(prices, pattern) !== null;
-  policy2.routes.forEach((r, i) => {
-    const at = `routes[${i}]`;
-    const codingAgentSeen = r.match.traffic !== "product";
-    const codingMessages = r.match.surface === "anthropic-messages" && r.match.traffic === "coding-agent";
-    if (r.chain.length < 1 || r.chain.length > 3) err("E_CHAIN_LENGTH", `${at}.chain`, `a chain has 1 to 3 providers, this one has ${r.chain.length}`);
-    r.chain.forEach((p, j) => {
-      const format = providers.get(p);
-      if (format === void 0) return void err("E_CHAIN_UNKNOWN_PROVIDER", `${at}.chain[${j}]`, `provider "${p}" is not defined under providers`);
-      if (codingMessages && format !== "anthropic") err("E_CODING_AGENT_FORMAT", `${at}.chain[${j}]`, `coding-agent traffic on anthropic-messages may only chain format: anthropic providers; "${p}" is ${format}`);
-    });
-    if (codingMessages) {
-      r.allowModels?.forEach((m, j) => {
-        if (!m.startsWith("claude")) err("E_CODING_AGENT_NON_CLAUDE", `${at}.allowModels[${j}]`, `"${m}" is not a Claude model; Claude Code is not supported through a gateway that routes it to non-Claude models`);
-      });
-    }
-    if (codingAgentSeen) {
-      if (r.rewriteModel !== void 0 && r.allowBodyRewrite !== true) err("E_BODY_REWRITE", `${at}.rewriteModel`, "rewriteModel on coding-agent traffic needs allowBodyRewrite: true and a because: reason");
-      if (r.allowBodyRewrite === true && (r.because ?? "").trim() === "") err("E_BODY_REWRITE", `${at}.because`, "allowBodyRewrite: true must name the reason in because:");
-    }
-    r.allowModels?.forEach((m, j) => {
-      if (!priced(m)) err("E_UNPRICED_MODEL", `${at}.allowModels[${j}]`, `"${m}" has no entry in the price table`);
-    });
-    if (r.rewriteModel !== void 0 && lookupModel(prices, r.rewriteModel) === null) err("E_UNPRICED_MODEL", `${at}.rewriteModel`, `"${r.rewriteModel}" has no entry in the price table`);
-    r.serverTools?.forEach((t, j) => {
-      if (!Object.hasOwn(prices.serverTools, t) && policy2.failure.unpricedModel === void 0) {
-        err("E_UNPRICED_SERVER_TOOL", `${at}.serverTools[${j}]`, `server tool "${t}" has no price and failure.unpricedModel is not stated`);
-      }
-    });
-    if (r.match.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `${at}.match.billing`, "a route matching billing: subscription needs --experimental-subscription");
-  });
-  for (const [id, m] of Object.entries(prices.models)) {
-    if (m.maxOutputTokens > m.maxContextTokens) err("E_MODEL_LIMITS", `prices.models.${id}`, `maxOutputTokens (${m.maxOutputTokens}) is larger than maxContextTokens (${m.maxContextTokens})`);
-  }
-  const names = /* @__PURE__ */ new Set();
-  policy2.budgets.forEach((b, i) => {
-    const at = `budgets[${i}]`;
-    if (names.has(b.name)) err("E_BUDGET_DUP", `${at}.name`, `budget name "${b.name}" is used twice`);
-    names.add(b.name);
-    if (b.scope === "session") {
-      if (b.window !== void 0) err("E_BUDGET_WINDOW", `${at}.window`, "a session budget has no window");
-    } else if (b.window === void 0 || !Object.hasOwn(WINDOW_RANK, b.window)) {
-      err("E_BUDGET_WINDOW", `${at}.window`, `window must be day, week or month (UTC) for scope ${b.scope}`);
-    }
-    if (!(b.usd > 0) || !Number.isFinite(b.usd)) err("E_BUDGET_USD", `${at}.usd`, `usd must be greater than 0, got ${b.usd}`);
-  });
-  const enforced = policy2.budgets.filter((b) => b.mode === "enforce");
-  if (enforced.length > 0 && policy2.failure.counterStoreDown.budgets === void 0) {
-    err("E_STORE_DOWN_UNSTATED", "failure.counterStoreDown.budgets", "state open or closed explicitly: the policy has budgets with mode: enforce");
-  }
-  policy2.budgets.forEach((child, i) => {
-    const parent = policy2.budgets.find(
-      (b) => (SCOPE_RANK[b.scope] ?? 0) > (SCOPE_RANK[child.scope] ?? 0) && child.usd > b.usd && (WINDOW_RANK[child.window ?? ""] ?? 0) >= (WINDOW_RANK[b.window ?? ""] ?? 0) && child.window !== void 0
-    );
-    if (parent) warn("W_CHILD_BUDGET", `budgets[${i}]`, `${child.scope} budget "${child.name}" (${child.usd} USD) is larger than ${parent.scope} budget "${parent.name}" (${parent.usd} USD)`);
-  });
-  for (const s of SURFACE_LIST) {
-    if (!policy2.routes.some((r) => r.match.surface === void 0 || r.match.surface === s)) warn("W_SURFACE_NO_ROUTE", "routes", `no route matches surface ${s}; requests on it get 403 "no route"`);
-  }
-  policy2.routes.forEach((later, j) => {
-    const i = policy2.routes.findIndex((earlier, k) => k < j && covers(earlier, later));
-    if (i >= 0) warn("W_ROUTE_SHADOWED", `routes[${j}]`, `route "${later.name}" can never match: route "${policy2.routes[i]?.name}" before it covers it`);
-  });
-  if (policy2.reservation.estimator === "session-aware") {
-    policy2.budgets.forEach((b, i) => {
-      if (b.scope === "session" && b.onExceed === "block") warn("W_SESSION_AWARE_BLOCK", `budgets[${i}]`, "estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold");
-    });
-  }
-  if (policy2.reservation.serverToolsWithoutMaxUses === "assume" && enforced.length > 0) {
-    warn("W_SERVER_TOOLS_ASSUME", "reservation.serverToolsWithoutMaxUses", "assume with an enforced budget: the budget guarantee does not hold for requests with a server tool and no max_uses");
-  }
-  if (flag) {
-    const subscriptionInUse = keys2.some((k) => k.billing === "subscription") || policy2.routes.some((r) => r.match.billing === "subscription");
-    const blocking = policy2.budgets.findIndex((b) => b.mode === "enforce" && b.onExceed === "block");
-    if (subscriptionInUse && blocking >= 0) warn("W_SUBSCRIPTION_BLOCK", `budgets[${blocking}]`, "subscription traffic is priced as API-equivalent cost; an enforced block budget can deny it (subscription budgets default to onExceed: warn)");
-  }
-  return { errors, warnings };
-}
-var ERROR_CODES, WARNING_CODES, LOAD_ERROR_CODES, OFFICIAL_HOST, ENV_NAME, WINDOW_RANK, SCOPE_RANK, MATCH_FIELDS;
-var init_validate = __esm({
-  "src/policy/validate.ts"() {
-    "use strict";
-    init_prices();
-    init_schema();
-    ERROR_CODES = [
-      "E_CHAIN_UNKNOWN_PROVIDER",
-      "E_CHAIN_LENGTH",
-      "E_CODING_AGENT_FORMAT",
-      "E_CODING_AGENT_NON_CLAUDE",
-      "E_BODY_REWRITE",
-      "E_PASSTHROUGH_HOST",
-      "E_SUBSCRIPTION_FLAG",
-      "E_UNPRICED_MODEL",
-      "E_MODEL_LIMITS",
-      "E_UNPRICED_SERVER_TOOL",
-      "E_BUDGET_DUP",
-      "E_BUDGET_WINDOW",
-      "E_BUDGET_USD",
-      "E_STORE_DOWN_UNSTATED",
-      "E_CREDENTIAL_ENV"
-    ];
-    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK"];
-    LOAD_ERROR_CODES = ["E_FILE_MISSING", "E_YAML_UNSAFE", "E_YAML_SYNTAX", "E_SCHEMA", "E_PRICES_INVALID", "E_MODEL_LIMITS_MISSING"];
-    OFFICIAL_HOST = { anthropic: "api.anthropic.com", openai: "api.openai.com" };
-    ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-    WINDOW_RANK = { day: 1, week: 2, month: 3 };
-    SCOPE_RANK = { tenant: 3, team: 2, key: 1, session: 0 };
-    MATCH_FIELDS = ["surface", "traffic", "billing", "feature"];
   }
 });
 
@@ -59969,7 +60546,7 @@ function formatUsd(micro) {
   const cents = Math.round(micro / 100);
   return `$${Math.floor(cents / 1e4)}.${String(cents % 1e4).padStart(4, "0")}`;
 }
-var pct = (part, whole) => whole === 0 ? "-" : `${(part / whole * 100).toFixed(1)}%`;
+var pct = (part2, whole) => whole === 0 ? "-" : `${(part2 / whole * 100).toFixed(1)}%`;
 function renderReportTerminal(r) {
   const cols = r.by.length > 0 ? r.by.map(String) : ["all"];
   const header2 = [...cols, "requests", "cost", "share", "input", "output", "cache read", "cache write"];
@@ -60082,7 +60659,7 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   beat?.unref();
   const { createGateway: createGateway2, DEFAULT_BODY_CAP_BYTES: DEFAULT_BODY_CAP_BYTES2 } = await Promise.resolve().then(() => (init_server(), server_exports));
   const { devPolicy: devPolicy2, DEV_KEY: DEV_KEY2, DEV_UPSTREAM_KEY_ENV: DEV_UPSTREAM_KEY_ENV2 } = await Promise.resolve().then(() => (init_dev_policy(), dev_policy_exports));
-  const policy2 = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 }, models: [] });
+  const policy2 = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 } });
   const gw = createGateway2({
     policy: () => policy2,
     store: null,
@@ -60131,7 +60708,7 @@ keys.command("create").description("create a key: prints it once and appends its
     console.error("tokenyard keys create: --billing subscription needs --experimental-subscription");
     process.exit(1);
   }
-  const { appendKey: appendKey2, createKey: createKey2 } = await Promise.resolve().then(() => (init_keys(), keys_exports));
+  const { appendKey: appendKey2, createKey: createKey2 } = await Promise.resolve().then(() => (init_keys2(), keys_exports));
   const { plaintext, hash: hash2 } = createKey2();
   await appendKey2(o.file, { hash: hash2, keyId: `key_${hash2.slice(0, 8)}`, tenant: o.tenant, team: o.team ?? null, name: o.name, kind: o.kind, billing: o.billing });
   console.log(plaintext);

@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { TraceWriter } from '../../src/ledger/writer.js';
-import { loadPrices } from '../helpers/prices.js';
 import { authHeaders, send, startStack } from '../helpers/conformance.js';
 
 let stack: Awaited<ReturnType<typeof startStack>> | undefined;
@@ -27,7 +26,7 @@ async function allTraceText(root: string): Promise<string> {
 test('records contain no prompt text: a body with a canary string never appears in any trace file', async () => {
   dir = await mkdtemp(join(tmpdir(), 'ty-gw-trace-'));
   const writer = new TraceWriter({ dir, instanceId: 'gw01', queueMax: 100, clock: Date.now });
-  stack = await startStack({ gw: { traces: writer, traceSalt: 'salt', prices: loadPrices() } });
+  stack = await startStack({ gw: { traces: writer, traceSalt: 'salt' } });
   const body = JSON.stringify({
     model: 'claude-opus-5-5',
     max_tokens: 64,

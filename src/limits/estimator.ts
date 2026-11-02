@@ -82,7 +82,7 @@ function outputTokenBound(f: RequestFeatures, m: ModelPrice, reserveOutputTokens
 }
 
 /** Server tool type to its price table key: `web_search_20250305` is `web_search`. */
-function serverToolKey(type: string): string {
+export function serverToolKey(type: string): string {
   return type.replace(/_\d{8}$/, '');
 }
 

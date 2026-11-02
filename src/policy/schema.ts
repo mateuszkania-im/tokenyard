@@ -13,6 +13,10 @@ const httpUrl = z.string().refine((s) => {
   }
 }, 'must be an http(s) URL');
 
+export const REQUEST_CLASSES = ['main', 'subagent', 'workflow', 'compaction', 'auxiliary'] as const;
+
+const chainEntry = z.union([name, z.strictObject({ provider: name, weight: z.number().int().nonnegative() })]);
+
 const provider = z.strictObject({
   format: z.enum(['anthropic', 'openai']),
   baseUrl: httpUrl,
@@ -27,10 +31,21 @@ const route = z.strictObject({
       surface: z.enum(SURFACES).optional(),
       traffic: z.enum(['coding-agent', 'product']).optional(),
       billing: z.enum(['api', 'subscription']).optional(),
+      tenant: name.optional(),
+      team: name.optional(),
+      requestClass: z.enum(REQUEST_CLASSES).optional(),
+      agentType: name.optional(),
+      repo: name.optional(),
       feature: name.optional(),
+      /** Glob on the requested model (`*` matches any run of characters), anchored at both ends. */
+      model: name.optional(),
     })
     .default({}),
-  chain: z.array(name),
+  /**
+   * Providers in fallback order. Entries with a `weight` are a split: one of them is picked first by a hash of the
+   * session (or request) id, so a session sticks to one provider; the others stay as fallbacks in their listed order.
+   */
+  chain: z.array(chainEntry),
   allowModels: z.array(name).optional(),
   rewriteModel: name.optional(),
   allowBodyRewrite: z.boolean().optional(),
@@ -43,7 +58,7 @@ const route = z.strictObject({
 
 const budget = z.strictObject({
   name,
-  scope: z.enum(['tenant', 'team', 'key', 'session']),
+  scope: z.enum(['tenant', 'team', 'key', 'repo', 'session']),
   // `window` and `usd` are checked in validate.ts (E_BUDGET_WINDOW, E_BUDGET_USD) so each failure has its own code.
   window: z.string().optional(),
   usd: z.number(),
@@ -123,6 +138,10 @@ export const policySchema = z.strictObject({
 export type PolicyDoc = z.infer<typeof policySchema>;
 export type RouteSpec = PolicyDoc['routes'][number];
 export type BudgetSpec = PolicyDoc['budgets'][number];
+export type ChainEntry = RouteSpec['chain'][number];
+
+/** Provider name of a chain entry, plain or weighted. */
+export const chainProvider = (e: ChainEntry): string => (typeof e === 'string' ? e : e.provider);
 
 export const keyRecordSchema = z.strictObject({
   hash: z.string().regex(/^[0-9a-f]{64}$/, 'must be a SHA-256 hex digest'),

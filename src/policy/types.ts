@@ -1,5 +1,7 @@
 // Spec 6.5 types, copied verbatim, plus the shared policy-side types the edge needs.
 // Pure module: types only.
+import type { PriceTable } from '../pricing/prices.js';
+import type { PolicyDoc } from './schema.js';
 
 export type Surface = 'anthropic-messages' | 'anthropic-count-tokens' | 'openai-responses' | 'openai-chat';
 
@@ -15,10 +17,28 @@ export type BlockReason =
   | 'unpriced'
   | 'server-tool-no-max-uses';
 
-/** A note carried on a plan: guardrail warns and audit-mode notes. The spec names the type without a shape; Task 10 may refine it. */
-export interface Warning {
-  kind: string;
-  message: string;
+/** A note carried on a plan: guardrail warns and what the reservation could not bound. */
+export type Warning =
+  | { kind: 'guardrail'; rule: string; where: 'last-turn' | 'history' }
+  /** The model sent upstream has no price; `failure.unpricedModel: allow-and-flag` let it through at the table's highest prices. */
+  | { kind: 'unpriced'; model: string }
+  /** The reservation is not a bound for this request (spec 7.4): a server tool without `max_uses` or without a price. */
+  | { kind: 'bound-assumed'; reason: 'server-tool-no-max-uses' | 'unpriced-server-tool' };
+
+/** Attribution as sent by the client, before pseudonymisation (spec 9.1 HMACs session, agent, parentAgent and promptId). */
+export interface RawAttribution {
+  session: string | null;
+  agent: string | null;
+  parentAgent: string | null;
+  requestClass: string | null;
+  agentType: string | null;
+  promptId: string | null;
+  repo: string | null;
+  branch: string | null;
+  ticket: string | null;
+  feature: string | null;
+  /** True when a header value was cut or had characters dropped by `sanitizeHeaderValue`. Absent otherwise. */
+  sanitized?: true;
 }
 
 export interface ProviderSpec {
@@ -38,25 +58,73 @@ export interface KeyRecord {
   billing: 'api' | 'subscription';
 }
 
-/**
- * Placeholder route shape for Tasks 4 to 9 (single-route policies from test/helpers/policy.ts
- * and `serve --dev-upstream`). Task 10 replaces it with the compiled route from the policy schema.
- */
+/** A route with its globs compiled to anchored RegExps (spec 6.7: precomputed matchers). */
 export interface CompiledRoute {
   name: string;
-  surfaces: readonly Surface[];
-  /** Model ids this route serves; `GET /v1/models` lists the ones containing `claude`. */
-  models: readonly string[];
-  /** Provider names in chain order. */
-  chain: readonly string[];
+  /** Absent fields match anything. String fields compare exactly; `model` is the compiled glob. */
+  match: {
+    surface: Surface | null;
+    traffic: 'coding-agent' | 'product' | null;
+    billing: 'api' | 'subscription' | null;
+    tenant: string | null;
+    team: string | null;
+    requestClass: string | null;
+    agentType: string | null;
+    repo: string | null;
+    feature: string | null;
+    model: RegExp | null;
+  };
+  /** Providers in policy order; `weight` is set on the entries of a weighted split. */
+  chain: ReadonlyArray<{ provider: string; weight: number | null }>;
+  /** Compiled `allowModels` globs; null when the route allows any model. */
+  allowModels: readonly RegExp[] | null;
+  rewriteModel: string | null;
+  allowBodyRewrite: boolean;
+  serverTools: readonly string[] | null;
+  criticality: 'standard' | 'sheddable';
+  reserveOutputTokens: number | null;
+  /** Model ids `GET /v1/models` shows for this route: priced ids its `allowModels` match, its `rewriteModel`, or every priced id. */
+  listedModels: readonly string[];
 }
 
-/** Compiled, immutable policy snapshot. Task 10 adds the remaining fields (budgets, rate limits, prices, ...). */
+export interface CompiledBudget {
+  name: string;
+  scope: 'tenant' | 'team' | 'key' | 'repo' | 'session';
+  window: 'day' | 'week' | 'month' | null;
+  limitMicroUsd: number;
+  /** `mode: enforce` with `onExceed: block`; audit and warn levels are reserved and reported, never block. */
+  enforce: boolean;
+}
+
+export interface CompiledRate {
+  name: string;
+  scope: 'tenant' | 'team' | 'key';
+  /** Milliseconds between requests at the limit: `ceil(60000 / rpm)`. */
+  emissionMs: number;
+  burst: number;
+}
+
+export interface CompiledStreamLimit {
+  name: string;
+  scope: 'tenant' | 'team' | 'key';
+  max: number;
+}
+
+/** Compiled, deep-frozen policy snapshot (spec 6.7). Built only by `compilePolicy`. */
 export interface CompiledPolicy {
   revision: string;
+  priceTableVersion: string;
   providers: ReadonlyMap<string, ProviderSpec>;
   keysByHash: ReadonlyMap<string, KeyRecord>;
   routes: readonly CompiledRoute[];
+  budgets: readonly CompiledBudget[];
+  rateLimits: readonly CompiledRate[];
+  streamLimits: readonly CompiledStreamLimit[];
+  reservation: PolicyDoc['reservation'];
+  guardrails: PolicyDoc['guardrails'];
+  failure: PolicyDoc['failure'];
+  ci: PolicyDoc['ci'];
+  prices: PriceTable;
   candidate: CompiledPolicy | null;
 }
 
@@ -93,7 +161,8 @@ export interface Plan {
   policyRevision: string;
   route: string | null;                // null: no route matched
   chain: Array<{ provider: string; upstreamModel: string; rewritesModel: boolean }>;
-  reservations: Array<{ budget: string; key: string; limitMicroUsd: number; estMicroUsd: number; enforce: boolean }>;
+  reservations: Array<{ budget: string; key: string; limitMicroUsd: number; estMicroUsd: number; enforce: boolean;
+                        resetsAt: string | null }>;   // not in spec 6.5: ISO start of the next window (null for session), for the 429 message
   rateChecks: Array<{ limit: string; key: string; emissionMs: number; burst: number; quantity: number }>;
   streamSlots: Array<{ limit: string; key: string; max: number }>;
   taint: {                             // null when the request has no session key and no block hits

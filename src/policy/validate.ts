@@ -2,7 +2,7 @@
 import { lookupModel } from '../pricing/prices.js';
 import type { PolicySource } from './load-dir.js';
 import type { ProviderSpec } from './types.js';
-import { SURFACE_LIST, type RouteSpec } from './schema.js';
+import { chainProvider, SURFACE_LIST, type RouteSpec } from './schema.js';
 
 export interface Issue {
   code: string;
@@ -36,7 +36,7 @@ export const LOAD_ERROR_CODES = ['E_FILE_MISSING', 'E_YAML_UNSAFE', 'E_YAML_SYNT
 const OFFICIAL_HOST: Record<ProviderSpec['format'], string> = { anthropic: 'api.anthropic.com', openai: 'api.openai.com' };
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const WINDOW_RANK: Record<string, number> = { day: 1, week: 2, month: 3 };
-const SCOPE_RANK: Record<string, number> = { tenant: 3, team: 2, key: 1, session: 0 };
+const SCOPE_RANK: Record<string, number> = { tenant: 3, team: 2, key: 1, repo: 0, session: 0 };
 
 /** `*` matches any run of characters; everything else is literal. Linear scan with one backtrack point, so no pattern can blow up. */
 export function globMatch(pattern: string, text: string): boolean {
@@ -60,7 +60,7 @@ export function globMatch(pattern: string, text: string): boolean {
   return p === pattern.length;
 }
 
-const MATCH_FIELDS = ['surface', 'traffic', 'billing', 'feature'] as const;
+const MATCH_FIELDS = ['surface', 'traffic', 'billing', 'tenant', 'team', 'requestClass', 'agentType', 'repo', 'feature', 'model'] as const;
 
 /** True when every request route `later` could match is already taken by `earlier` (earlier has no condition `later` lacks or differs on). */
 function covers(earlier: RouteSpec, later: RouteSpec): boolean {
@@ -107,7 +107,8 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
     const codingMessages = r.match.surface === 'anthropic-messages' && r.match.traffic === 'coding-agent';
 
     if (r.chain.length < 1 || r.chain.length > 3) err('E_CHAIN_LENGTH', `${at}.chain`, `a chain has 1 to 3 providers, this one has ${r.chain.length}`);
-    r.chain.forEach((p, j) => {
+    r.chain.forEach((entry, j) => {
+      const p = chainProvider(entry);
       const format = providers.get(p);
       if (format === undefined) return void err('E_CHAIN_UNKNOWN_PROVIDER', `${at}.chain[${j}]`, `provider "${p}" is not defined under providers`);
       if (codingMessages && format !== 'anthropic') err('E_CODING_AGENT_FORMAT', `${at}.chain[${j}]`, `coding-agent traffic on anthropic-messages may only chain format: anthropic providers; "${p}" is ${format}`);
@@ -168,7 +169,9 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
   });
 
   for (const s of SURFACE_LIST) {
-    if (!policy.routes.some((r) => r.match.surface === undefined || r.match.surface === s)) warn('W_SURFACE_NO_ROUTE', 'routes', `no route matches surface ${s}; requests on it get 403 "no route"`);
+    // A route on anthropic-messages also serves anthropic-count-tokens (decide.ts).
+    const serves = (r: RouteSpec): boolean => r.match.surface === undefined || r.match.surface === s || (s === 'anthropic-count-tokens' && r.match.surface === 'anthropic-messages');
+    if (!policy.routes.some(serves)) warn('W_SURFACE_NO_ROUTE', 'routes', `no route matches surface ${s}; requests on it get 403 "no route"`);
   }
 
   policy.routes.forEach((later, j) => {

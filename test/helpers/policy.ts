@@ -1,4 +1,8 @@
-import { devPolicy } from '../../src/edge/dev-policy.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { hashKey } from '../../src/edge/auth.js';
+import { compilePolicy } from '../../src/policy/compile.js';
+import { parsePolicyFiles } from '../../src/policy/load-dir.js';
 import type { CompiledPolicy, KeyRecord, ProviderSpec } from '../../src/policy/types.js';
 
 /** Plaintext tokenyard key accepted by the test policy. */
@@ -6,9 +10,17 @@ export const TEST_KEY = 'ty_live_test';
 /** Environment variable holding the provider key in API-mode tests. */
 export const PROVIDER_KEY_ENV = 'TOKENYARD_TEST_PROVIDER_KEY';
 
+const EXAMPLE = join(import.meta.dirname, '..', '..', 'examples', 'policy');
+const read = (f: string): string => readFileSync(join(EXAMPLE, f), 'utf8');
+
 /**
- * Single-route policy that forwards every Anthropic request to `upstream`
- * (the first and only provider). Task 10 rebuilds this from examples/policy.
+ * examples/policy compiled through `compilePolicy`, with three test changes: both Anthropic providers point at
+ * `upstream` with `credential`, the only key is TEST_KEY (developer, tenant acme, team platform, `billing`), and the
+ * claude-code route matches that billing and allows `models` (any model when omitted; unknown ones are flagged
+ * unpriced by the example's `unpricedModel: allow-and-flag`).
+ *
+ * A passthrough credential is only valid with the official host (E_PASSTHROUGH_HOST), so for passthrough the policy
+ * is compiled against https://api.anthropic.com and the providers are pointed at `upstream` afterwards.
  */
 export function testPolicy(o: {
   upstream: string;
@@ -16,11 +28,24 @@ export function testPolicy(o: {
   models?: string[];
   billing?: KeyRecord['billing'];
 }): CompiledPolicy {
-  return devPolicy({
-    upstream: o.upstream,
-    keys: [TEST_KEY],
-    credential: o.credential ?? { env: PROVIDER_KEY_ENV },
-    models: o.models ?? [],
-    billing: o.billing,
-  });
+  const credential = o.credential ?? { env: PROVIDER_KEY_ENV };
+  const billing = o.billing ?? 'api';
+  const src = parsePolicyFiles('examples/policy', { 'policy.yaml': read('policy.yaml'), 'prices.yaml': read('prices.yaml'), 'keys.yaml': read('keys.yaml') });
+  const passthrough = credential === 'passthrough';
+  for (const name of ['anthropic', 'anthropic-backup']) {
+    const p = src.policy.providers[name];
+    if (!p) throw new Error(`examples/policy has no provider ${name}`);
+    p.baseUrl = passthrough ? 'https://api.anthropic.com' : o.upstream;
+    p.credential = credential;
+  }
+  src.keys = [{ hash: hashKey(TEST_KEY), keyId: 'key_test', tenant: 'acme', team: 'platform', name: 'test', kind: 'developer', billing }];
+  const route = src.policy.routes.find((r) => r.name === 'claude-code');
+  if (!route) throw new Error('examples/policy has no claude-code route');
+  route.match.billing = billing;
+  if (o.models === undefined) delete route.allowModels;
+  else route.allowModels = o.models;
+  const compiled = compilePolicy(src, 'test', { experimentalSubscription: passthrough || billing === 'subscription' });
+  if (!passthrough) return compiled;
+  const providers = new Map([...compiled.providers].map(([n, p]) => [n, n.startsWith('anthropic') ? { ...p, baseUrl: o.upstream } : p]));
+  return { ...compiled, providers };
 }

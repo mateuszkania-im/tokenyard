@@ -1,6 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
 import type { RequestOutcome } from '../../../src/edge/server.js';
-import { loadPrices } from '../../helpers/prices.js';
 import { msgBody, send, startStack } from '../../helpers/conformance.js';
 import { TEST_KEY } from '../../helpers/policy.js';
 
@@ -17,8 +16,8 @@ const BETA = 'oauth-2025-04-20,claude-code-20250219';
 async function subscriptionStack(): Promise<RequestOutcome[]> {
   const outcomes: RequestOutcome[] = [];
   stack = await startStack({
-    policy: { credential: 'passthrough', billing: 'subscription', models: ['claude-opus-5-5'] },
-    gw: { experimentalSubscription: true, prices: loadPrices(), onSettled: (o) => outcomes.push(o) },
+    policy: { credential: 'passthrough', billing: 'subscription' },
+    gw: { experimentalSubscription: true, onSettled: (o) => outcomes.push(o) },
   });
   return outcomes;
 }

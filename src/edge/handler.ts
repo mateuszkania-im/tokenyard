@@ -2,9 +2,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import type { TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
-import type { CompiledPolicy, CompiledRoute, KeyRecord, ProviderSpec, Surface } from '../policy/types.js';
+import { pseudonym } from '../guardrails/hmac.js';
+import { buildFeatures, decide } from '../policy/decide.js';
+import { modelsForKey } from '../policy/match.js';
+import { resolve } from '../policy/resolve.js';
+import type { CompiledPolicy, Decision, KeyRecord, ProviderSpec, Surface } from '../policy/types.js';
 import { costMicroUsd } from '../pricing/cost.js';
-import type { PriceTable } from '../pricing/prices.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
 import { SseParser } from '../stream/sse.js';
 import { createTee } from '../stream/tee.js';
@@ -34,8 +37,6 @@ export interface GatewayDeps {
   newId(): string;
   basePath: string | null;
   bodyCapBytes: number;
-  /** Price table for actual cost; without it no cost is computed. Task 10 takes it from the compiled policy. */
-  prices?: PriceTable | null;
   /** `serve --experimental-subscription` (spec 6.8): without it keys with `billing: subscription` get 401. */
   experimentalSubscription?: boolean;
   /** HMAC salt for session, agent, parent agent and prompt id in traces (spec 9.1); required when `traces` is set. */
@@ -73,6 +74,12 @@ export interface RequestOutcome {
   priceTable: string;
   /** Block or forward, with the reason for a block; absent means forward. */
   decision?: { action: 'forward' | 'block'; reason: string | null };
+  /** Input token bound the decision used (spec 7.3); absent for exits before features were extracted. */
+  inputBound?: { tokens: number; kind: 'bytes' | 'context-window' };
+  /** The reservation is not a bound for this request (spec 7.4). */
+  boundAssumed?: boolean;
+  /** Audit mode (spec 6.5): what the candidate policy decided for the same request. */
+  candidate?: { revision: string; route: string | null; action: 'forward' | 'block'; reason: string | null; chain: string[] };
   /** Set for requests that failed or were refused before a response came from upstream. */
   errorClass?: string;
   /** Upstream `anthropic-ratelimit-unified-*` response headers. */
@@ -87,16 +94,19 @@ function sendError(req: IncomingMessage, res: ServerResponse, e: ErrorReply, clo
   res.writeHead(e.status, closeConnection ? { ...e.headers, connection: 'close' } : e.headers).end(e.body);
 }
 
-/**
- * Spec 5.3 steps 5 to 8 placeholder until Tasks 10 and 14 (guardrails, decide, admit, resolve):
- * the first route serving this surface, forwarded to the first provider of its chain.
- */
-function forwardToFirstProvider(policy: CompiledPolicy, surface: Surface): { provider: ProviderSpec; route: CompiledRoute } | null {
-  const route = policy.routes.find((r) => r.surfaces.includes(surface));
-  const name = route?.chain[0];
-  const provider = name === undefined ? undefined : policy.providers.get(name);
-  return route && provider ? { provider, route } : null;
+/** Session, agent, parent agent and prompt id as the trace stores them, so replay decides on the same values (spec 9.1). */
+function pseudonymised(a: RawAttribution, salt: string | undefined): RawAttribution {
+  if (!salt) return a;
+  const h = (v: string | null): string | null => (v === null ? null : pseudonym(salt, v));
+  return { ...a, session: h(a.session), agent: h(a.agent), parentAgent: h(a.parentAgent), promptId: h(a.promptId) };
 }
+
+const summary = (d: Decision): { route: string | null; action: 'forward' | 'block'; reason: string | null; chain: string[] } => ({
+  route: d.plan.route,
+  action: d.action,
+  reason: d.block?.reason ?? null,
+  chain: d.plan.chain.map((c) => c.provider),
+});
 
 function rateLimitHeaders(h: UpstreamResponse['headers']): Record<string, string> {
   const out: Record<string, string> = {};
@@ -142,11 +152,11 @@ function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { o
   };
 }
 
-function priceOutcome(deps: GatewayDeps, features: ExtractedFeatures, usage: UsageResult | null): number | null {
+function priceOutcome(policy: CompiledPolicy, features: ExtractedFeatures, usage: UsageResult | null): number | null {
   const model = usage?.responseModel ?? features.model;
-  if (!deps.prices || !usage?.usage || !model) return null;
+  if (!usage?.usage || !model) return null;
   try {
-    return costMicroUsd(deps.prices, model, usage.usage);
+    return costMicroUsd(policy.prices, model, usage.usage);
   } catch {
     return null; // unpriced model: Task 10's `unpricedModel` policy decides what that means
   }
@@ -206,7 +216,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
 
   if (match.surface === 'models') {
     req.resume();
-    const body = modelsListBody(policy.routes.flatMap((r) => r.models));
+    const body = modelsListBody(modelsForKey(policy, key));
     res
       .writeHead(200, { 'content-type': 'application/json', 'content-length': String(body.length), 'x-tokenyard-request-id': id })
       .end(body);
@@ -234,7 +244,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
       client: parseClient(typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined),
       policyRevision: policy.revision,
       route: null,
-      priceTable: deps.prices?.version ?? 'none',
+      priceTable: policy.priceTableVersion,
       ...over,
     });
 
@@ -256,14 +266,27 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);
 
-  // 5 to 8. Guardrails, decide, admit, resolve: placeholder until Tasks 10 and 14.
-  const target = forwardToFirstProvider(policy, surface);
-  if (!target) {
-    sendError(req, res, anthropicError(403, 'permission_error', 'no route allows this request', null, id));
-    return early({ status: 403, features, decision: { action: 'block', reason: 'no-route' }, errorClass: 'permission_error' });
+  // 5 to 8. Guardrails (Task 16), decide, admit (Task 14: until then no admission), resolve.
+  const f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy.prices, id, startedAt, surface);
+  const decision = resolve(policy, decide(policy, f), null);
+  const cp = policy.candidate;
+  const candidate = cp ? { revision: cp.revision, ...summary(resolve(cp, decide(cp, f), null)) } : undefined;
+  const planned = summary(decision);
+  const routeInfo = planned.route === null ? null : { name: planned.route, chain: planned.chain };
+  const decided = {
+    features,
+    inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
+    boundAssumed: decision.plan.warnings.some((w) => w.kind === 'bound-assumed'),
+    route: routeInfo,
+    ...(candidate ? { candidate } : {}),
+  };
+  const first = decision.plan.chain[0];
+  const provider = first === undefined ? undefined : policy.providers.get(first.provider);
+  if (decision.block || !provider) {
+    const b = decision.block ?? { status: 403 as const, type: 'permission_error', reason: 'no-route' as const, message: 'no provider serves this route', retryAfterS: null };
+    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
+    return early({ ...decided, status: b.status, decision: { action: 'block', reason: b.reason }, errorClass: b.type });
   }
-
-  const { provider, route } = target;
 
   // 9. Forward.
   const mode = provider.credential === 'passthrough' ? 'passthrough' : 'api';
@@ -279,7 +302,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   try {
     up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
   } catch {
-    const common = { features, provider: provider.name, route: { name: route.name, chain: route.chain } };
+    const common = { ...decided, provider: provider.name };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
     sendError(req, res, anthropicError(502, 'api_error', `upstream ${provider.name} is unreachable`, null, id));
     return early({ ...common, status: 502, errorClass: 'upstream_unreachable' });
@@ -287,7 +310,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   if (ac.signal.aborted) {
     up.body.on('error', () => undefined);
     up.body.destroy();
-    return early({ features, provider: provider.name, route: { name: route.name, chain: route.chain }, status: 499, aborted: true, errorClass: 'client_abort' });
+    return early({ ...decided, provider: provider.name, status: 499, aborted: true, errorClass: 'client_abort' });
   }
 
   // 10. First response headers: written and flushed at once, never compressed.
@@ -318,7 +341,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     key,
     attribution: readAttribution(req.headers, surface),
     surface,
-    features,
+    ...decided,
     provider: provider.name,
     status: up.status,
     usage,
@@ -326,13 +349,12 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     startedAt,
     ttfbMs,
     totalMs: deps.clock() - startedAt,
-    costMicroUsd: priceOutcome(deps, features, usage),
+    costMicroUsd: priceOutcome(policy, features, usage),
     costBasis: key.billing === 'subscription' ? 'api-equivalent' : 'billed',
     addedTtfbMs: Math.max(0, ttfbMs - (upstreamHeadersAt - forwardedAt)),
     client: parseClient(typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : undefined),
     policyRevision: policy.revision,
-    route: { name: route.name, chain: route.chain },
-    priceTable: deps.prices?.version ?? 'none',
+    priceTable: policy.priceTableVersion,
     rateLimitHeaders: rateLimitHeaders(up.headers),
   });
 }

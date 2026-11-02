@@ -53,7 +53,7 @@ program
     beat?.unref();
     const { createGateway, DEFAULT_BODY_CAP_BYTES } = await import('./edge/server.js');
     const { devPolicy, DEV_KEY, DEV_UPSTREAM_KEY_ENV } = await import('./edge/dev-policy.js');
-    const policy = devPolicy({ upstream: o.devUpstream, keys: [DEV_KEY], credential: { env: DEV_UPSTREAM_KEY_ENV }, models: [] });
+    const policy = devPolicy({ upstream: o.devUpstream, keys: [DEV_KEY], credential: { env: DEV_UPSTREAM_KEY_ENV } });
     const gw = createGateway({
       policy: () => policy,
       store: null,

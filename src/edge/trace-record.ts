@@ -50,9 +50,9 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
     features: {
       model: o.features.model ?? u?.responseModel ?? '',
       stream: o.features.stream,
-      // Until the estimator lands (Task 10) the request body size is the bound: one token per byte at most.
-      inputTokensBound: o.features.bodyBytes,
-      boundKind: 'bytes',
+      // Exits before the decision have no bound: the body size stands in (at most one token per byte, spec 7.3).
+      inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
+      boundKind: o.inputBound?.kind ?? 'bytes',
       maxOutputTokens: o.features.maxOutputTokens,
       serverTools: o.features.serverTools,
       toolCount: o.features.toolCount,
@@ -62,17 +62,31 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       contextCompacted: false,
     },
     guardrail: { hits: [] },
-    policy: { revision: o.policyRevision },
+    policy: { revision: o.policyRevision, ...(o.candidate ? { candidateRevision: o.candidate.revision } : {}) },
     decision: {
       route: o.route?.name ?? null,
       action: o.decision?.action ?? 'forward',
       reason: o.decision?.reason ?? null,
       chain: o.route ? [...o.route.chain] : [],
       reservedMicroUsd: 0,
-      boundAssumed: false,
+      boundAssumed: o.boundAssumed ?? false,
       taintUnchecked: false,
       audit: [],
     },
+    ...(o.candidate
+      ? {
+          candidateDecision: {
+            route: o.candidate.route,
+            action: o.candidate.action,
+            reason: o.candidate.reason,
+            chain: [...o.candidate.chain],
+            reservedMicroUsd: 0,
+            boundAssumed: false,
+            taintUnchecked: false,
+            audit: [],
+          },
+        }
+      : {}),
     outcome: {
       provider: o.provider,
       upstreamModel: o.provider === null ? null : (u?.responseModel ?? o.features.model),

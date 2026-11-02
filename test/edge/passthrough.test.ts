@@ -316,17 +316,17 @@ test('body over cap gets 413 in the Anthropic envelope', async () => {
   expect(mock.received).toHaveLength(0);
 });
 
-test('GET /v1/models?limit=1000 lists only claude ids, no redirect, under 3 s', async () => {
+test('GET /v1/models?limit=1000 lists only the models the key routes allow, no redirect, under 3 s', async () => {
   mock = await startAnthropicMock();
   gw = await startGateway({
-    policy: testPolicy({ upstream: mock.url, models: ['claude-opus-test', 'gpt-test', 'claude-haiku-test'] }),
+    policy: testPolicy({ upstream: mock.url, models: ['claude-sonnet-5-5*', 'claude-haiku-*'] }),
   });
   const t0 = Date.now();
   const res = await fetch(`${gw.url}/v1/models?limit=1000`, { headers: { 'x-api-key': TEST_KEY }, redirect: 'manual' });
   expect(Date.now() - t0).toBeLessThan(3000);
   expect(res.status).toBe(200);
   const json = (await res.json()) as { data: Array<{ id: string; type: string }>; has_more: boolean };
-  expect(json.data.map((m) => m.id)).toEqual(['claude-opus-test', 'claude-haiku-test']);
+  expect(json.data.map((m) => m.id)).toEqual(['claude-sonnet-5-5', 'claude-haiku-5-5']);
   expect(json.data.every((m) => m.type === 'model')).toBe(true);
   expect(json.has_more).toBe(false);
   expect(mock.received).toHaveLength(0);

@@ -1,22 +1,8 @@
 import type { IncomingHttpHeaders } from 'node:http';
-import type { Surface } from '../policy/types.js';
+import type { RawAttribution, Surface } from '../policy/types.js';
 import { sanitizeHeaderValue } from '../report/sanitize.js';
 
-/** Attribution as sent by the client, before pseudonymisation (spec 9.1 HMACs session, agent, parentAgent and promptId). */
-export interface RawAttribution {
-  session: string | null;
-  agent: string | null;
-  parentAgent: string | null;
-  requestClass: string | null;
-  agentType: string | null;
-  promptId: string | null;
-  repo: string | null;
-  branch: string | null;
-  ticket: string | null;
-  feature: string | null;
-  /** True when a header value was cut or had characters dropped by `sanitizeHeaderValue`. Absent otherwise. */
-  sanitized?: true;
-}
+export type { RawAttribution };
 
 function header(h: IncomingHttpHeaders, name: string, flag: { changed: boolean }): string | null {
   const v = h[name];
