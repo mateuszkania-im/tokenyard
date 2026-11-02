@@ -15,7 +15,8 @@ export type BlockReason =
   | 'streams'
   | 'store-down'
   | 'unpriced'
-  | 'server-tool-no-max-uses';
+  | 'server-tool-no-max-uses'
+  | 'server-tool-not-allowed';         // not in spec 6.5: a server tool type the matched route does not list
 
 /** A note carried on a plan: guardrail warns and what the reservation could not bound. */
 export type Warning =
@@ -23,7 +24,9 @@ export type Warning =
   /** The model sent upstream has no price; `failure.unpricedModel: allow-and-flag` let it through at the table's highest prices. */
   | { kind: 'unpriced'; model: string }
   /** The reservation is not a bound for this request (spec 7.4): a server tool without `max_uses` or without a price. */
-  | { kind: 'bound-assumed'; reason: 'server-tool-no-max-uses' | 'unpriced-server-tool' };
+  | { kind: 'bound-assumed'; reason: 'server-tool-no-max-uses' | 'unpriced-server-tool' }
+  /** A server tool type the matched route does not list (the plan carries preBlock server-tool-not-allowed). */
+  | { kind: 'server-tool-not-allowed'; type: string };
 
 /** Attribution as sent by the client, before pseudonymisation (spec 9.1 HMACs session, agent, parentAgent and promptId). */
 export interface RawAttribution {

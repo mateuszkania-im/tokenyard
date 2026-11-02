@@ -32,6 +32,10 @@ function preBlock(policy: CompiledPolicy, plan: Plan, reason: BlockReason): Bloc
       return block(403, 'permission_error', reason, `the model or a server tool has no price in table ${policy.priceTableVersion}, and failure.unpricedModel is block`);
     case 'server-tool-no-max-uses':
       return block(403, 'permission_error', reason, 'a server tool without max_uses has no cost bound under an enforced budget; set max_uses on the tool');
+    case 'server-tool-not-allowed': {
+      const types = [...new Set(plan.warnings.flatMap((w) => (w.kind === 'server-tool-not-allowed' ? [w.type] : [])))].join(', ');
+      return block(403, 'permission_error', reason, `server tool ${types || 'type'} is not allowed${route}; list it under the route's serverTools`);
+    }
     case 'secret': {
       const rules = [...new Set(plan.taint?.add.map((a) => a.rule) ?? [])].join(', ') || 'a secret rule';
       return block(400, 'invalid_request_error', reason, `the last message contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);

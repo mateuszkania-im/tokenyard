@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { hashKey } from '../../src/edge/auth.js';
 import { compilePolicy } from '../../src/policy/compile.js';
 import { parsePolicyFiles } from '../../src/policy/load-dir.js';
+import type { RouteSpec } from '../../src/policy/schema.js';
 import type { CompiledPolicy, KeyRecord, ProviderSpec } from '../../src/policy/types.js';
 
 /** Plaintext tokenyard key accepted by the test policy. */
@@ -27,6 +28,10 @@ export function testPolicy(o: {
   credential?: ProviderSpec['credential'];
   models?: string[];
   billing?: KeyRecord['billing'];
+  /** Sets rewriteModel on the claude-code route, with the allowBodyRewrite escape hatch and a reason. */
+  rewriteModel?: string;
+  /** Last edit of the parsed routes before compiling. */
+  editRoutes?: (routes: RouteSpec[]) => void;
 }): CompiledPolicy {
   const credential = o.credential ?? { env: PROVIDER_KEY_ENV };
   const billing = o.billing ?? 'api';
@@ -44,6 +49,8 @@ export function testPolicy(o: {
   route.match.billing = billing;
   if (o.models === undefined) delete route.allowModels;
   else route.allowModels = o.models;
+  if (o.rewriteModel !== undefined) Object.assign(route, { rewriteModel: o.rewriteModel, allowBodyRewrite: true, because: 'test' });
+  o.editRoutes?.(src.policy.routes);
   const compiled = compilePolicy(src, 'test', { experimentalSubscription: passthrough || billing === 'subscription' });
   if (!passthrough) return compiled;
   const providers = new Map([...compiled.providers].map(([n, p]) => [n, n.startsWith('anthropic') ? { ...p, baseUrl: o.upstream } : p]));

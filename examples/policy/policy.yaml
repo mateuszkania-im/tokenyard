@@ -29,6 +29,9 @@ routes:                               # first match wins
     match: { surface: anthropic-messages, traffic: coding-agent, billing: api }
     chain: [anthropic, anthropic-backup]
     allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]
+    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;
+    # tool search has no per-use fee in prices.yaml, so failure.unpricedModel (allow-and-flag) covers it.
+    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]
   - name: codex
     match: { surface: openai-responses, traffic: coding-agent }
     chain: [openai]
@@ -36,6 +39,11 @@ routes:                               # first match wins
     match: { traffic: product, feature: support-summary }
     chain: [anthropic]
     rewriteModel: claude-haiku-5-5    # product traffic only
+    criticality: sheddable
+  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too
+    match: { traffic: product }
+    chain: [anthropic]
+    rewriteModel: claude-haiku-5-5
     criticality: sheddable
 
 budgets:

@@ -92,7 +92,7 @@ test('no route gives preBlock no-route and 403', () => {
 });
 
 const BUDGETS = `${HEAD}routes:
-  - { name: all, chain: [a] }
+  - { name: all, chain: [a], serverTools: [web_search, code_execution, tool_search_tool_regex] }
 budgets:
   - { name: org-month, scope: tenant, window: month, usd: 6000 }
   - { name: team-day, scope: team, window: day, usd: 300 }
@@ -132,9 +132,16 @@ test('reservations cover tenant, team, key, repo and session levels with budgetK
   ]);
   expect(plan.streamSlots).toEqual([{ limit: 'dev-streams', key: 'ty:{acme}:st:dev-streams:k1', max: 8 }]);
 
-  // Levels without a scope value are skipped: no team, no repo, no session.
+  // No team on the key skips team levels. A missing session or repo header must not dodge an enforced budget: those
+  // levels are charged to "(unattributed)". Audit levels without a value are skipped.
   const bare = decide(p, features({ team: null }));
-  expect(bare.reservations.map((r) => r.budget)).toEqual(['org-month', 'key-week', 'audit-day']);
+  expect(bare.reservations.map((r) => [r.budget, r.key])).toEqual([
+    ['org-month', 'ty:{acme}:b:org-month:acme:2026-11-01'],
+    ['key-week', 'ty:{acme}:b:key-week:k1:2026-11-02'],
+    ['repo-day', 'ty:{acme}:b:repo-day:(unattributed):2026-11-04'],
+    ['session', 'ty:{acme}:b:session:(unattributed)'],
+    ['audit-day', 'ty:{acme}:b:audit-day:k1:2026-11-04'],
+  ]);
   expect(bare.rateChecks.map((r) => r.limit)).toEqual(['dev-rpm']);
 
   // Window start is UTC: 23:59 on Sunday 1 November in UTC is still in the week of 26 October.
@@ -310,7 +317,7 @@ test('server tools: no max_uses blocks only when an enforced budget is touched; 
   expect(plan.preBlock).toBe('server-tool-no-max-uses');
   expect(resolve(p, plan, null).block).toMatchObject({ status: 403, type: 'permission_error', reason: 'server-tool-no-max-uses' });
 
-  const auditOnly = compile(`${HEAD}routes:\n  - { name: all, chain: [a] }\nbudgets:\n  - { name: d, scope: key, window: day, usd: 5, mode: audit }\n${STORE}`);
+  const auditOnly = compile(`${HEAD}routes:\n  - { name: all, chain: [a], serverTools: [web_search] }\nbudgets:\n  - { name: d, scope: key, window: day, usd: 5, mode: audit }\n${STORE}`);
   const soft = decide(auditOnly, noMax);
   expect(soft.preBlock).toBeNull();
   expect(soft.warnings).toContainEqual({ kind: 'bound-assumed', reason: 'server-tool-no-max-uses' });
@@ -422,4 +429,57 @@ ${STORE}`;
   expect(other.chain.map((c) => c.provider).sort()).toEqual(['constructor', 'toString']);
   expect(resolve(p, plan, admission({ kind: 'budget', name: '__proto__' })).block?.message).toContain('__proto__');
   expect(resolve(p, plan, admission({ kind: 'budget', name: 'toString' })).block?.reason).toBe('budget');
+});
+
+test('client headers cannot widen the models a key may use: the route matched without header predicates authorises the model', () => {
+  const p = compile(`${HEAD}routes:
+  - { name: compaction, match: { requestClass: compaction }, chain: [b], allowModels: ["claude-*"] }
+  - { name: team-repo, match: { repo: acme/web }, chain: [b] }
+  - { name: base, chain: [a], allowModels: ["claude-haiku-*"] }
+${STORE}`);
+  // The header still chooses the chain among what the key may use.
+  expect(decide(p, features({ model: 'claude-haiku-5-5', attribution: { requestClass: 'compaction' } }))).toMatchObject({ route: 'compaction', preBlock: null, chain: [{ provider: 'b' }] });
+  // But it cannot reach a model the header-free route refuses.
+  const wider = decide(p, features({ model: 'claude-opus-5-5', attribution: { requestClass: 'compaction' } }));
+  expect(wider).toMatchObject({ route: 'compaction', preBlock: 'model-not-allowed' });
+  expect(resolve(p, wider, null).block).toMatchObject({ status: 403, type: 'permission_error' });
+  expect(decide(p, features({ model: 'claude-opus-5-5', attribution: { repo: 'acme/web' } })).preBlock).toBe('model-not-allowed');
+  expect(decide(p, features({ model: 'claude-opus-5-5' })).preBlock).toBe('model-not-allowed');
+
+  // A route reachable only through headers authorises nothing on its own.
+  const onlyHeader = compile(`${HEAD}routes:\n  - { name: feat, match: { feature: summary }, chain: [a] }\n${STORE}`);
+  expect(decide(onlyHeader, features({ attribution: { feature: 'summary' } }))).toMatchObject({ route: 'feat', preBlock: 'no-route' });
+});
+
+test('server tools are denied unless the matched route lists them; resolve answers 403 permission_error', () => {
+  const p = compile(`${HEAD}routes:
+  - { name: search, match: { team: web }, chain: [a], serverTools: [web_search] }
+  - { name: none, chain: [a] }
+${STORE}`);
+  const tool = (type: string, team = 'web'): Plan =>
+    decide(p, features({ team, serverTools: [{ type, maxUses: 3 }], boundKind: 'context-window', inputTokensBound: 1_000_000 }));
+  expect(tool('web_search_20250305').preBlock).toBeNull();
+  expect(tool('web_search').preBlock).toBeNull();
+  const other = tool('code_execution_20250825');
+  expect(other.preBlock).toBe('server-tool-not-allowed');
+  expect(resolve(p, other, null).block).toMatchObject({ status: 403, type: 'permission_error', reason: 'server-tool-not-allowed' });
+  expect(resolve(p, other, null).block?.message).toContain('code_execution_20250825');
+  expect(tool('web_search_20250305', 'data').preBlock).toBe('server-tool-not-allowed');
+  expect(decide(p, features({ team: 'data' })).preBlock).toBeNull();
+});
+
+test('coding-agent rewrite behind allowBodyRewrite prices the reservation at the served model', () => {
+  const p = compile(`${HEAD}routes:
+  - { name: cheap, match: { traffic: coding-agent }, chain: [a], rewriteModel: claude-haiku-5-5, allowBodyRewrite: true, because: auxiliary calls }
+budgets:
+  - { name: org, scope: tenant, window: day, usd: 10 }
+${STORE}`);
+  const f = features({ model: 'claude-opus-5-5' });
+  const plan = decide(p, f);
+  expect(plan.chain).toEqual([{ provider: 'a', upstreamModel: 'claude-haiku-5-5', rewritesModel: true }]);
+  const haiku = reservationPrice(p.prices, 'claude-haiku-5-5').price;
+  const opus = reservationPrice(p.prices, 'claude-opus-5-5').price;
+  const opts = { serverToolsWithoutMaxUses: 'block', assumedMaxUses: 25, reserveOutputTokens: null } as const;
+  expect(plan.reservations[0]?.estMicroUsd).toBe(worstCaseMicroUsd(f, haiku, p.prices, opts).micro);
+  expect(plan.reservations[0]?.estMicroUsd).not.toBe(worstCaseMicroUsd(f, opus, p.prices, opts).micro);
 });

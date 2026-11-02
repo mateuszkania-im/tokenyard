@@ -23,6 +23,12 @@ export function globTest(re: RegExp, value: string): boolean {
 
 const eq = <T>(want: T | null, have: T | null): boolean => want === null || want === have;
 
+/** Match fields whose request value comes from client headers, not from the key or the request itself. */
+export const HEADER_MATCH_FIELDS = ['requestClass', 'agentType', 'repo', 'feature'] as const;
+
+/** The route states a condition on a client header. */
+export const hasHeaderPredicate = (r: CompiledRoute): boolean => HEADER_MATCH_FIELDS.some((k) => r.match[k] !== null);
+
 /** Every condition the route states holds for the request, the surface taken as `surface`. */
 export function routeMatches(r: CompiledRoute, f: RequestFeatures, surface: Surface): boolean {
   const m = r.match;
@@ -42,6 +48,16 @@ export function routeMatches(r: CompiledRoute, f: RequestFeatures, surface: Surf
 }
 
 /**
+ * The route that authorises the model (spec 11): the first route matching on what the key and the request itself
+ * decide (tenant, team, traffic, billing, surface, model), as if the client had sent no attribution headers. Header
+ * predicates may only choose among chains and rewrites, never widen the models a key may use.
+ */
+export function findAuthzRoute(policy: CompiledPolicy, f: RequestFeatures): CompiledRoute | null {
+  const bare: RequestFeatures = { ...f, attribution: { ...f.attribution, requestClass: null, agentType: null, repo: null, feature: null } };
+  return findRoute(policy, bare);
+}
+
+/**
  * First matching route. `count_tokens` takes the route of the messages request it counts for (same models and
  * providers, no reservation) unless a route names `anthropic-count-tokens` itself.
  */
@@ -54,15 +70,17 @@ export function findRoute(policy: CompiledPolicy, f: RequestFeatures): CompiledR
 
 /**
  * Model ids `GET /v1/models` lists for a key (spec 5.3): the routes a messages request with this key could take,
- * judged on what the key decides (traffic, billing, tenant, team, surface); conditions that depend on the request
- * (request class, agent type, repo, feature, model) are assumed to hold. In route order, without duplicates.
+ * judged on what the key decides (traffic, billing, tenant, team, surface), skipping routes with header predicates
+ * (they cannot authorise a model); a model glob condition is assumed to hold. In route order, without duplicates.
  */
 export function modelsForKey(policy: CompiledPolicy, key: KeyRecord): string[] {
   const traffic = key.kind === 'service' ? 'product' : 'coding-agent';
   const out = new Set<string>();
   for (const r of policy.routes) {
     const m = r.match;
+    // A route with a header predicate never authorises a model on its own (findAuthzRoute).
     const reachable =
+      !hasHeaderPredicate(r) &&
       (m.surface === null || m.surface === 'anthropic-messages') &&
       eq(m.traffic, traffic) &&
       eq(m.billing, key.billing) &&

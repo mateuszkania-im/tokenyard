@@ -1,0 +1,17 @@
+apiVersion: tokenyard/v1
+kind: Policy
+metadata: { name: fixture }
+pricing: ./prices.yaml
+keys: ./keys.yaml
+providers:
+  anthropic: { format: anthropic, baseUrl: https://api.anthropic.com, credential: { env: ANTHROPIC_API_KEY } }
+tenants:
+  acme: { teams: [web] }
+routes:
+  # The request class comes from a client header, so it must not widen the models a key may use.
+  - { name: compaction, match: { requestClass: compaction }, chain: [anthropic], allowModels: ["claude-*"] }
+  - { name: all, match: {}, chain: [anthropic], allowModels: ["claude-haiku-*"] }
+budgets:
+  - { name: org-month, scope: tenant, window: month, usd: 100, onExceed: block }
+failure:
+  counterStoreDown: { rateLimits: open, budgets: closed }

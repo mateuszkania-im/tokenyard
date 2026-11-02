@@ -216,3 +216,62 @@ function lastMessageRange(b: Buffer): { start: number; end: number } | null {
   }
   return result;
 }
+
+/** Byte ranges of every value of top-level `key` in a JSON object body, keys compared after unescaping. */
+function topLevelValueRanges(b: Buffer, key: string): Array<{ start: number; end: number }> {
+  const out: Array<{ start: number; end: number }> = [];
+  let i = skipWs(b, 0);
+  if (b[i] !== 0x7b) return out;
+  i++;
+  for (;;) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] !== QUOTE) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString('utf8', keyStart, i);
+    let k: string;
+    try {
+      k = rawKey.includes('\\') ? (JSON.parse(rawKey) as string) : rawKey.slice(1, -1);
+    } catch {
+      return [];
+    }
+    i = skipWs(b, i) + 1; // colon
+    i = skipWs(b, i);
+    const start = i;
+    i = skipValue(b, i);
+    if (k === key) out.push({ start, end: i });
+    i = skipWs(b, i);
+    if (b[i] === 0x2c) i++;
+  }
+  return out;
+}
+
+/**
+ * The body with only the bytes of the top-level `model` string replaced by `model` (JSON-escaped); every other byte is
+ * kept. Null when the value cannot be located exactly: the body is not a JSON object, has no string `model`, or has
+ * more than one top-level `model` key. The result is checked by parsing it back.
+ */
+export function rewriteTopLevelModel(b: Buffer, model: string): Buffer | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(b.toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (!isObj(parsed) || typeof parsed.model !== 'string') return null;
+  const ranges = topLevelValueRanges(b, 'model');
+  const r = ranges[0];
+  if (ranges.length !== 1 || r === undefined || b[r.start] !== QUOTE) return null;
+  try {
+    if (JSON.parse(b.toString('utf8', r.start, r.end)) !== parsed.model) return null;
+  } catch {
+    return null;
+  }
+  const out = Buffer.concat([b.subarray(0, r.start), Buffer.from(JSON.stringify(model), 'utf8'), b.subarray(r.end)]);
+  try {
+    const back = JSON.parse(out.toString('utf8')) as unknown;
+    return isObj(back) && back.model === model ? out : null;
+  } catch {
+    return null;
+  }
+}

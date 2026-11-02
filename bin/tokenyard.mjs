@@ -28598,6 +28598,10 @@ function routeMatches(r, f, surface) {
   const a = f.attribution;
   return eq(m.surface, surface) && eq(m.traffic, f.traffic) && eq(m.billing, f.billing) && eq(m.tenant, f.tenant) && eq(m.team, f.team) && eq(m.requestClass, a.requestClass) && eq(m.agentType, a.agentType) && eq(m.repo, a.repo) && eq(m.feature, a.feature) && (m.model === null || globTest(m.model, f.model));
 }
+function findAuthzRoute(policy2, f) {
+  const bare2 = { ...f, attribution: { ...f.attribution, requestClass: null, agentType: null, repo: null, feature: null } };
+  return findRoute(policy2, bare2);
+}
 function findRoute(policy2, f) {
   const direct = policy2.routes.find((r) => routeMatches(r, f, f.surface));
   if (direct) return direct;
@@ -28609,17 +28613,19 @@ function modelsForKey(policy2, key) {
   const out = /* @__PURE__ */ new Set();
   for (const r of policy2.routes) {
     const m = r.match;
-    const reachable = (m.surface === null || m.surface === "anthropic-messages") && eq(m.traffic, traffic) && eq(m.billing, key.billing) && eq(m.tenant, key.tenant) && (m.team === null || m.team === key.team);
+    const reachable = !hasHeaderPredicate(r) && (m.surface === null || m.surface === "anthropic-messages") && eq(m.traffic, traffic) && eq(m.billing, key.billing) && eq(m.tenant, key.tenant) && (m.team === null || m.team === key.team);
     if (reachable) for (const id of r.listedModels) out.add(id);
   }
   return [...out];
 }
-var MAX_GLOB_INPUT, eq;
+var MAX_GLOB_INPUT, eq, HEADER_MATCH_FIELDS, hasHeaderPredicate;
 var init_match = __esm({
   "src/policy/match.ts"() {
     "use strict";
     MAX_GLOB_INPUT = 256;
     eq = (want, have) => want === null || want === have;
+    HEADER_MATCH_FIELDS = ["requestClass", "agentType", "repo", "feature"];
+    hasHeaderPredicate = (r) => HEADER_MATCH_FIELDS.some((k) => r.match[k] !== null);
   }
 });
 
@@ -28863,9 +28869,17 @@ function decide(policy2, f) {
   const route2 = findRoute(policy2, f);
   if (!route2) return { ...plan, preBlock: "no-route" };
   plan.route = route2.name;
-  if (route2.allowModels !== null && !route2.allowModels.some((re) => globTest(re, f.model))) return { ...plan, preBlock: "model-not-allowed" };
-  const upstreamModel = route2.rewriteModel ?? f.model;
-  const rewritesModel = route2.rewriteModel !== null && route2.rewriteModel !== f.model;
+  const authz = route2.match.requestClass === null && route2.match.agentType === null && route2.match.repo === null && route2.match.feature === null ? route2 : findAuthzRoute(policy2, f);
+  if (authz === null) return { ...plan, preBlock: "no-route" };
+  const allows = (r) => r.allowModels === null || r.allowModels.some((re) => globTest(re, f.model));
+  if (!allows(route2) || !allows(authz)) return { ...plan, preBlock: "model-not-allowed" };
+  const refused = f.serverTools.filter((tool) => !(route2.serverTools ?? []).includes(serverToolKey(tool.type)));
+  if (refused.length > 0) {
+    return { ...plan, preBlock: "server-tool-not-allowed", warnings: [...warnings, ...refused.map((tool) => ({ kind: "server-tool-not-allowed", type: tool.type }))] };
+  }
+  const mayRewrite = route2.rewriteModel !== null && (f.traffic === "product" || route2.allowBodyRewrite);
+  const upstreamModel = mayRewrite ? route2.rewriteModel : f.model;
+  const rewritesModel = upstreamModel !== f.model;
   plan.chain = orderChain(route2, session ?? f.id).map((provider2) => ({ provider: provider2, upstreamModel, rewritesModel }));
   if (lastTurnBlocks.length > 0) return { ...plan, preBlock: "secret" };
   if (f.surface === "anthropic-count-tokens") return plan;
@@ -28876,7 +28890,8 @@ function decide(policy2, f) {
     warnings.push({ kind: "unpriced", model: upstreamModel });
   }
   const levels = policy2.budgets.flatMap((b) => {
-    const value = scopeValue(b.scope, f);
+    const headerScoped = b.scope === "session" || b.scope === "repo";
+    const value = scopeValue(b.scope, f) ?? (headerScoped && b.enforce ? UNATTRIBUTED : null);
     if (value === null) return [];
     const w = b.window === null ? null : windowOf(b.window, f.ts);
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce: b.enforce, resetsAt: w?.end ?? null }];
@@ -28910,7 +28925,7 @@ function decide(policy2, f) {
   });
   return plan;
 }
-var DAY_MS2, CLASSES, hasModels, pricedName;
+var DAY_MS2, UNATTRIBUTED, CLASSES, hasModels, pricedName;
 var init_decide = __esm({
   "src/policy/decide.ts"() {
     "use strict";
@@ -28920,6 +28935,7 @@ var init_decide = __esm({
     init_match();
     init_schema();
     DAY_MS2 = 864e5;
+    UNATTRIBUTED = "(unattributed)";
     CLASSES = new Set(REQUEST_CLASSES2);
     hasModels = (t) => Object.keys(t.models).length > 0;
     pricedName = (t, model) => model !== "" && lookupModel(t, model) !== null ? model : null;
@@ -28945,6 +28961,10 @@ function preBlock(policy2, plan, reason) {
       return block(403, "permission_error", reason, `the model or a server tool has no price in table ${policy2.priceTableVersion}, and failure.unpricedModel is block`);
     case "server-tool-no-max-uses":
       return block(403, "permission_error", reason, "a server tool without max_uses has no cost bound under an enforced budget; set max_uses on the tool");
+    case "server-tool-not-allowed": {
+      const types = [...new Set(plan.warnings.flatMap((w) => w.kind === "server-tool-not-allowed" ? [w.type] : []))].join(", ");
+      return block(403, "permission_error", reason, `server tool ${types || "type"} is not allowed${route2}; list it under the route's serverTools`);
+    }
     case "secret": {
       const rules = [...new Set(plan.taint?.add.map((a) => a.rule) ?? [])].join(", ") || "a secret rule";
       return block(400, "invalid_request_error", reason, `the last message contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);
@@ -29419,6 +29439,57 @@ function lastMessageRange(b) {
     if (b[i] === 44) i++;
   }
   return result;
+}
+function topLevelValueRanges(b, key) {
+  const out = [];
+  let i = skipWs(b, 0);
+  if (b[i] !== 123) return out;
+  i++;
+  for (; ; ) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] !== QUOTE) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString("utf8", keyStart, i);
+    let k;
+    try {
+      k = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+    } catch {
+      return [];
+    }
+    i = skipWs(b, i) + 1;
+    i = skipWs(b, i);
+    const start = i;
+    i = skipValue(b, i);
+    if (k === key) out.push({ start, end: i });
+    i = skipWs(b, i);
+    if (b[i] === 44) i++;
+  }
+  return out;
+}
+function rewriteTopLevelModel(b, model) {
+  let parsed;
+  try {
+    parsed = JSON.parse(b.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!isObj3(parsed) || typeof parsed.model !== "string") return null;
+  const ranges = topLevelValueRanges(b, "model");
+  const r = ranges[0];
+  if (ranges.length !== 1 || r === void 0 || b[r.start] !== QUOTE) return null;
+  try {
+    if (JSON.parse(b.toString("utf8", r.start, r.end)) !== parsed.model) return null;
+  } catch {
+    return null;
+  }
+  const out = Buffer.concat([b.subarray(0, r.start), Buffer.from(JSON.stringify(model), "utf8"), b.subarray(r.end)]);
+  try {
+    const back = JSON.parse(out.toString("utf8"));
+    return isObj3(back) && back.model === model ? out : null;
+  } catch {
+    return null;
+  }
 }
 var isObj3, CLIENT_TOOL_PREFIXES, isClientTool, EXPANDING_BLOCKS, PLAIN_FIELDS, CLEARING_EDIT_PREFIXES, QUOTE, BACKSLASH;
 var init_anthropic_messages = __esm({
@@ -56247,6 +56318,16 @@ async function handle(deps, id, req, res) {
     sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
     return early({ ...decided, status: b.status, decision: { action: "block", reason: b.reason }, errorClass: b.type });
   }
+  let upstreamBody = body;
+  if (first2?.rewritesModel) {
+    const rewritten = rewriteTopLevelModel(body, first2.upstreamModel);
+    if (!rewritten) {
+      const msg = `route "${planned.route ?? ""}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
+      sendError(req, res, anthropicError(400, "invalid_request_error", msg, null, id));
+      return early({ ...decided, status: 400, decision: { action: "block", reason: "model-rewrite-failed" }, errorClass: "invalid_request_error" });
+    }
+    upstreamBody = rewritten;
+  }
   const mode = provider2.credential === "passthrough" ? "passthrough" : "api";
   const headers = upstreamHeaders(req.headers, {
     mode,
@@ -56257,7 +56338,7 @@ async function handle(deps, id, req, res) {
   let up;
   const forwardedAt = deps.clock();
   try {
-    up = await forward(provider2, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
+    up = await forward(provider2, { method, pathAndQuery: match.pathAndQuery, headers, body: upstreamBody }, ac.signal);
   } catch {
     const common = { ...decided, provider: provider2.name };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
@@ -56527,6 +56608,20 @@ function validatePolicy(src, o) {
     const i = policy2.routes.findIndex((earlier, k) => k < j && covers(earlier, later));
     if (i >= 0) warn("W_ROUTE_SHADOWED", `routes[${j}]`, `route "${later.name}" can never match: route "${policy2.routes[i]?.name}" before it covers it`);
   });
+  const modelIds = Object.keys(prices.models);
+  const allowsId = (r, id) => r.allowModels === void 0 || r.allowModels.some((p) => globMatch(p, id));
+  policy2.routes.forEach((r, j) => {
+    if (HEADER_FIELDS.every((k) => r.match[k] === void 0)) return;
+    const authz = policy2.routes.find((k) => HEADER_FIELDS.every((h) => k.match[h] === void 0) && INTRINSIC_FIELDS.every((f) => k.match[f] === void 0 || k.match[f] === r.match[f]));
+    if (!authz) {
+      warn("W_HEADER_ROUTE_GRANTS", `routes[${j}]`, `route "${r.name}" is reached only through client headers, which cannot grant models; add a route without header conditions that allows them, or its requests get 403`);
+      return;
+    }
+    const extra = modelIds.filter((id) => allowsId(r, id) && !allowsId(authz, id));
+    if (extra.length > 0 || r.allowModels === void 0 && authz.allowModels !== void 0) {
+      warn("W_HEADER_ROUTE_GRANTS", `routes[${j}]`, `route "${r.name}" allows models that route "${authz.name}" does not (${extra.join(", ") || "any model"}); client headers cannot grant them, so those requests get 403`);
+    }
+  });
   if (policy2.reservation.estimator === "session-aware") {
     policy2.budgets.forEach((b, i) => {
       if (b.scope === "session" && b.onExceed === "block") warn("W_SESSION_AWARE_BLOCK", `budgets[${i}]`, "estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold");
@@ -56542,7 +56637,7 @@ function validatePolicy(src, o) {
   }
   return { errors, warnings };
 }
-var ERROR_CODES, WARNING_CODES, LOAD_ERROR_CODES, OFFICIAL_HOST, ENV_NAME, WINDOW_RANK, SCOPE_RANK, MATCH_FIELDS;
+var ERROR_CODES, WARNING_CODES, LOAD_ERROR_CODES, OFFICIAL_HOST, ENV_NAME, WINDOW_RANK, SCOPE_RANK, MATCH_FIELDS, HEADER_FIELDS, INTRINSIC_FIELDS;
 var init_validate = __esm({
   "src/policy/validate.ts"() {
     "use strict";
@@ -56565,13 +56660,15 @@ var init_validate = __esm({
       "E_STORE_DOWN_UNSTATED",
       "E_CREDENTIAL_ENV"
     ];
-    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK"];
+    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK", "W_HEADER_ROUTE_GRANTS"];
     LOAD_ERROR_CODES = ["E_FILE_MISSING", "E_YAML_UNSAFE", "E_YAML_SYNTAX", "E_SCHEMA", "E_PRICES_INVALID", "E_MODEL_LIMITS_MISSING"];
     OFFICIAL_HOST = { anthropic: "api.anthropic.com", openai: "api.openai.com" };
     ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
     WINDOW_RANK = { day: 1, week: 2, month: 3 };
     SCOPE_RANK = { tenant: 3, team: 2, key: 1, repo: 0, session: 0 };
     MATCH_FIELDS = ["surface", "traffic", "billing", "tenant", "team", "requestClass", "agentType", "repo", "feature", "model"];
+    HEADER_FIELDS = ["requestClass", "agentType", "repo", "feature"];
+    INTRINSIC_FIELDS = ["surface", "traffic", "billing", "tenant", "team", "model"];
   }
 });
 

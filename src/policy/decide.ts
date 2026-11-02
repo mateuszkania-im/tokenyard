@@ -5,11 +5,13 @@ import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd,
 import { budgetKey, gcraKey, streamKey, taintKey } from '../limits/keys.js';
 import { lookupModel, type ModelPrice, type PriceTable } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
-import { findRoute, globTest } from './match.js';
+import { findAuthzRoute, findRoute, globTest } from './match.js';
 import { REQUEST_CLASSES } from './schema.js';
 import type { CompiledBudget, CompiledPolicy, CompiledRoute, GuardrailHit, KeyRecord, Plan, RawAttribution, RequestFeatures, Surface, Warning } from './types.js';
 
 const DAY_MS = 86_400_000;
+/** Scope value for an enforced level whose header-derived value (session, repo) is missing, so omitting it dodges nothing. */
+export const UNATTRIBUTED = '(unattributed)';
 const CLASSES: ReadonlySet<string> = new Set(REQUEST_CLASSES);
 
 const hasModels = (t: PriceTable): boolean => Object.keys(t.models).length > 0;
@@ -157,10 +159,21 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const route = findRoute(policy, f);
   if (!route) return { ...plan, preBlock: 'no-route' };
   plan.route = route.name;
-  if (route.allowModels !== null && !route.allowModels.some((re) => globTest(re, f.model))) return { ...plan, preBlock: 'model-not-allowed' };
+  // Client headers may pick the route, not widen the models: the header-free route must allow the model too (spec 11).
+  const authz = route.match.requestClass === null && route.match.agentType === null && route.match.repo === null && route.match.feature === null ? route : findAuthzRoute(policy, f);
+  if (authz === null) return { ...plan, preBlock: 'no-route' };
+  const allows = (r: CompiledRoute): boolean => r.allowModels === null || r.allowModels.some((re) => globTest(re, f.model));
+  if (!allows(route) || !allows(authz)) return { ...plan, preBlock: 'model-not-allowed' };
+  // Server tools are denied unless the route lists their type (date suffix dropped).
+  const refused = f.serverTools.filter((tool) => !(route.serverTools ?? []).includes(serverToolKey(tool.type)));
+  if (refused.length > 0) {
+    return { ...plan, preBlock: 'server-tool-not-allowed', warnings: [...warnings, ...refused.map((tool): Warning => ({ kind: 'server-tool-not-allowed', type: tool.type }))] };
+  }
 
-  const upstreamModel = route.rewriteModel ?? f.model;
-  const rewritesModel = route.rewriteModel !== null && route.rewriteModel !== f.model;
+  // A rewrite changes body bytes: product traffic, or coding-agent traffic behind allowBodyRewrite (spec 6.4).
+  const mayRewrite = route.rewriteModel !== null && (f.traffic === 'product' || route.allowBodyRewrite);
+  const upstreamModel = mayRewrite ? (route.rewriteModel as string) : f.model;
+  const rewritesModel = upstreamModel !== f.model;
   plan.chain = orderChain(route, session ?? f.id).map((provider) => ({ provider, upstreamModel, rewritesModel }));
   if (lastTurnBlocks.length > 0) return { ...plan, preBlock: 'secret' };
   // count_tokens is free: forwarded with no reservation, rate check or stream slot (spec 5.3).
@@ -174,7 +187,10 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   }
 
   const levels = policy.budgets.flatMap((b) => {
-    const value = scopeValue(b.scope, f);
+    // A key without a team skips team levels; a missing session or repo header is charged to UNATTRIBUTED on enforced
+    // levels, so leaving a header out cannot dodge a budget.
+    const headerScoped = b.scope === 'session' || b.scope === 'repo';
+    const value = scopeValue(b.scope, f) ?? (headerScoped && b.enforce ? UNATTRIBUTED : null);
     if (value === null) return [];
     const w = b.window === null ? null : windowOf(b.window, f.ts);
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce: b.enforce, resetsAt: w?.end ?? null }];
@@ -206,6 +222,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     const value = scopeValue(l.scope, f);
     return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
   });
+  // Slots deliberately apply to every messages request, streamed or not: both hold an upstream slot (spec 5.3, 11).
   plan.streamSlots = policy.streamLimits.flatMap((l) => {
     const value = scopeValue(l.scope, f);
     return value === null ? [] : [{ limit: l.name, key: streamKey(f.tenant, l.name, value), max: l.max }];

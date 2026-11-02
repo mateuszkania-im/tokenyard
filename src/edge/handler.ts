@@ -12,7 +12,7 @@ import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } 
 import { SseParser } from '../stream/sse.js';
 import { createTee } from '../stream/tee.js';
 import { extractCountTokensFeatures } from '../surfaces/anthropic-count-tokens.js';
-import { extractAnthropicFeatures } from '../surfaces/anthropic-messages.js';
+import { extractAnthropicFeatures, rewriteTopLevelModel } from '../surfaces/anthropic-messages.js';
 import { modelsListBody } from '../surfaces/anthropic-models.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { forward, type UpstreamResponse } from '../upstream/forward.js';
@@ -288,6 +288,19 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
     return early({ ...decided, status: b.status, decision: { action: 'block', reason: b.reason }, errorClass: b.type });
   }
 
+  // rewriteModel (product routes, or coding-agent routes behind allowBodyRewrite): only the bytes of the top-level
+  // model value change; the reservation was priced at this served model. Not locatable exactly: refuse, never guess.
+  let upstreamBody = body;
+  if (first?.rewritesModel) {
+    const rewritten = rewriteTopLevelModel(body, first.upstreamModel);
+    if (!rewritten) {
+      const msg = `route "${planned.route ?? ''}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
+      sendError(req, res, anthropicError(400, 'invalid_request_error', msg, null, id));
+      return early({ ...decided, status: 400, decision: { action: 'block', reason: 'model-rewrite-failed' }, errorClass: 'invalid_request_error' });
+    }
+    upstreamBody = rewritten;
+  }
+
   // 9. Forward.
   const mode = provider.credential === 'passthrough' ? 'passthrough' : 'api';
   // A tokenyard key is never forwarded, in whichever header it came; any other Authorization (the OAuth token) is.
@@ -300,7 +313,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   let up: UpstreamResponse;
   const forwardedAt = deps.clock();
   try {
-    up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body }, ac.signal);
+    up = await forward(provider, { method, pathAndQuery: match.pathAndQuery, headers, body: upstreamBody }, ac.signal);
   } catch {
     const common = { ...decided, provider: provider.name };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });

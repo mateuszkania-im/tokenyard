@@ -28,7 +28,7 @@ export const ERROR_CODES = [
   'E_CREDENTIAL_ENV',
 ] as const;
 
-export const WARNING_CODES = ['W_CHILD_BUDGET', 'W_SURFACE_NO_ROUTE', 'W_ROUTE_SHADOWED', 'W_SESSION_AWARE_BLOCK', 'W_SERVER_TOOLS_ASSUME', 'W_SUBSCRIPTION_BLOCK'] as const;
+export const WARNING_CODES = ['W_CHILD_BUDGET', 'W_SURFACE_NO_ROUTE', 'W_ROUTE_SHADOWED', 'W_SESSION_AWARE_BLOCK', 'W_SERVER_TOOLS_ASSUME', 'W_SUBSCRIPTION_BLOCK', 'W_HEADER_ROUTE_GRANTS'] as const;
 
 /** Codes `loadPolicyDir` throws with (PolicyLoadError.code) before validation can run. */
 export const LOAD_ERROR_CODES = ['E_FILE_MISSING', 'E_YAML_UNSAFE', 'E_YAML_SYNTAX', 'E_SCHEMA', 'E_PRICES_INVALID', 'E_MODEL_LIMITS_MISSING'] as const;
@@ -61,6 +61,9 @@ export function globMatch(pattern: string, text: string): boolean {
 }
 
 const MATCH_FIELDS = ['surface', 'traffic', 'billing', 'tenant', 'team', 'requestClass', 'agentType', 'repo', 'feature', 'model'] as const;
+/** Match fields whose value comes from client headers (decide.ts authorises the model on the route found without them). */
+const HEADER_FIELDS = ['requestClass', 'agentType', 'repo', 'feature'] as const;
+const INTRINSIC_FIELDS = ['surface', 'traffic', 'billing', 'tenant', 'team', 'model'] as const;
 
 /** True when every request route `later` could match is already taken by `earlier` (earlier has no condition `later` lacks or differs on). */
 function covers(earlier: RouteSpec, later: RouteSpec): boolean {
@@ -177,6 +180,23 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
   policy.routes.forEach((later, j) => {
     const i = policy.routes.findIndex((earlier, k) => k < j && covers(earlier, later));
     if (i >= 0) warn('W_ROUTE_SHADOWED', `routes[${j}]`, `route "${later.name}" can never match: route "${policy.routes[i]?.name}" before it covers it`);
+  });
+
+  // A route with header predicates cannot widen the models a key may use: decide also requires the route that matches
+  // without them. Approximated statically by the first header-free route with no condition this route lacks or differs on.
+  const modelIds = Object.keys(prices.models);
+  const allowsId = (r: RouteSpec, id: string): boolean => r.allowModels === undefined || r.allowModels.some((p) => globMatch(p, id));
+  policy.routes.forEach((r, j) => {
+    if (HEADER_FIELDS.every((k) => r.match[k] === undefined)) return;
+    const authz = policy.routes.find((k) => HEADER_FIELDS.every((h) => k.match[h] === undefined) && INTRINSIC_FIELDS.every((f) => k.match[f] === undefined || k.match[f] === r.match[f]));
+    if (!authz) {
+      warn('W_HEADER_ROUTE_GRANTS', `routes[${j}]`, `route "${r.name}" is reached only through client headers, which cannot grant models; add a route without header conditions that allows them, or its requests get 403`);
+      return;
+    }
+    const extra = modelIds.filter((id) => allowsId(r, id) && !allowsId(authz, id));
+    if (extra.length > 0 || (r.allowModels === undefined && authz.allowModels !== undefined)) {
+      warn('W_HEADER_ROUTE_GRANTS', `routes[${j}]`, `route "${r.name}" allows models that route "${authz.name}" does not (${extra.join(', ') || 'any model'}); client headers cannot grant them, so those requests get 403`);
+    }
   });
 
   if (policy.reservation.estimator === 'session-aware') {

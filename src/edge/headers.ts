@@ -25,7 +25,7 @@ function hopByHop(h: IncomingHttpHeaders): (name: string) => boolean {
 /**
  * Headers towards upstream (spec 5.5): a denylist, so unknown headers and every `anthropic-beta`
  * value pass verbatim. Dropped: hop-by-hop, `host` (set to the upstream host), `content-length`
- * (recomputed by the client from the unchanged body), `expect` (answered by this server),
+ * (recomputed by the HTTP client from the body sent, which differs only after a model rewrite), `expect` (answered by this server),
  * `accept-encoding` (set to `identity` so the tee parses plain text), `x-tokenyard-*`, and in
  * API mode both inbound credential headers, replaced by the provider credential. In passthrough mode
  * the credential headers stay (the OAuth value goes upstream unchanged) except one that carries a tokenyard key.
