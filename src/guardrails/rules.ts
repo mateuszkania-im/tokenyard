@@ -23,6 +23,8 @@ export interface SecretRule {
   minEntropy?: number;
   /** Extra check on the value (checksums for PII). */
   validate?: (value: string) => boolean;
+  /** Matches only inside quoted strings, never in a bare token (PII numbers: a JSON number such as a timestamp is not a card). */
+  quotedOnly?: boolean;
 }
 
 const GITLEAKS = 'MIT (gitleaks)';

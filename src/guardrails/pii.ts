@@ -61,6 +61,7 @@ export const PII_RULES: readonly SecretRule[] = Object.freeze([
     source: 'tokenyard (checksum per the PESEL specification)',
     licence: TOKENYARD,
     validate: peselValid,
+    quotedOnly: true,
   },
   {
     id: 'iban',
@@ -77,5 +78,6 @@ export const PII_RULES: readonly SecretRule[] = Object.freeze([
     source: 'tokenyard (Luhn)',
     licence: TOKENYARD,
     validate: luhnValid,
+    quotedOnly: true,
   },
 ]);

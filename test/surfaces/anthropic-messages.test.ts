@@ -140,3 +140,11 @@ test('expandsServerSide: fields and tools that make the provider add input, or t
   const sys = extractAnthropicFeatures(Buffer.from(JSON.stringify({ model: 'm', system: [{ type: 'document', source: {} }], messages: [] })));
   expect(sys.blockTypes).toContain('document');
 });
+
+test('ambiguous keys: a duplicate top-level messages key or a duplicate role or content in a message is flagged', () => {
+  const f = (s: string) => extractAnthropicFeatures(Buffer.from(s)).ambiguousKeys;
+  expect(f('{"messages":[{"role":"user","content":"a"}],"messages":[{"role":"user","content":"b"}]}')).toBe(true);
+  expect(f('{"messages":[{"role":"user","content":"a","role":"assistant"}]}')).toBe(true);
+  expect(f('{"messages":[{"role":"user","content":"a","c\\u006fntent":"b"}]}')).toBe(true);
+  expect(f('{"messages":[{"role":"user","content":"a"},{"role":"assistant","content":"b"}]}')).toBeUndefined();
+});

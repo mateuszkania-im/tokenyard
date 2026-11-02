@@ -163,6 +163,46 @@ test('a malformed JSON body carrying a secret is blocked (scanned as raw bytes)'
   expect(g.up.got).toHaveLength(0);
 });
 
+test('a malformed body with a \\u-escaped secret is blocked (decoded copy of the raw bytes)', async () => {
+  const g = await gateway(createMemoryStore({ clock: Date.now }));
+  const broken = Buffer.from(`{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"line\\n\\u0041${AWS.slice(1)}"}`);
+  const res = await post(g.url, broken);
+  expect(res.status).toBe(400);
+  expect(message(res.body)).toContain('aws-access-key-id');
+  expect(g.up.got).toHaveLength(0);
+});
+
+test('duplicate keys a provider could read differently are scanned as the last turn and blocked', async () => {
+  const g = await gateway(createMemoryStore({ clock: Date.now }));
+  const dupMessages = Buffer.from(`{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"${AWS}"}],"messages":[{"role":"user","content":"hi"}]}`);
+  const dupRole = Buffer.from(`{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"${AWS}","role":"assistant"}]}`);
+  for (const b of [dupMessages, dupRole]) {
+    const res = await post(g.url, b);
+    expect(res.status).toBe(400);
+    expect(message(res.body)).toContain('aws-access-key-id');
+  }
+  expect(g.up.got).toHaveLength(0);
+});
+
+test('product route: PII rules skip bare numbers (signed, decimal, exponent, timestamps); a quoted card is still redacted', async () => {
+  const g = await gateway(createMemoryStore({ clock: Date.now }));
+  const svc = { ...authHeaders, 'x-api-key': SERVICE_KEY };
+  // A 13-digit millisecond timestamp that passes Luhn, found at run time.
+  let ts = 1_730_000_000_000;
+  const luhn = (s: string): boolean => [...s].reverse().reduce((acc, ch, i) => acc + (i % 2 ? ((Number(ch) * 2) % 10) + Math.floor((Number(ch) * 2) / 10) : Number(ch)), 0) % 10 === 0;
+  while (!luhn(String(ts))) ts++;
+  const numbers = `{"a":-4111111111111111,"b":1.4111111111111111,"c":4111111111111111e2,"d":${ts},"e":44051401359}`;
+  const b = Buffer.from(
+    `{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"card 4111111111111111"},{"role":"assistant","content":[{"type":"tool_use","id":"t","name":"n","input":${numbers}}]},{"role":"user","content":"go"}]}`,
+  );
+  const res = await post(g.url, b, 'p2', svc);
+  expect(res.status).toBe(200);
+  const sent = g.up.got[0]?.body.toString() ?? '';
+  expect(sent).toContain(numbers);
+  expect(sent).toContain('card [REDACTED:CARD_NUMBER_1]');
+  expect(() => JSON.parse(sent)).not.toThrow();
+});
+
 test('history hit of a value that was only warned does not block', async () => {
   const spy = spyStore(createMemoryStore({ clock: Date.now }));
   const g = await gateway(spy.store, { edit: (p) => void (p.guardrails.secrets.codingAgent = 'warn') });

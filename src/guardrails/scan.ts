@@ -152,13 +152,31 @@ const isWs = (c: number | undefined): boolean => c === 0x20 || c === 0x09 || c =
  */
 const isStructural = (c: number | undefined): boolean => c === 0x7b || c === 0x7d || c === 0x5b || c === 0x5d || c === 0x2c || c === 0x3a;
 
-function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined, raw: boolean): { all: View; joined: View | null } {
+/**
+ * A body JSON.parse refused (or one with duplicate keys a provider may read differently): no structure to trust, so
+ * the raw bytes are scanned as they are, and a best-effort decoded copy beside them (escapes undone anywhere, invalid
+ * ones kept literal), so an escaped secret is not missed either. Fail toward detection.
+ */
+function rawViews(body: Buffer, start: number, end: number): { all: View; joined: View | null; decoded: View } {
   const all = new View();
-  // A body JSON.parse refused: no structure to trust, so the raw bytes are scanned as they are (fail toward detection).
-  if (raw) {
-    all.push(body.toString('latin1', start, end), start, end, PLAIN);
-    return { all, joined: null };
+  all.push(body.toString('latin1', start, end), start, end, PLAIN);
+  const decoded = new View();
+  let p = start;
+  while (p < end) {
+    const esc = body.indexOf(0x5c, p);
+    const stop = esc < 0 || esc >= end ? end : esc;
+    if (stop > p) decoded.push(body.toString('latin1', p, stop), p, stop, PLAIN);
+    if (stop >= end) break;
+    const d = decodeEscape(body, stop, end);
+    decoded.push(d.text, stop, d.next, ESCAPE);
+    p = Math.max(d.next, stop + 1);
   }
+  return { all, joined: null, decoded };
+}
+
+function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined, raw: boolean): { all: View; joined: View | null; decoded?: View } {
+  if (raw) return rawViews(body, start, end);
+  const all = new View();
   const joined = messages && messages.length > 0 ? new View() : null;
   let lastKey: string | null = null;
   let group = -1;
@@ -272,6 +290,7 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
     const first = segments[0];
     const last = segments[segments.length - 1];
     if (first === undefined || last === undefined || (crossingOnly && segments.length < 2)) continue;
+    if (rule.quotedOnly && segments.some((g) => g.bare)) continue;
     out.push({ rule, start: first.start, end: last.end, value, segments });
   }
 }
@@ -285,10 +304,19 @@ export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { ra
   const range = opts.range ?? { start: 0, end: body.length };
   const out: Span[] = [];
   if (rules.length === 0 || range.end <= range.start) return out;
-  const { all, joined } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
+  const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
   for (const rule of rules) {
+    const start = out.length;
     matchView(all, rule, false, out);
     if (joined) matchView(joined, rule, true, out);
+    // The decoded copy of a raw body: a value it shares with the raw view is reported once (same rule and bytes).
+    if (decoded) {
+      const before = out.length;
+      const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
+      matchView(decoded, rule, false, out);
+      const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
+      out.push(...fresh);
+    }
   }
   return out;
 }

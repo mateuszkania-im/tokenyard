@@ -39,12 +39,14 @@ function adversarial(): Array<[string, string]> {
   return out;
 }
 
-/** Bodies outside the string view: one huge bare token, many small bare tokens, and a malformed body scanned raw. */
+/** Bodies outside the string view: one huge bare token, many small bare tokens, malformed bodies scanned raw and decoded. */
 function adversarialBodies(): Array<[string, Buffer, boolean]> {
   return [
     ['bare token run', Buffer.from(`{"messages":[{"role":"user","content":[${fill('eyJ-')}]}]}`), false],
     ['many bare tokens', Buffer.from(`{"messages":[{"role":"user","content":[${fill('AKIA1,')}0]}]}`), false],
     ['raw malformed', Buffer.from(`{"messages":[{"role":"user","content":"${fill('a@b.')}`), true],
+    // Many distinct hits in both the raw view and its decoded copy: merging them must stay linear.
+    ['raw malformed, many hits', Buffer.from(`{"messages":[{"role":"user","content":"${Array.from({ length: 60_000 }, (_, i) => `u${i}@example.com`).join(' ')}`), true],
   ];
 }
 

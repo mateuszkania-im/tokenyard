@@ -26,6 +26,11 @@ export interface ExtractedFeatures {
    * scanner (spec 5.3 step 5). Null without a user message.
    */
   lastTurn: { start: number; end: number; index: number } | null;
+  /**
+   * True when the body has a duplicate top-level `messages` key, or a message with a duplicate `role` or `content`:
+   * JSON.parse keeps the last one, a provider may keep the first, so the guardrails scan such a body like a parse error.
+   */
+  ambiguousKeys?: true;
   /** Byte ranges of every element of `messages`, so guardrail hits can name a message index. Absent without messages. */
   messages?: Array<{ start: number; end: number }>;
 }

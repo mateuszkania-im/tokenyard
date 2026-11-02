@@ -365,12 +365,14 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
 /**
  * Step 5 (spec 5.3, 6.6): secret rules on every route, PII rules on product routes only; and for product routes, the
  * byte ranges a `redact` action replaces, over the whole body (a product client resends its history unredacted).
- * A body JSON.parse refused has no structure to trust: all of it counts as the last turn and its raw bytes are scanned.
+ * A body JSON.parse refused, or one with duplicate keys a provider may read differently, has no structure to trust:
+ * all of it counts as the last turn, and its raw bytes and a decoded copy of them are scanned.
  */
 function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, x: ExtractedFeatures, salt: string): { hits: GuardrailHit[]; redactions: RedactionHit[] } {
   const g = policy.guardrails;
-  const lastTurn = x.parseError ? { start: 0, end: body.length } : x.lastTurn;
-  const opts = { ...(x.messages ? { messages: x.messages } : {}), raw: x.parseError };
+  const untrusted = x.parseError || x.ambiguousKeys === true;
+  const lastTurn = untrusted ? { start: 0, end: body.length } : x.lastTurn;
+  const opts = { ...(x.messages && !untrusted ? { messages: x.messages } : {}), raw: untrusted };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => (product ? g.secrets.product : g.secrets.codingAgent), salt, opts);
   if (!product) return { hits, redactions: [] };
   hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));

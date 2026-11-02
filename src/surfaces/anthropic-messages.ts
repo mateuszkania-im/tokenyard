@@ -130,7 +130,19 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     ...(typeof parsed.inference_geo === 'string' ? { inferenceGeo: parsed.inference_geo } : {}),
     parseError: false,
     ...turnRanges(body, messages),
+    ...(hasAmbiguousKeys(body) ? { ambiguousKeys: true as const } : {}),
   };
+}
+
+/** A duplicate top-level `messages`, or a message object with a duplicate `role` or `content` (keys compared unescaped). */
+function hasAmbiguousKeys(body: Buffer): boolean {
+  if (topLevelValueRanges(body, 'messages').length > 1) return true;
+  for (const r of messageRanges(body) ?? []) {
+    if (body[r.start] !== 0x7b) continue;
+    const m = body.subarray(r.start, r.end);
+    if (topLevelValueRanges(m, 'role').length > 1 || topLevelValueRanges(m, 'content').length > 1) return true;
+  }
+  return false;
 }
 
 /**

@@ -162,3 +162,14 @@ test('many messages with one hit each: linear, not hits times messages', () => {
   console.log(`many messages: ${messages.length} messages, ${hits.length} hits, ${ms.toFixed(0)} ms`);
   expect(ms).toBeLessThan(1_000);
 }, 60_000);
+
+// Fix round 3: a malformed body is scanned both raw and best-effort decoded.
+test('malformed body: a \\u-escaped key is found by the decoded copy, also right after a \\n escape', () => {
+  const escaped = `\\u0041${AWS.slice(1)}`;
+  for (const content of [`key ${escaped}`, `line\\n${escaped}`]) {
+    const broken = Buffer.from(`{"model":"m","messages":[{"role":"user","content":"${content}"}`);
+    expect(scanBody(broken, { start: 0, end: broken.length }, DEFAULT_RULES, block, 's', { raw: true })).toEqual([
+      { rule: 'aws-access-key-id', action: 'block', valueHmac: pseudonym('s', AWS), where: 'last-turn' },
+    ]);
+  }
+});

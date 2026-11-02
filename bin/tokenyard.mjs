@@ -850,7 +850,8 @@ var init_pii = __esm({
         regex: /(?<![0-9])(\d{11})(?![0-9])/,
         source: "tokenyard (checksum per the PESEL specification)",
         licence: TOKENYARD,
-        validate: peselValid
+        validate: peselValid,
+        quotedOnly: true
       },
       {
         id: "iban",
@@ -866,7 +867,8 @@ var init_pii = __esm({
         regex: /(?<![0-9])(\d(?:[ -]?\d){12,18})(?![0-9])/,
         source: "tokenyard (Luhn)",
         licence: TOKENYARD,
-        validate: luhnValid
+        validate: luhnValid,
+        quotedOnly: true
       }
     ]);
   }
@@ -1068,12 +1070,25 @@ function decodeEscape(b, e, end) {
   }
   return { text: utf8Latin1(u >= 55296 && u <= 57343 ? 65533 : u), next: e + 6 };
 }
-function buildViews(body, start, end, messages, raw) {
+function rawViews(body, start, end) {
   const all = new View();
-  if (raw) {
-    all.push(body.toString("latin1", start, end), start, end, PLAIN);
-    return { all, joined: null };
+  all.push(body.toString("latin1", start, end), start, end, PLAIN);
+  const decoded = new View();
+  let p = start;
+  while (p < end) {
+    const esc2 = body.indexOf(92, p);
+    const stop = esc2 < 0 || esc2 >= end ? end : esc2;
+    if (stop > p) decoded.push(body.toString("latin1", p, stop), p, stop, PLAIN);
+    if (stop >= end) break;
+    const d = decodeEscape(body, stop, end);
+    decoded.push(d.text, stop, d.next, ESCAPE);
+    p = Math.max(d.next, stop + 1);
   }
+  return { all, joined: null, decoded };
+}
+function buildViews(body, start, end, messages, raw) {
+  if (raw) return rawViews(body, start, end);
+  const all = new View();
   const joined = messages && messages.length > 0 ? new View() : null;
   let lastKey = null;
   let group = -1;
@@ -1179,6 +1194,7 @@ function matchView(view, rule, crossingOnly, out) {
     const first2 = segments[0];
     const last = segments[segments.length - 1];
     if (first2 === void 0 || last === void 0 || crossingOnly && segments.length < 2) continue;
+    if (rule.quotedOnly && segments.some((g) => g.bare)) continue;
     out.push({ rule, start: first2.start, end: last.end, value, segments });
   }
 }
@@ -1186,10 +1202,18 @@ function findSpans(body, rules, opts = {}) {
   const range = opts.range ?? { start: 0, end: body.length };
   const out = [];
   if (rules.length === 0 || range.end <= range.start) return out;
-  const { all, joined } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
+  const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
   for (const rule of rules) {
+    const start = out.length;
     matchView(all, rule, false, out);
     if (joined) matchView(joined, rule, true, out);
+    if (decoded) {
+      const before = out.length;
+      const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
+      matchView(decoded, rule, false, out);
+      const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
+      out.push(...fresh);
+    }
   }
   return out;
 }
@@ -30151,8 +30175,18 @@ function extractAnthropicFeatures(body) {
     fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
     ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
     parseError: false,
-    ...turnRanges(body, messages)
+    ...turnRanges(body, messages),
+    ...hasAmbiguousKeys(body) ? { ambiguousKeys: true } : {}
   };
+}
+function hasAmbiguousKeys(body) {
+  if (topLevelValueRanges(body, "messages").length > 1) return true;
+  for (const r of messageRanges(body) ?? []) {
+    if (body[r.start] !== 123) continue;
+    const m = body.subarray(r.start, r.end);
+    if (topLevelValueRanges(m, "role").length > 1 || topLevelValueRanges(m, "content").length > 1) return true;
+  }
+  return false;
 }
 function turnRanges(body, messages) {
   if (messages.length === 0) return { lastTurn: null };
@@ -57344,8 +57378,9 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
 }
 function scanGuardrails(policy2, product, body, x, salt) {
   const g = policy2.guardrails;
-  const lastTurn = x.parseError ? { start: 0, end: body.length } : x.lastTurn;
-  const opts = { ...x.messages ? { messages: x.messages } : {}, raw: x.parseError };
+  const untrusted = x.parseError || x.ambiguousKeys === true;
+  const lastTurn = untrusted ? { start: 0, end: body.length } : x.lastTurn;
+  const opts = { ...x.messages && !untrusted ? { messages: x.messages } : {}, raw: untrusted };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => product ? g.secrets.product : g.secrets.codingAgent, salt, opts);
   if (!product) return { hits, redactions: [] };
   hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
