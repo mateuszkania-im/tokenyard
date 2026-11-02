@@ -130,8 +130,8 @@ test('parse error or missing model gives context-window and is priced at the mos
     }
   }
   const { price } = reservationPrice(table, null);
-  // Fable 5.1: cacheWrite1h 20, output 50; 1M context, 128k output. (1e6 * 20 + 1000 * 50) * 1.1
-  expect(worstCaseMicroUsd(req(noModel, price), price, table, opts).micro).toBe(22_055_000);
+  // Fable 5.1: cacheWrite1h 20, output 50; GPT-5.5 and GPT-5.4: the largest context, 1.05M. (1.05e6 * 20 + 1000 * 50) * 1.1
+  expect(worstCaseMicroUsd(req(noModel, price), price, table, opts).micro).toBe(23_155_000);
   expect(reservationPrice(table, 'claude-opus-5-5-20261001')).toEqual({ price: opus, unpriced: false });
 });
 

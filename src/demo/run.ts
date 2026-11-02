@@ -1,4 +1,4 @@
-// `tokenyard demo`: a mock Anthropic provider, a gateway with the example policy and synthetic traffic from 8 developers
+// `tokenyard demo`: mock Anthropic and OpenAI providers, a gateway with the example policy and synthetic traffic from 8 developers
 // run in this process on a virtual clock; the traces are exported and replayed against the demo PR's policy (spec 13).
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,7 @@ import { readLedger } from '../ledger/reader.js';
 import { TraceWriter } from '../ledger/writer.js';
 import { createMemoryStore } from '../limits/memory-store.js';
 import { startAnthropicMock } from '../mock/anthropic.js';
+import { startOpenAIMock } from '../mock/openai.js';
 import { DEMO_DEVELOPERS, DEMO_START_MS, generateTraffic } from '../mock/traffic.js';
 import type { Scenario } from '../mock/scenarios.js';
 import { mulberry32 } from '../mock/scenarios.js';
@@ -24,7 +25,10 @@ const TRACE_SALT = 'tokenyard-demo-salt';
 const INSTANCE_ID = 'demo0001';
 export const DEMO_DAYS = 7;
 
-/** Output tokens by request kind (max_tokens tells compaction and auxiliary apart), varied by the request body. */
+/**
+ * Output tokens by request kind (max_tokens tells compaction and auxiliary apart; a Responses body without
+ * max_output_tokens counts as a main turn), varied by the request body.
+ */
 function outputTokens(seed: number, body: Buffer): number {
   let max = 32000;
   try {
@@ -57,7 +61,9 @@ export async function recordDemo(o: { seed: number; days?: number; traceFile: st
   const scenario = (r: { body: Buffer }): Scenario => ({ kind: 'ok', ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: outputTokens(o.seed, r.body) });
   const mock = await startAnthropicMock({ now: clock });
   mock.setScenario(scenario);
-  const { base, head } = demoPolicies(mock.url);
+  const openai = await startOpenAIMock({ scenario: { kind: 'ok', ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: 16 } });
+  openai.setScenario(scenario);
+  const { base, head } = demoPolicies(mock.url, openai.url);
   const store = createMemoryStore({ clock });
   const writer = new TraceWriter({ dir, instanceId: INSTANCE_ID, queueMax: 1_000_000, clock });
   let settled = 0;
@@ -104,6 +110,7 @@ export async function recordDemo(o: { seed: number; days?: number; traceFile: st
   } finally {
     await gw.close();
     await mock.close();
+    await openai.close();
     await rm(dir, { recursive: true, force: true });
     if (prevKey === undefined) delete process.env[DEMO_CREDENTIAL_ENV];
     else process.env[DEMO_CREDENTIAL_ENV] = prevKey;
@@ -115,7 +122,7 @@ export async function runDemo(o: { out: NodeJS.WritableStream; seed: number; wri
   const dir = await mkdtemp(join(tmpdir(), 'tokenyard-demo-export-'));
   try {
     const file = join(dir, 'demo.ndjson.gz');
-    o.out.write(`tokenyard demo: ${DEMO_DAYS} days of synthetic traffic from ${DEMO_DEVELOPERS.length} developers in 3 teams, through a gateway with examples/policy and a mock Anthropic provider (seed ${o.seed}).\n`);
+    o.out.write(`tokenyard demo: ${DEMO_DAYS} days of synthetic traffic from ${DEMO_DEVELOPERS.length} developers in 3 teams, through a gateway with examples/policy and mock Anthropic and OpenAI providers (seed ${o.seed}).\n`);
     const rec = await recordDemo({ seed: o.seed, traceFile: file });
     o.out.write(`${rec.requests} requests in ${rec.sessions} sessions recorded. Replaying them against examples/policy-head (the demo PR: compaction and auxiliary on a cheaper model, a tighter team budget).\n`);
     const result = await replay({ base: rec.base, head: rec.head, traces: readLedger([file]), sinceMs: null, tenant: null });

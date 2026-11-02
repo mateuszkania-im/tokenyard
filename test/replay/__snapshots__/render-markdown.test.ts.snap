@@ -4,11 +4,11 @@ exports[`markdown matches spec 9.4 layout and starts with the sticky marker 1`] 
 "<!-- tokenyard-replay -->
 ### tokenyard policy replay: \`a1b2c3d\` (base) vs \`e4f5a6b\` (head)
 
-Traffic: 7 days, 3,587 requests, 75 sessions, tenant all. Fidelity: base replay matches recorded decisions on 100.0% of requests (details below).
+Traffic: 7 days, 3,649 requests, 83 sessions, tenant all. Fidelity: base replay matches recorded decisions on 100.0% of requests (details below).
 
 | | Base | Head | Change |
 |---|---|---|---|
-| Cost (billed) | $50.7159 | $47.8451 | **-$2.8708 (-5.7%)**, estimated (model change) |
+| Cost (billed) | $51.1013 | $48.2304 | **-$2.8708 (-5.6%)**, estimated (model change) |
 | Requests rerouted | | 200 | auxiliary and compaction to claude-code-auxiliary, claude-code-compaction |
 | Requests blocked | 2 | 7 | 5 team-day, 2 aws-access-key-id |
 | Sessions cut mid-task | 0 | **5** | 117 later requests ($1.6773) would not have run as recorded |

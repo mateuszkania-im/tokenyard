@@ -4,11 +4,11 @@ import { loadPrices } from '../helpers/prices.js';
 
 test('the example price table parses and every model carries source, date, context and output limits', () => {
   const t = loadPrices();
-  expect(t.version).toBe('2026-11-02');
-  expect(Object.keys(t.models)).toEqual(expect.arrayContaining(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1']));
+  expect(t.version).toBe('2026-11-03');
+  expect(Object.keys(t.models)).toEqual(expect.arrayContaining(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-1', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.3-codex']));
   for (const [id, m] of Object.entries(t.models)) {
     expect(m.source, id).toMatch(/^https:\/\//);
-    expect(m.retrieved, id).toBe('2026-11-02');
+    expect(m.retrieved, id).toBe(id.startsWith('gpt-') ? '2026-11-03' : '2026-11-02');
     expect(m.maxContextTokens, id).toBeGreaterThan(0);
     expect(m.maxOutputTokens, id).toBeGreaterThan(0);
   }
@@ -34,6 +34,21 @@ serverTools: {}
 `);
   expect(lookupModel(t, 'claude-a-b-20260101')?.id).toBe('claude-a-b');
   expect(lookupModel(t, 'claude-a-20260101')?.id).toBe('claude-a');
+});
+
+test('only a date suffix resolves to the table id: a variant (gpt-5.4-pro, gpt-5.4-mini) is never priced as its base model', () => {
+  const t = parsePriceTable(`
+version: x
+models:
+  gpt-5.4: { input: 1, output: 1, cacheWrite5m: 1, cacheWrite1h: 1, cacheRead: 1, maxContextTokens: 10, maxOutputTokens: 10, source: s, retrieved: r }
+modifiers: {}
+serverTools: {}
+`);
+  expect(lookupModel(t, 'gpt-5.4-2026-03-05')?.id).toBe('gpt-5.4');
+  expect(lookupModel(t, 'gpt-5.4-20260305')?.id).toBe('gpt-5.4');
+  expect(lookupModel(t, 'gpt-5.4-pro')).toBeNull();
+  expect(lookupModel(t, 'gpt-5.4-mini-2026-03-17')).toBeNull();
+  expect(lookupModel(t, 'gpt-5.4-2026-03-05-fast')).toBeNull();
 });
 
 test('price table without maxContextTokens is rejected', () => {

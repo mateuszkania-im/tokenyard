@@ -6,6 +6,7 @@ import { buildAgentSession } from '../../src/mock/session-fixture.js';
 import { AnthropicUsageAccumulator, type Usage } from '../../src/stream/anthropic-usage.js';
 import { SseParser } from '../../src/stream/sse.js';
 import { startAnthropicMock, type MockServer } from '../../src/mock/anthropic.js';
+import { startOpenAIMock, type OpenAIMockServer } from '../../src/mock/openai.js';
 import { startGateway, type TestGateway } from './gateway.js';
 import { PROVIDER_KEY_ENV, TEST_KEY, testPolicy } from './policy.js';
 
@@ -153,3 +154,55 @@ export async function startStack(
 }
 
 export const PROVIDER_KEY = 'sk-provider-test-value';
+
+/** Headers Codex sends with `wire_api = "responses"` (values replaced; the session header is read as attribution). */
+export const codexHeaders = {
+  authorization: `Bearer ${TEST_KEY}`,
+  'content-type': 'application/json',
+  accept: 'text/event-stream',
+  originator: 'codex_exec',
+  version: '0.130.0',
+  session_id: '0199a0b0-0000-7000-8000-000000000001',
+  'user-agent': 'codex_exec/0.130.0 (Mac OS 26.0.0; arm64) unknown',
+};
+
+/** A Responses request body as Codex shapes it: instructions, input items, tools, no max_output_tokens. */
+export const respBody = (extra: Record<string, unknown> = {}): Buffer =>
+  Buffer.from(
+    JSON.stringify({
+      model: 'gpt-5.4-mini',
+      instructions: 'You are a coding agent.',
+      input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: 'say hi' }] }],
+      tools: [{ type: 'function', name: 'shell', description: 'run a command', strict: false, parameters: { type: 'object', properties: { command: { type: 'array', items: { type: 'string' } } } } }],
+      tool_choice: 'auto',
+      parallel_tool_calls: false,
+      reasoning: { effort: 'low', summary: 'auto' },
+      store: false,
+      stream: true,
+      include: ['reasoning.encrypted_content'],
+      prompt_cache_key: '0199a0b0-0000-7000-8000-000000000001',
+      ...extra,
+    }),
+  );
+
+/** Gateway in front of the OpenAI mock: the `openai` provider points at it, the Anthropic providers at a dead port. */
+export async function startOpenAIStack(
+  o: {
+    mock?: Parameters<typeof startOpenAIMock>[0];
+    policy?: Partial<Parameters<typeof testPolicy>[0]>;
+    gw?: Pick<Parameters<typeof startGateway>[0], 'onSettled' | 'traces' | 'traceSalt' | 'store' | 'runtime' | 'bodyCapBytes'>;
+  } = {},
+): Promise<{ mock: OpenAIMockServer; gw: TestGateway; close(): Promise<void> }> {
+  process.env[PROVIDER_KEY_ENV] = PROVIDER_KEY;
+  const mock = await startOpenAIMock(o.mock);
+  const gw = await startGateway({ policy: testPolicy({ upstream: 'http://127.0.0.1:9', openaiUpstream: mock.url, ...o.policy }), ...o.gw });
+  return {
+    mock,
+    gw,
+    async close() {
+      await gw.close();
+      await mock.close();
+      delete process.env[PROVIDER_KEY_ENV];
+    },
+  };
+}

@@ -3757,9 +3757,9 @@ var require_stringifyNumber = __commonJS({
     function stringifyNumber({ format, minFractionDigits, tag, value }) {
       if (typeof value === "bigint")
         return String(value);
-      const num2 = typeof value === "number" ? value : Number(value);
-      if (!isFinite(num2))
-        return isNaN(num2) ? ".nan" : num2 < 0 ? "-.inf" : ".inf";
+      const num3 = typeof value === "number" ? value : Number(value);
+      if (!isFinite(num3))
+        return isNaN(num3) ? ".nan" : num3 < 0 ? "-.inf" : ".inf";
       let n2 = Object.is(value, -0) ? "-0" : JSON.stringify(value);
       if (!format && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n2) && !n2.includes("e")) {
         let i = n2.indexOf(".");
@@ -3799,8 +3799,8 @@ var require_float = __commonJS({
       test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str),
       stringify(node2) {
-        const num2 = Number(node2.value);
-        return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node2);
+        const num3 = Number(node2.value);
+        return isFinite(num3) ? num3.toExponential() : stringifyNumber.stringifyNumber(node2);
       }
     };
     var float = {
@@ -4239,8 +4239,8 @@ var require_float2 = __commonJS({
       test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str.replace(/_/g, "")),
       stringify(node2) {
-        const num2 = Number(node2.value);
-        return isFinite(num2) ? num2.toExponential() : stringifyNumber.stringifyNumber(node2);
+        const num3 = Number(node2.value);
+        return isFinite(num3) ? num3.toExponential() : stringifyNumber.stringifyNumber(node2);
       }
     };
     var float = {
@@ -4442,23 +4442,23 @@ var require_timestamp = __commonJS({
     function parseSexagesimal(str, asBigInt) {
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
-      const num2 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
-      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num2(60) + num2(p), num2(0));
-      return sign === "-" ? num2(-1) * res : res;
+      const num3 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
+      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num3(60) + num3(p), num3(0));
+      return sign === "-" ? num3(-1) * res : res;
     }
     function stringifySexagesimal(node2) {
       let { value } = node2;
-      let num2 = (n2) => n2;
+      let num3 = (n2) => n2;
       if (typeof value === "bigint")
-        num2 = (n2) => BigInt(n2);
+        num3 = (n2) => BigInt(n2);
       else if (isNaN(value) || !isFinite(value))
         return stringifyNumber.stringifyNumber(node2);
       let sign = "";
       if (value < 0) {
         sign = "-";
-        value *= num2(-1);
+        value *= num3(-1);
       }
-      const _60 = num2(60);
+      const _60 = num3(60);
       const parts = [value % _60];
       if (value < 60) {
         parts.unshift(0);
@@ -29218,12 +29218,12 @@ function lookupModel(t, model) {
   }
   let best = null;
   for (const id of Object.keys(t.models)) {
-    if (model.startsWith(`${id}-`) && (best === null || id.length > best.length)) best = id;
+    if (model.startsWith(`${id}-`) && DATE_SUFFIX.test(model.slice(id.length)) && (best === null || id.length > best.length)) best = id;
   }
   const price2 = best === null ? void 0 : t.models[best];
   return best !== null && price2 ? { id: best, price: price2 } : null;
 }
-var rate, tokens, provenance, tierSchema, fastSchema, modelSchema, tableSchema;
+var rate, tokens, provenance, tierSchema, fastSchema, modelSchema, tableSchema, DATE_SUFFIX;
 var init_prices = __esm({
   "src/pricing/prices.ts"() {
     "use strict";
@@ -29266,6 +29266,7 @@ var init_prices = __esm({
       modifiers: external_exports.record(external_exports.string(), external_exports.number().positive()).default({}),
       serverTools: external_exports.record(external_exports.string(), external_exports.strictObject({ perUseUsd: rate, maxIterations: external_exports.number().int().positive(), ...provenance })).default({})
     });
+    DATE_SUFFIX = /^-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
   }
 });
 
@@ -29364,14 +29365,25 @@ function sessionAwareMicroUsd(f, m, t, prevCacheReadShare, reserveOutputTokens) 
   const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast);
   return roundUp((inputMicro + outputMicro) * modifierProduct(t), f.model);
 }
-var OVERHEAD_TOKENS, TEXT_BLOCK_TYPES, TEXT_TYPES, NOISE_MICRO;
+var OVERHEAD_TOKENS, TEXT_BLOCK_TYPES, RESPONSES_TEXT_TYPES, TEXT_TYPES, NOISE_MICRO;
 var init_estimator = __esm({
   "src/limits/estimator.ts"() {
     "use strict";
     init_prices();
     OVERHEAD_TOKENS = 4096;
     TEXT_BLOCK_TYPES = ["text", "thinking", "redacted_thinking", "tool_use", "tool_result"];
-    TEXT_TYPES = new Set(TEXT_BLOCK_TYPES);
+    RESPONSES_TEXT_TYPES = [
+      "input_text",
+      "output_text",
+      "refusal",
+      "function_call",
+      "function_call_output",
+      "custom_tool_call",
+      "custom_tool_call_output",
+      "local_shell_call",
+      "local_shell_call_output"
+    ];
+    TEXT_TYPES = /* @__PURE__ */ new Set([...TEXT_BLOCK_TYPES, ...RESPONSES_TEXT_TYPES]);
     NOISE_MICRO = 1e-6;
   }
 });
@@ -30098,6 +30110,90 @@ var init_anthropic_usage = __esm({
   }
 });
 
+// src/stream/responses-usage.ts
+function toUsage(raw) {
+  if (!isObj3(raw)) return null;
+  const input3 = num2(raw.input_tokens);
+  if (input3 === void 0) return null;
+  const details = isObj3(raw.input_tokens_details) ? raw.input_tokens_details : {};
+  const cached2 = Math.min(input3, num2(details.cached_tokens) ?? 0);
+  const written = Math.min(input3 - cached2, num2(details.cache_write_tokens) ?? 0);
+  return { input: input3 - cached2 - written, cacheRead: cached2, cacheWrite5m: written, cacheWrite1h: 0, output: num2(raw.output_tokens) ?? 0 };
+}
+function parseResponsesJsonUsage(body) {
+  const none = { usage: null, source: "none", midStreamError: null, sawStop: false, streamedChars: 0, responseModel: null };
+  let d;
+  try {
+    d = JSON.parse(body.toString("utf8"));
+  } catch {
+    return none;
+  }
+  if (!isObj3(d)) return none;
+  const responseModel = typeof d.model === "string" ? d.model : null;
+  const usage = toUsage(d.usage);
+  return usage ? { ...none, usage, source: "final", sawStop: true, responseModel } : { ...none, responseModel };
+}
+var isObj3, num2, TERMINAL, ResponsesUsageAccumulator;
+var init_responses_usage = __esm({
+  "src/stream/responses-usage.ts"() {
+    "use strict";
+    isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    num2 = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : void 0;
+    TERMINAL = /* @__PURE__ */ new Set(["response.completed", "response.incomplete", "response.failed"]);
+    ResponsesUsageAccumulator = class {
+      constructor(o = {}) {
+        this.o = o;
+      }
+      o;
+      started = false;
+      usage = null;
+      sawStop = false;
+      chars = 0;
+      error = null;
+      model = null;
+      onEvent(e2) {
+        let d;
+        try {
+          d = JSON.parse(e2.data);
+        } catch {
+          return;
+        }
+        if (!isObj3(d)) return;
+        const type = typeof d.type === "string" ? d.type : e2.event ?? "";
+        const response = isObj3(d.response) ? d.response : null;
+        if (response && typeof response.model === "string") this.model = response.model;
+        if (type === "response.created" || type === "response.in_progress") {
+          this.started = true;
+          return;
+        }
+        if (TERMINAL.has(type)) {
+          this.started = true;
+          this.sawStop = true;
+          const u = toUsage(response?.usage);
+          if (u) this.usage = u;
+          if (type === "response.failed") {
+            const err = response?.error;
+            this.error = isObj3(err) && typeof err.code === "string" ? err.code : "response.failed";
+          }
+          return;
+        }
+        if (type === "error") {
+          this.error = typeof d.code === "string" ? d.code : isObj3(d.error) && typeof d.error.code === "string" ? d.error.code : "error";
+          return;
+        }
+        if (type.endsWith(".delta") && typeof d.delta === "string") this.chars += d.delta.length;
+      }
+      result() {
+        const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model };
+        if (this.usage) return { ...base, usage: { ...this.usage }, source: "final" };
+        if (!this.started) return { ...base, usage: null, source: "none" };
+        const usage = { input: this.o.inputTokensIfUnknown ?? 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: Math.ceil(this.chars / 4) };
+        return { ...base, usage, source: "partial", outputEstimated: true };
+      }
+    };
+  }
+});
+
 // src/stream/sse.ts
 var SseParser;
 var init_sse = __esm({
@@ -30199,113 +30295,7 @@ var init_tee = __esm({
   }
 });
 
-// src/surfaces/anthropic-messages.ts
-import { createHash as createHash4 } from "node:crypto";
-function hasExpandingField(parsed, tools) {
-  for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS.has(key)) return true;
-  if (parsed.output_config !== void 0 && !(isObj3(parsed.output_config) && parsed.output_config.format == null)) return true;
-  const cm = parsed.context_management;
-  if (cm !== void 0) {
-    if (!isObj3(cm) || cm.edits !== void 0 && !Array.isArray(cm.edits)) return true;
-    for (const e2 of cm.edits ?? []) {
-      if (!isObj3(e2) || typeof e2.type !== "string" || !CLEARING_EDIT_PREFIXES.some((p) => e2.type.startsWith(p))) return true;
-    }
-  }
-  for (const t of tools) {
-    if (isObj3(t) && typeof t.type === "string" && isClientTool(t.type)) return true;
-  }
-  return false;
-}
-function emptyFeatures(bodyBytes, parseError) {
-  return {
-    model: null,
-    stream: false,
-    maxOutputTokens: null,
-    toolCount: 0,
-    thinking: false,
-    serverTools: [],
-    bodyBytes,
-    prefixHash: null,
-    blockTypes: [],
-    expandsServerSide: false,
-    fastMode: false,
-    parseError,
-    lastTurn: null
-  };
-}
-function collectBlockTypes(content, out) {
-  if (!Array.isArray(content)) return;
-  for (const block2 of content) {
-    if (!isObj3(block2) || typeof block2.type !== "string") continue;
-    out.add(block2.type);
-    if (block2.type === "tool_result") collectBlockTypes(block2.content, out);
-  }
-}
-function extractAnthropicFeatures(body) {
-  let parsed;
-  try {
-    parsed = JSON.parse(body.toString("utf8"));
-  } catch {
-    return emptyFeatures(body.length, true);
-  }
-  if (!isObj3(parsed)) return emptyFeatures(body.length, true);
-  const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
-  const serverTools = [];
-  for (const t of tools) {
-    if (!isObj3(t) || t.type === void 0 || t.type === "custom") continue;
-    const type = typeof t.type === "string" ? t.type : String(t.type);
-    if (isClientTool(type)) continue;
-    serverTools.push({ type, maxUses: typeof t.max_uses === "number" ? t.max_uses : null });
-  }
-  const mcp = parsed.mcp_servers;
-  if (mcp !== void 0 && mcp !== null && !(Array.isArray(mcp) && mcp.length === 0)) serverTools.push({ type: "mcp_servers", maxUses: null });
-  const types = /* @__PURE__ */ new Set();
-  const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
-  collectBlockTypes(parsed.system, types);
-  for (const m of messages) if (isObj3(m)) collectBlockTypes(m.content, types);
-  const blockTypes = [...types];
-  const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
-  const prefixHash = hasPrefix ? createHash4("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
-  const thinking = parsed.thinking;
-  return {
-    model: typeof parsed.model === "string" ? parsed.model : null,
-    stream: parsed.stream === true,
-    maxOutputTokens: typeof parsed.max_tokens === "number" ? parsed.max_tokens : null,
-    toolCount: tools.length,
-    thinking: isObj3(thinking) && thinking.type !== "disabled",
-    serverTools,
-    bodyBytes: body.length,
-    prefixHash,
-    blockTypes,
-    expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
-    fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
-    ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
-    parseError: false,
-    ...turnRanges(body, messages),
-    ...hasAmbiguousKeys(body) ? { ambiguousKeys: true } : {}
-  };
-}
-function hasAmbiguousKeys(body) {
-  if (topLevelValueRanges(body, "messages").length > 1) return true;
-  for (const r of messageRanges(body) ?? []) {
-    if (body[r.start] !== 123) continue;
-    const m = body.subarray(r.start, r.end);
-    if (topLevelValueRanges(m, "role").length > 1 || topLevelValueRanges(m, "content").length > 1) return true;
-  }
-  return false;
-}
-function turnRanges(body, messages) {
-  if (messages.length === 0) return { lastTurn: null };
-  const ranges = messageRanges(body);
-  if (ranges === null || ranges.length !== messages.length) return { lastTurn: null };
-  let index = -1;
-  for (let i = messages.length - 1; i >= 0 && index < 0; i--) {
-    const m = messages[i];
-    if (isObj3(m) && m.role === "user") index = i;
-  }
-  const r = ranges[index];
-  return { lastTurn: r === void 0 ? null : { ...r, index }, messages: ranges };
-}
+// src/surfaces/json-ranges.ts
 function skipWs(b, i) {
   while (i < b.length && (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13)) i++;
   return i;
@@ -30341,7 +30331,7 @@ function skipValue(b, i) {
   while (i < b.length && b[i] !== 44 && b[i] !== 125 && b[i] !== 93 && b[i] !== 32 && b[i] !== 10 && b[i] !== 13 && b[i] !== 9) i++;
   return i;
 }
-function messageRanges(b) {
+function arrayElementRanges(b, name2) {
   let i = skipWs(b, 0);
   if (b[i] !== 123) return null;
   i++;
@@ -30355,7 +30345,7 @@ function messageRanges(b) {
     const key = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
     i = skipWs(b, i) + 1;
     i = skipWs(b, i);
-    if (key === "messages" && b[i] === 91) {
+    if (key === name2 && b[i] === 91) {
       i++;
       const all = [];
       for (; ; ) {
@@ -30407,6 +30397,122 @@ function topLevelValueRanges(b, key) {
   }
   return out;
 }
+var QUOTE, BACKSLASH;
+var init_json_ranges = __esm({
+  "src/surfaces/json-ranges.ts"() {
+    "use strict";
+    QUOTE = 34;
+    BACKSLASH = 92;
+  }
+});
+
+// src/surfaces/anthropic-messages.ts
+import { createHash as createHash4 } from "node:crypto";
+function hasExpandingField(parsed, tools) {
+  for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS.has(key)) return true;
+  if (parsed.output_config !== void 0 && !(isObj4(parsed.output_config) && parsed.output_config.format == null)) return true;
+  const cm = parsed.context_management;
+  if (cm !== void 0) {
+    if (!isObj4(cm) || cm.edits !== void 0 && !Array.isArray(cm.edits)) return true;
+    for (const e2 of cm.edits ?? []) {
+      if (!isObj4(e2) || typeof e2.type !== "string" || !CLEARING_EDIT_PREFIXES.some((p) => e2.type.startsWith(p))) return true;
+    }
+  }
+  for (const t of tools) {
+    if (isObj4(t) && typeof t.type === "string" && isClientTool(t.type)) return true;
+  }
+  return false;
+}
+function emptyFeatures(bodyBytes, parseError) {
+  return {
+    model: null,
+    stream: false,
+    maxOutputTokens: null,
+    toolCount: 0,
+    thinking: false,
+    serverTools: [],
+    bodyBytes,
+    prefixHash: null,
+    blockTypes: [],
+    expandsServerSide: false,
+    fastMode: false,
+    parseError,
+    lastTurn: null
+  };
+}
+function collectBlockTypes(content, out) {
+  if (!Array.isArray(content)) return;
+  for (const block2 of content) {
+    if (!isObj4(block2) || typeof block2.type !== "string") continue;
+    out.add(block2.type);
+    if (block2.type === "tool_result") collectBlockTypes(block2.content, out);
+  }
+}
+function extractAnthropicFeatures(body) {
+  let parsed;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    return emptyFeatures(body.length, true);
+  }
+  if (!isObj4(parsed)) return emptyFeatures(body.length, true);
+  const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
+  const serverTools = [];
+  for (const t of tools) {
+    if (!isObj4(t) || t.type === void 0 || t.type === "custom") continue;
+    const type = typeof t.type === "string" ? t.type : String(t.type);
+    if (isClientTool(type)) continue;
+    serverTools.push({ type, maxUses: typeof t.max_uses === "number" ? t.max_uses : null });
+  }
+  const mcp = parsed.mcp_servers;
+  if (mcp !== void 0 && mcp !== null && !(Array.isArray(mcp) && mcp.length === 0)) serverTools.push({ type: "mcp_servers", maxUses: null });
+  const types = /* @__PURE__ */ new Set();
+  const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+  collectBlockTypes(parsed.system, types);
+  for (const m of messages) if (isObj4(m)) collectBlockTypes(m.content, types);
+  const blockTypes = [...types];
+  const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
+  const prefixHash = hasPrefix ? createHash4("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
+  const thinking = parsed.thinking;
+  return {
+    model: typeof parsed.model === "string" ? parsed.model : null,
+    stream: parsed.stream === true,
+    maxOutputTokens: typeof parsed.max_tokens === "number" ? parsed.max_tokens : null,
+    toolCount: tools.length,
+    thinking: isObj4(thinking) && thinking.type !== "disabled",
+    serverTools,
+    bodyBytes: body.length,
+    prefixHash,
+    blockTypes,
+    expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
+    fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
+    ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
+    parseError: false,
+    ...turnRanges(body, messages),
+    ...hasAmbiguousKeys(body) ? { ambiguousKeys: true } : {}
+  };
+}
+function hasAmbiguousKeys(body) {
+  if (topLevelValueRanges(body, "messages").length > 1) return true;
+  for (const r of arrayElementRanges(body, "messages") ?? []) {
+    if (body[r.start] !== 123) continue;
+    const m = body.subarray(r.start, r.end);
+    if (topLevelValueRanges(m, "role").length > 1 || topLevelValueRanges(m, "content").length > 1) return true;
+  }
+  return false;
+}
+function turnRanges(body, messages) {
+  if (messages.length === 0) return { lastTurn: null };
+  const ranges = arrayElementRanges(body, "messages");
+  if (ranges === null || ranges.length !== messages.length) return { lastTurn: null };
+  let index = -1;
+  for (let i = messages.length - 1; i >= 0 && index < 0; i--) {
+    const m = messages[i];
+    if (isObj4(m) && m.role === "user") index = i;
+  }
+  const r = ranges[index];
+  return { lastTurn: r === void 0 ? null : { ...r, index }, messages: ranges };
+}
 function rewriteTopLevelModel(b, model) {
   let parsed;
   try {
@@ -30414,7 +30520,7 @@ function rewriteTopLevelModel(b, model) {
   } catch {
     return null;
   }
-  if (!isObj3(parsed) || typeof parsed.model !== "string") return null;
+  if (!isObj4(parsed) || typeof parsed.model !== "string") return null;
   const ranges = topLevelValueRanges(b, "model");
   const r = ranges[0];
   if (ranges.length !== 1 || r === void 0 || b[r.start] !== QUOTE) return null;
@@ -30426,16 +30532,17 @@ function rewriteTopLevelModel(b, model) {
   const out = Buffer.concat([b.subarray(0, r.start), Buffer.from(JSON.stringify(model), "utf8"), b.subarray(r.end)]);
   try {
     const back = JSON.parse(out.toString("utf8"));
-    return isObj3(back) && back.model === model ? out : null;
+    return isObj4(back) && back.model === model ? out : null;
   } catch {
     return null;
   }
 }
-var isObj3, CLIENT_TOOL_PREFIXES, isClientTool, EXPANDING_BLOCKS, PLAIN_FIELDS, CLEARING_EDIT_PREFIXES, QUOTE, BACKSLASH;
+var isObj4, CLIENT_TOOL_PREFIXES, isClientTool, EXPANDING_BLOCKS, PLAIN_FIELDS, CLEARING_EDIT_PREFIXES;
 var init_anthropic_messages = __esm({
   "src/surfaces/anthropic-messages.ts"() {
     "use strict";
-    isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    init_json_ranges();
+    isObj4 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     CLIENT_TOOL_PREFIXES = ["memory_", "bash_", "text_editor_", "computer_", "browser_toolset_"];
     isClientTool = (type) => CLIENT_TOOL_PREFIXES.some((p) => type.startsWith(p));
     EXPANDING_BLOCKS = /* @__PURE__ */ new Set(["image", "document"]);
@@ -30462,8 +30569,6 @@ var init_anthropic_messages = __esm({
       "context_management"
     ]);
     CLEARING_EDIT_PREFIXES = ["clear_tool_uses_", "clear_thinking_"];
-    QUOTE = 34;
-    BACKSLASH = 92;
   }
 });
 
@@ -30489,6 +30594,170 @@ function modelsListBody(ids) {
 var init_anthropic_models = __esm({
   "src/surfaces/anthropic-models.ts"() {
     "use strict";
+  }
+});
+
+// src/surfaces/openai-responses.ts
+import { createHash as createHash5 } from "node:crypto";
+function emptyFeatures2(bodyBytes) {
+  return {
+    model: null,
+    stream: false,
+    maxOutputTokens: null,
+    toolCount: 0,
+    thinking: false,
+    serverTools: [],
+    bodyBytes,
+    prefixHash: null,
+    blockTypes: [],
+    expandsServerSide: false,
+    fastMode: false,
+    parseError: true,
+    lastTurn: null
+  };
+}
+function collectTypes(input3, out) {
+  if (typeof input3 === "string") {
+    out.add("input_text");
+    return;
+  }
+  if (!Array.isArray(input3)) return;
+  for (const item of input3) {
+    if (!isObj5(item)) {
+      out.add("(invalid)");
+      continue;
+    }
+    const type = typeof item.type === "string" ? item.type : item.role !== void 0 ? "message" : "(untyped)";
+    if (type === "message") {
+      if (typeof item.content === "string") out.add("input_text");
+      else if (Array.isArray(item.content)) for (const part2 of item.content) out.add(isObj5(part2) && typeof part2.type === "string" ? part2.type : "(invalid)");
+      else out.add("(invalid)");
+      continue;
+    }
+    out.add(type);
+    if (Array.isArray(item.output)) for (const part2 of item.output) out.add(isObj5(part2) && typeof part2.type === "string" ? part2.type : "(invalid)");
+    else if (item.output !== void 0 && typeof item.output !== "string") out.add("(invalid)");
+  }
+}
+function collectServerTools(tools, maxUses, out, depth) {
+  for (const t of tools) {
+    const type = isObj5(t) ? typeof t.type === "string" ? t.type : String(t.type) : "(invalid)";
+    if (CLIENT_TOOL_TYPES.has(type)) continue;
+    if (type === "namespace" && isObj5(t) && Array.isArray(t.tools) && depth < MAX_NAMESPACE_DEPTH) {
+      collectServerTools(t.tools, maxUses, out, depth + 1);
+      continue;
+    }
+    out.push({ type, maxUses });
+  }
+}
+function hasExpandingField2(parsed) {
+  for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS2.has(key)) return true;
+  if (parsed.instructions !== void 0 && parsed.instructions !== null && typeof parsed.instructions !== "string") return true;
+  const text2 = parsed.text;
+  if (text2 !== void 0 && !(isObj5(text2) && (text2.format == null || isObj5(text2.format) && text2.format.type === "text"))) return true;
+  if (parsed.input !== void 0 && typeof parsed.input !== "string" && !Array.isArray(parsed.input)) return true;
+  return false;
+}
+function turnRanges2(body, input3) {
+  if (typeof input3 === "string") {
+    const r = topLevelValueRanges(body, "input")[0];
+    return r === void 0 ? { lastTurn: null } : { lastTurn: { ...r, index: 0 }, messages: [r] };
+  }
+  if (!Array.isArray(input3) || input3.length === 0) return { lastTurn: null };
+  const ranges = arrayElementRanges(body, "input");
+  if (ranges === null || ranges.length !== input3.length) return { lastTurn: null };
+  let first2 = input3.length;
+  while (first2 > 0 && isClientItem(input3[first2 - 1])) first2--;
+  const lastRange = ranges.at(-1);
+  const firstRange = ranges[first2];
+  if (firstRange !== void 0 && lastRange !== void 0) return { lastTurn: { start: firstRange.start, end: lastRange.end, index: first2 }, messages: ranges };
+  for (let i = input3.length - 1; i >= 0; i--) {
+    const m = input3[i];
+    const r = ranges[i];
+    if (isObj5(m) && m.role === "user" && r !== void 0) return { lastTurn: { ...r, index: i }, messages: ranges };
+  }
+  return { lastTurn: null, messages: ranges };
+}
+function hasAmbiguousKeys2(body) {
+  for (const k of ["input", "instructions", "model", "tools"]) if (topLevelValueRanges(body, k).length > 1) return true;
+  for (const r of arrayElementRanges(body, "input") ?? []) {
+    if (body[r.start] !== 123) continue;
+    const item = body.subarray(r.start, r.end);
+    for (const k of ["type", "role", "content", "output", "arguments", "input"]) if (topLevelValueRanges(item, k).length > 1) return true;
+  }
+  return false;
+}
+function extractResponsesFeatures(body) {
+  let parsed;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    return emptyFeatures2(body.length);
+  }
+  if (!isObj5(parsed)) return emptyFeatures2(body.length);
+  const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
+  const maxUses = typeof parsed.max_tool_calls === "number" && Number.isFinite(parsed.max_tool_calls) && parsed.max_tool_calls >= 0 ? parsed.max_tool_calls : null;
+  const serverTools = [];
+  collectServerTools(tools, maxUses, serverTools, 0);
+  const types = /* @__PURE__ */ new Set();
+  collectTypes(parsed.input, types);
+  const prefixHash = parsed.tools !== void 0 || parsed.instructions !== void 0 ? createHash5("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.instructions ?? null])).digest("hex") : null;
+  const reasoning = parsed.reasoning;
+  return {
+    model: typeof parsed.model === "string" ? parsed.model : null,
+    stream: parsed.stream === true,
+    maxOutputTokens: typeof parsed.max_output_tokens === "number" ? parsed.max_output_tokens : null,
+    toolCount: tools.length,
+    thinking: isObj5(reasoning) && reasoning.effort !== "none",
+    serverTools,
+    bodyBytes: body.length,
+    prefixHash,
+    blockTypes: [...types],
+    expandsServerSide: hasExpandingField2(parsed),
+    fastMode: !STANDARD_TIERS.has(parsed.service_tier),
+    parseError: false,
+    ...turnRanges2(body, parsed.input),
+    ...hasAmbiguousKeys2(body) ? { ambiguousKeys: true } : {}
+  };
+}
+var isObj5, CLIENT_TOOL_TYPES, PLAIN_FIELDS2, STANDARD_TIERS, MAX_NAMESPACE_DEPTH, isClientItem;
+var init_openai_responses = __esm({
+  "src/surfaces/openai-responses.ts"() {
+    "use strict";
+    init_json_ranges();
+    isObj5 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    CLIENT_TOOL_TYPES = /* @__PURE__ */ new Set(["function", "custom", "local_shell", "shell", "apply_patch"]);
+    PLAIN_FIELDS2 = /* @__PURE__ */ new Set([
+      "model",
+      "input",
+      "instructions",
+      "tools",
+      "tool_choice",
+      "parallel_tool_calls",
+      "max_output_tokens",
+      "max_tool_calls",
+      "stream",
+      "stream_options",
+      "store",
+      "include",
+      "metadata",
+      "temperature",
+      "top_p",
+      "top_logprobs",
+      "truncation",
+      "reasoning",
+      "text",
+      "prompt_cache_key",
+      "prompt_cache_retention",
+      "safety_identifier",
+      "user",
+      "service_tier",
+      // Codex 0.166.0 sends session, thread and turn ids here on every request (seen live): request metadata, like `metadata`.
+      "client_metadata"
+    ]);
+    STANDARD_TIERS = /* @__PURE__ */ new Set([void 0, null, "auto", "default", "flex"]);
+    MAX_NAMESPACE_DEPTH = 4;
+    isClientItem = (item) => isObj5(item) && (item.type === void 0 || item.type === "message" ? item.role !== "assistant" : typeof item.type === "string" && item.type.endsWith("_output"));
   }
 });
 
@@ -54121,8 +54390,8 @@ var require_util5 = __commonJS({
           return false;
         }
       }
-      const num2 = Number.parseInt(value, 10);
-      return num2 >= 8 && num2 <= 15;
+      const num3 = Number.parseInt(value, 10);
+      return num3 >= 8 && num3 <= 15;
     }
     function getURLRecord(url2, baseURL) {
       let urlRecord;
@@ -54410,24 +54679,24 @@ var require_connection = __commonJS({
         failWebsocketConnection(object2);
         object2.readyState = states.CLOSING;
       } else if (!object2.closeState.has(sentCloseFrameState.SENT) && !object2.closeState.has(sentCloseFrameState.RECEIVED)) {
-        const frame2 = new WebsocketFrameSend();
+        const frame3 = new WebsocketFrameSend();
         if (reason.length !== 0 && code2 === null) {
           code2 = 1e3;
         }
         assert2(code2 === null || Number.isInteger(code2));
         if (code2 === null && reason.length === 0) {
-          frame2.frameData = emptyBuffer;
+          frame3.frameData = emptyBuffer;
         } else if (code2 !== null && reason === null) {
-          frame2.frameData = Buffer.allocUnsafe(2);
-          frame2.frameData.writeUInt16BE(code2, 0);
+          frame3.frameData = Buffer.allocUnsafe(2);
+          frame3.frameData.writeUInt16BE(code2, 0);
         } else if (code2 !== null && reason !== null) {
-          frame2.frameData = Buffer.allocUnsafe(2 + Buffer.byteLength(reason));
-          frame2.frameData.writeUInt16BE(code2, 0);
-          frame2.frameData.write(reason, 2, "utf-8");
+          frame3.frameData = Buffer.allocUnsafe(2 + Buffer.byteLength(reason));
+          frame3.frameData.writeUInt16BE(code2, 0);
+          frame3.frameData.write(reason, 2, "utf-8");
         } else {
-          frame2.frameData = emptyBuffer;
+          frame3.frameData = emptyBuffer;
         }
-        object2.socket.write(frame2.createFrame(opcodes.CLOSE));
+        object2.socket.write(frame3.createFrame(opcodes.CLOSE));
         object2.closeState.add(sentCloseFrameState.SENT);
         object2.readyState = states.CLOSING;
       } else {
@@ -54890,8 +55159,8 @@ var require_receiver = __commonJS({
           return false;
         } else if (opcode === opcodes.PING) {
           if (!this.#handler.closeState.has(sentCloseFrameState.RECEIVED)) {
-            const frame2 = new WebsocketFrameSend(body);
-            this.#handler.socket.write(frame2.createFrame(opcodes.PONG));
+            const frame3 = new WebsocketFrameSend(body);
+            this.#handler.socket.write(frame3.createFrame(opcodes.PONG));
             this.#handler.onPing(body);
           }
         } else if (opcode === opcodes.PONG) {
@@ -55396,8 +55665,8 @@ var require_websocket = __commonJS({
         }
         const readyState = ws.#handler.readyState;
         if (isEstablished(readyState) && !isClosing(readyState) && !isClosed(readyState)) {
-          const frame2 = new WebsocketFrameSend(buffer);
-          ws.#handler.socket.write(frame2.createFrame(opcodes.PING));
+          const frame3 = new WebsocketFrameSend(buffer);
+          ws.#handler.socket.write(frame3.createFrame(opcodes.PING));
         }
       }
     };
@@ -55726,8 +55995,8 @@ var require_websocketstream = __commonJS({
           opcode = opcodes.TEXT;
         }
         if (!this.#handler.closeState.has(sentCloseFrameState.SENT) && !this.#handler.closeState.has(sentCloseFrameState.RECEIVED)) {
-          const frame2 = new WebsocketFrameSend(data);
-          this.#handler.socket.write(frame2.createFrame(opcode), () => {
+          const frame3 = new WebsocketFrameSend(data);
+          this.#handler.socket.write(frame3.createFrame(opcode), () => {
             promise2.resolve(void 0);
           });
         }
@@ -56844,14 +57113,14 @@ var init_forward = __esm({
 });
 
 // src/upstream/chain.ts
-import { createHash as createHash5, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash6, randomBytes as randomBytes2 } from "node:crypto";
 import { Readable } from "node:stream";
 function workspaceOf(p) {
   return `${new URL(p.baseUrl).origin}|${p.credential === "passthrough" ? "passthrough" : p.credential.env}`;
 }
 function credentialBreakerKey(p, headers) {
   if (p.credential !== "passthrough") return `${p.name}|${workspaceOf(p)}`;
-  const h = createHash5("sha256").update(CREDENTIAL_SALT);
+  const h = createHash6("sha256").update(CREDENTIAL_SALT);
   for (const name2 of ["authorization", "x-api-key"]) h.update(`${name2}=${String(headers[name2] ?? "")};`);
   return `${p.name}|passthrough:${h.digest("hex")}`;
 }
@@ -57028,7 +57297,7 @@ var init_attribution = __esm({
 });
 
 // src/edge/auth.ts
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 function extractCredentials(h) {
   const out = [];
   const own2 = first(h["x-tokenyard-key"])?.trim();
@@ -57040,7 +57309,7 @@ function extractCredentials(h) {
   return out;
 }
 function hashKey(v) {
-  return createHash6("sha256").update(v).digest("hex");
+  return createHash7("sha256").update(v).digest("hex");
 }
 var first;
 var init_auth = __esm({
@@ -57114,6 +57383,36 @@ function anthropicError(status, type, message, retryAfterS, requestId, opts = {}
   if (opts.shouldRetry === false) headers["x-should-retry"] = "false";
   if (retryAfterS !== null) headers["retry-after"] = String(Number.isFinite(retryAfterS) ? Math.min(60, Math.max(0, Math.ceil(retryAfterS))) : 60);
   return { status, headers, body };
+}
+function openaiError(status, type, code2, message, retryAfterS, requestId, opts = {}) {
+  const reply = anthropicError(status, type, message, retryAfterS, requestId, opts);
+  const body = Buffer.from(JSON.stringify({ error: { type, code: code2, message: `tokenyard: ${message}` } }));
+  return { status, headers: { ...reply.headers, "content-length": String(body.length) }, body };
+}
+function openaiTypeAndCode(anthropicType, reason) {
+  switch (reason) {
+    case "budget":
+      return { type: "insufficient_quota", code: "insufficient_quota" };
+    case "rate":
+    case "streams":
+      return { type: "requests", code: "rate_limit_exceeded" };
+    case "secret":
+    case "taint":
+      return { type: "invalid_request_error", code: "secret_detected" };
+    case "store-down":
+      return { type: "server_error", code: "service_unavailable" };
+    default:
+      break;
+  }
+  if (anthropicType === "api_error") return { type: "server_error", code: reason.replaceAll("-", "_") };
+  if (anthropicType === "authentication_error") return { type: "invalid_request_error", code: "invalid_api_key" };
+  if (anthropicType === "not_found_error") return { type: "invalid_request_error", code: "unknown_url" };
+  return { type: "invalid_request_error", code: reason.replaceAll("-", "_") };
+}
+function ownError(envelope, status, anthropicType, reason, message, retryAfterS, requestId, opts = {}) {
+  if (envelope === "anthropic") return anthropicError(status, anthropicType, message, retryAfterS, requestId, opts);
+  const { type, code: code2 } = openaiTypeAndCode(anthropicType, reason);
+  return openaiError(status, type, code2, message, retryAfterS, requestId, opts);
 }
 var NOT_RETRYABLE, retryable;
 var init_errors3 = __esm({
@@ -57205,12 +57504,15 @@ var init_paths = __esm({
     ROUTES = [
       { methods: ["POST"], path: "/messages", surface: "anthropic-messages", canonical: "/v1/messages", inference: true },
       { methods: ["POST"], path: "/messages/count_tokens", surface: "anthropic-count-tokens", canonical: "/v1/messages/count_tokens", inference: false },
-      { methods: ["GET"], path: "/models", surface: "models", canonical: "/v1/models", inference: false }
+      { methods: ["GET"], path: "/models", surface: "models", canonical: "/v1/models", inference: false },
+      // Codex appends /responses to its base_url, which carries /v1 (spec 3 step 6, 5.4). OpenAI provider base URLs carry
+      // /v1 as well (https://api.openai.com/v1), so the upstream path is /responses after it.
+      { methods: ["POST"], path: "/responses", surface: "openai-responses", canonical: "/responses", inference: true }
     ];
     ROUTE_TABLE = [
-      ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: r.canonical, inference: r.inference }))),
-      { method: "HEAD", path: "/api/hello", inference: false },
-      { method: "GET", path: "/api/hello", inference: false }
+      ...ROUTES.flatMap((r) => r.methods.map((method) => ({ method, path: `/v1${r.path}`, inference: r.inference, surface: r.surface }))),
+      { method: "HEAD", path: "/api/hello", inference: false, surface: "hello" },
+      { method: "GET", path: "/api/hello", inference: false, surface: "hello" }
     ];
   }
 });
@@ -57401,14 +57703,17 @@ function providerCredential(p, env) {
   return p.format === "anthropic" ? { header: "x-api-key", value } : { header: "authorization", value: `Bearer ${value}` };
 }
 function extractFeatures(surface, body) {
-  return surface === "anthropic-count-tokens" ? extractCountTokensFeatures(body) : extractAnthropicFeatures(body);
+  if (surface === "anthropic-count-tokens") return extractCountTokensFeatures(body);
+  if (surface === "openai-responses") return extractResponsesFeatures(body);
+  return extractAnthropicFeatures(body);
 }
-function usageTap(surface, up, capBytes) {
-  if (surface !== "anthropic-messages") return { onChunk: () => void 0, result: () => null };
+function usageTap(surface, up, capBytes, inputBound) {
+  if (surface !== "anthropic-messages" && surface !== "openai-responses") return { onChunk: () => void 0, result: () => null };
+  const responses = surface === "openai-responses";
   const ct = String(up.headers["content-type"] ?? "");
   if (ct.startsWith("text/event-stream")) {
     const parser = new SseParser();
-    const acc = new AnthropicUsageAccumulator();
+    const acc = responses ? new ResponsesUsageAccumulator({ inputTokensIfUnknown: inputBound }) : new AnthropicUsageAccumulator();
     return {
       onChunk: (c) => {
         for (const e2 of parser.push(c)) acc.onEvent(e2);
@@ -57423,7 +57728,7 @@ function usageTap(surface, up, capBytes) {
       size += c.length;
       if (size <= capBytes) chunks.push(c);
     },
-    result: () => size <= capBytes ? parseAnthropicJsonUsage(Buffer.concat(chunks)) : null
+    result: () => size <= capBytes ? (responses ? parseResponsesJsonUsage : parseAnthropicJsonUsage)(Buffer.concat(chunks)) : null
   };
 }
 function requestModifiers(policy2, x) {
@@ -57516,6 +57821,9 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     const path2 = (req.url ?? "/").split("?")[0];
     return sendError(req, res, anthropicError(404, "not_found_error", `no route for ${method} ${path2}`, null, id));
   }
+  const envelope = match.surface === "openai-responses" ? "openai" : "anthropic";
+  held.envelope = envelope;
+  const own2 = (status, type, reason, message, retryAfterS = null, opts = {}) => ownError(envelope, status, type, reason, message, retryAfterS, id, opts);
   if (match.surface === "hello") {
     req.resume();
     res.writeHead(200, { "content-length": "0" }).end();
@@ -57532,10 +57840,10 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     else if (c.source === "x-api-key") keyHeaders.add("x-api-key");
   }
   if (!key) {
-    return sendError(req, res, anthropicError(401, "authentication_error", "missing or unknown tokenyard key", null, id));
+    return sendError(req, res, own2(401, "authentication_error", "unknown-key", "missing or unknown tokenyard key"));
   }
   if (key.billing === "subscription" && !deps.experimentalSubscription) {
-    return sendError(req, res, anthropicError(401, "authentication_error", "subscription keys are not enabled on this gateway", null, id));
+    return sendError(req, res, own2(401, "authentication_error", "subscription-disabled", "subscription keys are not enabled on this gateway"));
   }
   if (match.surface === "models") {
     req.resume();
@@ -57571,7 +57879,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   } catch (err) {
     if (err instanceof BodyTooLargeError) {
       const msg = `request body is larger than the ${err.capBytes} byte limit`;
-      sendError(req, res, anthropicError(413, "request_too_large", msg, null, id), true);
+      sendError(req, res, own2(413, "request_too_large", "request_too_large", msg), true);
       return early({ status: 413, decision: { action: "block", reason: "body-too-large" }, errorClass: "request_too_large" });
     }
     return early({ status: 499, aborted: true, errorClass: "client_abort" });
@@ -57585,7 +57893,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
     plan = decide(policy2, f);
   } catch {
-    sendError(req, res, anthropicError(500, "api_error", "the reservation for this request could not be computed; it was not sent", null, id));
+    sendError(req, res, own2(500, "api_error", "reservation-error", "the reservation for this request could not be computed; it was not sent"));
     return early({ features, guardrailHits: guard.hits, status: 500, decision: { action: "block", reason: "reservation-error" }, errorClass: "reservation_error" });
   }
   held.plan = plan;
@@ -57606,7 +57914,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   if (plan.preBlock === null && product && guard.redactions.length > 0) {
     const redacted = redactProductBody(body, guard.redactions);
     if (!features.parseError && !isJson(redacted)) {
-      sendError(req, res, anthropicError(400, "invalid_request_error", "a redacted value could not be replaced without breaking the JSON body; it was not sent", null, id));
+      sendError(req, res, own2(400, "invalid_request_error", "redaction-failed", "a redacted value could not be replaced without breaking the JSON body; it was not sent"));
       return early({ ...decided, status: 400, decision: { action: "block", reason: "redaction-failed" }, errorClass: "invalid_request_error" });
     }
     upstreamBody = redacted;
@@ -57615,7 +57923,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     const rewritten = rewriteTopLevelModel(upstreamBody, first2.upstreamModel);
     if (!rewritten) {
       const msg = `route "${plan.route ?? ""}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
-      sendError(req, res, anthropicError(400, "invalid_request_error", msg, null, id));
+      sendError(req, res, own2(400, "invalid_request_error", "model-rewrite-failed", msg));
       return early({ ...decided, status: 400, decision: { action: "block", reason: "model-rewrite-failed" }, errorClass: "invalid_request_error" });
     }
     upstreamBody = rewritten;
@@ -57662,7 +57970,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
   if (decision.block || !provider2) {
     const b = decision.block ?? { status: 403, type: "permission_error", reason: "no-route", message: "no provider serves this route", retryAfterS: null };
-    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id, retryable(b.reason) ? {} : { shouldRetry: false }));
+    sendError(req, res, own2(b.status, b.type, b.reason, b.message, b.retryAfterS, retryable(b.reason) ? {} : { shouldRetry: false }));
     return early({ ...decided, ...admitted, status: b.status, decision: { action: "block", reason: b.reason }, errorClass: b.type });
   }
   const headersFor = (p) => upstreamHeaders(req.headers, {
@@ -57689,7 +57997,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     const n2 = err instanceof ChainError ? err.attempts : 1;
     const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n2 };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
-    sendError(req, res, anthropicError(502, "api_error", `upstream ${common.provider} is unreachable`, null, id));
+    sendError(req, res, own2(502, "api_error", "upstream-unreachable", `upstream ${common.provider} is unreachable`));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
   }
   const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider2) };
@@ -57709,7 +58017,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     })
   );
   res.flushHeaders();
-  const tap = usageTap(surface, up, deps.bodyCapBytes);
+  const tap = usageTap(surface, up, deps.bodyCapBytes, f.inputTokensBound);
   held.streamed = String(up.headers["content-type"] ?? "").startsWith("text/event-stream");
   try {
     await pipeline(up.body, createTee(tap.onChunk), res);
@@ -57753,7 +58061,7 @@ function createHandler(deps) {
   };
   return (req, res) => {
     const id = deps.newId();
-    const held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, known: null };
+    const held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, envelope: "anthropic", known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
@@ -57789,7 +58097,7 @@ function createHandler(deps) {
         }).catch(() => void 0);
       }
       try {
-        if (!res.headersSent) sendError(req, res, anthropicError(500, "api_error", "internal error", null, id));
+        if (!res.headersSent) sendError(req, res, ownError(held.envelope, 500, "api_error", "internal_error", "internal error", null, id));
         else res.destroy();
       } catch {
         res.destroy();
@@ -57812,11 +58120,13 @@ var init_handler = __esm({
     init_resolve();
     init_cost();
     init_anthropic_usage();
+    init_responses_usage();
     init_sse();
     init_tee();
     init_anthropic_count_tokens();
     init_anthropic_messages();
     init_anthropic_models();
+    init_openai_responses();
     init_breaker();
     init_chain();
     init_retry_budget();
@@ -58378,7 +58688,7 @@ __export(bundle_exports, {
   serializeBundle: () => serializeBundle,
   sha256Hex: () => sha256Hex
 });
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 function canonicalJson(v) {
   if (Array.isArray(v)) return `[${v.map((x) => x === void 0 ? "null" : canonicalJson(x)).join(",")}]`;
   if (typeof v === "object" && v !== null) {
@@ -58450,7 +58760,7 @@ var init_bundle = __esm({
     init_load_dir();
     init_schema();
     MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
-    sha256Hex = (text2) => createHash7("sha256").update(text2).digest("hex");
+    sha256Hex = (text2) => createHash8("sha256").update(text2).digest("hex");
     sortedKeys = (keys2) => [...keys2].sort((a, b) => a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0);
     serializeBundle = (b) => `${JSON.stringify(b, null, 2)}
 `;
@@ -58598,7 +58908,7 @@ var init_load_dir2 = __esm({
 });
 
 // src/policy-loader/lkg.ts
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 import { mkdir as mkdir2, readFile, rename, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 async function writeLkg(stateDir, bundleText) {
@@ -58638,7 +58948,7 @@ var init_lkg = __esm({
     "use strict";
     init_bundle();
     LKG_FILE = "last-known-good.json";
-    sha = (text2) => createHash8("sha256").update(text2).digest("hex");
+    sha = (text2) => createHash9("sha256").update(text2).digest("hex");
   }
 });
 
@@ -60298,21 +60608,21 @@ var require_generic_transformers = __commonJS({
       },
       3: void 0
     };
-    function transformDoubleArgument(num2) {
-      switch (num2) {
+    function transformDoubleArgument(num3) {
+      switch (num3) {
         case Infinity:
           return "+inf";
         case -Infinity:
           return "-inf";
         default:
-          return num2.toString();
+          return num3.toString();
       }
     }
     exports.transformDoubleArgument = transformDoubleArgument;
-    function transformStringDoubleArgument(num2) {
-      if (typeof num2 !== "number")
-        return num2;
-      return transformDoubleArgument(num2);
+    function transformStringDoubleArgument(num3) {
+      if (typeof num3 !== "number")
+        return num3;
+      return transformDoubleArgument(num3);
     }
     exports.transformStringDoubleArgument = transformStringDoubleArgument;
     exports.transformDoubleReply = {
@@ -102690,7 +103000,7 @@ __export(redis_store_exports, {
   createRedisStore: () => createRedisStore,
   redisSweepLock: () => redisSweepLock
 });
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 function createRedisStore(client, o) {
   const open3 = /* @__PURE__ */ new Map();
   let loaded = null;
@@ -102811,7 +103121,7 @@ var init_redis_store = __esm({
     init_keys();
     init_lua();
     init_store();
-    script = (source) => ({ source, sha: createHash9("sha1").update(source).digest("hex") });
+    script = (source) => ({ source, sha: createHash10("sha1").update(source).digest("hex") });
     ADMIT = script(ADMIT_LUA);
     SETTLE = script(SETTLE_LUA);
     SWEEP = script(SWEEP_LUA);
@@ -102942,6 +103252,154 @@ var init_sweeper = __esm({
   }
 });
 
+// src/mock/openai.ts
+import { createServer as createServer3 } from "node:http";
+function parseBody2(body) {
+  try {
+    const v = JSON.parse(body.toString("utf8"));
+    return typeof v === "object" && v !== null && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+function splitTokens2(output2) {
+  const n2 = Math.min(output2, MAX_DELTAS2);
+  if (n2 === 0) return [];
+  const base = Math.floor(output2 / n2);
+  const extra = output2 % n2;
+  return Array.from({ length: n2 }, (_, i) => base + (i < extra ? 1 : 0));
+}
+async function startOpenAIMock(opts = {}) {
+  const received = [];
+  let scenario = opts.scenario ?? DEFAULT_SCENARIO;
+  let respCount = 0;
+  const cache = /* @__PURE__ */ new Map();
+  async function respond(rec, res) {
+    const path2 = rec.pathAndQuery.split("?")[0];
+    if (rec.method !== "POST" || path2 !== "/responses" && path2 !== "/v1/responses") {
+      res.writeHead(404, { "content-type": "application/json" }).end('{"error":{"message":"not found","type":"invalid_request_error","param":null,"code":"unknown_url"}}');
+      return;
+    }
+    const sc = typeof scenario === "function" ? scenario(rec) : scenario;
+    if (sc.kind === "hangBeforeHeaders") return;
+    if (sc.kind === "status") {
+      res.writeHead(sc.status, { "content-type": "application/json", ...sc.headers }).end(sc.body);
+      return;
+    }
+    const body = parseBody2(rec.body);
+    const model = typeof body.model === "string" ? body.model : "gpt-mock";
+    const outputTokens2 = sc.kind === "ok" ? sc.outputTokens : DEFAULT_SCENARIO.kind === "ok" ? DEFAULT_SCENARIO.outputTokens : 16;
+    const input3 = Math.ceil(rec.body.length / 4);
+    const key = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : null;
+    const prev = key === null ? 0 : cache.get(key) ?? 0;
+    if (key !== null) cache.set(key, rec.body.length);
+    const usage = { input: input3, cached: Math.min(input3, Math.floor(Math.min(prev, rec.body.length) / 4 / 128) * 128), output: outputTokens2 };
+    const id = `resp_mock_${String(++respCount).padStart(6, "0")}`;
+    const text2 = splitTokens2(outputTokens2).map((t) => "x".repeat(t * 4));
+    const status = sc.kind === "incomplete" ? "incomplete" : "completed";
+    const response = (st, withUsage) => ({
+      id,
+      object: "response",
+      created_at: 17e8,
+      status: st,
+      model,
+      output: st === "in_progress" ? [] : [{ type: "message", id: `msg_${id}`, status: "completed", role: "assistant", content: [{ type: "output_text", text: text2.join(""), annotations: [] }] }],
+      ...sc.kind === "incomplete" && st === "incomplete" ? { incomplete_details: { reason: sc.reason } } : {},
+      usage: withUsage ? usageJson2(usage) : null
+    });
+    if (body.stream !== true) {
+      if (sc.kind === "drop") {
+        res.socket?.destroy();
+        return;
+      }
+      if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
+      res.writeHead(200, { "content-type": "application/json", "x-request-id": id }).end(JSON.stringify(response(status, true)));
+      return;
+    }
+    let seq = 0;
+    const ev = (type, rest) => ({ type, sequence_number: seq++, ...rest });
+    const events = [
+      ev("response.created", { response: response("in_progress", false) }),
+      ev("response.in_progress", { response: response("in_progress", false) }),
+      ev("response.output_item.added", { output_index: 0, item: { type: "message", id: `msg_${id}`, status: "in_progress", role: "assistant", content: [] } }),
+      ...text2.map((delta) => ev("response.output_text.delta", { item_id: `msg_${id}`, output_index: 0, content_index: 0, delta })),
+      ev("response.output_text.done", { item_id: `msg_${id}`, output_index: 0, content_index: 0, text: text2.join("") })
+    ];
+    if (sc.kind === "incomplete") events.push(ev("response.incomplete", { response: response("incomplete", true) }));
+    else events.push(ev("response.completed", { response: response("completed", true) }));
+    let closed = false;
+    res.on("close", () => closed = true);
+    const write = (chunk) => new Promise((resolve3) => {
+      if (closed || res.destroyed) return resolve3();
+      res.write(chunk, () => resolve3());
+    });
+    if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
+    if (closed) return;
+    res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", "x-request-id": id });
+    for (let i = 0; i < events.length; i++) {
+      if (sc.kind === "drop" && i === sc.afterEvents) {
+        res.socket?.destroy();
+        return;
+      }
+      if ((sc.kind === "failed" || sc.kind === "midStreamError") && i === sc.afterEvents) {
+        const code2 = sc.kind === "failed" ? sc.code : sc.errorType;
+        await write(frame2(ev("response.failed", { response: { ...response("failed", false), error: { code: code2, message: "mock failure" } } })));
+        break;
+      }
+      if (closed) return;
+      await write(frame2(events[i]));
+      if (sc.kind === "pauseAfterStart" && i === 0) await sleep2(sc.pauseMs);
+    }
+    if (!closed) res.end();
+  }
+  const server = createServer3((req, res) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const headers = {};
+      for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
+      const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
+      received.push(rec);
+      respond(rec, res).catch(() => res.destroy());
+    });
+  });
+  await new Promise((resolve3) => server.listen(opts.port ?? 0, "127.0.0.1", resolve3));
+  const port = server.address().port;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    received,
+    setScenario(s2) {
+      scenario = s2;
+    },
+    close() {
+      return new Promise((resolve3) => {
+        server.close(() => resolve3());
+        server.closeAllConnections();
+      });
+    }
+  };
+}
+var MAX_DELTAS2, sleep2, usageJson2, frame2;
+var init_openai = __esm({
+  "src/mock/openai.ts"() {
+    "use strict";
+    init_scenarios();
+    MAX_DELTAS2 = 100;
+    sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+    usageJson2 = (u) => ({
+      input_tokens: u.input,
+      input_tokens_details: { cached_tokens: u.cached },
+      output_tokens: u.output,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: u.input + u.output
+    });
+    frame2 = (data) => `event: ${String(data.type)}
+data: ${JSON.stringify(data)}
+
+`;
+  }
+});
+
 // src/mock/traffic.ts
 function auxiliaryBody(rng, model) {
   return Buffer.from(
@@ -102957,6 +103415,7 @@ function auxiliaryBody(rng, model) {
 function planSession(rng, dev, startAt, secret, out, counter) {
   const session = {
     dev,
+    client: "claude-code",
     id: `${hex3(rng, 8)}-${hex3(rng, 4)}-${hex3(rng, 4)}-${hex3(rng, 4)}-${hex3(rng, 12)}`,
     branch: `feat/WEB-${between(rng, 100, 999)}`,
     ticket: "",
@@ -103007,6 +103466,18 @@ region = eu-west-1` : void 0;
   }
   return session;
 }
+function planCodexSession(rng, dev, model, startAt, out, counter) {
+  const id = `${hex3(rng, 8)}-${hex3(rng, 4)}-7${hex3(rng, 3)}-${hex3(rng, 4)}-${hex3(rng, 12)}`;
+  const session = { dev, client: "codex", id, branch: `feat/WEB-${between(rng, 100, 999)}`, ticket: "", tolerance: 1, failures: 0 };
+  session.ticket = /WEB-\d+/.exec(session.branch)?.[0] ?? "";
+  const conv = new CodexConversation(rng, { model, instructions: text(mulberry32(hashString(`codex:${dev.repo}`)), 500), sessionId: id });
+  let t = startAt;
+  for (let i = between(rng, 4, 10); i > 0; i--) {
+    out.push({ at: t, order: counter.n++, session, kind: "main", agent: null, parent: null, agentType: null, promptId: "", build: () => conv.next() });
+    t += between(rng, 5, 40) * 1e3;
+  }
+  return session;
+}
 function hashString(s2) {
   let h = 2166136261;
   for (let i = 0; i < s2.length; i++) h = Math.imul(h ^ s2.charCodeAt(i), 16777619);
@@ -103030,6 +103501,18 @@ async function generateTraffic(o) {
       }
     }
   }
+  const codexRng = mulberry32(o.seed ^ 1540483477);
+  for (let d = 0; d < o.days; d++) {
+    const dayStart = startMs + d * DAY_MS4;
+    if (new Date(dayStart).getUTCDay() % 6 === 0) continue;
+    for (const c of CODEX_DEVS) {
+      const dev = DEMO_DEVELOPERS.find((x) => x.name === c.name);
+      if (!dev || codexRng() < 0.4) continue;
+      const model = c.models[Math.floor(codexRng() * c.models.length)];
+      const startAt = dayStart + 14 * 36e5 + between(codexRng, 0, 180) * 6e4;
+      sessions.push(planCodexSession(codexRng, dev, model, startAt, planned, counter));
+    }
+  }
   planned.sort((a, b) => a.at - b.at || a.order - b.order);
   let requests = 0;
   const stopped = /* @__PURE__ */ new Set();
@@ -103038,7 +103521,19 @@ async function generateTraffic(o) {
     if (stopped.has(s2)) continue;
     const body = p.build();
     o.setTime?.(p.at);
-    const headers = {
+    const codex = s2.client === "codex";
+    const headers = codex ? {
+      authorization: `Bearer ${o.keys[s2.dev.name] ?? ""}`,
+      "content-type": "application/json",
+      accept: "text/event-stream",
+      originator: "codex_cli_rs",
+      version: "0.130.0",
+      session_id: s2.id,
+      "user-agent": "codex_cli_rs/0.130.0 (Mac OS 26.0.0; arm64) iTerm.app",
+      "x-tokenyard-repo": s2.dev.repo,
+      "x-tokenyard-branch": s2.branch,
+      "x-tokenyard-ticket": s2.ticket
+    } : {
       "x-api-key": o.keys[s2.dev.name] ?? "",
       "content-type": "application/json",
       "anthropic-version": "2023-06-01",
@@ -103053,7 +103548,7 @@ async function generateTraffic(o) {
       ...p.parent ? { "x-claude-code-parent-agent-id": p.parent } : {},
       ...p.agentType ? { "x-claude-code-agent-type": p.agentType } : {}
     };
-    const res = await fetch(`${o.gatewayUrl}/v1/messages`, { method: "POST", headers, body: new Uint8Array(body) });
+    const res = await fetch(`${o.gatewayUrl}${codex ? "/v1/responses" : "/v1/messages"}`, { method: "POST", headers, body: new Uint8Array(body) });
     await res.arrayBuffer();
     requests++;
     await o.afterRequest?.();
@@ -103061,7 +103556,7 @@ async function generateTraffic(o) {
   }
   return { requests, sessions: sessions.length };
 }
-var DEMO_DEVELOPERS, FAKE_AWS_KEY, SECRET_DEV, SECRET_DAY, DEMO_START_MS, DAY_MS4, WORDS, text, between, hex3, toolDefs, MAIN_TOOLS, SUB_TOOLS, Conversation, MODELS;
+var DEMO_DEVELOPERS, FAKE_AWS_KEY, SECRET_DEV, SECRET_DAY, DEMO_START_MS, DAY_MS4, WORDS, text, between, hex3, toolDefs, MAIN_TOOLS, SUB_TOOLS, Conversation, CodexConversation, CODEX_TOOLS, CODEX_DEVS, MODELS;
 var init_traffic = __esm({
   "src/mock/traffic.ts"() {
     "use strict";
@@ -103154,6 +103649,46 @@ var init_traffic = __esm({
         return out;
       }
     };
+    CodexConversation = class {
+      constructor(rng, o) {
+        this.rng = rng;
+        this.o = o;
+      }
+      rng;
+      o;
+      input = [];
+      n = 0;
+      next() {
+        const i = this.n++;
+        if (i === 0) this.input.push({ type: "message", role: "user", content: [{ type: "input_text", text: `Task: ${text(this.rng, between(this.rng, 20, 60))}` }] });
+        else this.input.push({ type: "function_call_output", call_id: `call_${i - 1}`, output: text(this.rng, between(this.rng, 100, 700)) });
+        const out = Buffer.from(
+          JSON.stringify({
+            model: this.o.model,
+            instructions: this.o.instructions,
+            input: this.input,
+            tools: CODEX_TOOLS,
+            tool_choice: "auto",
+            parallel_tool_calls: false,
+            reasoning: { effort: "medium", summary: "auto" },
+            store: false,
+            stream: true,
+            include: [],
+            prompt_cache_key: this.o.sessionId
+          })
+        );
+        this.input.push({ type: "function_call", name: "shell", arguments: JSON.stringify({ command: ["bash", "-lc", text(this.rng, 4)] }), call_id: `call_${i}` });
+        return out;
+      }
+    };
+    CODEX_TOOLS = [
+      { type: "function", name: "shell", description: "Runs a shell command and returns its output. ".repeat(10), strict: false, parameters: { type: "object", properties: { command: { type: "array", items: { type: "string" } } }, required: ["command"] } },
+      { type: "custom", name: "apply_patch", description: "Applies a patch to files in the workspace. ".repeat(10) }
+    ];
+    CODEX_DEVS = [
+      { name: "gosia", models: ["gpt-5.4-mini", "gpt-5.3-codex"] },
+      { name: "hiro", models: ["gpt-5.4-mini"] }
+    ];
     MODELS = { main: "claude-opus-5-5", subagent: "claude-sonnet-5-5", compaction: "claude-opus-5-5", auxiliary: "claude-sonnet-5-5" };
   }
 });
@@ -103767,23 +104302,23 @@ var init_example_files = __esm({
     "use strict";
     EXAMPLE_BASE = {
       "policy.yaml": 'apiVersion: tokenyard/v1\nkind: Policy\nmetadata:\n  name: acme-coding-agents\n  owners: ["@acme/platform"]          # informational\n\npricing: ./prices.yaml                # versioned price table; part of the bundle\nkeys: ./keys.yaml                     # key hash, tenant, team, name, kind (developer|service), billing (api)\n\nproviders:\n  anthropic:\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY }\n  anthropic-backup:                   # second workspace; a fallback here starts a cold cache\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY_BACKUP }\n  openai:\n    format: openai\n    baseUrl: https://api.openai.com/v1\n    credential: { env: OPENAI_API_KEY }\n\ntenants:\n  acme: { teams: [platform, web, data] }\n\nroutes:                               # first match wins\n  - name: claude-code\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;\n    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).\n    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]\n  - name: codex\n    match: { surface: openai-responses, traffic: coding-agent }\n    chain: [openai]\n  - name: support-summaries\n    match: { traffic: product, feature: support-summary }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5    # product traffic only\n    criticality: sheddable\n  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too\n    match: { traffic: product }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5\n    criticality: sheddable\n\nbudgets:\n  - { name: org-month,  scope: tenant,  window: month, usd: 6000, onExceed: block }\n  - { name: team-day,   scope: team,    window: day,   usd: 300,  onExceed: block }\n  - { name: dev-day,    scope: key,     window: day,   usd: 40,   onExceed: block, mode: audit }\n  - { name: session,    scope: session,                usd: 25,   onExceed: block, mode: audit }\n\nreservation:\n  estimator: worst-case               # worst-case | session-aware\n  onOverrun: allow-and-debit\n  serverToolsWithoutMaxUses: block    # block | assume (assume prices assumedMaxUses and voids the bound, 7.4)\n\nrateLimits:\n  - { name: dev-rpm, scope: key, rpm: 120, burst: 30 }\n  - { name: dev-streams, scope: key, concurrentStreams: 8 }   # checked inside admit, released at settle\n\nguardrails:\n  secrets:\n    rules: default                    # curated prefix rules, section 6.6\n    codingAgent: block                # block | warn\n    product: redact                   # block | warn | redact\n    entropyOnly: warn                 # entropy-only hits never block\n    taintTtlHours: 24                 # how long a session stays tainted after a block\n  pii:\n    product: redact                   # email, PESEL, IBAN, card numbers with Luhn\n\nfailure:\n  counterStoreDown: { rateLimits: open, budgets: closed }\n  unpricedModel: allow-and-flag       # block | allow-and-flag\n  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }\n  retryBudgetRatio: 0.1\n\nci:\n  failOn:\n    cutSessions: 0                    # fail the check if any recorded session would be cut mid-task\n    costIncreasePct: 10\n',
-      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-02\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
+      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-03\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  # OpenAI models for Codex (Responses API). OpenAI bills no cache writes: written prompt tokens are plain input, so\n  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page\'s cached input price. Long-context rows apply\n  # above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing\n  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>\n  gpt-5.5:\n    input: 5\n    output: 30\n    cacheWrite5m: 5\n    cacheWrite1h: 5\n    cacheRead: 0.5\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 10\n        output: 45\n        cacheWrite5m: 10\n        cacheWrite1h: 10\n        cacheRead: 1\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5\n    retrieved: 2026-11-03\n  gpt-5.4:\n    input: 2.5\n    output: 15\n    cacheWrite5m: 2.5\n    cacheWrite1h: 2.5\n    cacheRead: 0.25\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 5\n        output: 22.5\n        cacheWrite5m: 5\n        cacheWrite1h: 5\n        cacheRead: 0.5\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4\n    retrieved: 2026-11-03\n  gpt-5.4-mini:\n    input: 0.75\n    output: 4.5\n    cacheWrite5m: 0.75\n    cacheWrite1h: 0.75\n    cacheRead: 0.075\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini\n    retrieved: 2026-11-03\n  gpt-5.4-nano:\n    input: 0.2\n    output: 1.25\n    cacheWrite5m: 0.2\n    cacheWrite1h: 0.2\n    cacheRead: 0.02\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano\n    retrieved: 2026-11-03\n  gpt-5.3-codex:\n    input: 1.75\n    output: 14\n    cacheWrite5m: 1.75\n    cacheWrite1h: 1.75\n    cacheRead: 0.175\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex\n    retrieved: 2026-11-03\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
       "keys.yaml": '- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}\n- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}\n'
     };
     EXAMPLE_HEAD = {
       "policy.yaml": 'apiVersion: tokenyard/v1\nkind: Policy\nmetadata:\n  name: acme-coding-agents\n  owners: ["@acme/platform"]          # informational\n\npricing: ./prices.yaml                # versioned price table; part of the bundle\nkeys: ./keys.yaml                     # key hash, tenant, team, name, kind (developer|service), billing (api)\n\nproviders:\n  anthropic:\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY }\n  anthropic-backup:                   # second workspace; a fallback here starts a cold cache\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY_BACKUP }\n  openai:\n    format: openai\n    baseUrl: https://api.openai.com/v1\n    credential: { env: OPENAI_API_KEY }\n\ntenants:\n  acme: { teams: [platform, web, data] }\n\nroutes:                               # first match wins\n  # The demo PR (spec 13): compaction and auxiliary requests run on a cheaper Claude model. This rewrites the model on\n  # coding-agent traffic, so each route needs allowBodyRewrite: true and a because: line. Requests are still authorised\n  # by the claude-code route below (same allowModels), which header-selected routes cannot widen.\n  - name: claude-code-compaction\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: compaction }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    rewriteModel: claude-haiku-5-5\n    allowBodyRewrite: true\n    because: "compaction summaries do not need the main model; Haiku is priced far below Opus"\n  - name: claude-code-auxiliary\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: auxiliary }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    rewriteModel: claude-haiku-5-5\n    allowBodyRewrite: true\n    because: "titles and command-prefix checks are small tasks; Haiku is priced far below Sonnet"\n  - name: claude-code\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;\n    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).\n    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]\n  - name: codex\n    match: { surface: openai-responses, traffic: coding-agent }\n    chain: [openai]\n  - name: support-summaries\n    match: { traffic: product, feature: support-summary }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5    # product traffic only\n    criticality: sheddable\n  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too\n    match: { traffic: product }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5\n    criticality: sheddable\n\nbudgets:\n  - { name: org-month,  scope: tenant,  window: month, usd: 6000, onExceed: block }\n  - { name: team-day,   scope: team,    window: day,   usd: 6,    onExceed: block }   # was 300; sized for the demo traffic, where only web spends this much\n  - { name: dev-day,    scope: key,     window: day,   usd: 40,   onExceed: block, mode: audit }\n  - { name: session,    scope: session,                usd: 25,   onExceed: block, mode: audit }\n\nreservation:\n  estimator: worst-case               # worst-case | session-aware\n  onOverrun: allow-and-debit\n  serverToolsWithoutMaxUses: block    # block | assume (assume prices assumedMaxUses and voids the bound, 7.4)\n\nrateLimits:\n  - { name: dev-rpm, scope: key, rpm: 120, burst: 30 }\n  - { name: dev-streams, scope: key, concurrentStreams: 8 }   # checked inside admit, released at settle\n\nguardrails:\n  secrets:\n    rules: default                    # curated prefix rules, section 6.6\n    codingAgent: block                # block | warn\n    product: redact                   # block | warn | redact\n    entropyOnly: warn                 # entropy-only hits never block\n    taintTtlHours: 24                 # how long a session stays tainted after a block\n  pii:\n    product: redact                   # email, PESEL, IBAN, card numbers with Luhn\n\nfailure:\n  counterStoreDown: { rateLimits: open, budgets: closed }\n  unpricedModel: allow-and-flag       # block | allow-and-flag\n  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }\n  retryBudgetRatio: 0.1\n\nci:\n  failOn:\n    cutSessions: 0                    # fail the check if any recorded session would be cut mid-task\n    costIncreasePct: 10\n',
-      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-02\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
+      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-03\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  # OpenAI models for Codex (Responses API). OpenAI bills no cache writes: written prompt tokens are plain input, so\n  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page\'s cached input price. Long-context rows apply\n  # above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing\n  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>\n  gpt-5.5:\n    input: 5\n    output: 30\n    cacheWrite5m: 5\n    cacheWrite1h: 5\n    cacheRead: 0.5\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 10\n        output: 45\n        cacheWrite5m: 10\n        cacheWrite1h: 10\n        cacheRead: 1\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5\n    retrieved: 2026-11-03\n  gpt-5.4:\n    input: 2.5\n    output: 15\n    cacheWrite5m: 2.5\n    cacheWrite1h: 2.5\n    cacheRead: 0.25\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 5\n        output: 22.5\n        cacheWrite5m: 5\n        cacheWrite1h: 5\n        cacheRead: 0.5\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4\n    retrieved: 2026-11-03\n  gpt-5.4-mini:\n    input: 0.75\n    output: 4.5\n    cacheWrite5m: 0.75\n    cacheWrite1h: 0.75\n    cacheRead: 0.075\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini\n    retrieved: 2026-11-03\n  gpt-5.4-nano:\n    input: 0.2\n    output: 1.25\n    cacheWrite5m: 0.2\n    cacheWrite1h: 0.2\n    cacheRead: 0.02\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano\n    retrieved: 2026-11-03\n  gpt-5.3-codex:\n    input: 1.75\n    output: 14\n    cacheWrite5m: 1.75\n    cacheWrite1h: 1.75\n    cacheRead: 0.175\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex\n    retrieved: 2026-11-03\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
       "keys.yaml": '- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}\n- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}\n'
     };
   }
 });
 
 // src/demo/policy.ts
-function compileDemo(dir, files, upstream) {
+function compileDemo(dir, files, upstream, openaiUpstream) {
   const src = parsePolicyFiles(dir, files);
   const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   for (const p of Object.values(src.policy.providers)) {
-    p.baseUrl = upstream;
+    p.baseUrl = p.format === "openai" ? openaiUpstream : upstream;
     p.credential = { env: DEMO_CREDENTIAL_ENV };
   }
   src.keys = DEMO_DEVELOPERS.map(
@@ -103791,8 +104326,8 @@ function compileDemo(dir, files, upstream) {
   );
   return compilePolicy(src, revision, { experimentalSubscription: false });
 }
-function demoPolicies(upstream) {
-  return { base: compileDemo("examples/policy", EXAMPLE_BASE, upstream), head: compileDemo("examples/policy-head", EXAMPLE_HEAD, upstream) };
+function demoPolicies(upstream, openaiUpstream = upstream) {
+  return { base: compileDemo("examples/policy", EXAMPLE_BASE, upstream, openaiUpstream), head: compileDemo("examples/policy-head", EXAMPLE_HEAD, upstream, openaiUpstream) };
 }
 var DEMO_CREDENTIAL_ENV, DEMO_TENANT, demoKey;
 var init_policy = __esm({
@@ -103842,7 +104377,9 @@ async function recordDemo(o) {
   const scenario = (r) => ({ kind: "ok", ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: outputTokens(o.seed, r.body) });
   const mock = await startAnthropicMock({ now: clock });
   mock.setScenario(scenario);
-  const { base, head } = demoPolicies(mock.url);
+  const openai = await startOpenAIMock({ scenario: { kind: "ok", ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: 16 } });
+  openai.setScenario(scenario);
+  const { base, head } = demoPolicies(mock.url, openai.url);
   const store = createMemoryStore({ clock });
   const writer = new TraceWriter({ dir, instanceId: INSTANCE_ID, queueMax: 1e6, clock });
   let settled = 0;
@@ -103888,6 +104425,7 @@ async function recordDemo(o) {
   } finally {
     await gw.close();
     await mock.close();
+    await openai.close();
     await rm(dir, { recursive: true, force: true });
     if (prevKey === void 0) delete process.env[DEMO_CREDENTIAL_ENV];
     else process.env[DEMO_CREDENTIAL_ENV] = prevKey;
@@ -103897,7 +104435,7 @@ async function runDemo(o) {
   const dir = await mkdtemp(join6(tmpdir(), "tokenyard-demo-export-"));
   try {
     const file2 = join6(dir, "demo.ndjson.gz");
-    o.out.write(`tokenyard demo: ${DEMO_DAYS} days of synthetic traffic from ${DEMO_DEVELOPERS.length} developers in 3 teams, through a gateway with examples/policy and a mock Anthropic provider (seed ${o.seed}).
+    o.out.write(`tokenyard demo: ${DEMO_DAYS} days of synthetic traffic from ${DEMO_DEVELOPERS.length} developers in 3 teams, through a gateway with examples/policy and mock Anthropic and OpenAI providers (seed ${o.seed}).
 `);
     const rec = await recordDemo({ seed: o.seed, traceFile: file2 });
     o.out.write(`${rec.requests} requests in ${rec.sessions} sessions recorded. Replaying them against examples/policy-head (the demo PR: compaction and auxiliary on a cheaper model, a tighter team budget).
@@ -103924,6 +104462,7 @@ var init_run = __esm({
     init_writer();
     init_memory_store();
     init_anthropic();
+    init_openai();
     init_traffic();
     init_scenarios();
     init_engine();

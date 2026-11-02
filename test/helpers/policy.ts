@@ -25,6 +25,8 @@ const read = (f: string): string => readFileSync(join(EXAMPLE, f), 'utf8');
  */
 export function testPolicy(o: {
   upstream: string;
+  /** Where the `openai` provider points (default `upstream`): tests never reach api.openai.com. */
+  openaiUpstream?: string;
   credential?: ProviderSpec['credential'];
   models?: string[];
   billing?: KeyRecord['billing'];
@@ -47,6 +49,11 @@ export function testPolicy(o: {
     p.baseUrl = passthrough ? 'https://api.anthropic.com' : o.upstream;
     p.credential = credential;
   }
+  const oa = src.policy.providers.openai;
+  if (oa && !passthrough) {
+    oa.baseUrl = o.openaiUpstream ?? o.upstream;
+    oa.credential = credential;
+  }
   src.keys = [{ hash: hashKey(TEST_KEY), keyId: 'key_test', tenant: 'acme', team: 'platform', name: 'test', kind: 'developer', billing }, ...(o.extraKeys ?? [])];
   const route = src.policy.routes.find((r) => r.name === 'claude-code');
   if (!route) throw new Error('examples/policy has no claude-code route');
@@ -58,6 +65,6 @@ export function testPolicy(o: {
   o.edit?.(src.policy);
   const compiled = compilePolicy(src, 'test', { experimentalSubscription: passthrough || billing === 'subscription' });
   if (!passthrough) return compiled;
-  const providers = new Map([...compiled.providers].map(([n, p]) => [n, n.startsWith('anthropic') ? { ...p, baseUrl: o.upstream } : p]));
+  const providers = new Map([...compiled.providers].map(([n, p]) => [n, n.startsWith('anthropic') ? { ...p, baseUrl: o.upstream } : n === 'openai' ? { ...p, baseUrl: o.openaiUpstream ?? o.upstream } : p]));
   return { ...compiled, providers };
 }

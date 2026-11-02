@@ -15,11 +15,13 @@ import { resolve } from '../policy/resolve.js';
 import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
 import { costMicroUsd } from '../pricing/cost.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
+import { parseResponsesJsonUsage, ResponsesUsageAccumulator } from '../stream/responses-usage.js';
 import { SseParser } from '../stream/sse.js';
 import { createTee } from '../stream/tee.js';
 import { extractCountTokensFeatures } from '../surfaces/anthropic-count-tokens.js';
 import { extractAnthropicFeatures, rewriteTopLevelModel } from '../surfaces/anthropic-messages.js';
 import { modelsListBody } from '../surfaces/anthropic-models.js';
+import { extractResponsesFeatures } from '../surfaces/openai-responses.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { Breaker } from '../upstream/breaker.js';
 import { ChainError, runChain, workspaceOf } from '../upstream/chain.js';
@@ -28,7 +30,7 @@ import { RetryBudget } from '../upstream/retry-budget.js';
 import { readAttribution, type RawAttribution } from './attribution.js';
 import { extractCredentials, hashKey } from './auth.js';
 import { BodyTooLargeError, readBody } from './body.js';
-import { anthropicError, retryable } from './errors.js';
+import { anthropicError, type ErrorEnvelope, type ErrorReply, ownError, retryable } from './errors.js';
 import { clientHeaders, upstreamHeaders } from './headers.js';
 import { matchRoute } from './paths.js';
 import { buildTraceRecord, parseClient } from './trace-record.js';
@@ -193,8 +195,6 @@ export interface RequestOutcome {
   admitAt?: { offsetMs: number; seq: number };
 }
 
-type ErrorReply = ReturnType<typeof anthropicError>;
-
 function sendError(req: IncomingMessage, res: ServerResponse, e: ErrorReply, closeConnection = false): void {
   // An early answer leaves an unread upload behind; drain it (or close the connection) so the socket is not stuck.
   req.resume();
@@ -240,16 +240,22 @@ function providerCredential(p: ProviderSpec, env: NodeJS.ProcessEnv): { header: 
 }
 
 function extractFeatures(surface: Surface, body: Buffer): ExtractedFeatures {
-  return surface === 'anthropic-count-tokens' ? extractCountTokensFeatures(body) : extractAnthropicFeatures(body);
+  if (surface === 'anthropic-count-tokens') return extractCountTokensFeatures(body);
+  if (surface === 'openai-responses') return extractResponsesFeatures(body);
+  return extractAnthropicFeatures(body);
 }
 
-/** Watches the response bytes for usage without delaying or changing them (spec 5.3 step 11). */
-function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { onChunk(c: Buffer): void; result(): UsageResult | null } {
-  if (surface !== 'anthropic-messages') return { onChunk: () => undefined, result: () => null };
+/**
+ * Watches the response bytes for usage without delaying or changing them (spec 5.3 step 11, 5.4). `inputBound` is
+ * what a Responses stream that ends without usage settles as input.
+ */
+function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number, inputBound: number): { onChunk(c: Buffer): void; result(): UsageResult | null } {
+  if (surface !== 'anthropic-messages' && surface !== 'openai-responses') return { onChunk: () => undefined, result: () => null };
+  const responses = surface === 'openai-responses';
   const ct = String(up.headers['content-type'] ?? '');
   if (ct.startsWith('text/event-stream')) {
     const parser = new SseParser();
-    const acc = new AnthropicUsageAccumulator();
+    const acc = responses ? new ResponsesUsageAccumulator({ inputTokensIfUnknown: inputBound }) : new AnthropicUsageAccumulator();
     return {
       onChunk: (c) => {
         for (const e of parser.push(c)) acc.onEvent(e);
@@ -264,7 +270,7 @@ function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { o
       size += c.length;
       if (size <= capBytes) chunks.push(c);
     },
-    result: () => (size <= capBytes ? parseAnthropicJsonUsage(Buffer.concat(chunks)) : null),
+    result: () => (size <= capBytes ? (responses ? parseResponsesJsonUsage : parseAnthropicJsonUsage)(Buffer.concat(chunks)) : null),
   };
 }
 
@@ -280,6 +286,8 @@ interface Held {
   streamed: boolean;
   /** Settlement has started; the fault path in `createHandler` settles an admitted request that never got here. */
   settled: boolean;
+  /** The surface's error envelope for own errors, the fault path's included. */
+  envelope: ErrorEnvelope;
   /** What the request knew once admitted, so the fault path can still queue its trace line (warm-up reads the charge). */
   known: Omit<RequestOutcome, 'status' | 'usage' | 'aborted' | 'ttfbMs' | 'totalMs' | 'costMicroUsd' | 'addedTtfbMs'> | null;
 }
@@ -420,6 +428,10 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     const path = (req.url ?? '/').split('?')[0];
     return sendError(req, res, anthropicError(404, 'not_found_error', `no route for ${method} ${path}`, null, id));
   }
+  const envelope: ErrorEnvelope = match.surface === 'openai-responses' ? 'openai' : 'anthropic';
+  held.envelope = envelope;
+  const own = (status: number, type: string, reason: string, message: string, retryAfterS: number | null = null, opts: { shouldRetry?: boolean } = {}): ErrorReply =>
+    ownError(envelope, status, type, reason, message, retryAfterS, id, opts);
   if (match.surface === 'hello') {
     req.resume();
     res.writeHead(200, { 'content-length': '0' }).end();
@@ -439,10 +451,10 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     else if (c.source === 'x-api-key') keyHeaders.add('x-api-key');
   }
   if (!key) {
-    return sendError(req, res, anthropicError(401, 'authentication_error', 'missing or unknown tokenyard key', null, id));
+    return sendError(req, res, own(401, 'authentication_error', 'unknown-key', 'missing or unknown tokenyard key'));
   }
   if (key.billing === 'subscription' && !deps.experimentalSubscription) {
-    return sendError(req, res, anthropicError(401, 'authentication_error', 'subscription keys are not enabled on this gateway', null, id));
+    return sendError(req, res, own(401, 'authentication_error', 'subscription-disabled', 'subscription keys are not enabled on this gateway'));
   }
 
   if (match.surface === 'models') {
@@ -489,7 +501,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   } catch (err) {
     if (err instanceof BodyTooLargeError) {
       const msg = `request body is larger than the ${err.capBytes} byte limit`;
-      sendError(req, res, anthropicError(413, 'request_too_large', msg, null, id), true);
+      sendError(req, res, own(413, 'request_too_large', 'request_too_large', msg), true);
       return early({ status: 413, decision: { action: 'block', reason: 'body-too-large' }, errorClass: 'request_too_large' });
     }
     return early({ status: 499, aborted: true, errorClass: 'client_abort' }); // the client went away mid-upload
@@ -510,7 +522,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
     plan = decide(policy, f);
   } catch {
-    sendError(req, res, anthropicError(500, 'api_error', 'the reservation for this request could not be computed; it was not sent', null, id));
+    sendError(req, res, own(500, 'api_error', 'reservation-error', 'the reservation for this request could not be computed; it was not sent'));
     return early({ features, guardrailHits: guard.hits, status: 500, decision: { action: 'block', reason: 'reservation-error' }, errorClass: 'reservation_error' });
   }
   held.plan = plan;
@@ -537,7 +549,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   if (plan.preBlock === null && product && guard.redactions.length > 0) {
     const redacted = redactProductBody(body, guard.redactions);
     if (!features.parseError && !isJson(redacted)) {
-      sendError(req, res, anthropicError(400, 'invalid_request_error', 'a redacted value could not be replaced without breaking the JSON body; it was not sent', null, id));
+      sendError(req, res, own(400, 'invalid_request_error', 'redaction-failed', 'a redacted value could not be replaced without breaking the JSON body; it was not sent'));
       return early({ ...decided, status: 400, decision: { action: 'block', reason: 'redaction-failed' }, errorClass: 'invalid_request_error' });
     }
     upstreamBody = redacted;
@@ -546,7 +558,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     const rewritten = rewriteTopLevelModel(upstreamBody, first.upstreamModel);
     if (!rewritten) {
       const msg = `route "${plan.route ?? ''}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
-      sendError(req, res, anthropicError(400, 'invalid_request_error', msg, null, id));
+      sendError(req, res, own(400, 'invalid_request_error', 'model-rewrite-failed', msg));
       return early({ ...decided, status: 400, decision: { action: 'block', reason: 'model-rewrite-failed' }, errorClass: 'invalid_request_error' });
     }
     upstreamBody = rewritten;
@@ -600,7 +612,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const provider = first === undefined ? undefined : policy.providers.get(first.provider);
   if (decision.block || !provider) {
     const b = decision.block ?? { status: 403 as const, type: 'permission_error', reason: 'no-route' as const, message: 'no provider serves this route', retryAfterS: null };
-    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id, retryable(b.reason) ? {} : { shouldRetry: false }));
+    sendError(req, res, own(b.status, b.type, b.reason, b.message, b.retryAfterS, retryable(b.reason) ? {} : { shouldRetry: false }));
     return early({ ...decided, ...admitted, status: b.status, decision: { action: 'block', reason: b.reason }, errorClass: b.type });
   }
 
@@ -632,7 +644,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     const n = err instanceof ChainError ? err.attempts : 1;
     const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider.name, attempts: n };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
-    sendError(req, res, anthropicError(502, 'api_error', `upstream ${common.provider} is unreachable`, null, id));
+    sendError(req, res, own(502, 'api_error', 'upstream-unreachable', `upstream ${common.provider} is unreachable`));
     return early({ ...common, status: 502, errorClass: 'upstream_unreachable' });
   }
   const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider) };
@@ -656,7 +668,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   res.flushHeaders();
 
   // 11. Body: every chunk goes on unchanged before it is parsed; backpressure through pipeline.
-  const tap = usageTap(surface, up, deps.bodyCapBytes);
+  const tap = usageTap(surface, up, deps.bodyCapBytes, f.inputTokensBound);
   held.streamed = String(up.headers['content-type'] ?? '').startsWith('text/event-stream');
   try {
     await pipeline(up.body, createTee(tap.onChunk), res);
@@ -705,7 +717,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
   };
   return (req, res) => {
     const id = deps.newId();
-    const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, known: null };
+    const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, envelope: 'anthropic', known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
       // (whether upstream billed is unknown, so fail closed), and queue the trace line with that charge so warm-up
@@ -748,7 +760,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
           .catch(() => undefined);
       }
       try {
-        if (!res.headersSent) sendError(req, res, anthropicError(500, 'api_error', 'internal error', null, id));
+        if (!res.headersSent) sendError(req, res, ownError(held.envelope, 500, 'api_error', 'internal_error', 'internal error', null, id));
         else res.destroy();
       } catch {
         res.destroy();

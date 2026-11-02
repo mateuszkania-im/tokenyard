@@ -70,7 +70,13 @@ export function parsePriceTable(text: string): PriceTable {
   return r.data;
 }
 
-/** Exact id, else the longest table id followed by `-` that prefixes the model, so dated ids resolve. */
+/** A snapshot date after the model id: `-20261001` (Anthropic) or `-2026-03-17` (OpenAI). */
+const DATE_SUFFIX = /^-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
+
+/**
+ * Exact id, else the table id followed only by a snapshot date, so dated ids resolve. Any other suffix is another
+ * model (`gpt-5.4-pro` is not `gpt-5.4`), never priced as its base: it is unpriced.
+ */
 export function lookupModel(t: PriceTable, model: string): { id: string; price: ModelPrice } | null {
   // Own properties only: `constructor` and friends must never resolve to a non-price object.
   if (Object.hasOwn(t.models, model)) {
@@ -79,7 +85,7 @@ export function lookupModel(t: PriceTable, model: string): { id: string; price: 
   }
   let best: string | null = null;
   for (const id of Object.keys(t.models)) {
-    if (model.startsWith(`${id}-`) && (best === null || id.length > best.length)) best = id;
+    if (model.startsWith(`${id}-`) && DATE_SUFFIX.test(model.slice(id.length)) && (best === null || id.length > best.length)) best = id;
   }
   const price = best === null ? undefined : t.models[best];
   return best !== null && price ? { id: best, price } : null;

@@ -1,6 +1,7 @@
 // Synthetic coding-agent traffic for the demo (spec 13): 8 developers in 3 teams send Claude Code shaped sessions
 // through a gateway. Everything is seeded; the caller owns the clock (the gateway and the mock read the same virtual
-// clock), so the same seed gives the same requests at the same times. Codex sessions come with Task 20.
+// clock), so the same seed gives the same requests at the same times. A few developers also run Codex sessions on the
+// OpenAI Responses surface (Task 20), planned from their own seeded stream so the Claude Code traffic does not change.
 import { mulberry32 } from './scenarios.js';
 
 export interface DemoDeveloper {
@@ -133,6 +134,53 @@ function auxiliaryBody(rng: Rng, model: string): Buffer {
   );
 }
 
+/**
+ * One Codex session's growing Responses input: the prompt, then a shell call and its output per turn, shaped like
+ * Codex's own requests (instructions, function tools, `store: false`, no `max_output_tokens`). Reasoning items with
+ * `encrypted_content` are left out, so the demo stays on the bytes input bound.
+ */
+class CodexConversation {
+  private input: Record<string, unknown>[] = [];
+  private n = 0;
+  constructor(
+    private readonly rng: Rng,
+    private readonly o: { model: string; instructions: string; sessionId: string },
+  ) {}
+
+  next(): Buffer {
+    const i = this.n++;
+    if (i === 0) this.input.push({ type: 'message', role: 'user', content: [{ type: 'input_text', text: `Task: ${text(this.rng, between(this.rng, 20, 60))}` }] });
+    else this.input.push({ type: 'function_call_output', call_id: `call_${i - 1}`, output: text(this.rng, between(this.rng, 100, 700)) });
+    const out = Buffer.from(
+      JSON.stringify({
+        model: this.o.model,
+        instructions: this.o.instructions,
+        input: this.input,
+        tools: CODEX_TOOLS,
+        tool_choice: 'auto',
+        parallel_tool_calls: false,
+        reasoning: { effort: 'medium', summary: 'auto' },
+        store: false,
+        stream: true,
+        include: [],
+        prompt_cache_key: this.o.sessionId,
+      }),
+    );
+    this.input.push({ type: 'function_call', name: 'shell', arguments: JSON.stringify({ command: ['bash', '-lc', text(this.rng, 4)] }), call_id: `call_${i}` });
+    return out;
+  }
+}
+
+const CODEX_TOOLS = [
+  { type: 'function', name: 'shell', description: 'Runs a shell command and returns its output. '.repeat(10), strict: false, parameters: { type: 'object', properties: { command: { type: 'array', items: { type: 'string' } } }, required: ['command'] } },
+  { type: 'custom', name: 'apply_patch', description: 'Applies a patch to files in the workspace. '.repeat(10) },
+];
+/** Developers who also use Codex, and the models they pick. */
+const CODEX_DEVS: ReadonlyArray<{ name: string; models: readonly string[] }> = [
+  { name: 'gosia', models: ['gpt-5.4-mini', 'gpt-5.3-codex'] },
+  { name: 'hiro', models: ['gpt-5.4-mini'] },
+];
+
 interface Planned {
   at: number;
   order: number;
@@ -148,6 +196,8 @@ interface Planned {
 
 interface Session {
   dev: DemoDeveloper;
+  /** The coding agent: Claude Code on /v1/messages, or Codex on /v1/responses. */
+  client: 'claude-code' | 'codex';
   id: string;
   branch: string;
   ticket: string;
@@ -175,6 +225,7 @@ const MODELS = { main: 'claude-opus-5-5', subagent: 'claude-sonnet-5-5', compact
 function planSession(rng: Rng, dev: DemoDeveloper, startAt: number, secret: boolean, out: Planned[], counter: { n: number }): Session {
   const session: Session = {
     dev,
+    client: 'claude-code',
     id: `${hex(rng, 8)}-${hex(rng, 4)}-${hex(rng, 4)}-${hex(rng, 4)}-${hex(rng, 12)}`,
     branch: `feat/WEB-${between(rng, 100, 999)}`,
     ticket: '',
@@ -224,6 +275,20 @@ function planSession(rng: Rng, dev: DemoDeveloper, startAt: number, secret: bool
   return session;
 }
 
+/** A Codex session: one prompt and `turns - 1` shell results, one request each. */
+function planCodexSession(rng: Rng, dev: DemoDeveloper, model: string, startAt: number, out: Planned[], counter: { n: number }): Session {
+  const id = `${hex(rng, 8)}-${hex(rng, 4)}-7${hex(rng, 3)}-${hex(rng, 4)}-${hex(rng, 12)}`;
+  const session: Session = { dev, client: 'codex', id, branch: `feat/WEB-${between(rng, 100, 999)}`, ticket: '', tolerance: 1, failures: 0 };
+  session.ticket = /WEB-\d+/.exec(session.branch)?.[0] ?? '';
+  const conv = new CodexConversation(rng, { model, instructions: text(mulberry32(hashString(`codex:${dev.repo}`)), 500), sessionId: id });
+  let t = startAt;
+  for (let i = between(rng, 4, 10); i > 0; i--) {
+    out.push({ at: t, order: counter.n++, session, kind: 'main', agent: null, parent: null, agentType: null, promptId: '', build: () => conv.next() });
+    t += between(rng, 5, 40) * 1000;
+  }
+  return session;
+}
+
 function hashString(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
@@ -254,6 +319,19 @@ export async function generateTraffic(o: TrafficOptions): Promise<{ requests: nu
       }
     }
   }
+  // Codex sessions come from their own stream, so adding them leaves the Claude Code traffic as it was.
+  const codexRng = mulberry32(o.seed ^ 0x5bd1e995);
+  for (let d = 0; d < o.days; d++) {
+    const dayStart = startMs + d * DAY_MS;
+    if (new Date(dayStart).getUTCDay() % 6 === 0) continue;
+    for (const c of CODEX_DEVS) {
+      const dev = DEMO_DEVELOPERS.find((x) => x.name === c.name);
+      if (!dev || codexRng() < 0.4) continue;
+      const model = c.models[Math.floor(codexRng() * c.models.length)] as string;
+      const startAt = dayStart + 14 * 3_600_000 + between(codexRng, 0, 180) * 60_000;
+      sessions.push(planCodexSession(codexRng, dev, model, startAt, planned, counter));
+    }
+  }
   planned.sort((a, b) => a.at - b.at || a.order - b.order);
 
   let requests = 0;
@@ -263,22 +341,36 @@ export async function generateTraffic(o: TrafficOptions): Promise<{ requests: nu
     if (stopped.has(s)) continue;
     const body = p.build();
     o.setTime?.(p.at);
-    const headers: Record<string, string> = {
-      'x-api-key': o.keys[s.dev.name] ?? '',
-      'content-type': 'application/json',
-      'anthropic-version': '2023-06-01',
-      'user-agent': 'claude-cli/2.1.0 (external, cli)',
-      'x-claude-code-session-id': s.id,
-      'x-claude-code-request-class': p.kind,
-      'x-claude-code-prompt-id': p.promptId,
-      'x-tokenyard-repo': s.dev.repo,
-      'x-tokenyard-branch': s.branch,
-      'x-tokenyard-ticket': s.ticket,
-      ...(p.agent ? { 'x-claude-code-agent-id': p.agent } : {}),
-      ...(p.parent ? { 'x-claude-code-parent-agent-id': p.parent } : {}),
-      ...(p.agentType ? { 'x-claude-code-agent-type': p.agentType } : {}),
-    };
-    const res = await fetch(`${o.gatewayUrl}/v1/messages`, { method: 'POST', headers, body: new Uint8Array(body) });
+    const codex = s.client === 'codex';
+    const headers: Record<string, string> = codex
+      ? {
+          authorization: `Bearer ${o.keys[s.dev.name] ?? ''}`,
+          'content-type': 'application/json',
+          accept: 'text/event-stream',
+          originator: 'codex_cli_rs',
+          version: '0.130.0',
+          session_id: s.id,
+          'user-agent': 'codex_cli_rs/0.130.0 (Mac OS 26.0.0; arm64) iTerm.app',
+          'x-tokenyard-repo': s.dev.repo,
+          'x-tokenyard-branch': s.branch,
+          'x-tokenyard-ticket': s.ticket,
+        }
+      : {
+          'x-api-key': o.keys[s.dev.name] ?? '',
+          'content-type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          'user-agent': 'claude-cli/2.1.0 (external, cli)',
+          'x-claude-code-session-id': s.id,
+          'x-claude-code-request-class': p.kind,
+          'x-claude-code-prompt-id': p.promptId,
+          'x-tokenyard-repo': s.dev.repo,
+          'x-tokenyard-branch': s.branch,
+          'x-tokenyard-ticket': s.ticket,
+          ...(p.agent ? { 'x-claude-code-agent-id': p.agent } : {}),
+          ...(p.parent ? { 'x-claude-code-parent-agent-id': p.parent } : {}),
+          ...(p.agentType ? { 'x-claude-code-agent-type': p.agentType } : {}),
+        };
+    const res = await fetch(`${o.gatewayUrl}${codex ? '/v1/responses' : '/v1/messages'}`, { method: 'POST', headers, body: new Uint8Array(body) });
     await res.arrayBuffer();
     requests++;
     await o.afterRequest?.();

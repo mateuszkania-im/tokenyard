@@ -35,7 +35,16 @@ test('traffic has 8 developers in 3 teams, every request class, cache markers an
   expect(DEMO_DEVELOPERS).toHaveLength(8);
   expect(new Set(recs.map((r) => r.keyId)).size).toBe(8);
   expect(new Set(recs.map((r) => r.team))).toEqual(new Set(['platform', 'web', 'data']));
-  expect(new Set(recs.map((r) => r.attribution.requestClass))).toEqual(new Set(['main', 'subagent', 'compaction', 'auxiliary']));
+  const claude = recs.filter((r) => r.client.agent === 'claude-code');
+  expect(new Set(claude.map((r) => r.attribution.requestClass))).toEqual(new Set(['main', 'subagent', 'compaction', 'auxiliary']));
+  // A few Codex sessions on the Responses surface, through the codex route and the OpenAI provider.
+  const codex = recs.filter((r) => r.surface === 'openai-responses');
+  expect(codex.length).toBeGreaterThan(5);
+  expect(new Set(codex.map((r) => r.client.agent))).toEqual(new Set(['codex']));
+  expect(new Set(codex.map((r) => r.decision.route))).toEqual(new Set(['codex']));
+  expect(codex.every((r) => r.decision.action === 'forward' && r.outcome.provider === 'openai' && (r.outcome.costMicroUsd ?? 0) > 0)).toBe(true);
+  expect(codex.some((r) => (r.outcome.usage?.cacheRead ?? 0) > 0)).toBe(true);
+  expect(codex.every((r) => r.features.maxOutputTokens === null && r.attribution.session !== null)).toBe(true);
   expect(recs.some((r) => r.attribution.parentAgent !== null)).toBe(true);
   expect(recs.some((r) => (r.outcome.usage?.cacheRead ?? 0) > 0)).toBe(true);
   expect(recs.some((r) => (r.outcome.usage?.cacheWrite5m ?? 0) > 0)).toBe(true);

@@ -430,7 +430,7 @@ test('compilePolicy refuses a policy with validation errors and deep-freezes the
     expect((e as PolicyInvalidError).issues.map((i) => i.code)).toContain('E_CHAIN_UNKNOWN_PROVIDER');
   }
   const p = compile(BUDGETS);
-  expect(p.priceTableVersion).toBe('2026-11-02');
+  expect(p.priceTableVersion).toBe('2026-11-03');
   expect(p.candidate).toBeNull();
   const frozen = (v: unknown, seen = new Set<unknown>()): boolean => {
     if (typeof v !== 'object' || v === null || seen.has(v)) return true;

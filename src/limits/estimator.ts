@@ -8,7 +8,17 @@ export const OVERHEAD_TOKENS = 4096;
 /** Content block types whose tokens are bounded by their bytes in the body. */
 export const TEXT_BLOCK_TYPES = ['text', 'thinking', 'redacted_thinking', 'tool_use', 'tool_result'] as const;
 
-const TEXT_TYPES: ReadonlySet<string> = new Set(TEXT_BLOCK_TYPES);
+/**
+ * OpenAI Responses input item and content part types whose tokens are bounded by their bytes: text parts, and tool
+ * calls and their string outputs. Reasoning items are not on it: their `encrypted_content` is opaque, so how many
+ * tokens it decrypts to is not bounded by its bytes; images, files and item references are expanded by the provider.
+ */
+export const RESPONSES_TEXT_TYPES = [
+  'input_text', 'output_text', 'refusal', 'function_call', 'function_call_output', 'custom_tool_call', 'custom_tool_call_output',
+  'local_shell_call', 'local_shell_call_output',
+] as const;
+
+const TEXT_TYPES: ReadonlySet<string> = new Set([...TEXT_BLOCK_TYPES, ...RESPONSES_TEXT_TYPES]);
 
 /**
  * Float noise below this many micro-USD is dropped before rounding up, so an exact sum such as

@@ -22,7 +22,7 @@ export function anthropicError(
   retryAfterS: number | null,
   requestId: string,
   opts: { shouldRetry?: boolean } = {},
-): { status: number; headers: Record<string, string>; body: Buffer } {
+): ErrorReply {
   const body = Buffer.from(JSON.stringify({ type: 'error', error: { type, message: `tokenyard: ${message}` } }));
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -32,4 +32,69 @@ export function anthropicError(
   if (opts.shouldRetry === false) headers['x-should-retry'] = 'false';
   if (retryAfterS !== null) headers['retry-after'] = String(Number.isFinite(retryAfterS) ? Math.min(60, Math.max(0, Math.ceil(retryAfterS))) : 60);
   return { status, headers, body };
+}
+
+/**
+ * tokenyard's own error in the OpenAI envelope (spec 5.6): `{"error":{"type","code","message":"tokenyard: ..."}}`, for
+ * requests on the Responses surface. `retry-after` and `x-should-retry` follow the same rules as `anthropicError`.
+ */
+export function openaiError(
+  status: number,
+  type: string,
+  code: string,
+  message: string,
+  retryAfterS: number | null,
+  requestId: string,
+  opts: { shouldRetry?: boolean } = {},
+): ErrorReply {
+  const reply = anthropicError(status, type, message, retryAfterS, requestId, opts);
+  const body = Buffer.from(JSON.stringify({ error: { type, code, message: `tokenyard: ${message}` } }));
+  return { status, headers: { ...reply.headers, 'content-length': String(body.length) }, body };
+}
+
+export type ErrorReply = { status: number; headers: Record<string, string>; body: Buffer };
+export type ErrorEnvelope = 'anthropic' | 'openai';
+
+/**
+ * OpenAI type and code for each own error, keyed by the Anthropic type and the block reason (or error class). Budget
+ * is `insufficient_quota`, OpenAI's answer to a spent quota; rate and stream limits are `rate_limit_exceeded`.
+ */
+function openaiTypeAndCode(anthropicType: string, reason: string): { type: string; code: string } {
+  switch (reason) {
+    case 'budget':
+      return { type: 'insufficient_quota', code: 'insufficient_quota' };
+    case 'rate':
+    case 'streams':
+      return { type: 'requests', code: 'rate_limit_exceeded' };
+    case 'secret':
+    case 'taint':
+      return { type: 'invalid_request_error', code: 'secret_detected' };
+    case 'store-down':
+      return { type: 'server_error', code: 'service_unavailable' };
+    default:
+      break;
+  }
+  if (anthropicType === 'api_error') return { type: 'server_error', code: reason.replaceAll('-', '_') };
+  if (anthropicType === 'authentication_error') return { type: 'invalid_request_error', code: 'invalid_api_key' };
+  if (anthropicType === 'not_found_error') return { type: 'invalid_request_error', code: 'unknown_url' };
+  return { type: 'invalid_request_error', code: reason.replaceAll('-', '_') };
+}
+
+/**
+ * An own error in the envelope of the request's surface: the Anthropic type and message as decided, translated for the
+ * OpenAI envelope. `reason` is the block reason or a short error class (`request_too_large`, `internal_error`).
+ */
+export function ownError(
+  envelope: ErrorEnvelope,
+  status: number,
+  anthropicType: string,
+  reason: string,
+  message: string,
+  retryAfterS: number | null,
+  requestId: string,
+  opts: { shouldRetry?: boolean } = {},
+): ErrorReply {
+  if (envelope === 'anthropic') return anthropicError(status, anthropicType, message, retryAfterS, requestId, opts);
+  const { type, code } = openaiTypeAndCode(anthropicType, reason);
+  return openaiError(status, type, code, message, retryAfterS, requestId, opts);
 }

@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 const T0 = Date.UTC(2026, 10, 2, 10, 0);
 const MIN = 60_000;
 const iso = (ms: number): string => new Date(ms).toISOString();
-const PRICES = '2026-11-02';
+const PRICES = '2026-11-03';
 
 /** Example prices, one route `all` to provider a unless `routes` replaces it; budgets and ci as given. */
 function policy(o: { revision?: string; routes?: string; budgets?: string; ci?: string } = {}): CompiledPolicy {
