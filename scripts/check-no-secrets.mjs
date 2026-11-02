@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const PATTERN = /sk-(ant|proj)-[A-Za-z0-9_-]{20,}/g;
-// Documented fake canary values (used by tests) contain this marker and are allowed.
-const CANARY = /CANARY/;
+// Only the documented fake test canary prefix is exempt.
+const CANARY = /^sk-ant-test-CANARY/;
 
 const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
   .split('\0')
