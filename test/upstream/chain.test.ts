@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { startAnthropicMock, type MockServer, type Scenario } from '../../src/mock/anthropic.js';
-import type { CompiledPolicy, Plan } from '../../src/policy/types.js';
+import type { CompiledPolicy, Plan, ProviderSpec } from '../../src/policy/types.js';
 import { Breaker } from '../../src/upstream/breaker.js';
-import { runChain, ChainError, workspaceOf, type ChainDeps } from '../../src/upstream/chain.js';
+import { runChain, ChainError, credentialBreakerKey, workspaceOf, type ChainDeps } from '../../src/upstream/chain.js';
 import type { ForwardRequest } from '../../src/upstream/forward.js';
 import { RetryBudget } from '../../src/upstream/retry-budget.js';
 import { PROVIDER_KEY_ENV, testPolicy } from '../helpers/policy.js';
@@ -133,13 +133,15 @@ test('spend-cap 429 opens that provider breaker for openSeconds and falls back',
   const out = await run(r, ['a', 'b']);
   expect(out).toMatchObject({ attempt: 2, provider: 'b' });
   drop(out.response);
-  expect(r.deps.breaker.allow('a')).toBe(false);
+  const ck = credentialBreakerKey(r.policy.providers.get('a') as ProviderSpec, req.headers);
+  expect(r.deps.breaker.allow(ck)).toBe(false);
+  expect(r.deps.breaker.allow('a')).toBe(true); // the provider itself is healthy
   r.now.t += r.policy.failure.breaker.openSeconds * 1000 - 1;
-  expect(r.deps.breaker.allow('a')).toBe(false);
+  expect(r.deps.breaker.allow(ck)).toBe(false);
   r.now.t += 1;
-  expect(r.deps.breaker.allow('a')).toBe(true);
+  expect(r.deps.breaker.allow(ck)).toBe(true);
   // While open, the next request skips a without an attempt.
-  r.deps.breaker.open('a', r.now.t + 5_000);
+  r.deps.breaker.open(ck, r.now.t + 5_000);
   const again = await run(r, ['a', 'b']);
   expect(again).toMatchObject({ attempt: 1, provider: 'b' });
   drop(again.response);
@@ -207,4 +209,65 @@ test('workspaceOf tells providers with another credential apart', async () => {
   expect(w('a')).not.toBe(w('b')); // another endpoint
   expect(w('b')).not.toBe(w('other')); // same endpoint, another key: another workspace
   expect(w('a')).toBe(w('a'));
+});
+
+test('a held 5xx followed by a connect error returns the held response and counts every attempt made', async () => {
+  const r = await rig({ a: status(503) });
+  const dead = await startAnthropicMock();
+  const url = dead.url;
+  await dead.close();
+  const policy: CompiledPolicy = { ...r.policy, providers: new Map([...r.policy.providers, ['b', { name: 'b', format: 'anthropic', baseUrl: url, credential: { env: PROVIDER_KEY_ENV } }]]) };
+  const out = await runChain(r.plan(['a', 'b']), policy, req, new AbortController().signal, r.deps);
+  expect(out).toMatchObject({ attempt: 2, provider: 'a' });
+  expect(out.response.status).toBe(503);
+  drop(out.response);
+});
+
+/** Provider `a` on passthrough credentials: the Authorization header is the tenant's own token. */
+async function passthroughRig(): Promise<{ r: Rig; as: (token: string) => ChainDeps }> {
+  const cap = status(429, {}, '{"type":"error","error":{"type":"rate_limit_error","message":"enforced_spend_limit_reached"}}');
+  const r = await rig();
+  r.a.setScenario((rec) => (rec.headers.authorization === 'Bearer A' ? cap : { kind: 'ok', ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: 4 }));
+  const a = r.policy.providers.get('a') as ProviderSpec;
+  r.policy = { ...r.policy, providers: new Map([...r.policy.providers, ['a', { ...a, credential: 'passthrough' }]]) };
+  return { r, as: (token) => ({ ...r.deps, headersFor: () => ({ authorization: `Bearer ${token}` }) }) };
+}
+
+test("tenant A's spend-cap 429 opens only A's credential breaker; tenant B through the same provider is unaffected", async () => {
+  const { r, as } = await passthroughRig();
+  const outA = await runChain(r.plan(['a', 'b']), r.policy, req, new AbortController().signal, as('A'));
+  expect(outA).toMatchObject({ attempt: 2, provider: 'b' });
+  drop(outA.response);
+  const outB = await runChain(r.plan(['a', 'b']), r.policy, req, new AbortController().signal, as('B'));
+  expect(outB).toMatchObject({ attempt: 1, provider: 'a' });
+  drop(outB.response);
+  const outA2 = await runChain(r.plan(['a', 'b']), r.policy, req, new AbortController().signal, as('A'));
+  expect(outA2).toMatchObject({ attempt: 1, provider: 'b' }); // A skips a while its breaker is open, B does not
+  drop(outA2.response);
+  expect(r.a.received.filter((x) => x.headers.authorization === 'Bearer A')).toHaveLength(1);
+});
+
+test('credential breaker keys never contain the credential and differ per credential', async () => {
+  const { r } = await passthroughRig();
+  const a = r.policy.providers.get('a') as ProviderSpec;
+  const k1 = credentialBreakerKey(a, { authorization: 'Bearer secret-token-1' });
+  expect(k1).not.toContain('secret-token-1');
+  expect(k1).not.toBe(credentialBreakerKey(a, { authorization: 'Bearer secret-token-2' }));
+  expect(k1).toBe(credentialBreakerKey(a, { authorization: 'Bearer secret-token-1' }));
+});
+
+test('401 and 403 never trip the provider breaker, 5xx do', async () => {
+  for (const s of [401, 403]) {
+    const r = await rig({ a: status(s) });
+    for (let i = 0; i < 30; i++) drop((await run(r, ['a'])).response);
+    expect(r.deps.breaker.allow('a')).toBe(true);
+    expect(r.deps.breaker.allow(credentialBreakerKey(r.policy.providers.get('a') as ProviderSpec, req.headers))).toBe(true);
+  }
+  const r = await rig({ a: status(503) });
+  for (let i = 0; i < 30; i++) {
+    const out = await run(r, ['a']).catch(() => null); // once open, the provider is skipped and nothing can answer
+    if (out) drop(out.response);
+  }
+  expect(r.deps.breaker.allow('a')).toBe(false);
+  expect(r.a.received.length).toBeLessThan(30);
 });

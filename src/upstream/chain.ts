@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { CompiledPolicy, Plan, ProviderSpec } from '../policy/types.js';
 import type { Breaker } from './breaker.js';
@@ -39,6 +40,23 @@ export class ChainError extends Error {
 /** Identity of a prompt cache: the endpoint and the credential (an Anthropic workspace is one API key). */
 export function workspaceOf(p: ProviderSpec): string {
   return `${new URL(p.baseUrl).origin}|${p.credential === 'passthrough' ? 'passthrough' : p.credential.env}`;
+}
+
+// Per process, so a stored breaker key never lets anyone recover or compare credentials across restarts.
+const CREDENTIAL_SALT = randomBytes(16);
+
+/**
+ * Breaker key for outcomes that belong to one credential (spend-cap 429): the provider plus the credential identity.
+ * A configured key is its env name; a passthrough credential (OAuth token or key forwarded from the client) is a
+ * salted SHA-256 of the forwarded header values, never kept in clear. One tenant's spend cap or bad token therefore
+ * cannot open the breaker for other tenants on the same provider. Provider health (5xx, connect errors) uses the
+ * plain provider name instead.
+ */
+export function credentialBreakerKey(p: ProviderSpec, headers: Record<string, string | string[]>): string {
+  if (p.credential !== 'passthrough') return `${p.name}|${workspaceOf(p)}`;
+  const h = createHash('sha256').update(CREDENTIAL_SALT);
+  for (const name of ['authorization', 'x-api-key']) h.update(`${name}=${String(headers[name] ?? '')};`);
+  return `${p.name}|passthrough:${h.digest('hex')}`;
 }
 
 /** The response is a spend-cap 429 (`enforced_spend_limit_reached`, no retry-after). Buffers the body, so it returns the response to forward. */
@@ -91,14 +109,17 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
     }
     if (attempts >= MAX_ATTEMPTS) break;
     const provider = policy.providers.get(entry.provider);
-    if (!provider || !breaker.allow(provider.name)) continue;
+    if (!provider) continue;
+    const headers = deps.headersFor?.(provider) ?? req.headers;
+    const credKey = credentialBreakerKey(provider, headers);
+    if (!breaker.allow(provider.name) || !breaker.allow(credKey)) continue;
     if (attempts > 0 && !retry.tryRetry(tenant)) break;
 
     attempts++;
     lastProvider = provider.name;
     let res: UpstreamResponse;
     try {
-      res = await forward(provider, { ...req, headers: deps.headersFor?.(provider) ?? req.headers }, signal);
+      res = await forward(provider, { ...req, headers }, signal);
     } catch (err) {
       if (signal.aborted) {
         if (held) discard(held.response);
@@ -113,11 +134,12 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
     res = checked.response;
     let retryable = RETRYABLE.has(res.status);
     if (checked.spendCap) {
-      breaker.open(provider.name, clock() + openMs);
+      breaker.open(credKey, clock() + openMs); // this credential only, never the provider for everyone
       retryable = true;
     } else if (res.status === 429 && fallbackOn429) {
       retryable = true;
     }
+    // Only provider-health signals (5xx, 529) count against the provider; 401, 403 and 429 belong to a credential.
     if (!checked.spendCap) breaker.record(provider.name, !RETRYABLE.has(res.status));
     if (!retryable) {
       if (held) discard(held.response);
@@ -128,6 +150,6 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
     lastError = null;
   }
 
-  if (held) return held;
+  if (held) return { ...held, attempt: attempts }; // attempts made, which can exceed the held response's own attempt
   throw new ChainError(attempts, lastProvider, lastError);
 }

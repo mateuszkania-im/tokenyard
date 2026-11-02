@@ -55913,9 +55913,16 @@ var init_forward = __esm({
 });
 
 // src/upstream/chain.ts
+import { createHash as createHash5, randomBytes as randomBytes2 } from "node:crypto";
 import { Readable } from "node:stream";
 function workspaceOf(p) {
   return `${new URL(p.baseUrl).origin}|${p.credential === "passthrough" ? "passthrough" : p.credential.env}`;
+}
+function credentialBreakerKey(p, headers) {
+  if (p.credential !== "passthrough") return `${p.name}|${workspaceOf(p)}`;
+  const h = createHash5("sha256").update(CREDENTIAL_SALT);
+  for (const name2 of ["authorization", "x-api-key"]) h.update(`${name2}=${String(headers[name2] ?? "")};`);
+  return `${p.name}|passthrough:${h.digest("hex")}`;
 }
 async function checkSpendCap(res) {
   if (res.status !== 429 || res.headers["retry-after"] !== void 0) return { spendCap: false, response: res };
@@ -55953,13 +55960,16 @@ async function runChain(plan, policy2, req, signal, deps) {
     }
     if (attempts >= MAX_ATTEMPTS) break;
     const provider2 = policy2.providers.get(entry.provider);
-    if (!provider2 || !breaker2.allow(provider2.name)) continue;
+    if (!provider2) continue;
+    const headers = deps.headersFor?.(provider2) ?? req.headers;
+    const credKey = credentialBreakerKey(provider2, headers);
+    if (!breaker2.allow(provider2.name) || !breaker2.allow(credKey)) continue;
     if (attempts > 0 && !retry.tryRetry(tenant)) break;
     attempts++;
     lastProvider = provider2.name;
     let res;
     try {
-      res = await forward(provider2, { ...req, headers: deps.headersFor?.(provider2) ?? req.headers }, signal);
+      res = await forward(provider2, { ...req, headers }, signal);
     } catch (err) {
       if (signal.aborted) {
         if (held) discard(held.response);
@@ -55973,7 +55983,7 @@ async function runChain(plan, policy2, req, signal, deps) {
     res = checked.response;
     let retryable = RETRYABLE.has(res.status);
     if (checked.spendCap) {
-      breaker2.open(provider2.name, clock() + openMs);
+      breaker2.open(credKey, clock() + openMs);
       retryable = true;
     } else if (res.status === 429 && fallbackOn429) {
       retryable = true;
@@ -55987,10 +55997,10 @@ async function runChain(plan, policy2, req, signal, deps) {
     held = { attempt: attempts, provider: provider2.name, response: res };
     lastError = null;
   }
-  if (held) return held;
+  if (held) return { ...held, attempt: attempts };
   throw new ChainError(attempts, lastProvider, lastError);
 }
-var MAX_ATTEMPTS, RETRYABLE, SPEND_CAP_PROBE_BYTES, ChainError;
+var MAX_ATTEMPTS, RETRYABLE, SPEND_CAP_PROBE_BYTES, ChainError, CREDENTIAL_SALT;
 var init_chain = __esm({
   "src/upstream/chain.ts"() {
     "use strict";
@@ -56009,6 +56019,7 @@ var init_chain = __esm({
       provider;
       cause;
     };
+    CREDENTIAL_SALT = randomBytes2(16);
   }
 });
 
@@ -56086,7 +56097,7 @@ var init_attribution = __esm({
 });
 
 // src/edge/auth.ts
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 function extractCredentials(h) {
   const out = [];
   const own2 = first(h["x-tokenyard-key"])?.trim();
@@ -56098,7 +56109,7 @@ function extractCredentials(h) {
   return out;
 }
 function hashKey(v) {
-  return createHash5("sha256").update(v).digest("hex");
+  return createHash6("sha256").update(v).digest("hex");
 }
 var first;
 var init_auth = __esm({
@@ -57187,7 +57198,7 @@ __export(bundle_exports, {
   serializeBundle: () => serializeBundle,
   sha256Hex: () => sha256Hex
 });
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 function canonicalJson(v) {
   if (Array.isArray(v)) return `[${v.map((x) => x === void 0 ? "null" : canonicalJson(x)).join(",")}]`;
   if (typeof v === "object" && v !== null) {
@@ -57259,7 +57270,7 @@ var init_bundle = __esm({
     init_load_dir();
     init_schema();
     MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
-    sha256Hex = (text) => createHash6("sha256").update(text).digest("hex");
+    sha256Hex = (text) => createHash7("sha256").update(text).digest("hex");
     sortedKeys = (keys2) => [...keys2].sort((a, b) => a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0);
     serializeBundle = (b) => `${JSON.stringify(b, null, 2)}
 `;
@@ -57392,7 +57403,7 @@ var init_load_dir2 = __esm({
 });
 
 // src/policy-loader/lkg.ts
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 import { mkdir as mkdir2, readFile as readFile2, rename, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 async function writeLkg(stateDir, bundleText) {
@@ -57432,7 +57443,7 @@ var init_lkg = __esm({
     "use strict";
     init_bundle();
     LKG_FILE = "last-known-good.json";
-    sha = (text) => createHash7("sha256").update(text).digest("hex");
+    sha = (text) => createHash8("sha256").update(text).digest("hex");
   }
 });
 
@@ -57649,7 +57660,7 @@ __export(keys_exports, {
   appendKey: () => appendKey,
   createKey: () => createKey
 });
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { randomBytes as randomBytes3 } from "node:crypto";
 import { appendFile as appendFile2 } from "node:fs/promises";
 function base62(bytes) {
   let n = BigInt(`0x${bytes.toString("hex")}`);
@@ -57661,7 +57672,7 @@ function base62(bytes) {
   return out.padStart(B62_LEN, "0");
 }
 function createKey() {
-  const plaintext = `ty_live_${base62(randomBytes2(32))}`;
+  const plaintext = `ty_live_${base62(randomBytes3(32))}`;
   return { plaintext, hash: hashKey(plaintext) };
 }
 async function appendKey(file2, rec) {

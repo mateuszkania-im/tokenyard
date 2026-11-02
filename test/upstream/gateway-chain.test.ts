@@ -24,10 +24,18 @@ afterEach(async () => {
   delete process.env[BACKUP_ENV];
 });
 
-async function setup(first: Parameters<typeof startAnthropicMock>[0], sameWorkspace: boolean) {
+async function closedUrl(): Promise<string> {
+  const m = await startAnthropicMock();
+  const url = m.url;
+  await m.close();
+  return url;
+}
+
+async function setup(first: Parameters<typeof startAnthropicMock>[0], sameWorkspace: boolean, deadBackup = false) {
   const a = await startAnthropicMock(first);
   // Same workspace means same endpoint and same key: both providers then point at one mock.
   const b = sameWorkspace ? a : await startAnthropicMock();
+  const backupUrl = deadBackup ? await closedUrl() : b.url;
   mocks.push(...new Set([a, b]));
   const base = testPolicy({ upstream: a.url });
   const sp = (p: ProviderSpec | undefined, baseUrl: string, env: string): [string, ProviderSpec] => [(p as ProviderSpec).name, { ...(p as ProviderSpec), baseUrl, credential: { env } }];
@@ -35,7 +43,7 @@ async function setup(first: Parameters<typeof startAnthropicMock>[0], sameWorksp
     ...base,
     providers: new Map([
       sp(base.providers.get('anthropic'), a.url, PROVIDER_KEY_ENV),
-      sp(base.providers.get('anthropic-backup'), b.url, sameWorkspace ? PROVIDER_KEY_ENV : BACKUP_ENV),
+      sp(base.providers.get('anthropic-backup'), backupUrl, sameWorkspace ? PROVIDER_KEY_ENV : BACKUP_ENV),
     ]),
   };
   const records: Array<Omit<TraceRecord, 'instance' | 'seq'>> = [];
@@ -115,4 +123,13 @@ test('no retry once the response started: a mid-stream error reaches the client 
   expect(t.a.received).toHaveLength(1);
   expect(t.b.received).toHaveLength(0);
   expect(t.records[0]?.outcome.attempts).toBe(1);
+});
+
+test('a held 503 followed by a backup that cannot be reached: the client gets the 503 and the trace counts both attempts', async () => {
+  const t = await setup({ scenario: down }, false, true);
+  const res = await post(t.url);
+  expect(res.status).toBe(503);
+  await res.done;
+  await settle();
+  expect(t.records[0]?.outcome).toMatchObject({ provider: 'anthropic', attempts: 2, cacheColdRisk: false, status: 503 });
 });
