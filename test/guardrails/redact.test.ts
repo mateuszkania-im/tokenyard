@@ -46,3 +46,9 @@ test('redact a key split across two text blocks: placeholder in the first, the r
   const parsed = JSON.parse(out.toString()) as { messages: Array<{ content: Array<{ text: string }> }> };
   expect(parsed.messages[0]?.content.map((c) => c.text)).toEqual(['key [REDACTED:AWS_ACCESS_KEY_ID_1]', ' end']);
 });
+
+test('redact a value in a token outside quotes: the placeholder is written as a JSON string', () => {
+  const b = Buffer.from('{"messages":[{"role":"user","content":"x"}],"metadata":{"card":4111111111111111,"n":1}}');
+  const out = redactProductBody(b, redactionHits(findSpans(b, PII_RULES)));
+  expect(JSON.parse(out.toString())).toMatchObject({ metadata: { card: '[REDACTED:CARD_NUMBER_1]', n: 1 } });
+});

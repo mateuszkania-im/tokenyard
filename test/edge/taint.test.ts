@@ -154,6 +154,15 @@ test('taint holds when the next request carries the secret escaped differently (
   expect(g.up.got).toHaveLength(0);
 });
 
+test('a malformed JSON body carrying a secret is blocked (scanned as raw bytes)', async () => {
+  const g = await gateway(createMemoryStore({ clock: Date.now }));
+  const broken = Buffer.from(`{"model":"claude-haiku-5-5","max_tokens":64,"messages":[{"role":"user","content":"key ${AWS}"}`);
+  const res = await post(g.url, broken);
+  expect(res.status).toBe(400);
+  expect(message(res.body)).toContain('aws-access-key-id');
+  expect(g.up.got).toHaveLength(0);
+});
+
 test('history hit of a value that was only warned does not block', async () => {
   const spy = spyStore(createMemoryStore({ clock: Date.now }));
   const g = await gateway(spy.store, { edit: (p) => void (p.guardrails.secrets.codingAgent = 'warn') });

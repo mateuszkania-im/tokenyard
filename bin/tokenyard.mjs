@@ -874,7 +874,9 @@ var init_pii = __esm({
 
 // src/guardrails/redact.ts
 function redactionHits(spans) {
-  return spans.flatMap((s) => s.segments.map((g, i) => ({ rule: s.rule.id, start: g.start, end: g.end, value: s.value, ...i > 0 ? { erase: true } : {} })));
+  return spans.flatMap(
+    (s) => s.segments.map((g, i) => ({ rule: s.rule.id, start: g.start, end: g.end, value: s.value, ...i > 0 ? { erase: true } : {}, ...g.bare ? { bare: true } : {} }))
+  );
 }
 function redactProductBody(body, hits) {
   if (hits.length === 0) return body;
@@ -886,7 +888,10 @@ function redactProductBody(body, hits) {
     if (h.start < at || h.end <= h.start || h.end > body.length) continue;
     parts.push(body.subarray(at, h.start));
     at = h.end;
-    if (h.erase) continue;
+    if (h.erase) {
+      if (h.bare) parts.push(Buffer.from('""', "latin1"));
+      continue;
+    }
     const value = h.value ?? body.toString("latin1", h.start, h.end);
     let perRule = numbers.get(h.rule);
     if (perRule === void 0) {
@@ -898,7 +903,8 @@ function redactProductBody(body, hits) {
       n = perRule.size + 1;
       perRule.set(value, n);
     }
-    parts.push(Buffer.from(placeholder(h.rule, n), "latin1"));
+    const text = placeholder(h.rule, n);
+    parts.push(Buffer.from(h.bare ? `"${text}"` : text, "latin1"));
   }
   parts.push(body.subarray(at));
   return Buffer.concat(parts);
@@ -1062,12 +1068,18 @@ function decodeEscape(b, e, end) {
   }
   return { text: utf8Latin1(u >= 55296 && u <= 57343 ? 65533 : u), next: e + 6 };
 }
-function buildViews(body, start, end, messages) {
+function buildViews(body, start, end, messages, raw) {
   const all = new View();
+  if (raw) {
+    all.push(body.toString("latin1", start, end), start, end, PLAIN);
+    return { all, joined: null };
+  }
   const joined = messages && messages.length > 0 ? new View() : null;
   let lastKey = null;
   let group = -1;
   let m = 0;
+  let member = false;
+  let afterColon = false;
   let bs = -2;
   let nq = -2;
   const nextBs = (p) => bs !== -1 && bs < p ? bs = body.indexOf(92, p) : bs;
@@ -1075,14 +1087,35 @@ function buildViews(body, start, end, messages) {
     if (nq !== -1 && nq < p) nq = body.indexOf(34, p);
     return nq < 0 || nq >= end ? end : nq;
   };
+  const opening = (at) => {
+    if (member) all.separate(at, MEMBER);
+    else all.separate(at);
+    member = false;
+  };
   let i = start;
   while (i < end) {
     const q = nextQuote(i);
+    while (i < q) {
+      const c = body[i];
+      if (isWs(c)) {
+        i++;
+      } else if (isStructural(c)) {
+        afterColon = c === 58;
+        if (c !== 58) member = false;
+        i++;
+      } else {
+        let j = i + 1;
+        while (j < q && !isWs(body[j]) && !isStructural(body[j])) j++;
+        opening(i);
+        all.push(body.toString("latin1", i, j), i, j, BARE);
+        afterColon = false;
+        i = j;
+      }
+    }
     if (q >= end) break;
-    let j = q - 1;
-    while (j >= start && isWs(body[j])) j--;
-    const afterColon = j >= start && body[j] === 58;
-    all.separate(q);
+    const valueOfMember = afterColon;
+    afterColon = false;
+    opening(q);
     const first2 = all.runCount();
     let p = q + 1;
     let close;
@@ -1105,7 +1138,8 @@ function buildViews(body, start, end, messages) {
     while (k < end && isWs(body[k])) k++;
     if (k < end && body[k] === 58) {
       lastKey = all.textOf(first2, last);
-    } else if (joined && messages && afterColon && lastKey !== null && PIECE_KEYS.has(lastKey)) {
+      member = true;
+    } else if (joined && messages && valueOfMember && lastKey !== null && PIECE_KEYS.has(lastKey)) {
       while (m < messages.length && messages[m].end <= q) m++;
       const msg = messages[m];
       if (msg !== void 0 && q >= msg.start) {
@@ -1152,7 +1186,7 @@ function findSpans(body, rules, opts = {}) {
   const range = opts.range ?? { start: 0, end: body.length };
   const out = [];
   if (rules.length === 0 || range.end <= range.start) return out;
-  const { all, joined } = buildViews(body, range.start, range.end, opts.messages);
+  const { all, joined } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
   for (const rule of rules) {
     matchView(all, rule, false, out);
     if (joined) matchView(joined, rule, true, out);
@@ -1160,9 +1194,16 @@ function findSpans(body, rules, opts = {}) {
   return out;
 }
 function messageAt(messages, pos) {
-  if (!messages) return void 0;
-  const i = messages.findIndex((m) => pos >= m.start && pos < m.end);
-  return i < 0 ? void 0 : i;
+  if (!messages || messages.length === 0) return void 0;
+  let lo = 0;
+  let hi = messages.length - 1;
+  while (lo < hi) {
+    const mid = lo + hi + 1 >> 1;
+    if (messages[mid].start <= pos) lo = mid;
+    else hi = mid - 1;
+  }
+  const m = messages[lo];
+  return pos >= m.start && pos < m.end ? lo : void 0;
 }
 function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const action = (r) => r.entropyOnly ? "warn" : actionFor(r);
@@ -1175,7 +1216,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const hits = [];
   const seen = /* @__PURE__ */ new Set();
   for (const region of regions) {
-    for (const s of findSpans(body, region.rules, { range: region.range, ...region.messages ? { messages: region.messages } : {} })) {
+    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, ...region.messages ? { messages: region.messages } : {} })) {
       const valueHmac = pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
@@ -1187,7 +1228,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var SEP, PLAIN, ESCAPE, SEPARATOR, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, globalRegex;
+var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, globalRegex;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
@@ -1196,6 +1237,8 @@ var init_scan = __esm({
     PLAIN = 0;
     ESCAPE = 1;
     SEPARATOR = 2;
+    BARE = 3;
+    MEMBER = ": ";
     PIECE_KEYS = /* @__PURE__ */ new Set(["text", "content", "thinking"]);
     SIMPLE_ESCAPES = { 34: '"', 92: "\\", 47: "/", 98: "\b", 102: "\f", 110: "\n", 114: "\r", 116: "	" };
     View = class {
@@ -1221,8 +1264,8 @@ var init_scan = __esm({
       copyRuns(from, to, into) {
         for (let k = from; k < to; k++) into.push(this.parts[k], this.runs[k * 4 + 1], this.runs[k * 4 + 2], this.runs[k * 4 + 3]);
       }
-      separate(at) {
-        if (this.length > 0) this.push(SEP, at, at, SEPARATOR);
+      separate(at, text = SEP) {
+        if (this.length > 0) this.push(text, at, at, SEPARATOR);
       }
       get text() {
         this.textCache ??= this.parts.join("");
@@ -1247,16 +1290,18 @@ var init_scan = __esm({
           const kind = r[k * 4 + 3];
           const tl = this.parts[k].length;
           if (kind === SEPARATOR) continue;
-          const from = kind === PLAIN ? b + Math.max(s, t) - t : b;
-          const to = kind === PLAIN ? b + Math.min(e, t + tl) - t : bEnd;
+          const linear = kind === PLAIN || kind === BARE;
+          const from = linear ? b + Math.max(s, t) - t : b;
+          const to = linear ? b + Math.min(e, t + tl) - t : bEnd;
           const last = out[out.length - 1];
-          if (last !== void 0 && last.end === from) last.end = to;
-          else out.push({ start: from, end: to });
+          if (last !== void 0 && last.end === from && last.bare === true === (kind === BARE)) last.end = to;
+          else out.push(kind === BARE ? { start: from, end: to, bare: true } : { start: from, end: to });
         }
         return out;
       }
     };
     isWs = (c) => c === 32 || c === 9 || c === 10 || c === 13;
+    isStructural = (c) => c === 123 || c === 125 || c === 91 || c === 93 || c === 44 || c === 58;
     globalRegex = /* @__PURE__ */ new WeakMap();
   }
 });
@@ -57300,7 +57345,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
 function scanGuardrails(policy2, product, body, x, salt) {
   const g = policy2.guardrails;
   const lastTurn = x.parseError ? { start: 0, end: body.length } : x.lastTurn;
-  const opts = x.messages ? { messages: x.messages } : {};
+  const opts = { ...x.messages ? { messages: x.messages } : {}, raw: x.parseError };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => product ? g.secrets.product : g.secrets.codingAgent, salt, opts);
   if (!product) return { hits, redactions: [] };
   hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));

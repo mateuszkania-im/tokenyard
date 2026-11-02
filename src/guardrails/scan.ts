@@ -8,6 +8,8 @@ import type { SecretRule } from './rules.js';
 
 export type GuardrailAction = GuardrailHit['action'];
 type Range = { start: number; end: number };
+/** A byte range of a match; `bare` when it lies in a token outside quotes (redaction then writes a quoted placeholder). */
+export type Segment = Range & { bare?: true };
 
 /** One match: the rule, its byte range in the body, the decoded value (never leaves the process) and its byte pieces. */
 export interface Span {
@@ -16,7 +18,7 @@ export interface Span {
   end: number;
   value: string;
   /** Byte ranges the value occupies, in order; more than one when it is split across strings (text blocks). */
-  segments: Range[];
+  segments: Segment[];
 }
 
 /** Shannon entropy in bits per character. */
@@ -39,6 +41,10 @@ const SEP = '\0';
 const PLAIN = 0;
 const ESCAPE = 1;
 const SEPARATOR = 2;
+/** A token outside quotes (a number, a literal, a bare word in lenient or malformed JSON): mapped like PLAIN. */
+const BARE = 3;
+/** Shown between an object key and its value, so assignment-style rules read `key: value`. Zero bytes wide. */
+const MEMBER = ': ';
 /** Values of these keys are message text: inside one message they are joined without a separator. */
 const PIECE_KEYS = new Set(['text', 'content', 'thinking']);
 const SIMPLE_ESCAPES: Record<number, string> = { 0x22: '"', 0x5c: '\\', 0x2f: '/', 0x62: '\b', 0x66: '\f', 0x6e: '\n', 0x72: '\r', 0x74: '\t' };
@@ -71,8 +77,8 @@ class View {
     for (let k = from; k < to; k++) into.push(this.parts[k] as string, this.runs[k * 4 + 1] as number, this.runs[k * 4 + 2] as number, this.runs[k * 4 + 3] as number);
   }
 
-  separate(at: number): void {
-    if (this.length > 0) this.push(SEP, at, at, SEPARATOR);
+  separate(at: number, text: string = SEP): void {
+    if (this.length > 0) this.push(text, at, at, SEPARATOR);
   }
 
   get text(): string {
@@ -81,7 +87,7 @@ class View {
   }
 
   /** Byte ranges of decoded `[s, e)`; a separator or a gap between strings starts a new range. */
-  segments(s: number, e: number): Range[] {
+  segments(s: number, e: number): Segment[] {
     const r = this.runs;
     let lo = 0;
     let hi = r.length / 4 - 1;
@@ -90,7 +96,7 @@ class View {
       if ((r[mid * 4] as number) <= s) lo = mid;
       else hi = mid - 1;
     }
-    const out: Range[] = [];
+    const out: Segment[] = [];
     for (let k = lo; k * 4 < r.length; k++) {
       const t = r[k * 4] as number;
       if (t >= e) break;
@@ -99,11 +105,12 @@ class View {
       const kind = r[k * 4 + 3] as number;
       const tl = (this.parts[k] as string).length;
       if (kind === SEPARATOR) continue;
-      const from = kind === PLAIN ? b + Math.max(s, t) - t : b;
-      const to = kind === PLAIN ? b + Math.min(e, t + tl) - t : bEnd;
+      const linear = kind === PLAIN || kind === BARE;
+      const from = linear ? b + Math.max(s, t) - t : b;
+      const to = linear ? b + Math.min(e, t + tl) - t : bEnd;
       const last = out[out.length - 1];
-      if (last !== undefined && last.end === from) last.end = to;
-      else out.push({ start: from, end: to });
+      if (last !== undefined && last.end === from && (last.bare === true) === (kind === BARE)) last.end = to;
+      else out.push(kind === BARE ? { start: from, end: to, bare: true } : { start: from, end: to });
     }
     return out;
   }
@@ -143,12 +150,23 @@ const isWs = (c: number | undefined): boolean => c === 0x20 || c === 0x09 || c =
  * `all` holds every string, separated; `joined` holds the message-text values (`text`, `content`, `thinking`) of each
  * message in `messages` joined with no separator, messages separated, so a value split across text blocks is whole.
  */
-function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined): { all: View; joined: View | null } {
+const isStructural = (c: number | undefined): boolean => c === 0x7b || c === 0x7d || c === 0x5b || c === 0x5d || c === 0x2c || c === 0x3a;
+
+function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined, raw: boolean): { all: View; joined: View | null } {
   const all = new View();
+  // A body JSON.parse refused: no structure to trust, so the raw bytes are scanned as they are (fail toward detection).
+  if (raw) {
+    all.push(body.toString('latin1', start, end), start, end, PLAIN);
+    return { all, joined: null };
+  }
   const joined = messages && messages.length > 0 ? new View() : null;
   let lastKey: string | null = null;
   let group = -1;
   let m = 0;
+  /** The previous item was an object key: the next value is shown as `key: value`. */
+  let member = false;
+  /** The last structural byte seen was a colon (the next string or token is a member value). */
+  let afterColon = false;
   // Next backslash and next quote at or after the cursor, cached so each is searched for once per occurrence (linear).
   let bs = -2;
   let nq = -2;
@@ -157,14 +175,36 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
     if (nq !== -1 && nq < p) nq = body.indexOf(0x22, p);
     return nq < 0 || nq >= end ? end : nq;
   };
+  const opening = (at: number): void => {
+    if (member) all.separate(at, MEMBER);
+    else all.separate(at);
+    member = false;
+  };
   let i = start;
   while (i < end) {
     const q = nextQuote(i);
+    // Bytes outside quotes: structure, whitespace, and tokens (numbers, literals, bare words), kept as BARE runs.
+    while (i < q) {
+      const c = body[i];
+      if (isWs(c)) {
+        i++;
+      } else if (isStructural(c)) {
+        afterColon = c === 0x3a;
+        if (c !== 0x3a) member = false;
+        i++;
+      } else {
+        let j = i + 1;
+        while (j < q && !isWs(body[j]) && !isStructural(body[j])) j++;
+        opening(i);
+        all.push(body.toString('latin1', i, j), i, j, BARE);
+        afterColon = false;
+        i = j;
+      }
+    }
     if (q >= end) break;
-    let j = q - 1;
-    while (j >= start && isWs(body[j])) j--;
-    const afterColon = j >= start && body[j] === 0x3a;
-    all.separate(q);
+    const valueOfMember = afterColon;
+    afterColon = false;
+    opening(q);
     const first = all.runCount();
     let p = q + 1;
     let close: number;
@@ -187,7 +227,8 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
     while (k < end && isWs(body[k])) k++;
     if (k < end && body[k] === 0x3a) {
       lastKey = all.textOf(first, last);
-    } else if (joined && messages && afterColon && lastKey !== null && PIECE_KEYS.has(lastKey)) {
+      member = true;
+    } else if (joined && messages && valueOfMember && lastKey !== null && PIECE_KEYS.has(lastKey)) {
       while (m < messages.length && (messages[m] as Range).end <= q) m++;
       const msg = messages[m];
       if (msg !== undefined && q >= msg.start) {
@@ -240,11 +281,11 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
  * position. The keyword prefilter runs on the decoded text before any regex; entropy and `validate` run on the value.
  * With `messages`, text values split across blocks of one message are matched whole too.
  */
-export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[] } = {}): Span[] {
+export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[]; raw?: boolean } = {}): Span[] {
   const range = opts.range ?? { start: 0, end: body.length };
   const out: Span[] = [];
   if (rules.length === 0 || range.end <= range.start) return out;
-  const { all, joined } = buildViews(body, range.start, range.end, opts.messages);
+  const { all, joined } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
   for (const rule of rules) {
     matchView(all, rule, false, out);
     if (joined) matchView(joined, rule, true, out);
@@ -252,11 +293,18 @@ export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { ra
   return out;
 }
 
-/** Index of the message whose byte range holds `pos`, if any. */
+/** Index of the message whose byte range holds `pos`, if any: a binary search, as message ranges are in body order. */
 function messageAt(messages: readonly Range[] | undefined, pos: number): number | undefined {
-  if (!messages) return undefined;
-  const i = messages.findIndex((m) => pos >= m.start && pos < m.end);
-  return i < 0 ? undefined : i;
+  if (!messages || messages.length === 0) return undefined;
+  let lo = 0;
+  let hi = messages.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if ((messages[mid] as Range).start <= pos) lo = mid;
+    else hi = mid - 1;
+  }
+  const m = messages[lo] as Range;
+  return pos >= m.start && pos < m.end ? lo : undefined;
 }
 
 /**
@@ -264,7 +312,8 @@ function messageAt(messages: readonly Range[] | undefined, pos: number): number 
  * `warn` (on coding-agent routes: the block rules). Entropy-only rules are `warn` at most, so they never block and are
  * not scanned in history. Each value is reported once per rule and place, as an HMAC with `salt` of its decoded form
  * (so the same secret escaped another way matches the taint), with the index of its message when `messages` are
- * given. No last turn: the whole body is history.
+ * given. No last turn: the whole body is history. `raw` (a body JSON.parse refused) scans the raw bytes instead of
+ * decoded strings.
  */
 export function scanBody(
   body: Buffer,
@@ -272,7 +321,7 @@ export function scanBody(
   rules: readonly SecretRule[],
   actionFor: (rule: SecretRule) => GuardrailAction,
   salt: string,
-  opts: { messages?: readonly Range[] } = {},
+  opts: { messages?: readonly Range[]; raw?: boolean } = {},
 ): GuardrailHit[] {
   const action = (r: SecretRule): GuardrailAction => (r.entropyOnly ? 'warn' : actionFor(r));
   const historyRules = rules.filter((r) => action(r) !== 'warn');
@@ -286,7 +335,7 @@ export function scanBody(
   const hits: GuardrailHit[] = [];
   const seen = new Set<string>();
   for (const region of regions) {
-    for (const s of findSpans(body, region.rules, { range: region.range, ...(region.messages ? { messages: region.messages } : {}) })) {
+    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, ...(region.messages ? { messages: region.messages } : {}) })) {
       const valueHmac = pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;

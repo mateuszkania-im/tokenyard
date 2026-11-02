@@ -39,6 +39,15 @@ function adversarial(): Array<[string, string]> {
   return out;
 }
 
+/** Bodies outside the string view: one huge bare token, many small bare tokens, and a malformed body scanned raw. */
+function adversarialBodies(): Array<[string, Buffer, boolean]> {
+  return [
+    ['bare token run', Buffer.from(`{"messages":[{"role":"user","content":[${fill('eyJ-')}]}]}`), false],
+    ['many bare tokens', Buffer.from(`{"messages":[{"role":"user","content":[${fill('AKIA1,')}0]}]}`), false],
+    ['raw malformed', Buffer.from(`{"messages":[{"role":"user","content":"${fill('a@b.')}`), true],
+  ];
+}
+
 test('every rule scans adversarial 1 MiB bodies within the time bound (no super-linear backtracking)', () => {
   const rules = [...DEFAULT_RULES, ...PII_RULES];
   const slow: string[] = [];
@@ -49,6 +58,13 @@ test('every rule scans adversarial 1 MiB bodies within the time bound (no super-
     const t0 = performance.now();
     scanBody(b, f.lastTurn, rules, () => 'block', 's', { messages: f.messages });
     findSpans(b, rules, { messages: f.messages });
+    const ms = performance.now() - t0;
+    worst = Math.max(worst, ms);
+    if (ms > BOUND_MS) slow.push(`${name}: ${ms.toFixed(0)} ms`);
+  }
+  for (const [name, b, raw] of adversarialBodies()) {
+    const t0 = performance.now();
+    scanBody(b, { start: 0, end: b.length }, rules, () => 'block', 's', { raw });
     const ms = performance.now() - t0;
     worst = Math.max(worst, ms);
     if (ms > BOUND_MS) slow.push(`${name}: ${ms.toFixed(0)} ms`);

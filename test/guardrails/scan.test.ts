@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { pseudonym } from '../../src/guardrails/hmac.js';
+import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES, type SecretRule } from '../../src/guardrails/rules.js';
 import { scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
@@ -115,3 +116,49 @@ test('taint matches when the same secret comes back escaped differently in histo
   expect(history).toMatchObject([{ where: 'history', message: 0 }]);
   expect(history[0]?.valueHmac).toBe(first[0]?.valueHmac);
 });
+
+// Fix round 2: the scanner must not see less than a lenient upstream parser would.
+test('non-string tokens: a secret in a bare or number-like token is found', () => {
+  const lenient = Buffer.from(`{"model":"m","messages":[{"role":"user","content":"x","note":${AWS}}]}`);
+  const hits = scanBody(lenient, { start: 0, end: lenient.length }, DEFAULT_RULES, block, 's');
+  expect(hits).toMatchObject([{ rule: 'aws-access-key-id', valueHmac: pseudonym('s', AWS) }]);
+  const tokenKey = RULE_FIXTURES['tokenyard-key']?.positive as string;
+  const bare = Buffer.from(`{"messages":[{"role":"user","content":[${tokenKey}]}]}`);
+  expect(scanBody(bare, { start: 0, end: bare.length }, DEFAULT_RULES, block, 's')).toMatchObject([{ rule: 'tokenyard-key' }]);
+});
+
+test('object members read as "key: value": an assignment split into a JSON key and its value is found', () => {
+  const value = GENERIC.slice(11, 51);
+  const { b, lastTurn, messages } = body([{ role: 'user', content: [{ type: 'tool_use_like', api_key: value }] }]);
+  expect(scanBody(b, lastTurn, DEFAULT_RULES, block, 's', { messages })).toMatchObject([{ rule: 'generic-secret-assignment', valueHmac: pseudonym('s', value) }]);
+});
+
+test('a malformed body is scanned as raw bytes', () => {
+  const broken = Buffer.from(`{"model":"m","messages":[{"role":"user","content":"key ${AWS} and \\q"}`);
+  expect(scanBody(broken, { start: 0, end: broken.length }, DEFAULT_RULES, block, 's', { raw: true })).toMatchObject([{ rule: 'aws-access-key-id', where: 'last-turn' }]);
+});
+
+test('an AKIA key written entirely in \\u escapes is found', () => {
+  const escaped = [...AWS].map((c) => `\\u00${c.charCodeAt(0).toString(16)}`).join('');
+  expect(scanLast(raw(`k ${escaped} k`))).toMatchObject([{ rule: 'aws-access-key-id', valueHmac: pseudonym('s', AWS) }]);
+});
+
+test('many messages with one hit each: linear, not hits times messages', () => {
+  const messages: unknown[] = [];
+  let size = 0;
+  for (let i = 0; size < 4 * 1024 * 1024; i++) {
+    const email = `user${i}@example.com`;
+    messages.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `mail ${email}` });
+    size += email.length + 45;
+  }
+  messages.push({ role: 'user', content: 'end' });
+  const b = Buffer.from(JSON.stringify({ model: 'm', messages }));
+  const f = extractAnthropicFeatures(b);
+  const t0 = performance.now();
+  const hits = scanBody(b, f.lastTurn, PII_RULES, block, 's', { messages: f.messages });
+  const ms = performance.now() - t0;
+  expect(hits.length).toBe(messages.length - 1);
+  expect(hits[hits.length - 1]?.message).toBe(messages.length - 2);
+  console.log(`many messages: ${messages.length} messages, ${hits.length} hits, ${ms.toFixed(0)} ms`);
+  expect(ms).toBeLessThan(1_000);
+}, 60_000);
