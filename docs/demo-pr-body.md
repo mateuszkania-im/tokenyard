@@ -14,7 +14,8 @@ Label: `demo`
 
 ## What to look at
 
-The policy replay Action replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,587 requests) against
+The policy replay comment appears only once the Action exists on the base branch (the workflow runs the Action from the
+base commit, so a PR cannot change the code that judges it). Once it does, it replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,587 requests) against
 the base and this branch and posts one sticky comment. With the current traces it reports (local run, seed 1):
 
 - Cost: -$2.87 (-5.7%), marked as estimated because the model changes.

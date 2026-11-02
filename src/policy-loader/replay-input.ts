@@ -1,8 +1,8 @@
 // The file side of `tokenyard policy replay` (R-P2): reads trace files and policy sources, hands data to src/replay.
 import { execFileSync } from 'node:child_process';
 import { stat } from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { lstatSync, realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { readLedger } from '../ledger/reader.js';
 import type { LedgerLine } from '../ledger/record.js';
 import { buildBundle } from '../policy/bundle.js';
@@ -21,32 +21,80 @@ export async function openReplayTraces(paths: string[]): Promise<AsyncIterable<L
   return readLedger(paths);
 }
 
+/** A policy directory inside a repository: the repository top level (real path) and the directory relative to it. */
+export interface RepoDir {
+  top: string;
+  rel: string;
+  /** For messages only. */
+  label: string;
+}
+
 /**
- * Policy files of `dir` at git ref `ref` (`git show <commit>:<path>`), relative to the repository that holds `dir`.
- * A ref that starts with `-` would be read as a git option and is refused before git runs; any other ref is resolved
- * to a commit id first (`rev-parse --verify --end-of-options`), and only that id reaches `git show`.
+ * Places `dir` in its repository. With `workspace` (the Action: GITHUB_WORKSPACE) the top level is the workspace and
+ * `dir` must lie inside it and pass through no symbolic link, so a PR cannot redirect which path is read at the base
+ * commit. Without it (the CLI) the top level is what git finds from `dir`.
  */
-function filesAtRef(ref: string, dir: string): Record<string, string> {
-  if (ref === '' || ref.startsWith('-')) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  const git = (args: string[]): string => execFileSync('git', args, { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
-  let commit: string;
-  try {
-    commit = git(['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]).trim();
-  } catch {
-    throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+export function locateRepoDir(dir: string, workspace: string | null): RepoDir {
+  if (workspace !== null) {
+    const root = resolve(workspace);
+    const abs = resolve(dir);
+    const rel = relative(root, abs);
+    if (rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error(`policy directory ${JSON.stringify(dir)} is outside the workspace`);
+    let cur = root;
+    for (const part of rel.split(sep).filter((x) => x !== '')) {
+      cur = join(cur, part);
+      let link = false;
+      try {
+        link = lstatSync(cur).isSymbolicLink();
+      } catch {
+        // a missing component is reported when the files are read
+      }
+      if (link) throw new Error(`policy directory ${JSON.stringify(dir)} passes through a symbolic link, which is refused`);
+    }
+    return { top: realpathSync(root), rel: rel.split(sep).join('/'), label: dir };
   }
-  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  const top = git(['rev-parse', '--show-toplevel']).trim();
-  const rel = relative(realpathSync(top), realpathSync(resolve(dir))).split('\\').join('/');
+  const top = realpathSync(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim());
+  return { top, rel: relative(top, realpathSync(resolve(dir))).split(sep).join('/'), label: dir };
+}
+
+/**
+ * git against an explicit repository: its git dir and work tree are `top`, discovery and bare or nested repositories
+ * found in the tree are off (`safe.bareRepository=explicit`, a ceiling at the parent of `top`).
+ */
+function gitIn(repo: RepoDir, args: string[]): string {
+  return execFileSync('git', ['-c', 'safe.bareRepository=explicit', '--git-dir', join(repo.top, '.git'), '--work-tree', repo.top, ...args], {
+    cwd: repo.top,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(repo.top) },
+  });
+}
+
+/** The commit id of `ref` in `repo`, or null when it is not a ref (or starts with `-`). */
+export function resolveGitCommit(ref: string, repo: RepoDir): string | null {
+  if (ref === '' || ref.startsWith('-')) return null;
+  try {
+    const commit = gitIn(repo, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`]).trim();
+    return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Policy files of the directory at git ref `ref` (`git show <commit>:<path>`); the ref is resolved to a commit id first. */
+function filesAtRef(ref: string, repo: RepoDir): Record<string, string> {
+  const commit = resolveGitCommit(ref, repo);
+  if (commit === null) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const show = (name: string): string | undefined => {
     try {
-      return git(['show', `${commit}:${rel === '' ? name : `${rel}/${name}`}`]);
+      return gitIn(repo, ['show', `${commit}:${repo.rel === '' ? name : `${repo.rel}/${name}`}`]);
     } catch {
       return undefined;
     }
   };
   const policy = show(POLICY_FILE);
-  if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${dir} at ${ref} (${commit})` }]);
+  if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${repo.label} at ${ref} (${commit})` }]);
   const files: Record<string, string> = { [POLICY_FILE]: policy };
   for (const name of policyFileNames(policy)) {
     if (name === POLICY_FILE) continue;
@@ -56,23 +104,12 @@ function filesAtRef(ref: string, dir: string): Record<string, string> {
   return files;
 }
 
-/** The commit id of `ref` in the repository that holds `dir`, or null when it is not a ref (or starts with `-`). */
-export function resolveGitCommit(ref: string, dir: string): string | null {
-  if (ref === '' || ref.startsWith('-')) return null;
-  try {
-    const commit = execFileSync('git', ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * The policy files of `dir` as committed at `commit`, always read as git objects: a directory in the working tree that
- * happens to be named like the commit or its branch is never consulted (the Action uses this for the base).
+ * The policy files of the directory as committed at `commit`, always read as git objects: a directory in the working
+ * tree that happens to be named like the commit or its branch is never consulted (the Action uses this for the base).
  */
-export function loadPolicyAtCommit(o: { commit: string; dir: string; experimentalSubscription: boolean }): CompiledPolicy {
-  const src = parsePolicyFiles(join(o.dir, `@${o.commit}`), filesAtRef(o.commit, o.dir));
+export function loadPolicyAtCommit(o: { commit: string; repo: RepoDir; experimentalSubscription: boolean }): CompiledPolicy {
+  const src = parsePolicyFiles(join(o.repo.top, o.repo.rel, `@${o.commit}`), filesAtRef(o.commit, o.repo));
   const revision = buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
@@ -84,7 +121,7 @@ export function loadPolicyAtCommit(o: { commit: string; dir: string; experimenta
  */
 export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean }): Promise<CompiledPolicy> {
   const isDir = await stat(o.source).then((s) => s.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join(o.headDir, `@${o.source}`), filesAtRef(o.source, o.headDir));
+  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
   const revision = o.revision ?? buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }

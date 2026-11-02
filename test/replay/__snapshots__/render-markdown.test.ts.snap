@@ -12,7 +12,7 @@ Traffic: 7 days, 3,587 requests, 75 sessions, tenant all. Fidelity: base replay 
 | Requests rerouted | | 200 | auxiliary and compaction to claude-code-auxiliary, claude-code-compaction |
 | Requests blocked | 2 | 7 | 5 team-day, 2 aws-access-key-id |
 | Sessions cut mid-task | 0 | **5** | 117 later requests ($1.6773) would not have run as recorded |
-| Budget hits | none | team-day web on 3 days, first hit 2026-10-26T16&#58;27&#58;20&#46;000Z | |
+| Budget hits | none | team-day web on 3 days, first hit 2026-10-26T16:​27:​20&#46;000Z | |
 
 Cost figures that involve a model change are estimates; see how exact this is below.
 
@@ -33,11 +33,11 @@ Cost figures that involve a model change are estimates; see how exact this is be
 </details>
 <details><summary>Cut sessions</summary>
 
-- head: session 681647518a3badb4b66ccc9ba1822405, team web, repo shop-web, request class main, request 43, cause budget team-day; 2 later requests ($0.0376)
-- head: session 238ce07308191b3519938695ec1fd435, team web, repo shop-web, request class main, request 20, cause budget team-day; 80 later requests ($1.0270)
-- head: session 20d3ad45080203e79081e762b1ae7882, team web, repo shop-web, request class main, request 25, cause budget team-day; 20 later requests ($0.3822)
-- head: session 2b47d838c6efed98d1cee1fb660a18a2, team web, repo shop-web, request class main, request 23, cause budget team-day; 5 later requests ($0.1041)
-- head: session 167cb43a0ef224ea79c600ec1c42de18, team web, repo shop-web, request class main, request 21, cause budget team-day; 10 later requests ($0.1264)
+- head: session 681647​518a3b​adb4b6​6ccc9b​a18224​05, team web, repo shop-web, request class main, request 43, cause budget team-day; 2 later requests ($0.0376)
+- head: session 238ce0​730819​1b3519​938695​ec1fd4​35, team web, repo shop-web, request class main, request 20, cause budget team-day; 80 later requests ($1.0270)
+- head: session 20d3ad​450802​03e790​81e762​b1ae78​82, team web, repo shop-web, request class main, request 25, cause budget team-day; 20 later requests ($0.3822)
+- head: session 2b47d8​38c6ef​ed98d1​cee1fb​660a18​a2, team web, repo shop-web, request class main, request 23, cause budget team-day; 5 later requests ($0.1041)
+- head: session 167cb4​3a0ef2​24ea79​c600ec​1c42de​18, team web, repo shop-web, request class main, request 21, cause budget team-day; 10 later requests ($0.1264)
 
 </details>
 <details><summary>Fidelity notes</summary>
@@ -58,6 +58,6 @@ none
 
 </details>
 
-Check: **failed** (ci&#46;failOn&#46;cutSessions&#58; 0). Policy check: 0 errors, 1 warning.
+Check: **failed** (ci&#46;failOn&#46;cutSessions:​ 0). Policy check: 0 errors, 1 warning.
 "
 `;

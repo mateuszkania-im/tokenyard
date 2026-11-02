@@ -32,8 +32,8 @@ test('fidelity line and missing instances appear above the table', () => {
   const table = md.indexOf('| | Base | Head | Change |');
   expect(md.indexOf('Fidelity: base replay matches recorded decisions on 90.0% of requests')).toBeGreaterThan(-1);
   expect(md.indexOf('Fidelity: ')).toBeLessThan(table);
-  expect(md.indexOf('gw-2')).toBeGreaterThan(-1);
-  expect(md.indexOf('gw-2')).toBeLessThan(table);
+  expect(md.indexOf('gw-')).toBeGreaterThan(-1);
+  expect(md.indexOf('gw-')).toBeLessThan(table);
   expect(md.indexOf('Do not trust')).toBeLessThan(table);
 });
 
@@ -79,9 +79,14 @@ test('escapeMarkdown stops mentions, issue links, autolinks, math and backslash 
   const link = escapeMarkdown('https://evil.example/x and www.evil.example');
   expect(link).not.toContain('https://');
   expect(link).not.toContain('www.');
-  expect(link).not.toContain(':');
+  expect(link).not.toMatch(/:(?!\u200b)/);
   expect(link).not.toContain('.');
   expect(escapeMarkdown('$x$ and $$y$$')).not.toContain('$');
+  expect(escapeMarkdown('$x$')).toBe('\uff04x\uff04');
+  expect(escapeMarkdown('GH-1 and ABC-123')).toBe(`GH-${zw}1 and ABC-${zw}123`);
+  expect(escapeMarkdown('see :smile: and :+1:')).not.toMatch(/:(?!\u200b)/);
+  for (const hex of ['0123456789abcdef0123456789abcdef01234567', 'abcdef1', 'ABCDEF12']) expect(escapeMarkdown(hex)).not.toMatch(/[0-9a-fA-F]{7}/);
+  expect(escapeMarkdown('0123456789abcdef0123456789abcdef01234567').replaceAll(zw, '')).toBe('0123456789abcdef0123456789abcdef01234567');
   expect(escapeMarkdown('a\\|b')).not.toContain('\\');
   expect(escapeMarkdown('a\\|b')).not.toContain('|');
   // none of the entities or marks written above starts a mention or issue reference again

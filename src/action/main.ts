@@ -8,7 +8,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseDuration } from '../ledger/export.js';
 import { loadPolicyDir } from '../policy-loader/load-dir.js';
-import { loadPolicyAtCommit, loadReplayPolicy, openReplayTraces, resolveGitCommit } from '../policy-loader/replay-input.js';
+import { loadPolicyAtCommit, loadReplayPolicy, locateRepoDir, openReplayTraces, resolveGitCommit } from '../policy-loader/replay-input.js';
 import { PolicyLoadError } from '../policy/load-dir.js';
 import { validatePolicy } from '../policy/validate.js';
 import { replay } from '../replay/engine.js';
@@ -97,7 +97,7 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     const baseRef = input(env, 'base-ref') || env.GITHUB_BASE_REF || '';
     const tracesInput = input(env, 'traces');
     if (tracesInput === '') throw new Error('the traces input is required');
-    if (baseRef === '') throw new Error('base-ref is empty and this is not a pull request event');
+    const repo = locateRepoDir(headDir, env.GITHUB_WORKSPACE ? env.GITHUB_WORKSPACE : null);
     // The trace token is read only outside fork PRs.
     const tracesToken = fork ? '' : input(env, 'traces-token');
     const headRev = (event?.headSha ?? env.GITHUB_SHA ?? 'head').slice(0, 7);
@@ -132,10 +132,13 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     const sinceMs = sinceInput === '' ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
     if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error('the since input must be a duration such as 7d, or an ISO time');
     const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false });
-    // The base is a git object: the pull request's base commit, else the base-ref input resolved as a git ref. Never a path.
-    const commit = [event?.baseSha ?? '', baseRef, `origin/${baseRef}`].map((c) => resolveGitCommit(c, headDir)).find((c) => c !== null);
-    if (!commit) throw new Error(`base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch, for example actions/checkout with fetch-depth: 0)`);
-    const base = loadPolicyAtCommit({ commit, dir: headDir, experimentalSubscription: false });
+    // The base is a git object read from the explicit repository at the workspace. In a pull request it is the event's
+    // base commit and nothing else; the base-ref input is resolved as a git ref only for other events.
+    const isPr = (env.GITHUB_EVENT_NAME ?? '').startsWith('pull_request');
+    const candidates = isPr ? [event?.baseSha ?? ''] : [baseRef, `origin/${baseRef}`];
+    const commit = candidates.map((c) => resolveGitCommit(c, repo)).find((c) => c !== null);
+    if (!commit) throw new Error(isPr ? 'the pull request base commit is missing from the event or from the checkout (use actions/checkout with fetch-depth: 0)' : `base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch)`);
+    const base = loadPolicyAtCommit({ commit, repo, experimentalSubscription: false });
     const result = await replay({ base, head, traces: await openReplayTraces([tracesPath]), sinceMs, tenant: null });
 
     // 4. outputs: replay.json for the artifact step, the sticky comment, the job summary

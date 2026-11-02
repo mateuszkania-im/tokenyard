@@ -285,7 +285,7 @@ function escapeMarkdown(s2, max = 256) {
     else if (isControl(code2)) continue;
     else out += MD_ENTITY[ch] ?? ch;
   }
-  return out;
+  return out.replace(/[0-9a-fA-F]{7,}/g, (run) => run.match(/.{1,6}/g)?.join(ZERO_WIDTH_SPACE) ?? run).replace(/([A-Za-z])-(?=\d)/g, `$1-${ZERO_WIDTH_SPACE}`);
 }
 var isControl, MAX_LABEL_LENGTH, ZERO_WIDTH_SPACE, MD_ENTITY;
 var init_sanitize = __esm({
@@ -308,12 +308,13 @@ var init_sanitize = __esm({
       // GitHub still resolves @name and #1 written as character references, so these two get a zero-width space instead.
       "@": `@${ZERO_WIDTH_SPACE}`,
       "#": `#${ZERO_WIDTH_SPACE}`,
-      // No literal ':' or '.' means no https:// or www. autolink; '\\' cannot escape the entity that follows it.
-      ":": "&#58;",
+      // GitHub decodes character references before its emoji, autolink and cross-reference filters, so entities alone do not
+      // stop :smile:, https:// or www.; ':' gets a zero-width space, '.' stays an entity, '\\' cannot escape what follows it.
+      ":": `:${ZERO_WIDTH_SPACE}`,
       ".": "&#46;",
       "\\": "&#92;",
-      // $...$ renders as math on GitHub; the character is dropped.
-      $: ""
+      // $...$ renders as math on GitHub, also with a zero-width space or entity inside and with \\$; the fullwidth dollar sign does not.
+      $: "\uFF04"
     };
   }
 });
@@ -5374,10 +5375,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep, value } = collItem;
+        const { start, key, sep: sep2, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep?.[0],
+          next: key ?? sep2?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -5391,7 +5392,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep) {
+          if (!keyProps.anchor && !keyProps.tag && !sep2) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map2.comment)
@@ -5415,7 +5416,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep ?? [], {
+        const valueProps = resolveProps.resolveProps(sep2 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -5431,7 +5432,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep2, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -5522,7 +5523,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep = "";
+        let sep2 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -5536,13 +5537,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep + cb;
-              sep = "";
+                comment += sep2 + cb;
+              sep2 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep += source;
+                sep2 += source;
               hasSpace = true;
               break;
             default:
@@ -5585,18 +5586,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep, value } = collItem;
+        const { start, key, sep: sep2, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep?.[0],
+          next: key ?? sep2?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep && !value) {
+          if (!props.anchor && !props.tag && !sep2 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -5650,8 +5651,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep, null, props, onError);
+        if (!isMap && !sep2 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep2, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -5663,7 +5664,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep ?? [], {
+          const valueProps = resolveProps.resolveProps(sep2 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -5674,8 +5675,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap && !props.found && ctx.options.strict) {
-              if (sep)
-                for (const st of sep) {
+              if (sep2)
+                for (const st of sep2) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -5692,7 +5693,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep2, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -5872,7 +5873,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep = "";
+      let sep2 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines[i][0].slice(trimIndent) + "\n";
@@ -5889,24 +5890,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep + indent.slice(trimIndent) + content;
-          sep = "\n";
+          value += sep2 + indent.slice(trimIndent) + content;
+          sep2 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep === " ")
-            sep = "\n";
-          else if (!prevMoreIndented && sep === "\n")
-            sep = "\n\n";
-          value += sep + indent.slice(trimIndent) + content;
-          sep = "\n";
+          if (sep2 === " ")
+            sep2 = "\n";
+          else if (!prevMoreIndented && sep2 === "\n")
+            sep2 = "\n\n";
+          value += sep2 + indent.slice(trimIndent) + content;
+          sep2 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep === "\n")
+          if (sep2 === "\n")
             value += "\n";
           else
-            sep = "\n";
+            sep2 = "\n";
         } else {
-          value += sep + content;
-          sep = " ";
+          value += sep2 + content;
+          sep2 = " ";
           prevMoreIndented = false;
         }
       }
@@ -6089,25 +6090,25 @@ var require_resolve_flow_scalar = __commonJS({
         trimBoth = /^[ \t]+|[ \t]+$/g;
       }
       let res = match[1].replace(trimEnd, "");
-      let sep = " ";
+      let sep2 = " ";
       let pos = line.lastIndex;
       while (match = line.exec(source)) {
         const lm = match[1].replace(trimBoth, "");
         if (lm === "") {
-          if (sep === "\n")
-            res += sep;
+          if (sep2 === "\n")
+            res += sep2;
           else
-            sep = "\n";
+            sep2 = "\n";
         } else {
-          res += sep + lm;
-          sep = " ";
+          res += sep2 + lm;
+          sep2 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep + (match?.[1] ?? "");
+      return res + sep2 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -6917,14 +6918,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep, value }) {
+    function stringifyItem({ start, key, sep: sep2, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep)
-        for (const st of sep)
+      if (sep2)
+        for (const st of sep2)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -8091,18 +8092,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep;
+          let sep2;
           if (scalar.end) {
-            sep = scalar.end;
-            sep.push(this.sourceToken);
+            sep2 = scalar.end;
+            sep2.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep = [this.sourceToken];
+            sep2 = [this.sourceToken];
           const map2 = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep }]
+            items: [{ start, key: scalar, sep: sep2 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map2;
@@ -8255,15 +8256,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep = it.sep;
-                  sep.push(this.sourceToken);
+                  const sep2 = it.sep;
+                  sep2.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep }]
+                    items: [{ start: start2, key, sep: sep2 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -8457,13 +8458,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep = fc.end.splice(1, fc.end.length);
-            sep.push(this.sourceToken);
+            const sep2 = fc.end.splice(1, fc.end.length);
+            sep2.push(this.sourceToken);
             const map2 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep }]
+              items: [{ start, key: fc, sep: sep2 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map2;
@@ -44438,7 +44439,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile: writeFile4, readFile: readFile4, mkdir: mkdir5 } = __require("node:fs/promises");
-    var { dirname: dirname3, resolve: resolve3 } = __require("node:path");
+    var { dirname: dirname4, resolve: resolve3 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -44669,7 +44670,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         const resolvedPath = resolve3(path2);
-        await mkdir5(dirname3(resolvedPath), { recursive: true });
+        await mkdir5(dirname4(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
           snapshot
@@ -104242,38 +104243,69 @@ var replay_input_exports = {};
 __export(replay_input_exports, {
   loadPolicyAtCommit: () => loadPolicyAtCommit,
   loadReplayPolicy: () => loadReplayPolicy,
+  locateRepoDir: () => locateRepoDir,
   openReplayTraces: () => openReplayTraces,
   resolveGitCommit: () => resolveGitCommit
 });
 import { execFileSync } from "node:child_process";
 import { stat as stat2 } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { join as join8, relative, resolve as resolve2 } from "node:path";
+import { lstatSync, realpathSync } from "node:fs";
+import { dirname as dirname2, isAbsolute, join as join8, relative, resolve as resolve2, sep } from "node:path";
 async function openReplayTraces(paths) {
   for (const p of paths) if ((await stat2(p)).isDirectory()) throw new RawTraceDirError(p);
   return readLedger(paths);
 }
-function filesAtRef(ref, dir) {
-  if (ref === "" || ref.startsWith("-")) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  const git = (args) => execFileSync("git", args, { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
-  let commit;
-  try {
-    commit = git(["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]).trim();
-  } catch {
-    throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+function locateRepoDir(dir, workspace) {
+  if (workspace !== null) {
+    const root = resolve2(workspace);
+    const abs = resolve2(dir);
+    const rel = relative(root, abs);
+    if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error(`policy directory ${JSON.stringify(dir)} is outside the workspace`);
+    let cur = root;
+    for (const part2 of rel.split(sep).filter((x) => x !== "")) {
+      cur = join8(cur, part2);
+      let link = false;
+      try {
+        link = lstatSync(cur).isSymbolicLink();
+      } catch {
+      }
+      if (link) throw new Error(`policy directory ${JSON.stringify(dir)} passes through a symbolic link, which is refused`);
+    }
+    return { top: realpathSync(root), rel: rel.split(sep).join("/"), label: dir };
   }
-  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  const top = git(["rev-parse", "--show-toplevel"]).trim();
-  const rel = relative(realpathSync(top), realpathSync(resolve2(dir))).split("\\").join("/");
+  const top = realpathSync(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim());
+  return { top, rel: relative(top, realpathSync(resolve2(dir))).split(sep).join("/"), label: dir };
+}
+function gitIn(repo, args) {
+  return execFileSync("git", ["-c", "safe.bareRepository=explicit", "--git-dir", join8(repo.top, ".git"), "--work-tree", repo.top, ...args], {
+    cwd: repo.top,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname2(repo.top) }
+  });
+}
+function resolveGitCommit(ref, repo) {
+  if (ref === "" || ref.startsWith("-")) return null;
+  try {
+    const commit = gitIn(repo, ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]).trim();
+    return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
+  } catch {
+    return null;
+  }
+}
+function filesAtRef(ref, repo) {
+  const commit = resolveGitCommit(ref, repo);
+  if (commit === null) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const show = (name2) => {
     try {
-      return git(["show", `${commit}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
+      return gitIn(repo, ["show", `${commit}:${repo.rel === "" ? name2 : `${repo.rel}/${name2}`}`]);
     } catch {
       return void 0;
     }
   };
   const policy2 = show(POLICY_FILE);
-  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir} at ${ref} (${commit})` }]);
+  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${repo.label} at ${ref} (${commit})` }]);
   const files = { [POLICY_FILE]: policy2 };
   for (const name2 of policyFileNames(policy2)) {
     if (name2 === POLICY_FILE) continue;
@@ -104282,23 +104314,14 @@ function filesAtRef(ref, dir) {
   }
   return files;
 }
-function resolveGitCommit(ref, dir) {
-  if (ref === "" || ref.startsWith("-")) return null;
-  try {
-    const commit = execFileSync("git", ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`], { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-    return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
-  } catch {
-    return null;
-  }
-}
 function loadPolicyAtCommit(o) {
-  const src = parsePolicyFiles(join8(o.dir, `@${o.commit}`), filesAtRef(o.commit, o.dir));
+  const src = parsePolicyFiles(join8(o.repo.top, o.repo.rel, `@${o.commit}`), filesAtRef(o.commit, o.repo));
   const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 async function loadReplayPolicy(o) {
   const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join8(o.headDir, `@${o.source}`), filesAtRef(o.source, o.headDir));
+  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join8(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
   const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
@@ -104476,7 +104499,7 @@ __export(main_exports, {
 });
 import { appendFile as appendFile3, mkdir as mkdir4, readFile as readFile3, writeFile as writeFile3 } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
-import { dirname as dirname2, join as join9 } from "node:path";
+import { dirname as dirname3, join as join9 } from "node:path";
 import { Readable as Readable2, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 async function readEvent(env) {
@@ -104539,7 +104562,7 @@ async function runAction(env, gh) {
     const baseRef = input2(env, "base-ref") || env.GITHUB_BASE_REF || "";
     const tracesInput = input2(env, "traces");
     if (tracesInput === "") throw new Error("the traces input is required");
-    if (baseRef === "") throw new Error("base-ref is empty and this is not a pull request event");
+    const repo = locateRepoDir(headDir, env.GITHUB_WORKSPACE ? env.GITHUB_WORKSPACE : null);
     const tracesToken = fork ? "" : input2(env, "traces-token");
     const headRev = (event?.headSha ?? env.GITHUB_SHA ?? "head").slice(0, 7);
     let errors = [];
@@ -104560,16 +104583,18 @@ async function runAction(env, gh) {
     let tracesPath = tracesInput;
     if (/^https?:\/\//i.test(tracesInput)) {
       tracesPath = join9(work, new URL(tracesInput).pathname.endsWith(".gz") ? "traces.ndjson.gz" : "traces.ndjson");
-      await mkdir4(dirname2(tracesPath), { recursive: true });
+      await mkdir4(dirname3(tracesPath), { recursive: true });
       await download(tracesInput, tracesToken === "" ? null : tracesToken, tracesPath);
     }
     const sinceInput = input2(env, "since");
     const sinceMs = sinceInput === "" ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
     if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error("the since input must be a duration such as 7d, or an ISO time");
     const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false });
-    const commit = [event?.baseSha ?? "", baseRef, `origin/${baseRef}`].map((c) => resolveGitCommit(c, headDir)).find((c) => c !== null);
-    if (!commit) throw new Error(`base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch, for example actions/checkout with fetch-depth: 0)`);
-    const base = loadPolicyAtCommit({ commit, dir: headDir, experimentalSubscription: false });
+    const isPr = (env.GITHUB_EVENT_NAME ?? "").startsWith("pull_request");
+    const candidates = isPr ? [event?.baseSha ?? ""] : [baseRef, `origin/${baseRef}`];
+    const commit = candidates.map((c) => resolveGitCommit(c, repo)).find((c) => c !== null);
+    if (!commit) throw new Error(isPr ? "the pull request base commit is missing from the event or from the checkout (use actions/checkout with fetch-depth: 0)" : `base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch)`);
+    const base = loadPolicyAtCommit({ commit, repo, experimentalSubscription: false });
     const result = await replay({ base, head, traces: await openReplayTraces([tracesPath]), sinceMs, tenant: null });
     const jsonPath = join9(work, "replay.json");
     await writeFile3(jsonPath, renderJson(result));
@@ -108334,7 +108359,7 @@ policy.command("check").description("validate a policy directory: schema, then t
 });
 policy.command("build").description("write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256").argument("[dir]", "policy directory", "policy").option("--out <file>", "output file", "dist/policy-bundle.json").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
   const { mkdir: mkdir5, writeFile: writeFile4 } = await import("node:fs/promises");
-  const { dirname: dirname3 } = await import("node:path");
+  const { dirname: dirname4 } = await import("node:path");
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
   const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
   const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
@@ -108347,7 +108372,7 @@ policy.command("build").description("write one bundle file (manifest, policy, pr
       process.exit(1);
     }
     const bundle = buildBundle2(src, { createdAt: (/* @__PURE__ */ new Date()).toISOString(), ...process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {} });
-    await mkdir5(dirname3(o.out), { recursive: true });
+    await mkdir5(dirname4(o.out), { recursive: true });
     await writeFile4(o.out, serializeBundle2(bundle));
     console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
   } catch (e2) {

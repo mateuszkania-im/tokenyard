@@ -1,7 +1,7 @@
 // Spec 9.5 and 11: the GitHub Action. Reads policy files as data, never runs PR code, never reads a trace token in a fork PR.
 import { execFileSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
-import { cpSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,6 +68,7 @@ function envFor(o: { fork?: boolean; baseRef?: string; traces?: string; noEvent?
     GITHUB_OUTPUT: join(tmp, 'output.txt'),
     GITHUB_SHA: 'b'.repeat(40),
     GITHUB_REPOSITORY: 'o/r',
+    GITHUB_WORKSPACE: repo,
     RUNNER_TEMP: tmp,
     'INPUT_POLICY-DIR': join(repo, 'policy'),
     'INPUT_BASE-REF': o.baseRef ?? 'main',
@@ -185,7 +186,7 @@ test('the base policy is the git object at the PR base commit, never a working-t
 });
 
 test('policy errors in the head fail the job before any replay and never log the token', async () => {
-  const bad = join(tmp, 'bad');
+  const bad = join(repo, 'bad');
   mkdirSync(bad);
   writeFileSync(join(bad, 'policy.yaml'), 'routes: not-a-list\n');
   const f = fakeGh();
@@ -265,4 +266,60 @@ test('only comments written by the token identity are updated; a foreign comment
     return new Response(JSON.stringify(comments), { status: 200 });
   });
   expect((await githubClient(env).listComments()).map((c) => c.id)).toEqual([1]);
+});
+
+test('a pull request base must be the event base sha: no fallback to the base-ref input', async () => {
+  setHead();
+  const env = envFor({ baseRef: 'main' });
+  writeFileSync(env.GITHUB_EVENT_PATH as string, JSON.stringify({ pull_request: { number: 7, base: { sha: 'c'.repeat(40), repo: { full_name: 'o/r' } }, head: { sha: 'b'.repeat(40), repo: { full_name: 'o/r', fork: false } } } }));
+  expect(await runAction(env, fakeGh().gh)).toBe(1);
+  expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('base commit');
+  const noSha = envFor();
+  writeFileSync(noSha.GITHUB_EVENT_PATH as string, JSON.stringify({ pull_request: { number: 7, base: { repo: { full_name: 'o/r' } }, head: { sha: 'b'.repeat(40), repo: { full_name: 'o/r', fork: false } } } }));
+  expect(await runAction(noSha, fakeGh().gh)).toBe(1);
+});
+
+test('a nested .git directory or a bare-repo-shaped directory planted by the PR cannot influence the base', async () => {
+  setHead();
+  await runAction(envFor(), fakeGh().gh);
+  const clean = replayJson();
+  const dir = join(repo, 'policy');
+  // a nested repository whose HEAD is a commit of its own, and a directory shaped like a bare repository
+  const nested = join(dir, 'sub');
+  mkdirSync(nested);
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: nested });
+  cpSync(join(ROOT, 'examples/policy-head'), join(nested, 'policy'), { recursive: true });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', 'add', '-A'], { cwd: nested });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'evil'], { cwd: nested });
+  const evilSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: nested, encoding: 'utf8' }).trim();
+  mkdirSync(join(dir, '.git'));
+  cpSync(join(nested, '.git'), join(dir, '.git'), { recursive: true });
+  const bare = join(dir, 'bare');
+  cpSync(join(nested, '.git'), bare, { recursive: true });
+  const env = envFor();
+  writeFileSync(env.GITHUB_EVENT_PATH as string, JSON.stringify({ pull_request: { number: 7, base: { sha: evilSha, repo: { full_name: 'o/r' } }, head: { sha: 'b'.repeat(40), repo: { full_name: 'o/r', fork: false } } } }));
+  expect(await runAction(env, fakeGh().gh)).toBe(1);
+  expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('base commit');
+  // with the real base sha the result is the clean one
+  expect(await runAction(envFor(), fakeGh().gh)).toBe(1);
+  expect(replayJson().base.costMicroUsd).toBe(clean.base.costMicroUsd);
+});
+
+test('a symlinked policy directory, or a directory outside the workspace, is refused', async () => {
+  setHead();
+  symlinkSync(join(repo, 'policy'), join(repo, 'linked'));
+  const env = envFor();
+  env['INPUT_POLICY-DIR'] = join(repo, 'linked');
+  expect(await runAction(env, fakeGh().gh)).toBe(1);
+  expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('symbolic link');
+  mkdirSync(join(repo, 'real'));
+  symlinkSync(join(repo, 'policy'), join(repo, 'real/inner'));
+  const env2 = envFor();
+  env2['INPUT_POLICY-DIR'] = join(repo, 'real/inner');
+  expect(await runAction(env2, fakeGh().gh)).toBe(1);
+  const outside = envFor();
+  outside['INPUT_POLICY-DIR'] = join(tmp, 'elsewhere');
+  mkdirSync(join(tmp, 'elsewhere'));
+  expect(await runAction(outside, fakeGh().gh)).toBe(1);
+  expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('outside the workspace');
 });
