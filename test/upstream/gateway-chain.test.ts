@@ -75,7 +75,8 @@ test('fallback to another workspace answers the client and marks cacheColdRisk o
 
 test('fallback to the same workspace does not mark cacheColdRisk', async () => {
   let calls = 0;
-  const t = await setup({ scenario: () => (++calls === 1 ? down : { kind: 'ok', ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: 4 }) }, true);
+  const t = await setup({ scenario: down }, true);
+  t.a.setScenario(() => (++calls === 1 ? down : { kind: 'ok', ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: 4 }));
   const res = await post(t.url);
   await res.done;
   await settle();

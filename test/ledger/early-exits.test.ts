@@ -90,14 +90,14 @@ test('413 body over the cap: a block record', async () => {
   });
 });
 
-test('502 upstream unreachable: a forward record with errorClass and the provider name', async () => {
+test('502 upstream unreachable: a forward record with errorClass, the last provider tried and the attempt count', async () => {
   const g = await gateway({ upstream: 'http://127.0.0.1:1' });
   const res = await send(g.url, { path: '/v1/messages', headers: authHeaders, body: msgBody() });
   expect(res.status).toBe(502);
   await expect.poll(() => g.records.length).toBe(1);
   expect(g.records[0]).toMatchObject({
     decision: { action: 'forward', route: 'claude-code' },
-    outcome: { status: 502, errorClass: 'upstream_unreachable', provider: 'anthropic', usage: null, aborted: false },
+    outcome: { status: 502, errorClass: 'upstream_unreachable', provider: 'anthropic-backup', attempts: 2, usage: null, aborted: false },
   });
 });
 
