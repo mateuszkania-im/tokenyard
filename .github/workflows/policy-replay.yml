@@ -1,4 +1,5 @@
 name: policy replay
+# Stays on pull_request, never pull_request_target: a fork PR runs with a read-only token and no secrets.
 on:
   pull_request:
     paths:
@@ -11,13 +12,22 @@ jobs:
   replay:
     runs-on: ubuntu-latest
     steps:
+      # The pull request head: policy files, read as data.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # This repository replays itself with the bundle in the checkout. Other repositories pin a released tag
-      # (uses: mateuszkania-im/tokenyard@v0.1.0), so a policy PR never changes the code that judges it.
+          persist-credentials: false
+      # The code that judges the PR comes from the base commit, so a PR cannot change the bundle that replays it.
+      # Other repositories pin a released tag instead (uses: mateuszkania-im/tokenyard@v0.1.0).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .tokenyard-trusted
+          persist-credentials: false
       - id: replay
-        uses: ./
+        # The base has no action.yml until the Action is merged: nothing to run then.
+        if: ${{ hashFiles('.tokenyard-trusted/action.yml') != '' }}
+        uses: ./.tokenyard-trusted
         with:
           policy-dir: examples/policy
           traces: examples/traces/demo.ndjson.gz

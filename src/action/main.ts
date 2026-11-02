@@ -8,7 +8,7 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseDuration } from '../ledger/export.js';
 import { loadPolicyDir } from '../policy-loader/load-dir.js';
-import { loadReplayPolicy, openReplayTraces } from '../policy-loader/replay-input.js';
+import { loadPolicyAtCommit, loadReplayPolicy, openReplayTraces, resolveGitCommit } from '../policy-loader/replay-input.js';
 import { PolicyLoadError } from '../policy/load-dir.js';
 import { validatePolicy } from '../policy/validate.js';
 import { replay } from '../replay/engine.js';
@@ -56,7 +56,7 @@ async function download(url: string, token: string | null, dest: string): Promis
   const u = new URL(url);
   const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]';
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) throw new Error('traces URL must be https');
-  const res = await fetch(u, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(u, { redirect: 'error', headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok || !res.body) throw new Error(`traces download failed with HTTP ${res.status}`);
   let seen = 0;
   const cap = new Transform({
@@ -90,7 +90,8 @@ async function publish(env: NodeJS.ProcessEnv, gh: Gh, body: string, wantComment
 export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number> {
   try {
     const event = await readEvent(env);
-    const fork = event?.fork ?? false;
+    // Fail closed: a pull request event whose payload cannot be read is treated as a fork.
+    const fork = event === null ? (env.GITHUB_EVENT_NAME ?? '').startsWith('pull_request') : event.fork;
     const wantComment = input(env, 'comment') !== 'false';
     const headDir = input(env, 'policy-dir') || 'policy';
     const baseRef = input(env, 'base-ref') || env.GITHUB_BASE_REF || '';
@@ -131,14 +132,10 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     const sinceMs = sinceInput === '' ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
     if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error('the since input must be a duration such as 7d, or an ISO time');
     const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false });
-    let base;
-    try {
-      base = await loadReplayPolicy({ source: baseRef, headDir, experimentalSubscription: false });
-    } catch (e) {
-      // actions/checkout leaves the base branch as origin/<name>
-      if (baseRef.includes('/')) throw e;
-      base = await loadReplayPolicy({ source: `origin/${baseRef}`, headDir, experimentalSubscription: false });
-    }
+    // The base is a git object: the pull request's base commit, else the base-ref input resolved as a git ref. Never a path.
+    const commit = [event?.baseSha ?? '', baseRef, `origin/${baseRef}`].map((c) => resolveGitCommit(c, headDir)).find((c) => c !== null);
+    if (!commit) throw new Error(`base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch, for example actions/checkout with fetch-depth: 0)`);
+    const base = loadPolicyAtCommit({ commit, dir: headDir, experimentalSubscription: false });
     const result = await replay({ base, head, traces: await openReplayTraces([tracesPath]), sinceMs, tenant: null });
 
     // 4. outputs: replay.json for the artifact step, the sticky comment, the job summary
@@ -175,13 +172,28 @@ export function githubClient(env: NodeJS.ProcessEnv): Gh {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || pr <= 0) throw new Error('not a pull request event');
     return { repo, pr };
   };
+  let me: string | null = null;
+  /** GITHUB_TOKEN (and app tokens) cannot read /user and comment as github-actions[bot]; a personal token answers with its login. */
+  const identity = async (): Promise<string> => {
+    if (me === null) {
+      try {
+        const u = (await call('GET', '/user')) as { login?: string } | null;
+        me = u?.login ?? 'github-actions[bot]';
+      } catch {
+        me = 'github-actions[bot]';
+      }
+    }
+    return me;
+  };
   return {
     async listComments() {
       const { repo, pr } = await target();
+      const me = await identity();
       const out: Array<{ id: number; body: string }> = [];
       for (let page = 1; page <= 20; page++) {
-        const rows = (await call('GET', `/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`)) as Array<{ id: number; body?: string }>;
-        for (const r of rows) out.push({ id: r.id, body: r.body ?? '' });
+        const rows = (await call('GET', `/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`)) as Array<{ id: number; body?: string; user?: { login?: string } | null }>;
+        // Only comments written by the token's own identity: a marker in someone else's comment is not ours to edit.
+        for (const r of rows) if (r.user?.login === me && (r.body ?? '').startsWith(COMMENT_MARKER)) out.push({ id: r.id, body: r.body ?? '' });
         if (rows.length < 100) break;
       }
       return out;

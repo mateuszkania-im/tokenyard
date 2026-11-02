@@ -12,7 +12,7 @@ Traffic: 7 days, 3,587 requests, 75 sessions, tenant all. Fidelity: base replay 
 | Requests rerouted | | 200 | auxiliary and compaction to claude-code-auxiliary, claude-code-compaction |
 | Requests blocked | 2 | 7 | 5 team-day, 2 aws-access-key-id |
 | Sessions cut mid-task | 0 | **5** | 117 later requests ($1.6773) would not have run as recorded |
-| Budget hits | none | team-day web on 3 days, first hit 2026-10-26T16:27:20.000Z | |
+| Budget hits | none | team-day web on 3 days, first hit 2026-10-26T16&#58;27&#58;20&#46;000Z | |
 
 Cost figures that involve a model change are estimates; see how exact this is below.
 
@@ -58,6 +58,6 @@ none
 
 </details>
 
-Check: **failed** (ci.failOn.cutSessions: 0). Policy check: 0 errors, 1 warning.
+Check: **failed** (ci&#46;failOn&#46;cutSessions&#58; 0). Policy check: 0 errors, 1 warning.
 "
 `;

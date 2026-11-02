@@ -287,12 +287,13 @@ function escapeMarkdown(s2, max = 256) {
   }
   return out;
 }
-var isControl, MAX_LABEL_LENGTH, MD_ENTITY;
+var isControl, MAX_LABEL_LENGTH, ZERO_WIDTH_SPACE, MD_ENTITY;
 var init_sanitize = __esm({
   "src/report/sanitize.ts"() {
     "use strict";
     isControl = (code2) => code2 <= 31 || code2 >= 127 && code2 <= 159;
     MAX_LABEL_LENGTH = 128;
+    ZERO_WIDTH_SPACE = "\u200B";
     MD_ENTITY = {
       "&": "&amp;",
       "<": "&lt;",
@@ -304,8 +305,15 @@ var init_sanitize = __esm({
       "[": "&#91;",
       "]": "&#93;",
       "~": "&#126;",
-      "@": "&#64;",
-      "#": "&#35;"
+      // GitHub still resolves @name and #1 written as character references, so these two get a zero-width space instead.
+      "@": `@${ZERO_WIDTH_SPACE}`,
+      "#": `#${ZERO_WIDTH_SPACE}`,
+      // No literal ':' or '.' means no https:// or www. autolink; '\\' cannot escape the entity that follows it.
+      ":": "&#58;",
+      ".": "&#46;",
+      "\\": "&#92;",
+      // $...$ renders as math on GitHub; the character is dropped.
+      $: ""
     };
   }
 });
@@ -104232,11 +104240,14 @@ var init_json_schema2 = __esm({
 // src/policy-loader/replay-input.ts
 var replay_input_exports = {};
 __export(replay_input_exports, {
+  loadPolicyAtCommit: () => loadPolicyAtCommit,
   loadReplayPolicy: () => loadReplayPolicy,
-  openReplayTraces: () => openReplayTraces
+  openReplayTraces: () => openReplayTraces,
+  resolveGitCommit: () => resolveGitCommit
 });
 import { execFileSync } from "node:child_process";
 import { stat as stat2 } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { join as join8, relative, resolve as resolve2 } from "node:path";
 async function openReplayTraces(paths) {
   for (const p of paths) if ((await stat2(p)).isDirectory()) throw new RawTraceDirError(p);
@@ -104253,7 +104264,7 @@ function filesAtRef(ref, dir) {
   }
   if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const top = git(["rev-parse", "--show-toplevel"]).trim();
-  const rel = relative(top, resolve2(dir)).split("\\").join("/");
+  const rel = relative(realpathSync(top), realpathSync(resolve2(dir))).split("\\").join("/");
   const show = (name2) => {
     try {
       return git(["show", `${commit}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
@@ -104270,6 +104281,20 @@ function filesAtRef(ref, dir) {
     if (text2 !== void 0) files[name2] = text2;
   }
   return files;
+}
+function resolveGitCommit(ref, dir) {
+  if (ref === "" || ref.startsWith("-")) return null;
+  try {
+    const commit = execFileSync("git", ["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`], { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
+  } catch {
+    return null;
+  }
+}
+function loadPolicyAtCommit(o) {
+  const src = parsePolicyFiles(join8(o.dir, `@${o.commit}`), filesAtRef(o.commit, o.dir));
+  const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
+  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 async function loadReplayPolicy(o) {
   const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
@@ -104472,7 +104497,7 @@ async function download(url2, token, dest) {
   const u = new URL(url2);
   const loopback = u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname === "[::1]";
   if (u.protocol !== "https:" && !(u.protocol === "http:" && loopback)) throw new Error("traces URL must be https");
-  const res = await fetch(u, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await fetch(u, { redirect: "error", headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok || !res.body) throw new Error(`traces download failed with HTTP ${res.status}`);
   let seen = 0;
   const cap = new Transform2({
@@ -104508,7 +104533,7 @@ async function publish(env, gh, body, wantComment, fork) {
 async function runAction(env, gh) {
   try {
     const event = await readEvent(env);
-    const fork = event?.fork ?? false;
+    const fork = event === null ? (env.GITHUB_EVENT_NAME ?? "").startsWith("pull_request") : event.fork;
     const wantComment = input2(env, "comment") !== "false";
     const headDir = input2(env, "policy-dir") || "policy";
     const baseRef = input2(env, "base-ref") || env.GITHUB_BASE_REF || "";
@@ -104542,13 +104567,9 @@ async function runAction(env, gh) {
     const sinceMs = sinceInput === "" ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
     if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error("the since input must be a duration such as 7d, or an ISO time");
     const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false });
-    let base;
-    try {
-      base = await loadReplayPolicy({ source: baseRef, headDir, experimentalSubscription: false });
-    } catch (e2) {
-      if (baseRef.includes("/")) throw e2;
-      base = await loadReplayPolicy({ source: `origin/${baseRef}`, headDir, experimentalSubscription: false });
-    }
+    const commit = [event?.baseSha ?? "", baseRef, `origin/${baseRef}`].map((c) => resolveGitCommit(c, headDir)).find((c) => c !== null);
+    if (!commit) throw new Error(`base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch, for example actions/checkout with fetch-depth: 0)`);
+    const base = loadPolicyAtCommit({ commit, dir: headDir, experimentalSubscription: false });
     const result = await replay({ base, head, traces: await openReplayTraces([tracesPath]), sinceMs, tenant: null });
     const jsonPath = join9(work, "replay.json");
     await writeFile3(jsonPath, renderJson(result));
@@ -104582,13 +104603,26 @@ function githubClient(env) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || pr <= 0) throw new Error("not a pull request event");
     return { repo, pr };
   };
+  let me = null;
+  const identity = async () => {
+    if (me === null) {
+      try {
+        const u = await call("GET", "/user");
+        me = u?.login ?? "github-actions[bot]";
+      } catch {
+        me = "github-actions[bot]";
+      }
+    }
+    return me;
+  };
   return {
     async listComments() {
       const { repo, pr } = await target();
+      const me2 = await identity();
       const out = [];
       for (let page = 1; page <= 20; page++) {
         const rows = await call("GET", `/repos/${repo}/issues/${pr}/comments?per_page=100&page=${page}`);
-        for (const r of rows) out.push({ id: r.id, body: r.body ?? "" });
+        for (const r of rows) if (r.user?.login === me2 && (r.body ?? "").startsWith(COMMENT_MARKER)) out.push({ id: r.id, body: r.body ?? "" });
         if (rows.length < 100) break;
       }
       return out;

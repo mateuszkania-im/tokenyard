@@ -1,6 +1,7 @@
 // The file side of `tokenyard policy replay` (R-P2): reads trace files and policy sources, hands data to src/replay.
 import { execFileSync } from 'node:child_process';
 import { stat } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { readLedger } from '../ledger/reader.js';
 import type { LedgerLine } from '../ledger/record.js';
@@ -36,7 +37,7 @@ function filesAtRef(ref: string, dir: string): Record<string, string> {
   }
   if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const top = git(['rev-parse', '--show-toplevel']).trim();
-  const rel = relative(top, resolve(dir)).split('\\').join('/');
+  const rel = relative(realpathSync(top), realpathSync(resolve(dir))).split('\\').join('/');
   const show = (name: string): string | undefined => {
     try {
       return git(['show', `${commit}:${rel === '' ? name : `${rel}/${name}`}`]);
@@ -53,6 +54,27 @@ function filesAtRef(ref: string, dir: string): Record<string, string> {
     if (text !== undefined) files[name] = text;
   }
   return files;
+}
+
+/** The commit id of `ref` in the repository that holds `dir`, or null when it is not a ref (or starts with `-`). */
+export function resolveGitCommit(ref: string, dir: string): string | null {
+  if (ref === '' || ref.startsWith('-')) return null;
+  try {
+    const commit = execFileSync('git', ['rev-parse', '--verify', '--quiet', '--end-of-options', `${ref}^{commit}`], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    return /^[0-9a-f]{40,64}$/.test(commit) ? commit : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The policy files of `dir` as committed at `commit`, always read as git objects: a directory in the working tree that
+ * happens to be named like the commit or its branch is never consulted (the Action uses this for the base).
+ */
+export function loadPolicyAtCommit(o: { commit: string; dir: string; experimentalSubscription: boolean }): CompiledPolicy {
+  const src = parsePolicyFiles(join(o.dir, `@${o.commit}`), filesAtRef(o.commit, o.dir));
+  const revision = buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
+  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 
 /**

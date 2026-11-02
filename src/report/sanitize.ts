@@ -25,6 +25,7 @@ export function sanitizeHeaderValue(s: string, max: number = MAX_LABEL_LENGTH): 
   return { value, changed: value !== s };
 }
 
+const ZERO_WIDTH_SPACE = '\u200b';
 const MD_ENTITY: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
@@ -36,15 +37,23 @@ const MD_ENTITY: Record<string, string> = {
   '[': '&#91;',
   ']': '&#93;',
   '~': '&#126;',
-  '@': '&#64;',
-  '#': '&#35;',
+  // GitHub still resolves @name and #1 written as character references, so these two get a zero-width space instead.
+  '@': `@${ZERO_WIDTH_SPACE}`,
+  '#': `#${ZERO_WIDTH_SPACE}`,
+  // No literal ':' or '.' means no https:// or www. autolink; '\\' cannot escape the entity that follows it.
+  ':': '&#58;',
+  '.': '&#46;',
+  '\\': '&#92;',
+  // $...$ renders as math on GitHub; the character is dropped.
+  $: '',
 };
 
 /**
  * A label for Markdown and HTML output (the PR comment): line breaks and tabs become spaces, other control characters
- * and line/paragraph separators are dropped, and every character that can start markup, a link, a mention, a table
- * cell break or HTML is written as a character reference. The result is plain text in any Markdown renderer and
- * cannot add a table column, a link or a tag. Cut to `max` characters before escaping.
+ * and line/paragraph separators are dropped, and every character that can start markup, a link, a mention, an issue
+ * reference, an autolink, math, a table cell break or HTML is written as a character reference (or neutralised). The
+ * result is plain text in GitHub Flavored Markdown and cannot add a table column, a link, a tag, a mention or a
+ * cross-reference. Cut to `max` characters before escaping.
  */
 export function escapeMarkdown(s: string, max: number = 256): string {
   let out = '';

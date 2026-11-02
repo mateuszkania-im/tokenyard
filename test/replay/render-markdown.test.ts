@@ -69,3 +69,23 @@ test('hostile labels cannot add a column, a link, a tag or a mention', () => {
   // the line count of the comment does not depend on newlines inside labels
   expect(md.split('\n').some((l) => l === 'b')).toBe(false);
 });
+
+test('escapeMarkdown stops mentions, issue links, autolinks, math and backslash escapes that GitHub still renders from entities', async () => {
+  const { escapeMarkdown } = await import('../../src/report/sanitize.js');
+  const zw = '​';
+  expect(escapeMarkdown('@octocat')).toBe(`@${zw}octocat`);
+  expect(escapeMarkdown('@org/team')).toBe(`@${zw}org/team`);
+  expect(escapeMarkdown('#1')).toBe(`#${zw}1`);
+  const link = escapeMarkdown('https://evil.example/x and www.evil.example');
+  expect(link).not.toContain('https://');
+  expect(link).not.toContain('www.');
+  expect(link).not.toContain(':');
+  expect(link).not.toContain('.');
+  expect(escapeMarkdown('$x$ and $$y$$')).not.toContain('$');
+  expect(escapeMarkdown('a\\|b')).not.toContain('\\');
+  expect(escapeMarkdown('a\\|b')).not.toContain('|');
+  // none of the entities or marks written above starts a mention or issue reference again
+  const all = escapeMarkdown('@a #b [c](d) <e> `f` *g* _h_ ~i~ j|k');
+  expect(all).not.toMatch(/(?<!&)[@#][A-Za-z0-9]/);
+  expect(all).not.toMatch(/[<>|`*_~[\]]/);
+});
