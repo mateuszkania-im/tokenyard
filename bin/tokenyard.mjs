@@ -1,6 +1,375 @@
 #!/usr/bin/env node
 import { createRequire as __tyCreateRequire } from 'node:module';
 const require = __tyCreateRequire(import.meta.url);
+var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+
+// src/mock/cache-sim.ts
+import { createHash } from "node:crypto";
+function canon(v) {
+  if (Array.isArray(v)) return `[${v.map(canon).join(",")}]`;
+  if (isObj(v)) {
+    const keys = Object.keys(v).filter((k) => v[k] !== void 0).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+function unit(value, extra) {
+  const { cache_control: cc, ...rest } = value;
+  const canonical = canon(extra ? { ...extra, block: rest } : rest);
+  let ttlMs = null;
+  if (isObj(cc)) ttlMs = cc.ttl === "1h" ? TTL_1H : TTL_5M;
+  return { bytes: Buffer.byteLength(canonical), canonical, ttlMs };
+}
+function prefixUnits(body) {
+  const b = isObj(body) ? body : {};
+  const out = [];
+  if (Array.isArray(b.tools)) for (const t of b.tools) out.push(unit(isObj(t) ? t : { value: t }, { part: "tool" }));
+  if (typeof b.system === "string") out.push(unit({ text: b.system }, { part: "system-string" }));
+  else if (Array.isArray(b.system)) for (const s of b.system) out.push(unit(isObj(s) ? s : { value: s }, { part: "system" }));
+  if (Array.isArray(b.messages)) {
+    for (const m of b.messages) {
+      if (!isObj(m)) continue;
+      const role = m.role;
+      if (typeof m.content === "string") out.push(unit({ text: m.content }, { part: "message", role }));
+      else if (Array.isArray(m.content)) {
+        for (const c of m.content) out.push(unit(isObj(c) ? c : { value: c }, { part: "message", role }));
+      }
+    }
+  }
+  return out;
+}
+function countTokens(body) {
+  return tokensForBytes(prefixUnits(body).reduce((n, u) => n + u.bytes, 0));
+}
+function toObject(body) {
+  const raw = Buffer.isBuffer(body) ? body.toString("utf8") : body;
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+var TTL_5M, TTL_1H, LOOKBACK, isObj, tokensForBytes, CacheSimulator;
+var init_cache_sim = __esm({
+  "src/mock/cache-sim.ts"() {
+    "use strict";
+    TTL_5M = 5 * 6e4;
+    TTL_1H = 60 * 6e4;
+    LOOKBACK = 20;
+    isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+    tokensForBytes = (bytes) => Math.ceil(bytes / 4);
+    CacheSimulator = class {
+      constructor(workspace = "default") {
+        this.workspace = workspace;
+      }
+      workspace;
+      entries = /* @__PURE__ */ new Map();
+      usageFor(body, model, nowMs) {
+        const units = prefixUnits(toObject(body));
+        const h = createHash("sha256");
+        let bytes = 0;
+        const keys = [];
+        const bpIdx = [];
+        const bpTokens = /* @__PURE__ */ new Map();
+        const bpTtl = /* @__PURE__ */ new Map();
+        units.forEach((u, i) => {
+          h.update(u.canonical);
+          h.update("\n");
+          bytes += u.bytes;
+          keys.push(`${this.workspace}|${model}|${h.copy().digest("hex")}`);
+          if (u.ttlMs !== null) {
+            bpIdx.push(i);
+            bpTokens.set(i, tokensForBytes(bytes));
+            bpTtl.set(i, u.ttlMs);
+          }
+        });
+        const total = tokensForBytes(bytes);
+        let hitUnit = -1;
+        let cacheRead = 0;
+        for (const b of bpIdx) {
+          for (let j = b; j >= Math.max(0, b - LOOKBACK); j--) {
+            if (j <= hitUnit) break;
+            const e = this.entries.get(keys[j]);
+            if (e && e.expiresAt > nowMs) {
+              hitUnit = j;
+              cacheRead = e.tokens;
+              e.expiresAt = nowMs + e.ttlMs;
+              break;
+            }
+          }
+        }
+        let w5 = 0;
+        let w1 = 0;
+        let prev = cacheRead;
+        for (const b of bpIdx) {
+          if (b <= hitUnit) continue;
+          const tokens = bpTokens.get(b);
+          const ttlMs = bpTtl.get(b);
+          const delta = tokens - prev;
+          if (delta <= 0) continue;
+          if (ttlMs === TTL_1H) w1 += delta;
+          else w5 += delta;
+          prev = tokens;
+          this.entries.set(keys[b], { expiresAt: nowMs + ttlMs, ttlMs, tokens });
+        }
+        return { input: total - cacheRead - w5 - w1, output: 0, cacheRead, cacheWrite5m: w5, cacheWrite1h: w1 };
+      }
+    };
+  }
+});
+
+// src/mock/scenarios.ts
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+var DEFAULT_SCENARIO;
+var init_scenarios = __esm({
+  "src/mock/scenarios.ts"() {
+    "use strict";
+    DEFAULT_SCENARIO = {
+      kind: "ok",
+      ttftMs: 0,
+      tokensPerSec: 0,
+      pingEveryMs: null,
+      outputTokens: 16
+    };
+  }
+});
+
+// src/mock/anthropic.ts
+var anthropic_exports = {};
+__export(anthropic_exports, {
+  startAnthropicMock: () => startAnthropicMock
+});
+import { createServer } from "node:http";
+function usageJson(u) {
+  return {
+    input_tokens: u.input,
+    cache_creation_input_tokens: u.cacheWrite5m + u.cacheWrite1h,
+    cache_read_input_tokens: u.cacheRead,
+    cache_creation: { ephemeral_5m_input_tokens: u.cacheWrite5m, ephemeral_1h_input_tokens: u.cacheWrite1h },
+    output_tokens: u.output
+  };
+}
+function splitTokens(output) {
+  const n = Math.min(output, MAX_DELTAS);
+  if (n === 0) return [];
+  const base = Math.floor(output / n);
+  const extra = output % n;
+  return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+}
+function scriptedEvents(id, model, usage) {
+  const head = [
+    {
+      event: "message_start",
+      data: {
+        type: "message_start",
+        message: { id, type: "message", role: "assistant", model, content: [], stop_reason: null, stop_sequence: null, usage: { ...usageJson(usage), output_tokens: 1 } }
+      }
+    },
+    { event: "content_block_start", data: { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } } }
+  ];
+  const deltas = splitTokens(usage.output).map((t) => ({
+    event: "content_block_delta",
+    data: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "x".repeat(t * 4) } }
+  }));
+  const tail = [
+    { event: "content_block_stop", data: { type: "content_block_stop", index: 0 } },
+    { event: "message_delta", data: { type: "message_delta", delta: { stop_reason: "end_turn", stop_sequence: null }, usage: usageJson(usage) } },
+    { event: "message_stop", data: { type: "message_stop" } }
+  ];
+  return { head, deltas, tail };
+}
+function parseBody(body) {
+  try {
+    const v = JSON.parse(body.toString("utf8"));
+    return typeof v === "object" && v !== null && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+async function startAnthropicMock(opts = {}) {
+  const received = [];
+  const now = opts.now ?? Date.now;
+  const sims = /* @__PURE__ */ new Map();
+  let scenario = opts.scenario ?? DEFAULT_SCENARIO;
+  let requestCount = 0;
+  let msgCount = 0;
+  const simFor = (req) => {
+    const h = req.headers["x-mock-workspace"];
+    const ws = (Array.isArray(h) ? h[0] : h) ?? opts.workspace ?? "default";
+    let s = sims.get(ws);
+    if (!s) sims.set(ws, s = new CacheSimulator(ws));
+    return s;
+  };
+  async function respond(rec, res) {
+    const path2 = rec.pathAndQuery.split("?")[0];
+    const body = parseBody(rec.body);
+    const sc = typeof scenario === "function" ? scenario(rec) : scenario;
+    if (rec.method !== "POST" || path2 !== "/v1/messages" && path2 !== "/v1/messages/count_tokens") {
+      res.writeHead(404, { "content-type": "application/json" }).end('{"type":"error","error":{"type":"not_found_error","message":"not found"}}');
+      return;
+    }
+    if (path2 === "/v1/messages/count_tokens") {
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ input_tokens: countTokens(body) }));
+      return;
+    }
+    if (sc.kind === "hangBeforeHeaders") return;
+    if (sc.kind === "status") {
+      res.writeHead(sc.status, { "content-type": "application/json", ...sc.headers }).end(sc.body);
+      return;
+    }
+    const model = typeof body.model === "string" ? body.model : "claude-mock";
+    const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : 1024;
+    const usage = simFor(rec).usageFor(body, model, now());
+    const timing = { ttftMs: 0, tokensPerSec: 0, pingEveryMs: null };
+    let outputTokens = DEFAULT_SCENARIO.kind === "ok" ? DEFAULT_SCENARIO.outputTokens : 16;
+    if (sc.kind === "ok") {
+      timing.ttftMs = sc.ttftMs;
+      timing.tokensPerSec = sc.tokensPerSec;
+      timing.pingEveryMs = sc.pingEveryMs;
+      outputTokens = sc.outputTokens;
+    } else if (sc.kind === "randomUsage") {
+      const rng = mulberry32(sc.seed + requestCount);
+      const bytes = rec.body.length;
+      const totalIn = Math.floor(rng() * (bytes + 1));
+      const cuts = [rng(), rng(), rng()].sort((a, b) => a - b).map((c) => Math.floor(c * (totalIn + 1)));
+      usage.input = cuts[0];
+      usage.cacheRead = cuts[1] - cuts[0];
+      usage.cacheWrite5m = cuts[2] - cuts[1];
+      usage.cacheWrite1h = totalIn - cuts[2];
+      outputTokens = Math.floor(rng() * (maxTokens + 1));
+    }
+    usage.output = outputTokens;
+    const id = `msg_mock_${String(++msgCount).padStart(6, "0")}`;
+    if (body.stream !== true) {
+      if (sc.kind === "drop") {
+        res.socket?.destroy();
+        return;
+      }
+      if (sc.kind === "midStreamError") {
+        res.writeHead(529, { "content-type": "application/json" }).end(JSON.stringify({ type: "error", error: { type: sc.errorType, message: "mock error" } }));
+        return;
+      }
+      if (timing.ttftMs > 0) await sleep(timing.ttftMs);
+      res.writeHead(200, { "content-type": "application/json", "request-id": id });
+      res.end(
+        JSON.stringify({
+          id,
+          type: "message",
+          role: "assistant",
+          model,
+          content: [{ type: "text", text: "x".repeat(outputTokens * 4) }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: usageJson(usage)
+        })
+      );
+      return;
+    }
+    let closed = false;
+    res.on("close", () => closed = true);
+    const write = (chunk) => new Promise((resolve) => {
+      if (closed || res.destroyed) return resolve();
+      res.write(chunk, () => resolve());
+    });
+    const { head, deltas, tail } = scriptedEvents(id, model, usage);
+    const all = [...head, ...deltas, ...tail];
+    if (timing.ttftMs > 0) await sleep(timing.ttftMs);
+    if (closed) return;
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", "request-id": id });
+    let pinger;
+    const stopPings = () => {
+      if (pinger) clearInterval(pinger);
+    };
+    res.on("close", stopPings);
+    if (timing.pingEveryMs !== null && timing.pingEveryMs > 0) {
+      pinger = setInterval(() => void write('event: ping\ndata: {"type": "ping"}\n\n'), timing.pingEveryMs);
+    }
+    const perDeltaMs = timing.tokensPerSec > 0 ? 1e3 * Math.max(1, outputTokens / Math.max(1, deltas.length)) / timing.tokensPerSec : 0;
+    try {
+      for (let i = 0; i < all.length; i++) {
+        if (sc.kind === "midStreamError" && i === sc.afterEvents) {
+          await write(frame({ event: "error", data: { type: "error", error: { type: sc.errorType, message: "mock error" } } }));
+          break;
+        }
+        if (sc.kind === "drop" && i === sc.afterEvents) {
+          res.socket?.destroy();
+          return;
+        }
+        if (i >= head.length && i < head.length + deltas.length && perDeltaMs > 0) await sleep(perDeltaMs);
+        if (closed) return;
+        await write(frame(all[i]));
+        if (sc.kind === "pauseAfterStart" && i === 0) await sleep(sc.pauseMs);
+      }
+    } finally {
+      stopPings();
+    }
+    if (!closed) res.end();
+  }
+  const server = createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const headers = {};
+      for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
+      const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
+      received.push(rec);
+      requestCount++;
+      respond(rec, res).catch(() => res.destroy());
+    });
+  });
+  await new Promise((resolve) => server.listen(opts.port ?? 0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    received,
+    setScenario(s) {
+      scenario = s;
+    },
+    close() {
+      return new Promise((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      });
+    }
+  };
+}
+var MAX_DELTAS, sleep, frame;
+var init_anthropic = __esm({
+  "src/mock/anthropic.ts"() {
+    "use strict";
+    init_cache_sim();
+    init_scenarios();
+    MAX_DELTAS = 100;
+    sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    frame = (e) => `event: ${e.event}
+data: ${JSON.stringify(e.data)}
+
+`;
+  }
+});
 
 // node_modules/commander/lib/error.js
 var CommanderError = class extends Error {
@@ -3421,4 +3790,12 @@ var package_default = {
 // src/cli.ts
 var program2 = new Command();
 program2.name("tokenyard").description(package_default.description).version(package_default.version);
+program2.command("mock").description("run the deterministic mock Anthropic provider").option("--port <n>", "port to listen on (0 picks a free one)", "0").action(async (o) => {
+  const { startAnthropicMock: startAnthropicMock2 } = await Promise.resolve().then(() => (init_anthropic(), anthropic_exports));
+  const mock = await startAnthropicMock2({ port: Number(o.port) });
+  console.log(mock.url);
+  const stop = () => void mock.close().then(() => process.exit(0));
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+});
 await program2.parseAsync(process.argv);
