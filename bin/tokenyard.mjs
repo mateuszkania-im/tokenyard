@@ -128,9 +128,9 @@ var init_reader = __esm({
 import { readdir, rmdir, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-function parseDuration(s) {
-  const m = /^(\d+)([hd])$/.exec(s.trim());
-  if (!m) throw new Error(`invalid duration "${s}": use a number and h or d, for example 7d`);
+function parseDuration(s2) {
+  const m = /^(\d+)([hd])$/.exec(s2.trim());
+  if (!m) throw new Error(`invalid duration "${s2}": use a number and h or d, for example 7d`);
   return Number(m[1]) * (m[2] === "h" ? HOUR_MS : DAY_MS);
 }
 async function listLedgerFiles(dir, fromMs, toMs) {
@@ -156,7 +156,7 @@ async function exportTraces(o) {
   const instances = /* @__PURE__ */ new Map();
   const acc = (id) => {
     let a = instances.get(id);
-    if (!a) instances.set(id, a = { hours: /* @__PURE__ */ new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: /* @__PURE__ */ new Set(), emitted: 0, minSeq: Infinity, maxSeq: -Infinity });
+    if (!a) instances.set(id, a = { hours: /* @__PURE__ */ new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: /* @__PURE__ */ new Set(), emitted: 0, minSeq: Infinity, maxSeq: -Infinity, lastSignal: -Infinity, lastShutdown: -Infinity });
     return a;
   };
   const inWindow = (ms) => ms >= o.sinceMs && ms <= o.untilMs;
@@ -174,6 +174,7 @@ async function exportTraces(o) {
         a.minSeq = Math.min(a.minSeq, line.seq);
         a.maxSeq = Math.max(a.maxSeq, line.seq);
         const ms = Date.parse(line.ts);
+        a.lastSignal = Math.max(a.lastSignal, ms);
         if (!inWindow(ms)) continue;
         seen(a, ms);
         a.emitted++;
@@ -183,12 +184,15 @@ async function exportTraces(o) {
         a.maxSeq = Math.max(a.maxSeq, line.seq);
         const ms = Date.parse(line.ts);
         if (inWindow(ms)) seen(a, ms);
+        a.lastSignal = Math.max(a.lastSignal, ms);
+        if (line.kind === "shutdown") a.lastShutdown = Math.max(a.lastShutdown, ms);
       } else if (line.kind === "segment") {
         const seg = line;
         const a = acc(seg.instance);
         a.minSeq = Math.min(a.minSeq, seg.firstSeq);
         const ms = Date.parse(seg.startedAt);
         if (inWindow(ms)) seen(a, ms);
+        a.lastSignal = Math.max(a.lastSignal, ms);
       }
     }
   }
@@ -204,14 +208,15 @@ async function exportTraces(o) {
       const hoursWithoutFile = [];
       for (let h = first2; h <= last; h += HOUR_MS) if (!a.hours.has(h)) hoursWithoutFile.push(hourLabel(h));
       let seqGaps = 0;
-      for (let s = a.minSeq; s <= a.maxSeq; s++) if (!a.seqs.has(s)) seqGaps++;
+      for (let s2 = a.minSeq; s2 <= a.maxSeq; s2++) if (!a.seqs.has(s2)) seqGaps++;
       return {
         id,
         firstTs: new Date(a.firstTs === Infinity ? first2 : a.firstTs).toISOString(),
         lastTs: new Date(a.lastTs === -Infinity ? last : a.lastTs).toISOString(),
         records: a.emitted,
         seqGaps,
-        hoursWithoutFile
+        hoursWithoutFile,
+        shutdown: a.lastShutdown !== -Infinity && a.lastShutdown >= a.lastSignal
       };
     })
   };
@@ -258,19 +263,19 @@ var init_export = __esm({
 });
 
 // src/report/sanitize.ts
-function stripControls(s) {
+function stripControls(s2) {
   let out = "";
-  for (const ch of s) if (!isControl(ch.codePointAt(0) ?? 0)) out += ch;
+  for (const ch of s2) if (!isControl(ch.codePointAt(0) ?? 0)) out += ch;
   return out;
 }
-function sanitizeHeaderValue(s, max = MAX_LABEL_LENGTH) {
+function sanitizeHeaderValue(s2, max = MAX_LABEL_LENGTH) {
   let out = "";
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c >= 32 && c <= 126) out += s[i];
+  for (let i = 0; i < s2.length; i++) {
+    const c = s2.charCodeAt(i);
+    if (c >= 32 && c <= 126) out += s2[i];
   }
   const value = out.slice(0, max);
-  return { value, changed: value !== s };
+  return { value, changed: value !== s2 };
 }
 var isControl, MAX_LABEL_LENGTH;
 var init_sanitize = __esm({
@@ -278,6 +283,42 @@ var init_sanitize = __esm({
     "use strict";
     isControl = (code) => code <= 31 || code >= 127 && code <= 159;
     MAX_LABEL_LENGTH = 128;
+  }
+});
+
+// src/report/render-terminal.ts
+function formatUsd(micro) {
+  const cents = Math.round(micro / 100);
+  return `$${Math.floor(cents / 1e4)}.${String(cents % 1e4).padStart(4, "0")}`;
+}
+function renderReportTerminal(r) {
+  const cols = r.by.length > 0 ? r.by.map(String) : ["all"];
+  const header2 = [...cols, "requests", "cost", "share", "input", "output", "cache read", "cache write"];
+  const row = (label, x) => [
+    ...label,
+    String(x.requests),
+    formatUsd(x.costMicroUsd) + (x.unpriced > 0 ? `+${x.unpriced} unpriced` : ""),
+    pct(x.costMicroUsd, r.totals.costMicroUsd),
+    String(x.input),
+    String(x.output),
+    String(x.cacheRead),
+    String(x.cacheWrite)
+  ];
+  const rows = [
+    header2,
+    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => stripControls(g.key[d] ?? "")) : ["all"], g)),
+    row(["total", ...cols.slice(1).map(() => "")], r.totals)
+  ];
+  const widths = header2.map((_, i) => Math.max(...rows.map((x) => (x[i] ?? "").length)));
+  const numeric = (i) => i >= cols.length;
+  return rows.map((x) => x.map((c, i) => numeric(i) ? c.padStart(widths[i] ?? 0) : c.padEnd(widths[i] ?? 0)).join("  ").trimEnd()).join("\n") + "\n";
+}
+var pct;
+var init_render_terminal = __esm({
+  "src/report/render-terminal.ts"() {
+    "use strict";
+    init_sanitize();
+    pct = (part2, whole) => whole === 0 ? "-" : `${(part2 / whole * 100).toFixed(1)}%`;
   }
 });
 
@@ -303,7 +344,7 @@ function prefixUnits(body) {
   const out = [];
   if (Array.isArray(b.tools)) for (const t of b.tools) out.push(unit(isObj(t) ? t : { value: t }, { part: "tool" }));
   if (typeof b.system === "string") out.push(unit({ text: b.system }, { part: "system-string" }));
-  else if (Array.isArray(b.system)) for (const s of b.system) out.push(unit(isObj(s) ? s : { value: s }, { part: "system" }));
+  else if (Array.isArray(b.system)) for (const s2 of b.system) out.push(unit(isObj(s2) ? s2 : { value: s2 }, { part: "system" }));
   if (Array.isArray(b.messages)) {
     for (const m of b.messages) {
       if (!isObj(m)) continue;
@@ -484,9 +525,9 @@ async function startAnthropicMock(opts = {}) {
   const simFor = (req) => {
     const h = req.headers["x-mock-workspace"];
     const ws = (Array.isArray(h) ? h[0] : h) ?? opts.workspace ?? "default";
-    let s = sims.get(ws);
-    if (!s) sims.set(ws, s = new CacheSimulator(ws));
-    return s;
+    let s2 = sims.get(ws);
+    if (!s2) sims.set(ws, s2 = new CacheSimulator(ws));
+    return s2;
   };
   async function respond(rec, res) {
     const path2 = rec.pathAndQuery.split("?")[0];
@@ -555,9 +596,9 @@ async function startAnthropicMock(opts = {}) {
     }
     let closed = false;
     res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve2) => {
-      if (closed || res.destroyed) return resolve2();
-      res.write(chunk, () => resolve2());
+    const write = (chunk) => new Promise((resolve3) => {
+      if (closed || res.destroyed) return resolve3();
+      res.write(chunk, () => resolve3());
     });
     const { head, deltas, tail } = scriptedEvents(id, model, usage);
     const all = [...head, ...deltas, ...tail];
@@ -605,17 +646,17 @@ async function startAnthropicMock(opts = {}) {
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve2) => server.listen(opts.port ?? 0, "127.0.0.1", resolve2));
+  await new Promise((resolve3) => server.listen(opts.port ?? 0, "127.0.0.1", resolve3));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
     received,
-    setScenario(s) {
-      scenario = s;
+    setScenario(s2) {
+      scenario = s2;
     },
     close() {
-      return new Promise((resolve2) => {
-        server.close(() => resolve2());
+      return new Promise((resolve3) => {
+        server.close(() => resolve3());
         server.closeAllConnections();
       });
     }
@@ -680,8 +721,8 @@ function defaultInstanceId(hostname4, startedAtMs) {
 ${startedAtMs}`).digest("hex").slice(0, 8);
 }
 function safeTenantDir(tenant) {
-  const s = tenant.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, (dots) => "_".repeat(dots.length));
-  return s === "" ? "_" : s;
+  const s2 = tenant.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, (dots) => "_".repeat(dots.length));
+  return s2 === "" ? "_" : s2;
 }
 var TraceWriter;
 var init_writer = __esm({
@@ -701,8 +742,8 @@ var init_writer = __esm({
       draining = null;
       closed = false;
       pathFor(tenant, nowMs) {
-        const iso = new Date(nowMs).toISOString();
-        return { path: join2(this.o.dir, safeTenantDir(tenant), iso.slice(0, 10), `${iso.slice(11, 13)}.${this.o.instanceId}.ndjson`) };
+        const iso2 = new Date(nowMs).toISOString();
+        return { path: join2(this.o.dir, safeTenantDir(tenant), iso2.slice(0, 10), `${iso2.slice(11, 13)}.${this.o.instanceId}.ndjson`) };
       }
       /** Queues one request record. Never waits on disk; false when the queue was full (the record is dropped, its seq is still used so the gap shows). */
       write(r) {
@@ -796,17 +837,17 @@ var init_writer = __esm({
 });
 
 // src/guardrails/pii.ts
-function peselValid(s) {
-  if (!/^\d{11}$/.test(s)) return false;
-  const d = [...s].map(Number);
+function peselValid(s2) {
+  if (!/^\d{11}$/.test(s2)) return false;
+  const d = [...s2].map(Number);
   const month = ((d[2] ?? 0) * 10 + (d[3] ?? 0)) % 20;
   const day = (d[4] ?? 0) * 10 + (d[5] ?? 0);
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
   const sum = PESEL_WEIGHTS.reduce((acc, w, i) => acc + w * (d[i] ?? 0), 0);
   return (10 - sum % 10) % 10 === d[10];
 }
-function ibanValid(s) {
-  const iban3 = s.replace(/ /g, "").toUpperCase();
+function ibanValid(s2) {
+  const iban3 = s2.replace(/ /g, "").toUpperCase();
   if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban3)) return false;
   const moved = iban3.slice(4) + iban3.slice(0, 4);
   let rem = 0;
@@ -816,8 +857,8 @@ function ibanValid(s) {
   }
   return rem === 1;
 }
-function luhnValid(s) {
-  const digits = s.replace(/[ -]/g, "");
+function luhnValid(s2) {
+  const digits = s2.replace(/[ -]/g, "");
   if (!/^\d{13,19}$/.test(digits)) return false;
   let sum = 0;
   for (let i = 0; i < digits.length; i++) {
@@ -877,7 +918,7 @@ var init_pii = __esm({
 // src/guardrails/redact.ts
 function redactionHits(spans) {
   return spans.flatMap(
-    (s) => s.segments.map((g, i) => ({ rule: s.rule.id, start: g.start, end: g.end, value: s.value, ...i > 0 ? { erase: true } : {}, ...g.bare ? { bare: true } : {} }))
+    (s2) => s2.segments.map((g, i) => ({ rule: s2.rule.id, start: g.start, end: g.end, value: s2.value, ...i > 0 ? { erase: true } : {}, ...g.bare ? { bare: true } : {} }))
   );
 }
 function redactProductBody(body, hits) {
@@ -1037,13 +1078,13 @@ var init_rules = __esm({
 });
 
 // src/guardrails/scan.ts
-function shannonEntropy(s) {
-  if (s.length === 0) return 0;
+function shannonEntropy(s2) {
+  if (s2.length === 0) return 0;
   const counts = /* @__PURE__ */ new Map();
-  for (const ch of s) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+  for (const ch of s2) counts.set(ch, (counts.get(ch) ?? 0) + 1);
   let h = 0;
   for (const n of counts.values()) {
-    const p = n / s.length;
+    const p = n / s2.length;
     h -= p * Math.log2(p);
   }
   return h;
@@ -1053,8 +1094,8 @@ function utf8Latin1(cp) {
 }
 function hex4(b, i) {
   if (i + 4 > b.length) return -1;
-  const s = b.toString("latin1", i, i + 4);
-  return /^[0-9A-Fa-f]{4}$/.test(s) ? Number.parseInt(s, 16) : -1;
+  const s2 = b.toString("latin1", i, i + 4);
+  return /^[0-9A-Fa-f]{4}$/.test(s2) ? Number.parseInt(s2, 16) : -1;
 }
 function decodeEscape(b, e, end) {
   const c = b[e + 1];
@@ -1189,8 +1230,8 @@ function matchView(view, rule, crossingOnly, out) {
     const offset = m[1] === void 0 ? 0 : m[0].indexOf(m[1]);
     if (rule.minEntropy !== void 0 && shannonEntropy(value) < rule.minEntropy) continue;
     if (rule.validate && !rule.validate(value)) continue;
-    const s = m.index + offset;
-    const segments = view.segments(s, s + value.length);
+    const s2 = m.index + offset;
+    const segments = view.segments(s2, s2 + value.length);
     const first2 = segments[0];
     const last = segments[segments.length - 1];
     if (first2 === void 0 || last === void 0 || crossingOnly && segments.length < 2) continue;
@@ -1240,13 +1281,13 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const hits = [];
   const seen = /* @__PURE__ */ new Set();
   for (const region of regions) {
-    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, ...region.messages ? { messages: region.messages } : {} })) {
-      const valueHmac = pseudonym(salt, s.value);
-      const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
+    for (const s2 of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, ...region.messages ? { messages: region.messages } : {} })) {
+      const valueHmac = pseudonym(salt, s2.value);
+      const id = `${s2.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
       seen.add(id);
-      const message = messageAt(opts.messages, s.start);
-      hits.push({ rule: s.rule.id, action: action(s.rule), valueHmac, where: region.where, ...message === void 0 ? {} : { message } });
+      const message = messageAt(opts.messages, s2.start);
+      hits.push({ rule: s2.rule.id, action: action(s2.rule), valueHmac, where: region.where, ...message === void 0 ? {} : { message } });
     }
   }
   const order = new Map(rules.map((r, i) => [r.id, i]));
@@ -1296,13 +1337,13 @@ var init_scan = __esm({
         return this.textCache;
       }
       /** Byte ranges of decoded `[s, e)`; a separator or a gap between strings starts a new range. */
-      segments(s, e) {
+      segments(s2, e) {
         const r = this.runs;
         let lo = 0;
         let hi = r.length / 4 - 1;
         while (lo < hi) {
           const mid = lo + hi + 1 >> 1;
-          if (r[mid * 4] <= s) lo = mid;
+          if (r[mid * 4] <= s2) lo = mid;
           else hi = mid - 1;
         }
         const out = [];
@@ -1315,7 +1356,7 @@ var init_scan = __esm({
           const tl = this.parts[k].length;
           if (kind === SEPARATOR) continue;
           const linear = kind === PLAIN || kind === BARE;
-          const from = linear ? b + Math.max(s, t) - t : b;
+          const from = linear ? b + Math.max(s2, t) - t : b;
           const to = linear ? b + Math.min(e, t + tl) - t : bEnd;
           const last = out[out.length - 1];
           if (last !== void 0 && last.end === from && last.bare === true === (kind === BARE)) last.end = to;
@@ -3923,10 +3964,10 @@ var require_binary = __commonJS({
         if (typeof node_buffer.Buffer === "function") {
           str = buf instanceof node_buffer.Buffer ? buf.toString("base64") : node_buffer.Buffer.from(buf.buffer).toString("base64");
         } else if (typeof btoa === "function") {
-          let s = "";
+          let s2 = "";
           for (let i = 0; i < buf.length; ++i)
-            s += String.fromCharCode(buf[i]);
-          str = btoa(s);
+            s2 += String.fromCharCode(buf[i]);
+          str = btoa(s2);
         } else {
           throw new Error("This environment does not support writing binary tags; either Buffer or btoa is required");
         }
@@ -4984,8 +5025,8 @@ var require_Document = __commonJS({
         if (this.errors.length > 0)
           throw new Error("Document with errors cannot be stringified");
         if ("indent" in options && (!Number.isInteger(options.indent) || Number(options.indent) <= 0)) {
-          const s = JSON.stringify(options.indent);
-          throw new Error(`"indent" option must be a positive integer, not ${s}`);
+          const s2 = JSON.stringify(options.indent);
+          throw new Error(`"indent" option must be a positive integer, not ${s2}`);
         }
         return stringifyDocument.stringifyDocument(this, options);
       }
@@ -7198,12 +7239,12 @@ var require_lexer = __commonJS({
         if (ch === "-" || ch === ".") {
           if (!this.atEnd && !this.hasChars(4))
             return this.setNext("line-start");
-          const s = this.peek(3);
-          if ((s === "---" || s === "...") && isEmpty(this.charAt(3))) {
+          const s2 = this.peek(3);
+          if ((s2 === "---" || s2 === "...") && isEmpty(this.charAt(3))) {
             yield* this.pushCount(3);
             this.indentValue = 0;
             this.indentNext = 0;
-            return s === "---" ? "doc" : "stream";
+            return s2 === "---" ? "doc" : "stream";
           }
         }
         this.indentValue = yield* this.pushSpaces(false);
@@ -7508,11 +7549,11 @@ var require_lexer = __commonJS({
         return 0;
       }
       *pushToIndex(i, allowEmpty) {
-        const s = this.buffer.slice(this.pos, i);
-        if (s) {
-          yield s;
-          this.pos += s.length;
-          return s.length;
+        const s2 = this.buffer.slice(this.pos, i);
+        if (s2) {
+          yield s2;
+          this.pos += s2.length;
+          return s2.length;
         } else if (allowEmpty)
           yield "";
         return 0;
@@ -9344,9 +9385,9 @@ function hexToUint8Array(hex3) {
 function uint8ArrayToHex(bytes) {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-function members(proto, table) {
-  for (const key in table) {
-    const desc = Object.getOwnPropertyDescriptor(table, key);
+function members(proto, table2) {
+  for (const key in table2) {
+    const desc = Object.getOwnPropertyDescriptor(table2, key);
     if (desc.get)
       Object.defineProperty(proto, key, { ...desc, enumerable: false });
     else
@@ -9361,10 +9402,10 @@ function hide(inst, key, value) {
   return own(inst, key, value, false);
 }
 // @__NO_SIDE_EFFECTS__
-function derived(computes, table) {
+function derived(computes, table2) {
   for (const key in computes) {
     const compute = computes[key];
-    Object.defineProperty(table, key, {
+    Object.defineProperty(table2, key, {
       configurable: true,
       enumerable: true,
       get() {
@@ -9375,7 +9416,7 @@ function derived(computes, table) {
       }
     });
   }
-  return table;
+  return table2;
 }
 function defineBound(proto, key, fn) {
   Object.defineProperty(proto, key, {
@@ -11436,7 +11477,7 @@ function partPattern(schema) {
   if (def.options) {
     const sources = def.options.map(partPattern);
     if (sources.every(Boolean))
-      return `^(${sources.map((s) => cleanRegex(s)).join("|")})$`;
+      return `^(${sources.map((s2) => cleanRegex(s2)).join("|")})$`;
   }
   return leafPattern(schema);
 }
@@ -13240,7 +13281,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve2) {
+function isRecursive(inst, stack, resolve3) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE2;
@@ -13250,7 +13291,7 @@ function isRecursive(inst, stack, resolve2) {
   let result = NONE2;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve2);
+      const answer = isRecursive(child, stack, resolve3);
       if (answer > result)
         result = answer;
     }
@@ -13261,7 +13302,7 @@ function isRecursive(inst, stack, resolve2) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve2) : NONE2;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve3) : NONE2;
       if (child > answer)
         answer = child;
     }
@@ -13325,7 +13366,7 @@ function isRecursive(inst, stack, resolve2) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve2 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve3 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -28363,12 +28404,12 @@ function convertSchema(schema, ctx) {
   let baseSchema = convertBaseSchema(schema, ctx);
   const hasExplicitType = schema.type || schema.enum !== void 0 || schema.const !== void 0;
   if (schema.anyOf && Array.isArray(schema.anyOf)) {
-    const options = schema.anyOf.map((s) => convertSchema(s, ctx));
+    const options = schema.anyOf.map((s2) => convertSchema(s2, ctx));
     const anyOfUnion = z.union(options);
     baseSchema = hasExplicitType ? z.intersection(baseSchema, anyOfUnion) : anyOfUnion;
   }
   if (schema.oneOf && Array.isArray(schema.oneOf)) {
-    const options = schema.oneOf.map((s) => convertSchema(s, ctx));
+    const options = schema.oneOf.map((s2) => convertSchema(s2, ctx));
     const oneOfUnion = z.xor(options);
     baseSchema = hasExplicitType ? z.intersection(baseSchema, oneOfUnion) : oneOfUnion;
   }
@@ -28580,24 +28621,24 @@ function visit2(schema, fnOrHandlers) {
     return h ? h(node2, rewritten) : node2;
   };
   const cache = /* @__PURE__ */ new Map();
-  function run(s) {
-    const cached2 = cache.get(s);
+  function run(s2) {
+    const cached2 = cache.get(s2);
     if (cached2 === RESOLVING) {
       return new $ZodLazy({
         type: "lazy",
-        getter: () => cache.get(s)
+        getter: () => cache.get(s2)
       });
     }
     if (cached2 !== void 0)
       return cached2;
-    cache.set(s, RESOLVING);
-    const inner = mapInner(s);
-    const mapped = fn(inner, inner !== s);
-    cache.set(s, mapped);
+    cache.set(s2, RESOLVING);
+    const inner = mapInner(s2);
+    const mapped = fn(inner, inner !== s2);
+    cache.set(s2, mapped);
     return mapped;
   }
-  function mapInner(s) {
-    const def = s._zod.def;
+  function mapInner(s2) {
+    const def = s2._zod.def;
     const kind = def.type;
     switch (kind) {
       case "object": {
@@ -28617,11 +28658,11 @@ function visit2(schema, fnOrHandlers) {
           if (newCatchall !== def.catchall)
             changed = true;
         }
-        return changed ? clone(s, { ...def, shape: newShape, catchall: newCatchall }) : s;
+        return changed ? clone(s2, { ...def, shape: newShape, catchall: newCatchall }) : s2;
       }
       case "array": {
         const mapped = run(def.element);
-        return mapped === def.element ? s : clone(s, { ...def, element: mapped });
+        return mapped === def.element ? s2 : clone(s2, { ...def, element: mapped });
       }
       case "tuple": {
         const oldItems = def.items;
@@ -28639,17 +28680,17 @@ function visit2(schema, fnOrHandlers) {
           if (newRest !== def.rest)
             changed = true;
         }
-        return changed ? clone(s, { ...def, items: newItems, rest: newRest }) : s;
+        return changed ? clone(s2, { ...def, items: newItems, rest: newRest }) : s2;
       }
       case "record":
       case "map": {
         const newKey = run(def.keyType);
         const newVal = run(def.valueType);
-        return newKey === def.keyType && newVal === def.valueType ? s : clone(s, { ...def, keyType: newKey, valueType: newVal });
+        return newKey === def.keyType && newVal === def.valueType ? s2 : clone(s2, { ...def, keyType: newKey, valueType: newVal });
       }
       case "set": {
         const newVal = run(def.valueType);
-        return newVal === def.valueType ? s : clone(s, { ...def, valueType: newVal });
+        return newVal === def.valueType ? s2 : clone(s2, { ...def, valueType: newVal });
       }
       case "union": {
         const oldOptions = def.options;
@@ -28661,12 +28702,12 @@ function visit2(schema, fnOrHandlers) {
             changed = true;
           newOptions.push(mapped);
         }
-        return changed ? clone(s, { ...def, options: newOptions }) : s;
+        return changed ? clone(s2, { ...def, options: newOptions }) : s2;
       }
       case "intersection": {
         const newLeft = run(def.left);
         const newRight = run(def.right);
-        return newLeft === def.left && newRight === def.right ? s : clone(s, { ...def, left: newLeft, right: newRight });
+        return newLeft === def.left && newRight === def.right ? s2 : clone(s2, { ...def, left: newLeft, right: newRight });
       }
       case "optional":
       case "nullable":
@@ -28678,22 +28719,22 @@ function visit2(schema, fnOrHandlers) {
       case "promise":
       case "success": {
         const newInner = run(def.innerType);
-        return newInner === def.innerType ? s : clone(s, { ...def, innerType: newInner });
+        return newInner === def.innerType ? s2 : clone(s2, { ...def, innerType: newInner });
       }
       case "pipe": {
         const newIn = run(def.in);
         const newOut = run(def.out);
-        return newIn === def.in && newOut === def.out ? s : clone(s, { ...def, in: newIn, out: newOut });
+        return newIn === def.in && newOut === def.out ? s2 : clone(s2, { ...def, in: newIn, out: newOut });
       }
       case "function": {
         const newInput = run(def.input);
         const newOutput = run(def.output);
-        return newInput === def.input && newOutput === def.output ? s : clone(s, { ...def, input: newInput, output: newOutput });
+        return newInput === def.input && newOutput === def.output ? s2 : clone(s2, { ...def, input: newInput, output: newOutput });
       }
       case "lazy": {
         const original = def.getter;
         const { _cachedInner, ...rest } = def;
-        return clone(s, { ...rest, getter: () => run(original()) });
+        return clone(s2, { ...rest, getter: () => run(original()) });
       }
       // A leaf by choice: `parts` are regex fragments, not data positions.
       case "template_literal":
@@ -28717,10 +28758,10 @@ function visit2(schema, fnOrHandlers) {
       case "file":
       case "transform":
       case "custom":
-        return s;
+        return s2;
       default: {
         kind;
-        return s;
+        return s2;
       }
     }
   }
@@ -28738,11 +28779,11 @@ var init_visit = __esm({
 // node_modules/zod/v4/classic/deep-partial.js
 function deepPartial(schema) {
   return visit2(schema, {
-    object: (s) => s.partial(),
+    object: (s2) => s2.partial(),
     // Every partialed option now admits `undefined`, which the constructor rejects as a duplicate.
-    union: (s) => {
-      const def = s._zod.def;
-      return def.discriminator === void 0 ? s : union(def.options);
+    union: (s2) => {
+      const def = s2._zod.def;
+      return def.discriminator === void 0 ? s2 : union(def.options);
     }
   });
 }
@@ -28768,18 +28809,18 @@ function inSide(def) {
 }
 function input(schema) {
   return visit2(schema, {
-    pipe: (s) => inSide(s._zod.def),
+    pipe: (s2) => inSide(s2._zod.def),
     // A default value belongs to the output side, so a rewritten inner type leaves it stranded. `.default()` widens the declared input type with `undefined`, and `optional` is what carries that across.
-    default: (s, rewritten) => rewritten ? optional(s._zod.def.innerType) : s,
+    default: (s2, rewritten) => rewritten ? optional(s2._zod.def.innerType) : s2,
     // A catch value is output-side too, but `.catch()` leaves the declared input type alone, so the inner schema stands on its own.
-    catch: (s, rewritten) => rewritten ? s._zod.def.innerType : s
+    catch: (s2, rewritten) => rewritten ? s2._zod.def.innerType : s2
   });
 }
 function output(schema) {
   return visit2(schema, {
-    pipe: (s) => outSide(s._zod.def),
+    pipe: (s2) => outSide(s2._zod.def),
     // A prefault value is fed through the schema, which makes it input-side, so a rewritten inner type leaves it stranded.
-    prefault: (s, rewritten) => rewritten ? s._zod.def.innerType : s
+    prefault: (s2, rewritten) => rewritten ? s2._zod.def.innerType : s2
   });
 }
 var init_in_out = __esm({
@@ -29138,8 +29179,8 @@ function lookupModel(t, model) {
   for (const id of Object.keys(t.models)) {
     if (model.startsWith(`${id}-`) && (best === null || id.length > best.length)) best = id;
   }
-  const price = best === null ? void 0 : t.models[best];
-  return best !== null && price ? { id: best, price } : null;
+  const price2 = best === null ? void 0 : t.models[best];
+  return best !== null && price2 ? { id: best, price: price2 } : null;
 }
 var rate, tokens, provenance, tierSchema, fastSchema, modelSchema, tableSchema;
 var init_prices = __esm({
@@ -29252,18 +29293,18 @@ function worstCaseMicroUsd(f, m, t, o) {
     let iterations = 1;
     for (const tool of f.serverTools) {
       const key = serverToolKey(tool.type);
-      const price = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
-      if (!price) {
+      const price2 = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
+      if (!price2) {
         unpriced = true;
         continue;
       }
-      iterations = Math.max(iterations, price.maxIterations);
+      iterations = Math.max(iterations, price2.maxIterations);
       let uses = tool.maxUses;
       if (uses === null) {
         withoutMaxUses = true;
         uses = o.assumedMaxUses;
       }
-      feeMicro += Math.max(0, Math.ceil(uses)) * price.perUseUsd * 1e6;
+      feeMicro += Math.max(0, Math.ceil(uses)) * price2.perUseUsd * 1e6;
     }
     inputTokens = iterations * m.maxContextTokens;
     outputTokens = iterations * m.maxOutputTokens;
@@ -29333,7 +29374,7 @@ var part, prefix, SWEEP_LOCK_TENANT, TAG;
 var init_keys = __esm({
   "src/limits/keys.ts"() {
     "use strict";
-    part = (s) => encodeURIComponent(s);
+    part = (s2) => encodeURIComponent(s2);
     prefix = (tenant) => `ty:{${part(tenant)}}`;
     SWEEP_LOCK_TENANT = "_sweeper";
     TAG = /^ty:\{([^{}]*)\}:/;
@@ -29393,9 +29434,9 @@ var init_schema = __esm({
     SURFACES = ["anthropic-messages", "anthropic-count-tokens", "openai-responses", "openai-chat"];
     name = external_exports.string().min(1);
     fileRef = external_exports.string().regex(/^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/, "must be a file name in the policy directory");
-    httpUrl2 = external_exports.string().refine((s) => {
+    httpUrl2 = external_exports.string().refine((s2) => {
       try {
-        return ["http:", "https:"].includes(new URL(s).protocol);
+        return ["http:", "https:"].includes(new URL(s2).protocol);
       } catch {
         return false;
       }
@@ -29602,7 +29643,7 @@ function budgetEnforced(b, billing) {
 }
 function orderChain(route2, seed) {
   const names = route2.chain.map((e) => e.provider);
-  const total = route2.chain.reduce((s, e) => s + (e.weight ?? 0), 0);
+  const total = route2.chain.reduce((s2, e) => s2 + (e.weight ?? 0), 0);
   if (total <= 0) return names;
   const h = createHash3("sha256").update(route2.name).update("\0").update(seed).digest().readUInt32BE(0);
   const x = h / 2 ** 32 * total;
@@ -29672,11 +29713,11 @@ function decide(policy2, f) {
   });
   let est = 0;
   if (hasModels(t)) {
-    const price = reservationPrice(t, known).price;
-    const uf = upstreamFeatures(f, t, upstreamModel, price);
+    const price2 = reservationPrice(t, known).price;
+    const uf = upstreamFeatures(f, t, upstreamModel, price2);
     const r = policy2.reservation;
-    const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route2.reserveOutputTokens });
-    est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price, t, null, route2.reserveOutputTokens) : worst.micro;
+    const worst = worstCaseMicroUsd(uf, price2, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route2.reserveOutputTokens });
+    est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price2, t, null, route2.reserveOutputTokens) : worst.micro;
     const enforced = levels.some((l) => l.enforce);
     if (worst.block === "unpriced-server-tool") {
       if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
@@ -29764,8 +29805,8 @@ function failedBlock(plan, failed) {
       return block(429, "rate_limit_error", "budget", `budget "${failed.name}" is exhausted${spent}${resets}`);
     }
     case "rate": {
-      const s = rateRetryAfterS(failed.retryAfterMs);
-      return block(429, "rate_limit_error", "rate", `rate limit "${failed.name}" reached; retry in ${s} s`, s);
+      const s2 = rateRetryAfterS(failed.retryAfterMs);
+      return block(429, "rate_limit_error", "rate", `rate limit "${failed.name}" reached; retry in ${s2} s`, s2);
     }
     case "streams":
       return block(429, "rate_limit_error", "streams", `concurrent stream limit "${failed.name}" reached`, STREAMS_RETRY_S);
@@ -29813,15 +29854,15 @@ var init_resolve = __esm({
 });
 
 // src/pricing/cost.ts
-function costMicroUsd(t, modelId, u, o = {}) {
-  const found = lookupModel(t, modelId);
-  if (!found) throw new Error(`unpriced model: ${modelId}`);
+function costMicroUsd(t, modelId2, u, o = {}) {
+  const found = lookupModel(t, modelId2);
+  if (!found) throw new Error(`unpriced model: ${modelId2}`);
   const m = found.price;
   const promptTokens = u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
   let p = m;
   let above = -1;
   if (o.fast) {
-    if (!m.fast) throw new Error(`unpriced fast mode: ${modelId}`);
+    if (!m.fast) throw new Error(`unpriced fast mode: ${modelId2}`);
     p = m.fast;
   }
   for (const tier of o.fast ? [] : m.tiers ?? []) {
@@ -29843,7 +29884,7 @@ function costMicroUsd(t, modelId, u, o = {}) {
     toolCost += uses * tool.perUseUsd * 1e6;
   }
   const cost = Math.round(tokenCost + toolCost);
-  if (!Number.isSafeInteger(cost) || cost < 0) throw new Error(`invalid cost for ${modelId}: ${cost}`);
+  if (!Number.isSafeInteger(cost) || cost < 0) throw new Error(`invalid cost for ${modelId2}: ${cost}`);
   return cost;
 }
 var init_cost = __esm({
@@ -30400,42 +30441,42 @@ var init_breaker = __esm({
       clock;
       states = /* @__PURE__ */ new Map();
       state(provider2) {
-        let s = this.states.get(provider2);
-        if (!s) this.states.set(provider2, s = { events: [], openUntil: 0, halfOpen: false });
-        return s;
+        let s2 = this.states.get(provider2);
+        if (!s2) this.states.set(provider2, s2 = { events: [], openUntil: 0, halfOpen: false });
+        return s2;
       }
       allow(provider2) {
-        const s = this.states.get(provider2);
-        if (!s || s.openUntil === 0) return true;
-        if (this.clock() < s.openUntil) return false;
-        s.openUntil = 0;
-        s.halfOpen = true;
-        s.events = [];
+        const s2 = this.states.get(provider2);
+        if (!s2 || s2.openUntil === 0) return true;
+        if (this.clock() < s2.openUntil) return false;
+        s2.openUntil = 0;
+        s2.halfOpen = true;
+        s2.events = [];
         return true;
       }
       record(provider2, ok) {
-        const s = this.state(provider2);
+        const s2 = this.state(provider2);
         const now = this.clock();
-        if (s.openUntil > now) return;
-        if (s.halfOpen) {
-          s.halfOpen = false;
+        if (s2.openUntil > now) return;
+        if (s2.halfOpen) {
+          s2.halfOpen = false;
           if (!ok) this.open(provider2, now + this.o.openSeconds * 1e3);
           return;
         }
         const cutoff = now - this.o.windowSeconds * 1e3;
-        s.events = s.events.filter((e) => e.at > cutoff);
-        s.events.push({ at: now, ok });
-        const failures = s.events.filter((e) => !e.ok).length;
-        if (s.events.length >= this.o.minRequests && failures / s.events.length >= this.o.failureRatio) {
+        s2.events = s2.events.filter((e) => e.at > cutoff);
+        s2.events.push({ at: now, ok });
+        const failures = s2.events.filter((e) => !e.ok).length;
+        if (s2.events.length >= this.o.minRequests && failures / s2.events.length >= this.o.failureRatio) {
           this.open(provider2, now + this.o.openSeconds * 1e3);
         }
       }
       /** Opens the breaker until `untilMs` (a spend-cap 429 does this for `openSeconds`). */
       open(provider2, untilMs) {
-        const s = this.state(provider2);
-        s.openUntil = untilMs;
-        s.halfOpen = false;
-        s.events = [];
+        const s2 = this.state(provider2);
+        s2.openUntil = untilMs;
+        s2.halfOpen = false;
+        s2.events = [];
       }
     };
   }
@@ -33173,9 +33214,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve2, reject) => {
+          return new Promise((resolve3, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve2(data);
+              return err ? reject(err) : resolve3(data);
             });
           });
         }
@@ -33213,9 +33254,9 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve2, reject) => {
+          return new Promise((resolve3, reject) => {
             this.destroy(err, (err2, data) => {
-              return err2 ? reject(err2) : resolve2(data);
+              return err2 ? reject(err2) : resolve3(data);
             });
           });
         }
@@ -36721,8 +36762,8 @@ var require_promise = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise2 = new Promise((resolve2, reject) => {
-        res = resolve2;
+      const promise2 = new Promise((resolve3, reject) => {
+        res = resolve3;
         rej = reject;
       });
       return { promise: promise2, resolve: res, reject: rej };
@@ -38131,12 +38172,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve2, reject) => {
+      const waitForDrain = () => new Promise((resolve3, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve2;
+          callback = resolve3;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -39020,12 +39061,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve2, reject) => {
+      const waitForDrain = () => new Promise((resolve3, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve2;
+          callback = resolve3;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -39342,16 +39383,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       [kClose]() {
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve2;
+            this[kClosedResolve] = resolve3;
           } else {
-            resolve2(null);
+            resolve3(null);
           }
         });
       }
       [kDestroy](err) {
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request2 = requests[i];
@@ -39364,7 +39405,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve2(null);
+            resolve3(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -39771,8 +39812,8 @@ var require_pool_base = __commonJS({
           }
           return Promise.all(closeAll);
         } else {
-          return new Promise((resolve2) => {
-            this[kClosedResolve] = resolve2;
+          return new Promise((resolve3) => {
+            this[kClosedResolve] = resolve3;
           });
         }
       }
@@ -40894,7 +40935,7 @@ var require_socks5_proxy_agent = __commonJS({
         const proxyHost = this[kProxyUrl].hostname;
         const proxyPort = parseInt(this[kProxyUrl].port) || 1080;
         debug("creating SOCKS5 connection to", proxyHost, proxyPort);
-        const socket = await new Promise((resolve2, reject) => {
+        const socket = await new Promise((resolve3, reject) => {
           this[kConnector]({
             hostname: proxyHost,
             host: proxyHost,
@@ -40904,7 +40945,7 @@ var require_socks5_proxy_agent = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve2(socket2);
+              resolve3(socket2);
             }
           });
         });
@@ -40914,14 +40955,14 @@ var require_socks5_proxy_agent = __commonJS({
           socket.destroy();
         });
         await socks5Client.handshake();
-        await new Promise((resolve2, reject) => {
+        await new Promise((resolve3, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 authentication timeout"));
           }, 5e3);
           const onAuthenticated = () => {
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve2();
+            resolve3();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -40930,14 +40971,14 @@ var require_socks5_proxy_agent = __commonJS({
           };
           if (socks5Client.state === STATES.AUTHENTICATED) {
             clearTimeout(timeout);
-            resolve2();
+            resolve3();
           } else {
             socks5Client.once("authenticated", onAuthenticated);
             socks5Client.once("error", onError);
           }
         });
         await socks5Client.connect(targetHost, targetPort);
-        await new Promise((resolve2, reject) => {
+        await new Promise((resolve3, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 connection timeout"));
           }, 5e3);
@@ -40945,7 +40986,7 @@ var require_socks5_proxy_agent = __commonJS({
             debug("SOCKS5 tunnel established to", targetHost, targetPort, "via", info);
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve2();
+            resolve3();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -40988,8 +41029,8 @@ var require_socks5_proxy_agent = __commonJS({
                       socket,
                       servername: this[kRequestTls]?.servername || targetHost
                     });
-                    await new Promise((resolve2, reject) => {
-                      finalSocket.once("secureConnect", resolve2);
+                    await new Promise((resolve3, reject) => {
+                      finalSocket.once("secureConnect", resolve3);
                       finalSocket.once("error", reject);
                     });
                   }
@@ -42122,7 +42163,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return Promise.resolve(null);
         }
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           if (this[kContentLength] && this[kContentLength] > limit || this[kBytesRead] > limit) {
             this.destroy(new AbortError());
           }
@@ -42136,11 +42177,11 @@ var require_readable = __commonJS({
               if (signal.aborted) {
                 reject(signal.reason ?? new AbortError());
               } else {
-                resolve2(null);
+                resolve3(null);
               }
             });
           } else {
-            this.on("close", resolve2);
+            this.on("close", resolve3);
           }
           this.on("error", noop).on("data", () => {
             if (this[kBytesRead] > limit) {
@@ -42168,7 +42209,7 @@ var require_readable = __commonJS({
     }
     function consume(stream, type) {
       assert2(!stream[kConsume]);
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve3, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -42183,7 +42224,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve: resolve2,
+              resolve: resolve3,
               reject,
               length: 0,
               body: []
@@ -42257,18 +42298,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2, encoding) {
-      const { type, body, resolve: resolve2, stream, length } = consume2;
+      const { type, body, resolve: resolve3, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve2(chunksDecode(body, length, encoding));
+          resolve3(chunksDecode(body, length, encoding));
         } else if (type === "json") {
-          resolve2(JSON.parse(chunksDecode(body, length, encoding)));
+          resolve3(JSON.parse(chunksDecode(body, length, encoding)));
         } else if (type === "arrayBuffer") {
-          resolve2(chunksConcat(body, length).buffer);
+          resolve3(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve2(new Blob(body, { type: stream[kContentType] }));
+          resolve3(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve2(chunksConcat(body, length));
+          resolve3(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -42458,9 +42499,9 @@ var require_api_request = __commonJS({
     };
     function request2(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           request2.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -42672,9 +42713,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -42962,9 +43003,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -43057,9 +43098,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve2(data);
+            return err ? reject(err) : resolve3(data);
           });
         });
       }
@@ -44333,7 +44374,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir4 } = __require("node:fs/promises");
-    var { dirname: dirname2, resolve: resolve2 } = __require("node:path");
+    var { dirname: dirname2, resolve: resolve3 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -44534,7 +44575,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile3(resolve2(path2), "utf8");
+          const data = await readFile3(resolve3(path2), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -44563,7 +44604,7 @@ var require_snapshot_recorder = __commonJS({
         if (!path2) {
           throw new InvalidArgumentError2("Snapshot path is required");
         }
-        const resolvedPath = resolve2(path2);
+        const resolvedPath = resolve3(path2);
         await mkdir4(dirname2(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
@@ -52213,7 +52254,7 @@ var require_fetch = __commonJS({
         const agent2 = fetchParams.controller.dispatcher;
         const path2 = url2.pathname + url2.search;
         const hasTrailingQuestionMark = url2.search.length === 0 && url2.href[url2.href.length - url2.hash.length - 1] === "?";
-        return new Promise((resolve2, reject) => agent2.dispatch(
+        return new Promise((resolve3, reject) => agent2.dispatch(
           {
             path: hasTrailingQuestionMark ? `${path2}?` : path2,
             origin: url2.origin,
@@ -52301,7 +52342,7 @@ var require_fetch = __commonJS({
               }
               this.body = new Readable2({ read: resume });
               const onError = this.onError.bind(this);
-              resolve2({
+              resolve3({
                 status,
                 statusText,
                 headersList,
@@ -52354,7 +52395,7 @@ var require_fetch = __commonJS({
                   headersList.append(headerName, String(value), true);
                 }
               }
-              resolve2({
+              resolve3({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -52378,7 +52419,7 @@ var require_fetch = __commonJS({
                   headersList.append(nameStr, value.toString("latin1"), true);
                 }
               }
-              resolve2({
+              resolve3({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -56946,7 +56987,7 @@ var init_auth = __esm({
 
 // src/edge/body.ts
 function readBody(req, capBytes) {
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     const declared = Number(req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > capBytes) {
       req.resume();
@@ -56963,7 +57004,7 @@ function readBody(req, capBytes) {
       if (err) {
         req.resume();
         reject(err);
-      } else resolve2(Buffer.concat(chunks, size));
+      } else resolve3(Buffer.concat(chunks, size));
     };
     const onData = (c) => {
       size += c.length;
@@ -57159,7 +57200,8 @@ function buildTraceRecord(o, salt) {
       thinking: o.features.thinking,
       bodyBytes: o.features.bodyBytes,
       prefixHash: o.features.prefixHash,
-      contextCompacted: false
+      contextCompacted: false,
+      ...o.features.fastMode ? { fastMode: true } : {}
     },
     // The message index stays out: it is for the error message only.
     guardrail: { hits: (o.guardrailHits ?? []).map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) },
@@ -57173,7 +57215,9 @@ function buildTraceRecord(o, salt) {
       boundAssumed: o.boundAssumed ?? false,
       taintUnchecked: o.taintUnchecked ?? false,
       audit: o.audit ? o.audit.map((a2) => ({ ...a2 })) : [],
-      ...o.storeDown ? { storeDown: true } : {}
+      ...o.storeDown ? { storeDown: true } : {},
+      // Every exit after decide carries the bound it used; without one there was no plan to replay.
+      ...o.inputBound === void 0 ? { preDecision: true } : {}
     },
     ...o.candidate && !("error" in o.candidate) ? {
       candidateDecision: {
@@ -57204,6 +57248,9 @@ function buildTraceRecord(o, salt) {
       costMicroUsd: o.costMicroUsd,
       costBasis: o.costBasis,
       priceTable: o.priceTable,
+      ...u?.usage && (u.fast === true || o.features.fastMode) ? { fast: true } : {},
+      ...o.costModifiers && o.costModifiers.length > 0 ? { modifiers: [...o.costModifiers] } : {},
+      ...u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {},
       aborted: o.aborted,
       settledBy: o.settledBy ?? "request",
       overrun: o.overrun ?? false,
@@ -57327,6 +57374,7 @@ function actualCost(policy2, model, r, x) {
 }
 async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   const o = { ...outcome };
+  o.costModifiers = requestModifiers(policy2, o.features);
   const r = o.usage;
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost = null;
@@ -57761,19 +57809,19 @@ function createGateway(deps) {
   const server = createServer2(createHandler(deps));
   return {
     listen(port, host = "127.0.0.1") {
-      return new Promise((resolve2, reject) => {
+      return new Promise((resolve3, reject) => {
         server.once("error", reject);
         server.listen(port, host, () => {
           server.off("error", reject);
           const a = server.address();
           const h = a.family === "IPv6" ? `[${a.address}]` : a.address;
-          resolve2(`http://${h}:${a.port}`);
+          resolve3(`http://${h}:${a.port}`);
         });
       });
     },
     close() {
-      return new Promise((resolve2) => {
-        server.close(() => resolve2());
+      return new Promise((resolve3) => {
+        server.close(() => resolve3());
         server.closeAllConnections();
       });
     }
@@ -57904,9 +57952,9 @@ function validatePolicy(src, o) {
     );
     if (parent) warn("W_CHILD_BUDGET", `budgets[${i}]`, `${child.scope} budget "${child.name}" (${child.usd} USD) is larger than ${parent.scope} budget "${parent.name}" (${parent.usd} USD)`);
   });
-  for (const s of SURFACE_LIST) {
-    const serves = (r) => r.match.surface === void 0 || r.match.surface === s || s === "anthropic-count-tokens" && r.match.surface === "anthropic-messages";
-    if (!policy2.routes.some(serves)) warn("W_SURFACE_NO_ROUTE", "routes", `no route matches surface ${s}; requests on it get 403 "no route"`);
+  for (const s2 of SURFACE_LIST) {
+    const serves = (r) => r.match.surface === void 0 || r.match.surface === s2 || s2 === "anthropic-count-tokens" && r.match.surface === "anthropic-messages";
+    if (!policy2.routes.some(serves)) warn("W_SURFACE_NO_ROUTE", "routes", `no route matches surface ${s2}; requests on it get 403 "no route"`);
   }
   policy2.routes.forEach((later, j) => {
     const i = policy2.routes.findIndex((earlier, k) => k < j && covers(earlier, later));
@@ -58247,7 +58295,7 @@ var init_load_dir = __esm({
     DEFAULT_PRICES = "prices.yaml";
     DEFAULT_KEYS = "keys.yaml";
     bare = (ref) => ref.replace(/^\.\//, "");
-    pathOf = (p) => p.reduce((s, k) => typeof k === "number" ? `${s}[${k}]` : s ? `${s}.${String(k)}` : String(k), "");
+    pathOf = (p) => p.reduce((s2, k) => typeof k === "number" ? `${s2}[${k}]` : s2 ? `${s2}.${String(k)}` : String(k), "");
   }
 });
 
@@ -58363,7 +58411,7 @@ function fetchBundle(rawUrl, o) {
   const url2 = checkPolicyUrl(rawUrl);
   const maxBytes = o.maxBytes ?? MAX_BUNDLE_BYTES;
   const send = url2.protocol === "https:" ? httpsRequest : httpRequest;
-  return new Promise((resolve2, reject) => {
+  return new Promise((resolve3, reject) => {
     let settled = false;
     const done = (fn) => {
       if (settled) return;
@@ -58375,7 +58423,7 @@ function fetchBundle(rawUrl, o) {
       const status = res.statusCode ?? 0;
       if (status === 304) {
         res.resume();
-        return done(() => resolve2({ status: "not-modified" }));
+        return done(() => resolve3({ status: "not-modified" }));
       }
       if (status >= 300 && status < 400) {
         res.resume();
@@ -58408,7 +58456,7 @@ function fetchBundle(rawUrl, o) {
       });
       res.on("end", () => {
         const etag = res.headers.etag;
-        done(() => resolve2({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
+        done(() => resolve3({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
       });
       res.on("error", (e) => done(() => reject(e)));
       res.on("aborted", () => done(() => reject(new Error("policy response was cut off"))));
@@ -58715,7 +58763,7 @@ function planTenant(plan) {
   const keys2 = [
     ...plan.reservations.map((r) => r.key),
     ...plan.rateChecks.map((r) => r.key),
-    ...plan.streamSlots.map((s) => s.key),
+    ...plan.streamSlots.map((s2) => s2.key),
     ...plan.taint ? [plan.taint.key] : []
   ];
   let tenant = null;
@@ -58803,7 +58851,7 @@ function createMemoryStore(o) {
       if (!g.allowed) return refused({ kind: "rate", name: c.limit, retryAfterMs: g.retryAfterMs });
       nextTats.push(g.tatMs);
     }
-    for (const s of plan.streamSlots) if ((streams.get(s.key) ?? 0) >= s.max) return refused({ kind: "streams", name: s.limit });
+    for (const s2 of plan.streamSlots) if ((streams.get(s2.key) ?? 0) >= s2.max) return refused({ kind: "streams", name: s2.limit });
     const seen = plan.reservations.map((l) => {
       const b = live(budgets, l.key, now);
       return { s: b?.s ?? 0, r: b?.r ?? 0 };
@@ -58811,19 +58859,19 @@ function createMemoryStore(o) {
     const audit = [];
     let failing = -1;
     plan.reservations.forEach((l, i) => {
-      const { s, r } = seen[i];
-      const over = s + r + l.estMicroUsd > l.limitMicroUsd;
+      const { s: s2, r } = seen[i];
+      const over = s2 + r + l.estMicroUsd > l.limitMicroUsd;
       if (!l.enforce) audit.push({ name: l.budget, wouldFail: over });
       else if (over && failing < 0) failing = i;
     });
-    const totals = () => plan.reservations.flatMap((l, i) => {
+    const totals3 = () => plan.reservations.flatMap((l, i) => {
       if (!l.enforce) return [];
-      const { s, r } = seen[i];
-      return [{ key: l.key, spentMicroUsd: s, reservedMicroUsd: r, limitMicroUsd: l.limitMicroUsd }];
+      const { s: s2, r } = seen[i];
+      return [{ key: l.key, spentMicroUsd: s2, reservedMicroUsd: r, limitMicroUsd: l.limitMicroUsd }];
     });
     const fail = plan.reservations[failing];
     if (fail !== void 0) {
-      return { admitted: false, failed: { kind: "budget", name: fail.budget, spentMicroUsd: seen[failing]?.s ?? 0 }, audit, totals: totals() };
+      return { admitted: false, failed: { kind: "budget", name: fail.budget, spentMicroUsd: seen[failing]?.s ?? 0 }, audit, totals: totals3() };
     }
     plan.reservations.forEach((l, i) => {
       let b = live(budgets, l.key, now);
@@ -58839,14 +58887,14 @@ function createMemoryStore(o) {
       const tat = nextTats[i];
       tats.set(c.key, { tat, exp: tat });
     });
-    for (const s of plan.streamSlots) streams.set(s.key, (streams.get(s.key) ?? 0) + 1);
+    for (const s2 of plan.streamSlots) streams.set(s2.key, (streams.get(s2.key) ?? 0) + 1);
     reservations.set(plan.id, {
       tenant,
       levels: plan.reservations.map((l) => ({ key: l.key, est: l.estMicroUsd })),
-      streams: plan.streamSlots.map((s) => s.key),
+      streams: plan.streamSlots.map((s2) => s2.key),
       deadline: now + deadlineMs
     });
-    return { admitted: true, failed: null, audit, totals: totals() };
+    return { admitted: true, failed: null, audit, totals: totals3() };
   }
   return {
     async admit(plan, nowMs) {
@@ -58947,7 +58995,7 @@ async function warmupEntries(records, policy2, nowMs) {
       else sums.set(key, { spent: Math.round(cost), expiresAt: budgetExpiresAt(resetsAt, nowMs) });
     }
   }
-  return [...sums].map(([key, s]) => ({ key, spentMicroUsd: s.spent, ttlMs: s.expiresAt - nowMs }));
+  return [...sums].map(([key, s2]) => ({ key, spentMicroUsd: s2.spent, ttlMs: s2.expiresAt - nowMs }));
 }
 var init_warmup = __esm({
   "src/limits/warmup.ts"() {
@@ -78567,11 +78615,11 @@ var require_commands_queue = __commonJS({
         if (this.#waitingForReply.length === 0) {
           return;
         }
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           const onEmpty = () => {
             if (timeoutId)
               clearTimeout(timeoutId);
-            resolve2();
+            resolve3();
           };
           let timeoutId;
           const timeoutMs = options?.timeoutMs;
@@ -78584,7 +78632,7 @@ var require_commands_queue = __commonJS({
                 (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Flushing ${pendingCount} commands that timed out waiting for reply`);
                 this.#flushWaitingForReply(new errors_1.TimeoutError());
               }
-              resolve2();
+              resolve3();
             }, timeoutMs);
           }
           this.#waitingForReply.events.once("empty", onEmpty);
@@ -78614,13 +78662,13 @@ var require_commands_queue = __commonJS({
         } else if (options?.abortSignal?.aborted) {
           return Promise.reject(new errors_1.AbortError());
         }
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           const value = {
             args,
             chainId: options?.chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve2,
+            resolve: resolve3,
             reject,
             channelsCounter: void 0,
             typeMapping: options?.typeMapping
@@ -78659,7 +78707,7 @@ var require_commands_queue = __commonJS({
         });
       }
       #addPubSubCommand(command, asap = false, chainId) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           this.#toWrite.add({
             args: command.args,
             chainId,
@@ -78667,7 +78715,7 @@ var require_commands_queue = __commonJS({
             timeout: void 0,
             resolve() {
               command.resolve();
-              resolve2();
+              resolve3();
             },
             reject(err) {
               command.reject?.();
@@ -78687,8 +78735,8 @@ var require_commands_queue = __commonJS({
               return;
             const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
             if (PONG.equals(firstElement)) {
-              const { resolve: resolve2, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
-              resolve2(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
+              const { resolve: resolve3, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
+              resolve3(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
               return;
             }
           }
@@ -78712,12 +78760,12 @@ var require_commands_queue = __commonJS({
         if (!command)
           return;
         if (command && this.#respVersion === 2) {
-          const { resolve: resolve2 } = command;
+          const { resolve: resolve3 } = command;
           command.resolve = () => {
             if (!this.#pubSub.isActive) {
               this.#resetDecoderCallbacks();
             }
-            resolve2();
+            resolve3();
           };
         }
         return this.#addPubSubCommand(command);
@@ -78753,7 +78801,7 @@ var require_commands_queue = __commonJS({
         return this.#pubSub.listeners[type];
       }
       monitor(callback, options) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           const typeMapping = options?.typeMapping ?? {};
           this.#toWrite.add({
             args: ["MONITOR"],
@@ -78768,7 +78816,7 @@ var require_commands_queue = __commonJS({
                 this.decoder.onReply = callback;
               }
               this.decoder.getTypeMapping = () => typeMapping;
-              resolve2();
+              resolve3();
             },
             reject,
             channelsCounter: void 0,
@@ -78782,7 +78830,7 @@ var require_commands_queue = __commonJS({
       }
       #resetFallbackOnReply;
       async reset(chainId, typeMapping) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           this.#resetFallbackOnReply = this.decoder.onReply;
           this.decoder.onReply = ((reply) => {
             if (typeof reply === "string" && reply === "RESET" || reply instanceof Buffer && RESET.equals(reply)) {
@@ -78799,7 +78847,7 @@ var require_commands_queue = __commonJS({
             chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve2,
+            resolve: resolve3,
             reject,
             channelsCounter: void 0,
             typeMapping
@@ -86643,7 +86691,7 @@ var require_pool2 = __commonJS({
         this._self.#returnClient(node2);
       }
       execute(fn) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           if (this._self.isClosing || !this._self.#isOpen) {
             return reject(new errors_1.ClientClosedError());
           }
@@ -86660,7 +86708,7 @@ var require_pool2 = __commonJS({
             const task = this._self.#tasksQueue.push({
               timeout,
               // @ts-expect-error -- resolve generic variance
-              resolve: resolve2,
+              resolve: resolve3,
               reject,
               fn,
               waitStartTimestamp
@@ -86676,10 +86724,10 @@ var require_pool2 = __commonJS({
           }
           const node2 = this._self.#clientsInUse.push(client);
           (0, tracing_1.publish)(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, () => ({ clientId: client._clientId, waitStartTimestamp }));
-          this._self.#executeTask(node2, resolve2, reject, fn);
+          this._self.#executeTask(node2, resolve3, reject, fn);
         });
       }
-      #executeTask(node2, resolve2, reject, fn) {
+      #executeTask(node2, resolve3, reject, fn) {
         let result;
         try {
           result = fn(node2.value);
@@ -86689,11 +86737,11 @@ var require_pool2 = __commonJS({
           return;
         }
         if (result instanceof Promise) {
-          result.then(resolve2, reject).finally(() => {
+          result.then(resolve3, reject).finally(() => {
             this.#returnClient(node2);
           });
         } else {
-          resolve2(result);
+          resolve3(result);
           this.#returnClient(node2);
         }
       }
@@ -86747,8 +86795,8 @@ var require_pool2 = __commonJS({
       async #doClose() {
         try {
           if (this._self.#clientsInUse.length > 0) {
-            await new Promise((resolve2) => {
-              this._self.#drainResolve = resolve2;
+            await new Promise((resolve3) => {
+              this._self.#drainResolve = resolve3;
             });
           }
           const promises = [];
@@ -89260,7 +89308,7 @@ var require_client2 = __commonJS({
        * Close the client. Wait for pending commands.
        */
       close() {
-        return new Promise((resolve2) => {
+        return new Promise((resolve3) => {
           clearTimeout(this._self.#pingTimer);
           this._self.#socket.close();
           if (this._self.#socket.socketEpoch > 0) {
@@ -89271,12 +89319,12 @@ var require_client2 = __commonJS({
           if (this._self.#queue.isEmpty()) {
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            return resolve2();
+            return resolve3();
           }
           const onEnd = () => {
             this._self.#socket.off("data", maybeClose);
             this._self.#unregisterFromMetrics();
-            resolve2();
+            resolve3();
           };
           const maybeClose = () => {
             if (!this._self.#queue.isEmpty())
@@ -89285,7 +89333,7 @@ var require_client2 = __commonJS({
             this._self.#socket.off("end", onEnd);
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            resolve2();
+            resolve3();
           };
           this._self.#socket.on("data", maybeClose);
           this._self.#socket.once("end", onEnd);
@@ -89670,7 +89718,7 @@ var require_cluster_slots = __commonJS({
                   master: destMasterNode
                 };
               } else {
-                const allMasters = [...new Set(this.slots)].map((s) => `${s.master.host}:${s.master.port}`);
+                const allMasters = [...new Set(this.slots)].map((s2) => `${s2.master.host}:${s2.master.port}`);
                 (0, enterprise_maintenance_manager_1.dbgMaintenance)(`[CSlots]: Searching for shard with host=${host}, port=${port}. Available masters in slots: ${allMasters.join(", ")}`);
                 const existingShard = this.slots.find((shard) => shard.master.host === host && shard.master.port === port);
                 if (!existingShard) {
@@ -89690,10 +89738,10 @@ var require_cluster_slots = __commonJS({
                   destinationSlots.add(slot);
                   allMovingSlots.add(slot);
                 } else {
-                  for (let s = slot[0]; s <= slot[1]; s++) {
-                    this.slots[s] = destShard;
-                    destinationSlots.add(s);
-                    allMovingSlots.add(s);
+                  for (let s2 = slot[0]; s2 <= slot[1]; s2++) {
+                    this.slots[s2] = destShard;
+                    destinationSlots.add(s2);
+                    allMovingSlots.add(s2);
                   }
                 }
               }
@@ -91730,10 +91778,10 @@ var require_utils3 = __commonJS({
     }
     exports.mergeSentinelNodes = mergeSentinelNodes;
     function clientSocketToNode(socket) {
-      const s = socket;
+      const s2 = socket;
       return {
-        host: s.host,
-        port: s.port
+        host: s2.host,
+        port: s2.port
       };
     }
     exports.clientSocketToNode = clientSocketToNode;
@@ -92248,9 +92296,9 @@ var require_wait_queue = __commonJS({
       #list = new linked_list_1.SinglyLinkedList();
       #queue = new linked_list_1.SinglyLinkedList();
       push(value) {
-        const resolve2 = this.#queue.shift();
-        if (resolve2 !== void 0) {
-          resolve2(value);
+        const resolve3 = this.#queue.shift();
+        if (resolve3 !== void 0) {
+          resolve3(value);
           return;
         }
         this.#list.push(value);
@@ -92259,7 +92307,7 @@ var require_wait_queue = __commonJS({
         return this.#list.shift();
       }
       wait() {
-        return new Promise((resolve2) => this.#queue.push(resolve2));
+        return new Promise((resolve3) => this.#queue.push(resolve3));
       }
     };
     exports.WaitQueue = WaitQueue;
@@ -92917,10 +92965,10 @@ var require_sentinel = __commonJS({
        * `passthroughClientErrorEvents`), unchanged.
        */
       #connectOrFail(client) {
-        return new Promise((resolve2, reject) => {
+        return new Promise((resolve3, reject) => {
           const onError = (err) => reject(err);
           client.once("error", onError);
-          client.connect().then(resolve2, reject).finally(() => client.off("error", onError));
+          client.connect().then(resolve3, reject).finally(() => client.off("error", onError));
         });
       }
       /**
@@ -93175,7 +93223,7 @@ var require_sentinel = __commonJS({
           }
         }
         this.#replicaClients = [];
-        await new Promise((resolve2) => {
+        await new Promise((resolve3) => {
           let settled = false;
           const forceDestroy = () => {
             if (settled)
@@ -93188,7 +93236,7 @@ var require_sentinel = __commonJS({
               } catch {
               }
             }
-            resolve2();
+            resolve3();
           };
           if (this.#teardownKind === "destroy") {
             forceDestroy();
@@ -93200,7 +93248,7 @@ var require_sentinel = __commonJS({
               return;
             settled = true;
             this.#escalateToDestroy = void 0;
-            resolve2();
+            resolve3();
           });
         });
         this.#pubSubProxy.destroy();
@@ -102563,21 +102611,21 @@ import { createHash as createHash9 } from "node:crypto";
 function createRedisStore(client, o) {
   const open2 = /* @__PURE__ */ new Map();
   let loaded = null;
-  const load = () => loaded ??= Promise.all([ADMIT, SETTLE, SWEEP, SEED].map((s) => client.sendCommand(["SCRIPT", "LOAD", s.source]))).then(
+  const load = () => loaded ??= Promise.all([ADMIT, SETTLE, SWEEP, SEED].map((s2) => client.sendCommand(["SCRIPT", "LOAD", s2.source]))).then(
     () => void 0,
     (e) => {
       loaded = null;
       throw e;
     }
   );
-  async function run(s, keys2, args) {
+  async function run(s2, keys2, args) {
     await load();
     const tail = [String(keys2.length), ...keys2, ...args];
     try {
-      return await client.sendCommand(["EVALSHA", s.sha, ...tail]);
+      return await client.sendCommand(["EVALSHA", s2.sha, ...tail]);
     } catch (e) {
       if (!(e instanceof Error && e.message.startsWith("NOSCRIPT"))) throw e;
-      return client.sendCommand(["EVAL", s.source, ...tail]);
+      return client.sendCommand(["EVAL", s2.source, ...tail]);
     }
   }
   return {
@@ -102590,7 +102638,7 @@ function createRedisStore(client, o) {
         deadlinesKey(tenant),
         ...plan.reservations.map((l) => l.key),
         ...plan.rateChecks.map((c) => c.key),
-        ...plan.streamSlots.map((s) => s.key),
+        ...plan.streamSlots.map((s2) => s2.key),
         ...plan.taint ? [plan.taint.key] : []
       ];
       const arg = {
@@ -102599,17 +102647,17 @@ function createRedisStore(client, o) {
         sx: SESSION_BUDGET_TTL_MS,
         b: plan.reservations.map((l) => ({ n: l.budget, e: l.estMicroUsd, l: l.limitMicroUsd, f: l.enforce, x: l.resetsAt === null ? -1 : budgetExpiresAt(l.resetsAt, now) })),
         g: plan.rateChecks.map((c) => ({ n: c.limit, e: c.emissionMs, b: c.burst, q: c.quantity })),
-        s: plan.streamSlots.map((s) => ({ n: s.limit, m: s.max })),
+        s: plan.streamSlots.map((s2) => ({ n: s2.limit, m: s2.max })),
         ...plan.taint ? { t: { c: plan.taint.check, a: plan.taint.add.map((a) => [a.valueHmac, a.rule]), ttl: plan.taint.ttlMs } } : {}
       };
       const reply = JSON.parse(String(await run(ADMIT, keys2, [JSON.stringify(arg)])));
       const audit = list(reply.audit).map(([name3, wouldFail]) => ({ name: name3, wouldFail }));
-      const totals = list(reply.totals).map(([key, s, r, l]) => ({ key, spentMicroUsd: Number(s), reservedMicroUsd: Number(r), limitMicroUsd: Number(l) }));
+      const totals3 = list(reply.totals).map(([key, s2, r, l]) => ({ key, spentMicroUsd: Number(s2), reservedMicroUsd: Number(r), limitMicroUsd: Number(l) }));
       const name2 = reply.name ?? "";
       switch (reply.r) {
         case "ok":
           open2.set(plan.id, tenant);
-          return { admitted: true, failed: null, audit, totals };
+          return { admitted: true, failed: null, audit, totals: totals3 };
         case "dup":
           return NOTHING2;
         case "taint":
@@ -102619,7 +102667,7 @@ function createRedisStore(client, o) {
         case "streams":
           return { admitted: false, failed: { kind: "streams", name: name2 }, audit: [], totals: [] };
         case "budget":
-          return { admitted: false, failed: { kind: "budget", name: name2, spentMicroUsd: Number(reply.spent) }, audit, totals };
+          return { admitted: false, failed: { kind: "budget", name: name2, spentMicroUsd: Number(reply.spent) }, audit, totals: totals3 };
       }
     },
     // Settled by the instance that admitted the request: the id's tenant is known here only. A reservation whose
@@ -102654,8 +102702,8 @@ function createRedisStore(client, o) {
     async snapshot(keys2) {
       const rows = await Promise.all(keys2.map((k) => client.sendCommand(["HMGET", k, "s", "r"])));
       return Object.fromEntries(keys2.map((k, i) => {
-        const [s, r] = rows[i] ?? [];
-        return [k, { spent: Number(s ?? 0), reserved: Number(r ?? 0) }];
+        const [s2, r] = rows[i] ?? [];
+        return [k, { spent: Number(s2 ?? 0), reserved: Number(r ?? 0) }];
       }));
     },
     async seed(entries) {
@@ -103108,8 +103156,8 @@ var init_env = __esm({
     "use strict";
     DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
     OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
-    oneLine = (s) => s.replace(/[\r\n]+/g, " ").trim();
-    shellQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
+    oneLine = (s2) => s2.replace(/[\r\n]+/g, " ").trim();
+    shellQuote = (s2) => `'${s2.replaceAll("'", "'\\''")}'`;
   }
 });
 
@@ -103126,6 +103174,707 @@ var init_json_schema2 = __esm({
     "use strict";
     init_zod();
     init_schema();
+  }
+});
+
+// src/replay/cost-model.ts
+function price(t, model, u, r) {
+  try {
+    const fast = r.outcome.fast === true && lookupModel(t, model)?.price.fast !== void 0;
+    return costMicroUsd(t, model, u, { fast, modifiers: r.outcome.modifiers ?? [], ...r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {} });
+  } catch {
+    return null;
+  }
+}
+function replayedCost(c) {
+  const { r, policy: policy2 } = c;
+  const recorded = r.outcome.costMicroUsd ?? 0;
+  const t = policy2.prices;
+  const same = modelId(t, c.upstreamModel) === modelId(t, recordedModel(r)) && c.provider === (r.decision.chain[0] ?? r.outcome.provider);
+  const atEstimate = r.outcome.settledAtEstimate === true;
+  const charge = (cost) => atEstimate || r.outcome.settledBy === "sweeper" ? c.estMicroUsd : cost;
+  const result = (cost, estimated, cacheCold = false) => ({
+    costMicroUsd: cost,
+    chargeMicroUsd: charge(cost),
+    estimated,
+    modelChanged: !same,
+    cacheCold
+  });
+  if (r.decision.action !== "forward") return result(0, true);
+  if (atEstimate) return result(c.estMicroUsd, !same);
+  const u = r.outcome.usage;
+  if (u === null) return result(recorded, false);
+  if (same) {
+    if (policy2.priceTableVersion === r.outcome.priceTable) return { ...result(recorded, false), chargeMicroUsd: charge(r.outcome.chargedMicroUsd ?? recorded) };
+    const repriced = price(t, recordedModel(r), u, r);
+    return repriced === null ? result(recorded, true) : result(repriced, false);
+  }
+  const ratio = c.ratios.ratio(recordedModel(r), c.upstreamModel, r.attribution.requestClass) ?? 1;
+  const next = { ...u, output: Math.round(u.output * ratio) };
+  const session = r.attribution.session;
+  const cold = session !== null && c.firstSwitch(session, `${c.provider}\0${modelId(t, c.upstreamModel)}`);
+  if (cold) {
+    next.cacheWrite5m += next.cacheRead;
+    next.cacheRead = 0;
+  }
+  const estimate = price(t, c.upstreamModel, next, r);
+  return result(estimate ?? recorded, true, cold && next.cacheWrite5m > u.cacheWrite5m);
+}
+var modelId, recordedModel, OutputRatios;
+var init_cost_model = __esm({
+  "src/replay/cost-model.ts"() {
+    "use strict";
+    init_cost();
+    init_prices();
+    modelId = (t, model) => lookupModel(t, model)?.id ?? model;
+    recordedModel = (r) => r.outcome.upstreamModel ?? r.features.model;
+    OutputRatios = class {
+      constructor(records, prices) {
+        this.prices = prices;
+        for (const r of records) {
+          const u = r.outcome.usage;
+          if (u === null || r.outcome.provider === null) continue;
+          const k = this.key(recordedModel(r), r.attribution.requestClass);
+          const s2 = this.sums.get(k) ?? { tokens: 0, n: 0 };
+          s2.tokens += u.output;
+          s2.n++;
+          this.sums.set(k, s2);
+        }
+      }
+      prices;
+      sums = /* @__PURE__ */ new Map();
+      key(model, requestClass) {
+        return `${modelId(this.prices, model)}\0${requestClass ?? ""}`;
+      }
+      /** Output of `to` over output of `from` for this request class; null when either was never observed. */
+      ratio(from, to, requestClass) {
+        const a = this.sums.get(this.key(from, requestClass));
+        const b = this.sums.get(this.key(to, requestClass));
+        if (!a || !b || a.tokens === 0) return null;
+        return b.tokens / b.n / (a.tokens / a.n);
+      }
+    };
+  }
+});
+
+// src/replay/diff.ts
+function exactnessRows(a) {
+  const flags = [a.routes, a.counters, a.costSameModel, a.costModelChange, a.cacheSwitch, a.guardrailChange, a.switched, a.switched];
+  return EXACTNESS_ROWS.map((row, i) => ({ output: row.output, exactness: row.exactness, applied: flags[i] ?? false }));
+}
+function countBy(items, parts) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const x of items) {
+    const k = parts(x).join("\0");
+    const g = groups.get(k);
+    if (g) g.count++;
+    else groups.set(k, { item: x, count: 1 });
+  }
+  return [...groups.values()];
+}
+function failedGates(failOn, o) {
+  const failed = [];
+  if (o.headCuts > failOn.cutSessions) failed.push(`ci.failOn.cutSessions: ${failOn.cutSessions}`);
+  const increase = o.baseCost === 0 ? o.headCost > 0 ? Number.POSITIVE_INFINITY : 0 : (o.headCost - o.baseCost) / o.baseCost * 100;
+  if (increase > failOn.costIncreasePct) failed.push(`ci.failOn.costIncreasePct: ${failOn.costIncreasePct}`);
+  return failed;
+}
+var EXACTNESS_TABLE, EXACTNESS_ROWS, cmp;
+var init_diff = __esm({
+  "src/replay/diff.ts"() {
+    "use strict";
+    EXACTNESS_TABLE = `| Output | Exactness | Why |
+|---|---|---|
+| Route and provider per request, model allowlist blocks, guardrail blocks for rules that fired at record time | **Exact** | Pure function of recorded features |
+| Budget hits, rate-limit blocks, session cuts | **Exact given the simulation's assumptions**: when cost is exact; a cut session stops; a rate-limited request is not retried | Counter state is rebuilt from the replay itself; Claude Code's retries after a 429 cannot be simulated |
+| Cost delta when the model does not change (price table change, budget change) | **Exact** | Same tokens, different prices or admissions |
+| Cost delta when the model changes | **Estimated** | Output tokens of a model that never ran are unknown: scaled by the per-model, per-request-class output ratio observed in the traces, or kept equal and flagged when no data exists |
+| Cache effect of a model or provider switch within a session | **Estimated** | From the first switched request, all recorded cache reads of that session become 5m cache writes at the new model's price for one request, then the recorded hit pattern resumes. Caches are per workspace and per model ([Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)) |
+| A new guardrail rule | **Not computed** | Traces hold no content; the comment says "new secret rules cannot be replayed" |
+| Latency | **Not computed in v0.1** | Would need per-provider distributions; listed as future work |
+| Answer quality | **Never** | Logs hold no outcome for routes not taken; offline replay is unbiased only when the logging policy chose at random ([Li et al., WSDM 2011](https://arxiv.org/abs/1003.5956)) |`;
+    EXACTNESS_ROWS = EXACTNESS_TABLE.split("\n").slice(2).map((line) => {
+      const [output2 = "", stated = ""] = line.slice(2).split(" | ");
+      const exactness = stated.startsWith("**Exact given") ? "exact-given-assumptions" : stated.startsWith("**Exact**") ? "exact" : stated.startsWith("**Estimated") ? "estimated" : stated.startsWith("**Not computed") ? "not-computed" : "never";
+      return { output: output2, exactness };
+    });
+    cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+  }
+});
+
+// src/replay/fidelity.ts
+function hoursBetween(fromMs, toMs) {
+  const out = [];
+  for (let h = Math.floor(fromMs / HOUR_MS2) * HOUR_MS2; h <= toMs; h += HOUR_MS2) out.push(hourLabel2(h));
+  return out;
+}
+function disagreement(recorded, replayed) {
+  if (recorded.action !== replayed.action || recorded.reason !== replayed.reason) return `recorded ${describe3(recorded)}, replayed ${describe3(replayed)}`;
+  if (recorded.route !== replayed.route) return `recorded route ${recorded.route ?? "(none)"}, replayed route ${replayed.route ?? "(none)"}`;
+  if (recorded.chain.join(",") !== replayed.chain.join(",")) return `recorded providers ${recorded.chain.join(", ") || "(none)"}, replayed providers ${replayed.chain.join(", ") || "(none)"}`;
+  return null;
+}
+function missingInstances(manifests, records) {
+  const out = /* @__PURE__ */ new Map();
+  const add2 = (instance, kind, hours) => {
+    const k = `${instance}\0${kind}`;
+    const prev = out.get(k);
+    const all = [.../* @__PURE__ */ new Set([...prev?.hours ?? [], ...hours])].sort();
+    out.set(k, { instance, hours: all, kind });
+  };
+  const byInstance = /* @__PURE__ */ new Map();
+  for (const r of records) {
+    const list2 = byInstance.get(r.instance) ?? [];
+    list2.push(r);
+    byInstance.set(r.instance, list2);
+  }
+  for (const m of manifests) {
+    const untilMs = Date.parse(m.until);
+    for (const inst of m.instances) {
+      if (inst.hoursWithoutFile.length > 0) add2(inst.id, "no-file", inst.hoursWithoutFile);
+      if (inst.seqGaps > 0) {
+        const seen = [...byInstance.get(inst.id) ?? []].sort((a, b) => a.seq - b.seq);
+        const hours = [];
+        for (let i = 1; i < seen.length; i++) {
+          const a = seen[i - 1];
+          const b = seen[i];
+          if (b.seq - a.seq <= 1) continue;
+          const [x, y] = [Date.parse(a.ts), Date.parse(b.ts)].sort((p, q) => p - q);
+          hours.push(...hoursBetween(x, y));
+        }
+        add2(inst.id, "seq-gap", hours.length > 0 ? hours : hoursBetween(Date.parse(inst.firstTs), Date.parse(inst.lastTs)));
+      }
+      const lastMs = Date.parse(inst.lastTs);
+      if (inst.shutdown === false && lastMs < untilMs - HEARTBEAT_GRACE_MS) add2(inst.id, "heartbeats-stop", hoursBetween(lastMs, untilMs - 1));
+    }
+  }
+  return [...out.values()].sort((a, b) => a.instance < b.instance ? -1 : a.instance > b.instance ? 1 : KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
+}
+var HOUR_MS2, HEARTBEAT_GRACE_MS, KIND_ORDER, hourLabel2, describe3;
+var init_fidelity = __esm({
+  "src/replay/fidelity.ts"() {
+    "use strict";
+    HOUR_MS2 = 36e5;
+    HEARTBEAT_GRACE_MS = 12e4;
+    KIND_ORDER = ["no-file", "seq-gap", "heartbeats-stop"];
+    hourLabel2 = (ms) => new Date(ms).toISOString().slice(0, 13);
+    describe3 = (d) => d.action === "forward" ? "forward" : `block (${d.reason ?? "unknown"})`;
+  }
+});
+
+// src/replay/sim-store.ts
+function createSimStore(clock) {
+  return createMemoryStore({ clock, deadlineMs: NO_DEADLINE_MS });
+}
+var NO_DEADLINE_MS;
+var init_sim_store = __esm({
+  "src/replay/sim-store.ts"() {
+    "use strict";
+    init_memory_store();
+    NO_DEADLINE_MS = Number.MAX_SAFE_INTEGER / 2;
+  }
+});
+
+// src/replay/engine.ts
+var engine_exports = {};
+__export(engine_exports, {
+  RawTraceDirError: () => RawTraceDirError,
+  featuresOf: () => featuresOf,
+  replay: () => replay
+});
+function featuresOf(r) {
+  const a = r.attribution;
+  return {
+    id: r.id,
+    ts: Date.parse(r.ts),
+    surface: r.surface,
+    traffic: r.traffic,
+    billing: r.billing,
+    tenant: r.tenant,
+    team: r.team,
+    keyId: r.keyId,
+    model: r.features.model,
+    stream: r.features.stream,
+    inputTokensBound: r.features.inputTokensBound,
+    boundKind: r.features.boundKind,
+    maxOutputTokens: r.features.maxOutputTokens,
+    serverTools: r.features.serverTools.map((t) => ({ type: t.type, maxUses: t.maxUses })),
+    toolCount: r.features.toolCount,
+    thinking: r.features.thinking,
+    fastMode: r.features.fastMode === true,
+    attribution: {
+      session: a.session,
+      agent: a.agent,
+      parentAgent: a.parentAgent,
+      requestClass: a.requestClass !== null && CLASSES2.has(a.requestClass) ? a.requestClass : null,
+      agentType: a.agentType,
+      promptId: a.promptId,
+      repo: a.repo,
+      branch: a.branch,
+      ticket: a.ticket,
+      feature: a.feature
+    },
+    guardrail: { hits: r.guardrail.hits.map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) }
+  };
+}
+function holdsCounters2(plan) {
+  const t = plan.taint;
+  return plan.reservations.length + plan.rateChecks.length + plan.streamSlots.length > 0 || t !== null && t.check.length + t.add.length > 0;
+}
+function blockName(plan, f, reason, admission) {
+  const failed = admission?.failed ?? null;
+  switch (reason) {
+    case "budget":
+      return failed?.kind === "budget" ? failed.name : oversizedReservation(plan)?.budget ?? "";
+    case "rate":
+    case "streams":
+      return failed?.name ?? "";
+    case "taint":
+      return failed?.rule ?? failed?.name ?? "";
+    case "secret":
+      return uniqSorted((plan.taint?.add ?? []).map((a) => a.rule)).join(", ");
+    case "model-not-allowed":
+      return f.model;
+    case "unpriced":
+      return plan.chain[0]?.upstreamModel ?? f.model;
+    case "server-tool-not-allowed":
+      return uniqSorted(plan.warnings.flatMap((w) => w.kind === "server-tool-not-allowed" ? [w.type] : [])).join(", ");
+    case "server-tool-no-max-uses":
+      return uniqSorted(f.serverTools.filter((t) => t.maxUses === null).map((t) => t.type)).join(", ");
+    default:
+      return "";
+  }
+}
+async function* iterate(xs) {
+  yield* xs;
+}
+async function simulate(policy2, which, window, warm, startMs, ratios) {
+  let now = startMs;
+  const store = createSimStore(() => now);
+  await store.seed(await warmupEntries(iterate(warm), policy2, startMs));
+  const pending = [];
+  let order = 0;
+  const schedule = (at, id, amount) => {
+    const p = { at, order: order++, id, amount };
+    let i = pending.length;
+    while (i > 0 && pending[i - 1].at > at) i--;
+    pending.splice(i, 0, p);
+  };
+  const drain = async (until) => {
+    while (pending.length > 0 && pending[0].at <= until) {
+      const p = pending.shift();
+      now = p.at;
+      await store.settle(p.id, p.amount);
+    }
+  };
+  const switched = /* @__PURE__ */ new Set();
+  const firstSwitch = (session, target) => {
+    const k = `${session}\0${target}`;
+    if (switched.has(k)) return false;
+    switched.add(k);
+    return true;
+  };
+  const one = async (r, ms) => {
+    const f = featuresOf(r);
+    let plan;
+    try {
+      plan = decide(policy2, f);
+    } catch {
+      return { ...NOTHING3, kind: "exit", decision: { action: "block", reason: "reservation-error", route: null, chain: [] } };
+    }
+    const compared = (action, reason) => ({ action, reason, route: plan.route, chain: plan.chain.map((c) => c.provider) });
+    const bodyExit = plan.preBlock === null && r.decision.reason !== null && BODY_EXITS.has(r.decision.reason) && (r.decision.reason !== "model-rewrite-failed" || plan.chain[0]?.rewritesModel === true);
+    if (bodyExit) return { ...NOTHING3, kind: "exit", decision: compared("block", r.decision.reason) };
+    const pre = resolve(policy2, plan, null);
+    const taintWrite = plan.preBlock === "secret" && (plan.taint?.add.length ?? 0) > 0;
+    let admission = null;
+    if (taintWrite || pre.block === null && holdsCounters2(plan)) admission = r.decision.storeDown ? STORE_DOWN : await store.admit(plan, ms);
+    const admitted = admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+    const decision = admission === null ? pre : resolve(policy2, plan, admission);
+    const first2 = plan.chain[0];
+    const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
+    const end = ms + Math.max(0, r.outcome.totalMs);
+    const est = plan.reservations[0]?.estMicroUsd ?? 0;
+    if (decision.block !== null || first2 === void 0 || provider2 === void 0) {
+      const reason = decision.block?.reason ?? "no-route";
+      if (admitted) schedule(end, r.id, 0);
+      let scopeValue2 = "";
+      if (reason === "budget") {
+        const name2 = blockName(plan, f, reason, admission);
+        const b = policy2.budgets.find((x) => x.name === name2);
+        scopeValue2 = b === void 0 ? "" : levelValue(b.scope, f, budgetEnforced(b, f.billing)) ?? "";
+      }
+      return { ...NOTHING3, kind: "block", decision: compared("block", reason), reason, name: blockName(plan, f, reason, admission), scopeValue: scopeValue2 };
+    }
+    const cost = replayedCost({ policy: policy2, r, provider: first2.provider, upstreamModel: first2.upstreamModel, estMicroUsd: est, ratios, firstSwitch });
+    if (admitted) schedule(end, r.id, cost.chargeMicroUsd);
+    return { ...NOTHING3, kind: "forward", decision: compared("forward", null), provider: first2.provider, upstreamModel: first2.upstreamModel, cost };
+  };
+  const outcomes = [];
+  const cuts = [];
+  const sessions = /* @__PURE__ */ new Map();
+  for (const r of window) {
+    const ms = Date.parse(r.ts);
+    await drain(ms);
+    now = ms;
+    const session = r.attribution.session;
+    let s2 = null;
+    if (session !== null) {
+      s2 = sessions.get(session) ?? { index: 0, forwarded: false, cut: null };
+      sessions.set(session, s2);
+      s2.index++;
+    }
+    if (s2?.cut) {
+      s2.cut.droppedRequests++;
+      s2.cut.droppedCostMicroUsd += r.outcome.costMicroUsd ?? 0;
+      outcomes.push({ ...NOTHING3, kind: "dropped", decision: null });
+      continue;
+    }
+    if (r.decision.preDecision) {
+      outcomes.push({ ...NOTHING3, kind: "exit", decision: null });
+      continue;
+    }
+    const o = await one(r, ms);
+    outcomes.push(o);
+    if (s2 === null) continue;
+    if (o.kind === "forward") s2.forwarded = true;
+    if (o.kind === "block" && s2.forwarded && r.decision.action === "forward") {
+      s2.cut = {
+        policy: which,
+        session,
+        team: r.team,
+        repo: r.attribution.repo,
+        requestClass: r.attribution.requestClass,
+        requestIndex: s2.index,
+        cause: o.name === "" ? o.reason : `${o.reason} ${o.name}`,
+        droppedRequests: 0,
+        droppedCostMicroUsd: 0
+      };
+      cuts.push(s2.cut);
+    }
+  }
+  await drain(Number.POSITIVE_INFINITY);
+  return { outcomes, cuts };
+}
+function totals(outcomes, window) {
+  let costMicroUsd2 = 0;
+  let estimated = false;
+  let forwarded = 0;
+  let blocked = 0;
+  const bases = /* @__PURE__ */ new Set();
+  outcomes.forEach((o, i) => {
+    if (o.kind === "block") blocked++;
+    if (o.kind !== "forward" || o.cost === null) return;
+    forwarded++;
+    costMicroUsd2 += o.cost.costMicroUsd;
+    estimated ||= o.cost.estimated;
+    bases.add(window[i].outcome.costBasis);
+  });
+  const costBasis = bases.size > 1 ? "mixed" : bases.has("api-equivalent") ? "api-equivalent" : "billed";
+  return { costMicroUsd: costMicroUsd2, costBasis, estimated, forwarded, blocked };
+}
+async function replay(o) {
+  const manifests = [];
+  const all = [];
+  for await (const line of o.traces) {
+    if (line.kind === "manifest") manifests.push(line);
+    else if (line.kind === "request") {
+      const ms = Date.parse(line.ts);
+      if (!Number.isNaN(ms) && (o.tenant === null || line.tenant === o.tenant)) all.push({ ms, r: line });
+    } else throw new RawTraceDirError(null);
+  }
+  all.sort((a, b) => a.ms - b.ms || cmp(a.r.id, b.r.id));
+  const firstManifest = manifests[0];
+  const sinceMs = o.sinceMs ?? (firstManifest ? Date.parse(firstManifest.since) : all[0]?.ms ?? 0);
+  const untilMs = firstManifest ? Math.max(...manifests.map((m) => Date.parse(m.until))) : all.at(-1)?.ms ?? sinceMs;
+  const warm = all.filter((x) => x.ms < sinceMs).map((x) => x.r);
+  const window = all.filter((x) => x.ms >= sinceMs).map((x) => x.r);
+  const base = await simulate(o.base, "base", window, warm, sinceMs, new OutputRatios([...warm, ...window], o.base.prices));
+  const head = await simulate(o.head, "head", window, warm, sinceMs, new OutputRatios([...warm, ...window], o.head.prices));
+  let compared = 0;
+  const reasons = [];
+  window.forEach((r, i) => {
+    const replayed = base.outcomes[i]?.decision ?? null;
+    if (r.policy.revision !== o.base.revision || r.decision.preDecision || replayed === null) return;
+    compared++;
+    const d = disagreement(recordedDecision(r), replayed);
+    if (d !== null) reasons.push(d);
+  });
+  const disagreements = countBy(reasons, (x) => [x]).map((g) => ({ reason: g.item, count: g.count })).sort((a, b) => b.count - a.count || cmp(a.reason, b.reason));
+  if (compared === 0) disagreements.push({ reason: `no request in the window was recorded under the base revision ${o.base.revision}`, count: window.length });
+  const agreement = compared === 0 ? 0 : (compared - reasons.length) / compared;
+  const rerouted = [];
+  window.forEach((r, i) => {
+    const b = base.outcomes[i];
+    const h = head.outcomes[i];
+    if (b?.kind !== "forward" || h?.kind !== "forward") return;
+    const route2 = (x) => x.decision?.route ?? "(none)";
+    if (route2(b) !== route2(h)) rerouted.push({ fromRoute: route2(b), toRoute: route2(h), requestClass: r.attribution.requestClass });
+    else if (b.provider !== h.provider || modelId(o.head.prices, b.upstreamModel ?? "") !== modelId(o.head.prices, h.upstreamModel ?? "")) {
+      const hop = (x) => `${route2(x)} (${x.provider ?? ""}, ${x.upstreamModel ?? ""})`;
+      rerouted.push({ fromRoute: hop(b), toRoute: hop(h), requestClass: r.attribution.requestClass });
+    }
+  });
+  const both = [
+    { which: "base", outcomes: base.outcomes },
+    { which: "head", outcomes: head.outcomes }
+  ];
+  const blocks = both.flatMap(({ which, outcomes }) => outcomes.flatMap((x, i) => x.kind === "block" ? [{ which, x, r: window[i] }] : []));
+  const blocked = countBy(blocks, (b) => [b.which, b.x.reason, b.x.name]).map((g) => ({ policy: g.item.which, reason: g.item.x.reason, name: g.item.x.name, count: g.count })).sort((a, b) => cmp(a.policy, b.policy) || b.count - a.count || cmp(a.reason, b.reason) || cmp(a.name, b.name));
+  const hits = /* @__PURE__ */ new Map();
+  for (const b of blocks) {
+    if (b.x.reason !== "budget") continue;
+    const k = [b.which, b.x.name, b.x.scopeValue].join("\0");
+    const ms = Date.parse(b.r.ts);
+    const h = hits.get(k) ?? { policy: b.which, budget: b.x.name, scopeValue: b.x.scopeValue, firstMs: ms, days: /* @__PURE__ */ new Set() };
+    h.firstMs = Math.min(h.firstMs, ms);
+    h.days.add(b.r.ts.slice(0, 10));
+    hits.set(k, h);
+  }
+  const budgetHits = [...hits.values()].sort((a, b) => cmp(a.policy, b.policy) || cmp(a.budget, b.budget) || cmp(a.scopeValue, b.scopeValue)).map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: new Date(h.firstMs).toISOString(), days: h.days.size }));
+  const forwardedCosts = [...base.outcomes, ...head.outcomes].flatMap((x) => x.kind === "forward" && x.cost ? [x.cost] : []);
+  const baseTotals = totals(base.outcomes, window);
+  const headTotals = totals(head.outcomes, window);
+  const counterBlock = blocks.some((b) => b.x.reason === "budget" || b.x.reason === "rate" || b.x.reason === "streams");
+  const switchedModel = forwardedCosts.some((c) => c.modelChanged);
+  const exactness = exactnessRows({
+    routes: window.length > 0,
+    counters: counterBlock || base.cuts.length + head.cuts.length > 0,
+    costSameModel: forwardedCosts.some((c) => !c.modelChanged),
+    costModelChange: switchedModel,
+    cacheSwitch: forwardedCosts.some((c) => c.cacheCold),
+    guardrailChange: JSON.stringify(o.base.guardrails) !== JSON.stringify(o.head.guardrails),
+    switched: switchedModel
+  });
+  return {
+    schemaVersion: 1,
+    window: { sinceMs, untilMs },
+    tenant: o.tenant,
+    requests: window.length,
+    sessions: new Set(window.flatMap((r) => r.attribution.session === null ? [] : [r.attribution.session])).size,
+    fidelity: { agreement, disagreements, missingInstances: missingInstances(manifests, window) },
+    base: baseTotals,
+    head: headTotals,
+    rerouted: countBy(rerouted, (x) => [x.fromRoute, x.toRoute, x.requestClass ?? "\0"]).map((g) => ({ ...g.item, count: g.count })).sort((a, b) => b.count - a.count || cmp(a.fromRoute, b.fromRoute) || cmp(a.toRoute, b.toRoute) || cmp(a.requestClass ?? "", b.requestClass ?? "")),
+    blocked,
+    cutSessions: [...base.cuts, ...head.cuts],
+    budgetHits,
+    exactness,
+    gates: { failed: failedGates(o.head.ci.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }) }
+  };
+}
+var RawTraceDirError, CLASSES2, STORE_DOWN, NOTHING3, BODY_EXITS, uniqSorted, recordedDecision;
+var init_engine = __esm({
+  "src/replay/engine.ts"() {
+    "use strict";
+    init_warmup();
+    init_decide();
+    init_resolve();
+    init_schema();
+    init_cost_model();
+    init_diff();
+    init_fidelity();
+    init_sim_store();
+    RawTraceDirError = class extends Error {
+      constructor(path2) {
+        const what = path2 === null ? "the traces hold lines of raw per-instance files (segment, heartbeat or shutdown records)" : `${path2} is a directory of raw per-instance trace files`;
+        super(`${what}; replay needs one merged set, because a partial set would undercount budgets. Run tokenyard traces export --trace-dir <dir> --since 7d --out traces.ndjson and pass that file`);
+        this.path = path2;
+        this.name = "RawTraceDirError";
+      }
+      path;
+    };
+    CLASSES2 = new Set(REQUEST_CLASSES2);
+    STORE_DOWN = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
+    NOTHING3 = { reason: null, name: "", scopeValue: "", provider: null, upstreamModel: null, cost: null };
+    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed"]);
+    uniqSorted = (xs) => [...new Set(xs)].sort(cmp);
+    recordedDecision = (r) => ({ action: r.decision.action, reason: r.decision.reason, route: r.decision.route, chain: [...r.decision.chain] });
+  }
+});
+
+// src/policy-loader/replay-input.ts
+var replay_input_exports = {};
+__export(replay_input_exports, {
+  loadReplayPolicy: () => loadReplayPolicy,
+  openReplayTraces: () => openReplayTraces
+});
+import { execFileSync } from "node:child_process";
+import { stat as stat2 } from "node:fs/promises";
+import { join as join7, relative, resolve as resolve2 } from "node:path";
+async function openReplayTraces(paths) {
+  for (const p of paths) if ((await stat2(p)).isDirectory()) throw new RawTraceDirError(p);
+  return readLedger(paths);
+}
+function filesAtRef(ref, dir) {
+  const git = (args) => execFileSync("git", args, { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  const top = git(["rev-parse", "--show-toplevel"]).trim();
+  const rel = relative(top, resolve2(dir)).split("\\").join("/");
+  const show = (name2) => {
+    try {
+      return git(["show", `${ref}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
+    } catch {
+      return void 0;
+    }
+  };
+  const policy2 = show(POLICY_FILE);
+  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir} at ${ref}` }]);
+  const files = { [POLICY_FILE]: policy2 };
+  for (const name2 of policyFileNames(policy2)) {
+    if (name2 === POLICY_FILE) continue;
+    const text = show(name2);
+    if (text !== void 0) files[name2] = text;
+  }
+  return files;
+}
+async function loadReplayPolicy(o) {
+  const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
+  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join7(o.headDir, `@${o.source}`), filesAtRef(o.source, o.headDir));
+  const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
+  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+}
+var init_replay_input = __esm({
+  "src/policy-loader/replay-input.ts"() {
+    "use strict";
+    init_reader();
+    init_bundle();
+    init_compile2();
+    init_load_dir();
+    init_engine();
+    init_load_dir2();
+  }
+});
+
+// src/replay/render-json.ts
+var render_json_exports = {};
+__export(render_json_exports, {
+  renderJson: () => renderJson
+});
+function renderJson(r) {
+  const ordered = {
+    schemaVersion: r.schemaVersion,
+    window: { sinceMs: r.window.sinceMs, untilMs: r.window.untilMs },
+    tenant: r.tenant,
+    requests: r.requests,
+    sessions: r.sessions,
+    fidelity: {
+      agreement: r.fidelity.agreement,
+      disagreements: r.fidelity.disagreements.map((d) => ({ reason: d.reason, count: d.count })),
+      missingInstances: r.fidelity.missingInstances.map((m) => ({ instance: m.instance, hours: [...m.hours], kind: m.kind }))
+    },
+    base: totals2(r.base),
+    head: totals2(r.head),
+    rerouted: r.rerouted.map((x) => ({ fromRoute: x.fromRoute, toRoute: x.toRoute, requestClass: x.requestClass, count: x.count })),
+    blocked: r.blocked.map((x) => ({ policy: x.policy, reason: x.reason, name: x.name, count: x.count })),
+    cutSessions: r.cutSessions.map((c) => ({
+      policy: c.policy,
+      session: c.session,
+      team: c.team,
+      repo: c.repo,
+      requestClass: c.requestClass,
+      requestIndex: c.requestIndex,
+      cause: c.cause,
+      droppedRequests: c.droppedRequests,
+      droppedCostMicroUsd: c.droppedCostMicroUsd
+    })),
+    budgetHits: r.budgetHits.map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: h.firstHitTs, days: h.days })),
+    exactness: r.exactness.map((e) => ({ output: e.output, exactness: e.exactness, applied: e.applied })),
+    gates: { failed: [...r.gates.failed] }
+  };
+  return `${JSON.stringify(ordered, null, 2)}
+`;
+}
+var totals2;
+var init_render_json = __esm({
+  "src/replay/render-json.ts"() {
+    "use strict";
+    totals2 = (t) => ({ costMicroUsd: t.costMicroUsd, costBasis: t.costBasis, estimated: t.estimated, forwarded: t.forwarded, blocked: t.blocked });
+  }
+});
+
+// src/replay/render-terminal.ts
+var render_terminal_exports = {};
+__export(render_terminal_exports, {
+  renderTerminal: () => renderTerminal
+});
+function change(base, head) {
+  const d = head.costMicroUsd - base.costMicroUsd;
+  const sign = d < 0 ? "-" : "+";
+  const rel = base.costMicroUsd === 0 ? "" : ` (${sign}${(Math.abs(d) / base.costMicroUsd * 100).toFixed(1)}%)`;
+  const estimated = base.estimated || head.estimated ? ", estimated" : "";
+  return `${sign}${formatUsd(Math.abs(d))}${rel}${estimated}`;
+}
+function table(rows) {
+  const widths = rows[0]?.map((_, i) => Math.max(...rows.map((r) => (r[i] ?? "").length))) ?? [];
+  return rows.map((r) => r.map((c, i) => c.padEnd(widths[i] ?? 0)).join("  ").trimEnd());
+}
+function renderTerminal(r) {
+  const out = [];
+  const section = (title, lines) => {
+    out.push("", title, ...lines.length > 0 ? lines.map((l) => `  ${l}`) : ["  none"]);
+  };
+  const basis = r.base.costBasis === r.head.costBasis ? r.base.costBasis : "mixed";
+  out.push("tokenyard policy replay");
+  out.push(`Traffic: ${iso(r.window.sinceMs)} to ${iso(r.window.untilMs)}, ${r.requests} requests, ${r.sessions} sessions, tenant ${r.tenant === null ? "all" : s(r.tenant)}.`);
+  out.push(`Fidelity: base replay matches recorded decisions on ${pctDown(r.fidelity.agreement)} of requests.`);
+  if (r.fidelity.disagreements.length > 0 || r.fidelity.missingInstances.length > 0) out.push("Do not trust the diff below until the fidelity notes are explained.");
+  out.push("");
+  out.push(
+    ...table([
+      ["", "base", "head", "change"],
+      [`cost (${basis})`, formatUsd(r.base.costMicroUsd), formatUsd(r.head.costMicroUsd), change(r.base, r.head)],
+      ["forwarded", String(r.base.forwarded), String(r.head.forwarded), ""],
+      ["blocked", String(r.base.blocked), String(r.head.blocked), ""],
+      ["sessions cut", String(r.cutSessions.filter((c) => c.policy === "base").length), String(r.cutSessions.filter((c) => c.policy === "head").length), ""],
+      ["requests rerouted", "", String(r.rerouted.reduce((n, x) => n + x.count, 0)), ""]
+    ])
+  );
+  section("Fidelity notes", [
+    ...r.fidelity.disagreements.map((d) => `${d.count} x ${s(d.reason)}`),
+    ...r.fidelity.missingInstances.map((m) => `instance ${s(m.instance)}: ${m.kind} in ${m.hours.map(s).join(", ") || "unknown hours"}`)
+  ]);
+  section(
+    "Rerouted requests",
+    r.rerouted.map((x) => `${x.count} x from ${s(x.fromRoute)} to ${s(x.toRoute)}, request class ${s(x.requestClass)}`)
+  );
+  section(
+    "Blocked requests",
+    r.blocked.map((b) => `${b.policy}: ${b.count} x ${b.reason}${b.name === "" ? "" : ` ${s(b.name)}`}`)
+  );
+  section(
+    "Cut sessions",
+    r.cutSessions.map(
+      (c) => `${c.policy}: session ${s(c.session)} (team ${s(c.team)}, repo ${s(c.repo)}, request class ${s(c.requestClass)}) cut at request ${c.requestIndex} by ${s(c.cause)}; ${c.droppedRequests} later requests (${formatUsd(c.droppedCostMicroUsd)}) would not have run as recorded`
+    )
+  );
+  section(
+    "Budget hits",
+    r.budgetHits.map((h) => `${h.policy}: ${s(h.budget)} ${s(h.scopeValue)}, first hit ${h.firstHitTs}, on ${h.days} day${h.days === 1 ? "" : "s"}`)
+  );
+  section(
+    "How exact is this",
+    r.exactness.map((e) => `[${e.applied ? "x" : " "}] ${e.output}: ${EXACTNESS_LABEL[e.exactness]}`)
+  );
+  out.push("", r.gates.failed.length === 0 ? "Check: passed." : `Check: failed (${r.gates.failed.map(s).join(", ")}).`);
+  return `${out.join("\n")}
+`;
+}
+var s, iso, pctDown, EXACTNESS_LABEL;
+var init_render_terminal2 = __esm({
+  "src/replay/render-terminal.ts"() {
+    "use strict";
+    init_render_terminal();
+    init_sanitize();
+    s = (v) => v === null ? "-" : stripControls(v);
+    iso = (ms) => new Date(ms).toISOString();
+    pctDown = (x) => `${(Math.floor(x * 1e3) / 10).toFixed(1)}%`;
+    EXACTNESS_LABEL = {
+      exact: "exact",
+      "exact-given-assumptions": "exact given the simulation's assumptions",
+      estimated: "estimated",
+      "not-computed": "not computed",
+      never: "never"
+    };
   }
 });
 
@@ -105999,11 +106748,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
   _excessArguments(receivedArgs) {
     if (this._allowExcessArguments) return;
     const expected = this.registeredArguments.length;
-    const s = expected === 1 ? "" : "s";
+    const s2 = expected === 1 ? "" : "s";
     const received = receivedArgs.length;
     const forSubcommand = this.parent ? ` for '${this.name()}'` : "";
     const details = receivedArgs.join(", ");
-    const message = `error: too many arguments${forSubcommand}. Expected ${expected} argument${s} but got ${received}: ${details}.`;
+    const message = `error: too many arguments${forSubcommand}. Expected ${expected} argument${s2} but got ${received}: ${details}.`;
     this.error(message, { code: "commander.excessArguments" });
   }
   /**
@@ -106547,36 +107296,7 @@ var package_default = {
 
 // src/cli.ts
 init_export();
-
-// src/report/render-terminal.ts
-init_sanitize();
-function formatUsd(micro) {
-  const cents = Math.round(micro / 100);
-  return `$${Math.floor(cents / 1e4)}.${String(cents % 1e4).padStart(4, "0")}`;
-}
-var pct = (part2, whole) => whole === 0 ? "-" : `${(part2 / whole * 100).toFixed(1)}%`;
-function renderReportTerminal(r) {
-  const cols = r.by.length > 0 ? r.by.map(String) : ["all"];
-  const header2 = [...cols, "requests", "cost", "share", "input", "output", "cache read", "cache write"];
-  const row = (label, x) => [
-    ...label,
-    String(x.requests),
-    formatUsd(x.costMicroUsd) + (x.unpriced > 0 ? `+${x.unpriced} unpriced` : ""),
-    pct(x.costMicroUsd, r.totals.costMicroUsd),
-    String(x.input),
-    String(x.output),
-    String(x.cacheRead),
-    String(x.cacheWrite)
-  ];
-  const rows = [
-    header2,
-    ...r.groups.map((g) => row(r.by.length > 0 ? r.by.map((d) => stripControls(g.key[d] ?? "")) : ["all"], g)),
-    row(["total", ...cols.slice(1).map(() => "")], r.totals)
-  ];
-  const widths = header2.map((_, i) => Math.max(...rows.map((x) => (x[i] ?? "").length)));
-  const numeric = (i) => i >= cols.length;
-  return rows.map((x) => x.map((c, i) => numeric(i) ? c.padStart(widths[i] ?? 0) : c.padEnd(widths[i] ?? 0)).join("  ").trimEnd()).join("\n") + "\n";
-}
+init_render_terminal();
 
 // src/report/report.ts
 var REPORT_DIMENSIONS = ["tenant", "team", "key", "repo", "branch", "ticket", "session", "requestClass", "agent", "promptId"];
@@ -106619,10 +107339,10 @@ function add(row, r) {
   }
 }
 function buildReport(records, by) {
-  const totals = empty();
+  const totals3 = empty();
   const groups = /* @__PURE__ */ new Map();
   for (const r of records) {
-    add(totals, r);
+    add(totals3, r);
     const key = {};
     for (const d of by) key[d] = dimension(r, d) ?? NONE;
     const id = JSON.stringify(by.map((d) => key[d]));
@@ -106631,7 +107351,7 @@ function buildReport(records, by) {
     add(g, r);
   }
   const sorted = [...groups.values()].sort((a, b) => b.costMicroUsd - a.costMicroUsd || b.requests - a.requests || idOf(a, by).localeCompare(idOf(b, by)));
-  return { by, totals, groups: sorted };
+  return { by, totals: totals3, groups: sorted };
 }
 var idOf = (g, by) => by.map((d) => g.key[d]).join("\0");
 
@@ -106774,12 +107494,12 @@ program2.command("live", { hidden: true }).description("live-test harness: the g
   process.on("SIGTERM", stop);
 });
 program2.command("env").description('print shell code that sets repo, branch and ticket headers for Claude Code: eval "$(tokenyard env)"').option("--ticket-pattern <regex>", "regex applied to the branch name; the first group (or the whole match) is the ticket").action(async (o) => {
-  const { execFileSync } = await import("node:child_process");
+  const { execFileSync: execFileSync2 } = await import("node:child_process");
   const { basename } = await import("node:path");
   const { buildEnvExport: buildEnvExport2 } = await Promise.resolve().then(() => (init_env(), env_exports));
   const git = (...args) => {
     try {
-      return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+      return execFileSync2("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
     } catch {
       return null;
     }
@@ -106808,6 +107528,7 @@ keys.command("create").description("create a key: prints it once and appends its
   console.log(plaintext);
   console.error(`appended the hash to ${o.file}; the key is shown only once`);
 });
+var sinceOf = (v, now) => /^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v);
 var policy = program2.command("policy").description("policy files");
 policy.command("check").description("validate a policy directory: schema, then the semantic rules; exits 1 on errors").argument("[dir]", "policy directory (policy.yaml, prices.yaml, keys.yaml)", "policy").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
@@ -106856,8 +107577,28 @@ policy.command("schema").description("print the JSON Schema of policy.yaml for e
   process.stdout.write(`${JSON.stringify(policyJsonSchema2(), null, 2)}
 `);
 });
+policy.command("replay").description("replay a merged trace export against a base and a head policy: fidelity, cost, reroutes, blocks, cut sessions, budget hits; exits 1 when a ci.failOn gate fails").requiredOption("--base <dir or git ref>", "base policy directory, or a git ref whose copy of the --head directory is the base").requiredOption("--head <dir>", "head policy directory").requiredOption("--traces <files...>", "export file(s) written by tokenyard traces export (.ndjson or .ndjson.gz); a trace directory is refused").option("--since <when>", "duration such as 7d, or an ISO time; earlier records only seed budget windows (default: the export window)").option("--tenant <tenant>", "only this tenant").option("--json <file>", "also write the full result as JSON (docs/replay-json.md)").option("--base-revision <rev>", "revision the base was recorded under (default: the content revision serve --policy records)").option("--head-revision <rev>", "revision of the head (default: its content revision)").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (o) => {
+  const { writeFile: writeFile3 } = await import("node:fs/promises");
+  const { loadReplayPolicy: loadReplayPolicy2, openReplayTraces: openReplayTraces2 } = await Promise.resolve().then(() => (init_replay_input(), replay_input_exports));
+  const { replay: replay2 } = await Promise.resolve().then(() => (init_engine(), engine_exports));
+  const { renderJson: renderJson2 } = await Promise.resolve().then(() => (init_render_json(), render_json_exports));
+  const { renderTerminal: renderTerminal2 } = await Promise.resolve().then(() => (init_render_terminal2(), render_terminal_exports));
+  const experimentalSubscription = o.experimentalSubscription === true;
+  const sinceMs = o.since === void 0 ? null : sinceOf(o.since, Date.now());
+  if (sinceMs !== null && Number.isNaN(sinceMs)) return void (console.error("tokenyard policy replay: --since must be a duration or an ISO time"), process.exit(1));
+  try {
+    const base = await loadReplayPolicy2({ source: o.base, headDir: o.head, experimentalSubscription, ...o.baseRevision ? { revision: o.baseRevision } : {} });
+    const head = await loadReplayPolicy2({ source: o.head, headDir: o.head, experimentalSubscription, ...o.headRevision ? { revision: o.headRevision } : {} });
+    const result = await replay2({ base, head, traces: await openReplayTraces2(o.traces), sinceMs, tenant: o.tenant ?? null });
+    if (o.json) await writeFile3(o.json, renderJson2(result));
+    process.stdout.write(renderTerminal2(result));
+    if (result.gates.failed.length > 0) process.exitCode = 1;
+  } catch (e) {
+    console.error(`tokenyard policy replay: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+});
 var traces = program2.command("traces").description("trace files written by serve --trace-dir");
-var sinceOf = (v, now) => /^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v);
 traces.command("export").description("merge every instance file in a window into one ordered NDJSON file with a manifest line first").requiredOption("--trace-dir <dir>", "trace directory (shared storage when several instances write)").requiredOption("--out <file>", "output file; a name ending in .gz is gzipped").option("--since <when>", "duration such as 7d or 12h, or an ISO time", "7d").option("--until <when>", "ISO time (default now)").option("--anonymize", "replace tenant, team, key id, repo, branch and ticket with stable pseudonyms and drop client.version").option("--salt <salt>", "salt for --anonymize (or TOKENYARD_TRACE_SALT)").action(async (o) => {
   const salt = o.salt ?? process.env.TOKENYARD_TRACE_SALT;
   if (o.anonymize && !salt) return void (console.error("tokenyard traces export: --anonymize needs --salt or TOKENYARD_TRACE_SALT"), process.exit(1));

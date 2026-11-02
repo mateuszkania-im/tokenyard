@@ -221,6 +221,7 @@ keys
     console.log(plaintext);
     console.error(`appended the hash to ${o.file}; the key is shown only once`);
   });
+const sinceOf = (v: string, now: number): number => (/^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v));
 const policy = program.command('policy').description('policy files');
 policy
   .command('check')
@@ -282,8 +283,40 @@ policy
     const { policyJsonSchema } = await import('./policy/json-schema.js');
     process.stdout.write(`${JSON.stringify(policyJsonSchema(), null, 2)}\n`);
   });
+policy
+  .command('replay')
+  .description('replay a merged trace export against a base and a head policy: fidelity, cost, reroutes, blocks, cut sessions, budget hits; exits 1 when a ci.failOn gate fails')
+  .requiredOption('--base <dir or git ref>', 'base policy directory, or a git ref whose copy of the --head directory is the base')
+  .requiredOption('--head <dir>', 'head policy directory')
+  .requiredOption('--traces <files...>', 'export file(s) written by tokenyard traces export (.ndjson or .ndjson.gz); a trace directory is refused')
+  .option('--since <when>', 'duration such as 7d, or an ISO time; earlier records only seed budget windows (default: the export window)')
+  .option('--tenant <tenant>', 'only this tenant')
+  .option('--json <file>', 'also write the full result as JSON (docs/replay-json.md)')
+  .option('--base-revision <rev>', 'revision the base was recorded under (default: the content revision serve --policy records)')
+  .option('--head-revision <rev>', 'revision of the head (default: its content revision)')
+  .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
+  .action(async (o: { base: string; head: string; traces: string[]; since?: string; tenant?: string; json?: string; baseRevision?: string; headRevision?: string; experimentalSubscription?: boolean }) => {
+    const { writeFile } = await import('node:fs/promises');
+    const { loadReplayPolicy, openReplayTraces } = await import('./policy-loader/replay-input.js');
+    const { replay } = await import('./replay/engine.js');
+    const { renderJson } = await import('./replay/render-json.js');
+    const { renderTerminal } = await import('./replay/render-terminal.js');
+    const experimentalSubscription = o.experimentalSubscription === true;
+    const sinceMs = o.since === undefined ? null : sinceOf(o.since, Date.now());
+    if (sinceMs !== null && Number.isNaN(sinceMs)) return void (console.error('tokenyard policy replay: --since must be a duration or an ISO time'), process.exit(1));
+    try {
+      const base = await loadReplayPolicy({ source: o.base, headDir: o.head, experimentalSubscription, ...(o.baseRevision ? { revision: o.baseRevision } : {}) });
+      const head = await loadReplayPolicy({ source: o.head, headDir: o.head, experimentalSubscription, ...(o.headRevision ? { revision: o.headRevision } : {}) });
+      const result = await replay({ base, head, traces: await openReplayTraces(o.traces), sinceMs, tenant: o.tenant ?? null });
+      if (o.json) await writeFile(o.json, renderJson(result));
+      process.stdout.write(renderTerminal(result));
+      if (result.gates.failed.length > 0) process.exitCode = 1;
+    } catch (e) {
+      console.error(`tokenyard policy replay: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+  });
 const traces = program.command('traces').description('trace files written by serve --trace-dir');
-const sinceOf = (v: string, now: number): number => (/^\d+[hd]$/.test(v) ? now - parseDuration(v) : Date.parse(v));
 traces
   .command('export')
   .description('merge every instance file in a window into one ordered NDJSON file with a manifest line first')

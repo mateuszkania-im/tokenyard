@@ -183,6 +183,8 @@ export interface RequestOutcome {
   boundExceeded?: boolean;
   /** What the store charged the budget levels at settlement (the estimate when the sweeper settled); absent without a reservation. */
   chargedMicroUsd?: number;
+  /** Price table modifiers the request selected, as the cost was priced (replay reprices with them). */
+  costModifiers?: string[];
 }
 
 type ErrorReply = ReturnType<typeof anthropicError>;
@@ -304,6 +306,7 @@ function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { us
  */
 async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy: CompiledPolicy, held: Held, outcome: RequestOutcome): Promise<void> {
   const o: RequestOutcome = { ...outcome };
+  o.costModifiers = requestModifiers(policy, o.features);
   const r = o.usage;
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost: number | null = null;

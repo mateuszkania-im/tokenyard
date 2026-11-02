@@ -57,6 +57,9 @@ interface InstanceAcc {
   emitted: number;
   minSeq: number;
   maxSeq: number;
+  /** Latest ts of any line of this instance, in the window or not, and of its latest shutdown record. */
+  lastSignal: number;
+  lastShutdown: number;
 }
 
 /**
@@ -68,7 +71,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
   const instances = new Map<string, InstanceAcc>();
   const acc = (id: string): InstanceAcc => {
     let a = instances.get(id);
-    if (!a) instances.set(id, (a = { hours: new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: new Set(), emitted: 0, minSeq: Infinity, maxSeq: -Infinity }));
+    if (!a) instances.set(id, (a = { hours: new Set(), firstTs: Infinity, lastTs: -Infinity, seqs: new Set(), emitted: 0, minSeq: Infinity, maxSeq: -Infinity, lastSignal: -Infinity, lastShutdown: -Infinity }));
     return a;
   };
   const inWindow = (ms: number): boolean => ms >= o.sinceMs && ms <= o.untilMs;
@@ -89,6 +92,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
         a.minSeq = Math.min(a.minSeq, line.seq);
         a.maxSeq = Math.max(a.maxSeq, line.seq);
         const ms = Date.parse(line.ts);
+        a.lastSignal = Math.max(a.lastSignal, ms);
         if (!inWindow(ms)) continue;
         seen(a, ms);
         a.emitted++;
@@ -98,12 +102,15 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
         a.maxSeq = Math.max(a.maxSeq, line.seq);
         const ms = Date.parse((line as HeartbeatRecord).ts);
         if (inWindow(ms)) seen(a, ms);
+        a.lastSignal = Math.max(a.lastSignal, ms);
+        if (line.kind === 'shutdown') a.lastShutdown = Math.max(a.lastShutdown, ms);
       } else if (line.kind === 'segment') {
         const seg = line as SegmentRecord;
         const a = acc(seg.instance);
         a.minSeq = Math.min(a.minSeq, seg.firstSeq);
         const ms = Date.parse(seg.startedAt);
         if (inWindow(ms)) seen(a, ms);
+        a.lastSignal = Math.max(a.lastSignal, ms);
       }
     }
   }
@@ -131,6 +138,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
           records: a.emitted,
           seqGaps,
           hoursWithoutFile,
+          shutdown: a.lastShutdown !== -Infinity && a.lastShutdown >= a.lastSignal,
         };
       }),
   };

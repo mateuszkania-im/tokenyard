@@ -177,3 +177,16 @@ test('anonymizeRecord is deny by default: unknown attribution keys and free-text
   const known = anonymizeRecord({ ...r, attribution: { ...r.attribution, requestClass: 'subagent', agentType: 'Explore' }, instance: 'i', seq: 1 }, () => 'x');
   expect(known.attribution).toMatchObject({ requestClass: 'subagent', agentType: 'Explore', repo: 'x' });
 });
+
+test('manifest says whether each instance ended with a shutdown record, so replay can tell heartbeats that stopped', async () => {
+  const root = join(dir, 't');
+  const seg = (inst: string) => ({ v: 1, kind: 'segment', instance: inst, startedAt: iso(T(10)), firstSeq: 1 });
+  const hb = (inst: string, m: number) => ({ v: 1, kind: 'heartbeat', instance: inst, ts: iso(T(10, m)), seq: 0 });
+  await writeFileLines(join(root, 'acme', '2026-11-02', '10.up.ndjson'), [seg('up'), hb('up', 1), { v: 1, kind: 'shutdown', instance: 'up', ts: iso(T(10, 2)), seq: 0 }]);
+  await writeFileLines(join(root, 'acme', '2026-11-02', '10.died.ndjson'), [seg('died'), hb('died', 1)]);
+  const m = await exportTraces({ dir: root, sinceMs: T(0), untilMs: T(23), out });
+  expect(m.instances.map((i) => [i.id, i.shutdown])).toEqual([
+    ['died', false],
+    ['up', true],
+  ]);
+});

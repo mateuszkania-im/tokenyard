@@ -60,6 +60,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       bodyBytes: o.features.bodyBytes,
       prefixHash: o.features.prefixHash,
       contextCompacted: false,
+      ...(o.features.fastMode ? { fastMode: true as const } : {}),
     },
     // The message index stays out: it is for the error message only.
     guardrail: { hits: (o.guardrailHits ?? []).map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) },
@@ -74,6 +75,8 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       taintUnchecked: o.taintUnchecked ?? false,
       audit: o.audit ? o.audit.map((a) => ({ ...a })) : [],
       ...(o.storeDown ? { storeDown: true as const } : {}),
+      // Every exit after decide carries the bound it used; without one there was no plan to replay.
+      ...(o.inputBound === undefined ? { preDecision: true as const } : {}),
     },
     ...(o.candidate && !('error' in o.candidate)
       ? {
@@ -106,6 +109,9 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       costMicroUsd: o.costMicroUsd,
       costBasis: o.costBasis,
       priceTable: o.priceTable,
+      ...(u?.usage && (u.fast === true || o.features.fastMode) ? { fast: true as const } : {}),
+      ...(o.costModifiers && o.costModifiers.length > 0 ? { modifiers: [...o.costModifiers] } : {}),
+      ...(u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {}),
       aborted: o.aborted,
       settledBy: o.settledBy ?? 'request',
       overrun: o.overrun ?? false,

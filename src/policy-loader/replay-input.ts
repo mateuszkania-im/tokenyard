@@ -1,0 +1,56 @@
+// The file side of `tokenyard policy replay` (R-P2): reads trace files and policy sources, hands data to src/replay.
+import { execFileSync } from 'node:child_process';
+import { stat } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
+import { readLedger } from '../ledger/reader.js';
+import type { LedgerLine } from '../ledger/record.js';
+import { buildBundle } from '../policy/bundle.js';
+import { compilePolicy } from '../policy/compile.js';
+import { parsePolicyFiles, policyFileNames, POLICY_FILE, PolicyLoadError } from '../policy/load-dir.js';
+import type { CompiledPolicy } from '../policy/types.js';
+import { RawTraceDirError } from '../replay/engine.js';
+import { loadPolicyDir } from './load-dir.js';
+
+/**
+ * Lines of one or more export files (plain or .gz). A directory is refused before anything is read: replay needs the
+ * merged set `tokenyard traces export` writes, never raw per-instance files (spec 9.2 step 1).
+ */
+export async function openReplayTraces(paths: string[]): Promise<AsyncIterable<LedgerLine>> {
+  for (const p of paths) if ((await stat(p)).isDirectory()) throw new RawTraceDirError(p);
+  return readLedger(paths);
+}
+
+/** Policy files of `dir` at git ref `ref` (`git show <ref>:<path>`), relative to the repository that holds `dir`. */
+function filesAtRef(ref: string, dir: string): Record<string, string> {
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  const top = git(['rev-parse', '--show-toplevel']).trim();
+  const rel = relative(top, resolve(dir)).split('\\').join('/');
+  const show = (name: string): string | undefined => {
+    try {
+      return git(['show', `${ref}:${rel === '' ? name : `${rel}/${name}`}`]);
+    } catch {
+      return undefined;
+    }
+  };
+  const policy = show(POLICY_FILE);
+  if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${dir} at ${ref}` }]);
+  const files: Record<string, string> = { [POLICY_FILE]: policy };
+  for (const name of policyFileNames(policy)) {
+    if (name === POLICY_FILE) continue;
+    const text = show(name);
+    if (text !== undefined) files[name] = text;
+  }
+  return files;
+}
+
+/**
+ * A policy for replay from a directory, or from a git ref (the head directory's files at that ref). The revision is
+ * the one `serve --policy <dir>` records (the first 12 hex of the content sha256), unless `revision` is given (a bundle
+ * built in CI records GITHUB_SHA).
+ */
+export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean }): Promise<CompiledPolicy> {
+  const isDir = await stat(o.source).then((s) => s.isDirectory(), () => false);
+  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join(o.headDir, `@${o.source}`), filesAtRef(o.source, o.headDir));
+  const revision = o.revision ?? buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
+  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+}

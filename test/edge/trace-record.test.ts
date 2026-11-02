@@ -48,3 +48,24 @@ test('no usage is recorded as usageSource none with null usage and cost', () => 
   const r = buildTraceRecord(outcome({ usage: null, costMicroUsd: null }), 'salt');
   expect(r.outcome).toMatchObject({ usage: null, usageSource: 'none', costMicroUsd: null });
 });
+
+test('records what replay needs to reproduce the reservation and the cost: fast mode, modifiers, server tool uses', () => {
+  const u = outcome().usage!;
+  const base = outcome();
+  const r = buildTraceRecord(
+    outcome({ features: { ...base.features, fastMode: true }, usage: { ...u, fast: true, serverToolUses: { web_search: 2 } }, costModifiers: ['inferenceGeoUs'] }),
+    'salt',
+  );
+  expect(r.features.fastMode).toBe(true);
+  expect(r.outcome).toMatchObject({ fast: true, modifiers: ['inferenceGeoUs'], serverToolUses: { web_search: 2 } });
+  const plain = buildTraceRecord(outcome({ costModifiers: [] }), 'salt');
+  expect(plain.features.fastMode).toBeUndefined();
+  expect(plain.outcome.fast).toBeUndefined();
+  expect(plain.outcome.modifiers).toBeUndefined();
+  expect(plain.outcome.serverToolUses).toBeUndefined();
+});
+
+test('a request that ended before a decision is marked preDecision, so replay skips it', () => {
+  expect(buildTraceRecord(outcome({ route: null, decision: { action: 'block', reason: 'body-too-large' } }), 'salt').decision.preDecision).toBe(true);
+  expect(buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt').decision.preDecision).toBeUndefined();
+});

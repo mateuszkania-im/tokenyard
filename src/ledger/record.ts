@@ -18,14 +18,18 @@ export interface TraceRecord {
   features: { model: string; stream: boolean; inputTokensBound: number; boundKind: 'bytes' | 'context-window';
               maxOutputTokens: number | null; serverTools: Array<{ type: string; maxUses: number | null }>;
               toolCount: number; thinking: boolean; bodyBytes: number; prefixHash: string | null;
-              contextCompacted: boolean };
+              contextCompacted: boolean;
+              /** Not in spec 9.1: set (true) when the body selected fast mode; the reservation is priced at fast rates (replay reproduces it). */
+              fastMode?: true };
   guardrail: { hits: Array<{ rule: string; action: 'block' | 'warn' | 'redact'; valueHmac: string; where: 'last-turn' | 'history' }> };
   policy: { revision: string; candidateRevision?: string; candidateError?: string };
   decision: { route: string | null; action: 'forward' | 'block'; reason: string | null;
               chain: string[]; reservedMicroUsd: number; boundAssumed: boolean; taintUnchecked: boolean;
               audit: Array<{ name: string; wouldFail: boolean }>;
               /** Not in spec 9.1: set (true) when admit could not reach the counter store and failure.counterStoreDown applied. */
-              storeDown?: true };
+              storeDown?: true;
+              /** Not in spec 9.1: set (true) when the request ended before a decision (body too large, client gone while uploading, reservation not computable); replay skips it. */
+              preDecision?: true };
   candidateDecision?: TraceRecord['decision'];
   outcome: {
     provider: string | null; upstreamModel: string | null; attempts: number; cacheColdRisk: boolean;
@@ -36,6 +40,12 @@ export interface TraceRecord {
     /** Set (true) when usageSource is 'final' but `usage.output` was estimated from streamed characters: message_stop arrived without a message_delta output count. Not in spec 9.1; added so settlement and replay can tell. */
     outputEstimated?: boolean;
     costMicroUsd: number | null; costBasis: 'billed' | 'api-equivalent'; priceTable: string;
+    /** Not in spec 9.1: the cost was priced at fast mode rates (response or request). Replay reprices with it. */
+    fast?: true;
+    /** Not in spec 9.1: price table modifiers the request selected (for example `inferenceGeoUs`). Absent when none. */
+    modifiers?: string[];
+    /** Not in spec 9.1: server tool uses by price table tool name, as billed. Absent when none. */
+    serverToolUses?: Record<string, number>;
     aborted: boolean; settledBy: 'request' | 'sweeper'; overrun: boolean;
     /** Not in spec 9.1: set (true) when the actual cost could not be computed and the reservation estimate was settled instead; `costMicroUsd` is that estimate. */
     settledAtEstimate?: true;
@@ -59,6 +69,8 @@ export interface ManifestRecord {
   kind: 'manifest';
   since: string;
   until: string;
-  instances: Array<{ id: string; firstTs: string; lastTs: string; records: number; seqGaps: number; hoursWithoutFile: string[] }>;
+  instances: Array<{ id: string; firstTs: string; lastTs: string; records: number; seqGaps: number; hoursWithoutFile: string[];
+    /** Not in spec 9.5: the instance's latest line is a shutdown record (a graceful stop). Absent in older exports. */
+    shutdown?: boolean }>;
 }
 export type LedgerLine = TraceRecord | SegmentRecord | HeartbeatRecord | ShutdownRecord | ManifestRecord;
