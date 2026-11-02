@@ -36,7 +36,8 @@ export interface MemoryCounterStore extends CounterStore {
 const NOTHING: Admission = { admitted: true, failed: null, audit: [], totals: [] };
 const refused = (failed: NonNullable<Admission['failed']>): Admission => ({ admitted: false, failed, audit: [], totals: [] });
 
-export function createMemoryStore(o: { clock(): number; deadlineMs?: number }): MemoryCounterStore {
+/** `onSwept` receives the ids of the reservations a sweep settled at their estimate (trace `settledBy: sweeper`). */
+export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onSwept?: (ids: string[]) => void }): MemoryCounterStore {
   const deadlineMs = o.deadlineMs ?? DEFAULT_DEADLINE_MS;
   const budgets = new Map<string, Budget>();
   const tats = new Map<string, Tat>();
@@ -171,14 +172,15 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number }): 
     },
 
     async sweep(nowMs) {
-      let n = 0;
+      const ids: string[] = [];
       for (const [id, res] of reservations) {
         if (res.deadline > nowMs) continue;
         release(id, res, (est) => est, nowMs);
-        n++;
+        ids.push(id);
       }
+      if (ids.length > 0) o.onSwept?.(ids);
       for (const m of [budgets, tats, taints] as Array<Map<string, Expiring>>) for (const key of m.keys()) live(m, key, nowMs);
-      return n;
+      return ids.length;
     },
 
     async snapshot(keys) {
@@ -203,8 +205,9 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number }): 
           b = { s: 0, r: 0, exp: 0 };
           budgets.set(e.key, b);
         }
-        b.s = e.spentMicroUsd;
-        b.exp = now + e.ttlMs;
+        // max(current, seeded), TTL only grows: seeding from partial traces never lowers spend (as the Redis store).
+        b.s = Math.max(b.s, e.spentMicroUsd);
+        b.exp = Math.max(b.exp, now + e.ttlMs);
       }
     },
 

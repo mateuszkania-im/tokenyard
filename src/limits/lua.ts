@@ -127,9 +127,15 @@ export const SETTLE_LUA = `${RELEASE}
 return release(KEYS[1], KEYS[2], ARGV[1])
 `;
 
-/** KEYS: deadlines. ARGV: now ms, batch size. Settles due reservations at their estimates; returns their res keys. */
+/**
+ * KEYS: deadlines. ARGV: batch size. Settles reservations past their deadline at their estimates; returns their res
+ * keys. "Past" is judged on Redis TIME, the clock admit scored the deadlines with, so a fast instance clock cannot
+ * sweep a live reservation and free its stream slot early.
+ */
 export const SWEEP_LUA = `${RELEASE}
-local due = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, tonumber(ARGV[2]))
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+local due = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', int(now), 'LIMIT', 0, tonumber(ARGV[1]))
 local done = {}
 for _, resKey in ipairs(due) do
   if release(resKey, KEYS[1], nil) == 1 then table.insert(done, resKey) end
@@ -137,9 +143,14 @@ end
 return done
 `;
 
-/** KEYS: budget key. ARGV: spent micro-USD, ttl ms. Warm-up: sets spent, keeps reserved. */
+/**
+ * KEYS: budget key. ARGV: spent micro-USD, ttl ms. Warm-up: spent becomes max(current, seeded) and the TTL only
+ * grows, so an instance seeding from its own (partial) traces never lowers what a shared store already counts.
+ */
 export const SEED_LUA = `
-redis.call('HSET', KEYS[1], 's', ARGV[1])
-redis.call('PEXPIRE', KEYS[1], ARGV[2])
+local cur = tonumber(redis.call('HGET', KEYS[1], 's') or '0')
+if tonumber(ARGV[1]) > cur then redis.call('HSET', KEYS[1], 's', ARGV[1]) end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl < tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
 return 1
 `;

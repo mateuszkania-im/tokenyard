@@ -18,13 +18,31 @@ describe.skipIf(!url)('redis store (REDIS_URL)', () => {
     await client.flushDb();
     await client.close();
   });
-  const make = async () => {
+  const make = async (o: { deadlineMs?: number; onSwept?: (ids: string[]) => void } = {}) => {
     await client.flushDb();
-    return createRedisStore(client, { deadlineMs: 600_000 });
+    return createRedisStore(client, { deadlineMs: 600_000, ...o });
   };
   const keys = async () => (await client.keys('*')).sort();
 
-  runStoreContract('redis', make, keys);
+  // Redis sweeps on its own TIME, so the contract runs with a 300 ms deadline and waits past it to make reservations overdue.
+  runStoreContract('redis', (o) => make({ deadlineMs: 300, ...o }), {
+    listKeys: keys,
+    sweepOverdue: async (s) => {
+      await new Promise((r) => setTimeout(r, 350));
+      return s.sweep(0);
+    },
+  });
+
+  test('sweep ignores the caller clock: a fast instance clock does not sweep a live reservation or free its slot', async () => {
+    const swept: string[] = [];
+    const s = await make({ onSwept: (ids) => swept.push(...ids) });
+    const slot = { limit: 'st', key: 'ty:{acme}:st:st:k', max: 1 };
+    expect((await s.admit(plan({ id: 'live', streamSlots: [slot] }))).admitted).toBe(true);
+    expect(await s.sweep(Date.now() + 365 * 86_400_000)).toBe(0);
+    expect(swept).toEqual([]);
+    expect((await s.admit(plan({ id: 'second', streamSlots: [slot] }))).failed?.kind).toBe('streams');
+    expect(await s.settle('live', 0)).toBe('settled');
+  });
 
   test('NOSCRIPT after SCRIPT FLUSH falls back to EVAL', async () => {
     const s = await make();
@@ -50,6 +68,11 @@ describe.skipIf(!url)('redis store (REDIS_URL)', () => {
     expect(await client.hGet(bk, 'r')).toBe('9007199254740');
     const exp = await client.pTTL(bk);
     expect(exp).toBeGreaterThan(3_600_000 + 86_000_000);
+    const sk = budgetKey('acme', 'seeded', 'v', null);
+    await s.seed([{ key: sk, spentMicroUsd: 5, ttlMs: 60_000 }]);
+    expect(await client.pTTL(sk)).toBeGreaterThan(59_000);
+    await s.seed([{ key: sk, spentMicroUsd: 5, ttlMs: 1_000 }]);
+    expect(await client.pTTL(sk)).toBeGreaterThan(59_000);
   });
 
   test('GCRA runs on the Redis clock, not the caller nowMs', async () => {

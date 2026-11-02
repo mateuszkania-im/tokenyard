@@ -7,7 +7,7 @@ import type { CounterStore } from '../../src/limits/store.js';
 import type { Plan } from '../../src/policy/types.js';
 import { runStoreContract } from './store-contract.js';
 
-runStoreContract('memory', async () => createMemoryStore({ clock: () => Date.now() }), async (s: CounterStore) => (s as MemoryCounterStore).keys());
+runStoreContract('memory', async (o) => createMemoryStore({ clock: () => Date.now(), ...o }), { listKeys: async (s: CounterStore) => (s as MemoryCounterStore).keys() });
 
 const plan = (over: Partial<Plan>): Plan => ({ id: 'req_1', policyRevision: 'r1', route: 'r', chain: [], reservations: [], rateChecks: [], streamSlots: [], taint: null, preBlock: null, warnings: [], ...over });
 

@@ -23,7 +23,16 @@ function level(tenant: string, name: string, limitMicroUsd: number, estMicroUsd:
   return { budget: name, key: budgetKey(tenant, name, 'v', session ? null : '2026-11-02'), limitMicroUsd, estMicroUsd, enforce, resetsAt };
 }
 
-export function runStoreContract(name: string, make: () => Promise<CounterStore>, listKeys?: (store: CounterStore) => Promise<string[]>): void {
+export interface ContractOptions {
+  /** Every key the store holds (tests: every key carries {tenant}). */
+  listKeys?: (store: CounterStore) => Promise<string[]>;
+  /** Makes every open reservation overdue and sweeps; default `sweep(Date.now() + 1 hour)`. Redis sweeps on its own clock. */
+  sweepOverdue?: (store: CounterStore) => Promise<number>;
+}
+
+export function runStoreContract(name: string, make: (o?: { onSwept?: (ids: string[]) => void }) => Promise<CounterStore>, opts: ContractOptions = {}): void {
+  const { listKeys } = opts;
+  const sweepOverdue = opts.sweepOverdue ?? ((s: CounterStore) => s.sweep(Date.now() + HOUR));
   test(`${name}: admit reserves on every level and returns post-admit totals`, async () => {
     const s = await make();
     const t = freshTenant();
@@ -135,7 +144,7 @@ export function runStoreContract(name: string, make: () => Promise<CounterStore>
     expect(await s.settle(a, 0)).toBe('settled');
     expect((await s.admit(p(c))).admitted).toBe(true);
     expect((await s.admit(p(d))).failed?.kind).toBe('streams');
-    expect(await s.sweep(Date.now() + HOUR)).toBe(2);
+    expect(await sweepOverdue(s)).toBe(2);
     expect((await s.admit(p(d))).admitted).toBe(true);
     expect((await s.admit(p(e))).admitted).toBe(true);
     expect((await s.admit(p(id()))).failed?.kind).toBe('streams');
@@ -166,11 +175,11 @@ export function runStoreContract(name: string, make: () => Promise<CounterStore>
     const rid = id();
     await s.admit({ ...plan({ reservations: levels }), id: rid });
     expect(await s.sweep(Date.now())).toBe(0);
-    expect(await s.sweep(Date.now() + HOUR)).toBe(1);
+    expect(await sweepOverdue(s)).toBe(1);
     const snap = await s.snapshot(levels.map((l) => l.key));
     for (const l of levels) expect(snap[l.key]).toEqual({ spent: 100, reserved: 0 });
     expect(await s.settle(rid, 5)).toBe('unknown');
-    expect(await s.sweep(Date.now() + HOUR)).toBe(0);
+    expect(await sweepOverdue(s)).toBe(0);
   });
 
   test(`${name}: seed sets spent for warm-up keys`, async () => {
@@ -180,8 +189,8 @@ export function runStoreContract(name: string, make: () => Promise<CounterStore>
     await s.seed([{ key: org.key, spentMicroUsd: 700, ttlMs: DAY }]);
     expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 700, reserved: 0 });
     await s.seed([{ key: org.key, spentMicroUsd: 600, ttlMs: DAY }]);
-    expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 600, reserved: 0 });
-    expect((await s.admit(plan({ reservations: [org] }))).failed).toEqual({ kind: 'budget', name: 'org', spentMicroUsd: 600 });
+    expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 700, reserved: 0 });
+    expect((await s.admit(plan({ reservations: [org] }))).failed).toEqual({ kind: 'budget', name: 'org', spentMicroUsd: 700 });
     expect(await s.snapshot(['ty:{nobody}:b:x:y'])).toEqual({ 'ty:{nobody}:b:x:y': { spent: 0, reserved: 0 } });
   });
 
@@ -224,5 +233,34 @@ export function runStoreContract(name: string, make: () => Promise<CounterStore>
     const a = await s.admit(plan());
     expect(a).toEqual({ admitted: true, failed: null, audit: [], totals: [] });
     if (listKeys) expect(await listKeys(s)).toEqual([]);
+  });
+  test(`${name}: sweep reports the ids it settled (trace settledBy: sweeper)`, async () => {
+    const swept: string[] = [];
+    const s = await make({ onSwept: (ids) => swept.push(...ids) });
+    const t = freshTenant();
+    const [a, b] = [`${id()}:x/y`, id()];
+    await s.admit(plan({ id: a, reservations: [level(t, 'org', 10_000, 100)] }));
+    await s.admit(plan({ id: b, streamSlots: [{ limit: 'st', key: streamKey(t, 'st', 'k'), max: 5 }] }));
+    const c = id();
+    await s.admit(plan({ id: c, reservations: [level(t, 'org', 10_000, 100)] }));
+    expect(await s.settle(c, 1)).toBe('settled');
+    expect(await sweepOverdue(s)).toBe(2);
+    expect(swept.sort()).toEqual([a, b].sort());
+  });
+
+  test(`${name}: seeding a lower value never decreases spent`, async () => {
+    const s = await make();
+    const t = freshTenant();
+    const org = level(t, 'org', 10_000, 100);
+    await s.seed([{ key: org.key, spentMicroUsd: 700, ttlMs: DAY }]);
+    await s.seed([{ key: org.key, spentMicroUsd: 300, ttlMs: DAY }]);
+    expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 700, reserved: 0 });
+    const rid = id();
+    await s.admit(plan({ id: rid, reservations: [org] }));
+    await s.settle(rid, 50);
+    await s.seed([{ key: org.key, spentMicroUsd: 700, ttlMs: DAY }]);
+    expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 750, reserved: 0 });
+    await s.seed([{ key: org.key, spentMicroUsd: 900, ttlMs: DAY }]);
+    expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 900, reserved: 0 });
   });
 }

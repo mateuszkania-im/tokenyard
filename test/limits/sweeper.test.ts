@@ -66,3 +66,21 @@ test('a failing sweep or lock does not stop the sweeper, and ticks never overlap
   expect(calls).toBe(3);
   stop();
 });
+
+test('onError receives every lock or sweep failure and ticking continues', async () => {
+  const errors: unknown[] = [];
+  let calls = 0;
+  let lockFails = true;
+  const stop = startSweeper(
+    fakeStore(async () => {
+      calls++;
+      throw new Error(`sweep failed ${calls}`);
+    }),
+    { intervalMs: 1_000, onError: (e) => errors.push(e), lock: { acquire: async () => { if (lockFails) throw new Error('lock failed'); return true; } } },
+  );
+  await vi.advanceTimersByTimeAsync(1_000);
+  lockFails = false;
+  await vi.advanceTimersByTimeAsync(2_000);
+  stop();
+  expect(errors.map((e) => (e as Error).message)).toEqual(['lock failed', 'sweep failed 1', 'sweep failed 2']);
+});

@@ -36,7 +36,11 @@ interface AdmitReply {
   totals?: Array<[string, string, string, string]> | Record<string, never>;
 }
 
-export function createRedisStore(client: Client, o: { deadlineMs: number }): CounterStore {
+/**
+ * `onSwept` receives the ids of the reservations a sweep settled (they get `settledBy: sweeper`), whichever instance
+ * admitted them. `sweep(nowMs)` ignores `nowMs`: overdue is judged on Redis TIME, the clock admit used.
+ */
+export function createRedisStore(client: Client, o: { deadlineMs: number; onSwept?: (ids: string[]) => void }): CounterStore {
   /** Open reservations admitted by this instance: id to tenant, so settle can name the record. */
   const open = new Map<string, string>();
   let loaded: Promise<void> | null = null;
@@ -116,7 +120,7 @@ export function createRedisStore(client: Client, o: { deadlineMs: number }): Cou
       return Number(done) === 1 ? 'settled' : 'unknown';
     },
 
-    async sweep(nowMs) {
+    async sweep() {
       let n = 0;
       let cursor = '0';
       do {
@@ -124,9 +128,12 @@ export function createRedisStore(client: Client, o: { deadlineMs: number }): Cou
         cursor = String(next);
         for (const key of found.map(String).filter((k) => DEADLINES.test(k))) {
           for (;;) {
-            const done = list<unknown>(await run(SWEEP, [key], [String(Math.floor(nowMs)), String(SWEEP_BATCH)])).map(String);
+            const done = list<unknown>(await run(SWEEP, [key], [String(SWEEP_BATCH)])).map(String);
             n += done.length;
-            for (const resKey of done) open.delete(decodeURIComponent(resKey.slice(resKey.lastIndexOf(':') + 1)));
+            // `ty:{t}:res:<encoded id>`: the encoded id holds no ':'.
+            const ids = done.map((resKey) => decodeURIComponent(resKey.slice(resKey.lastIndexOf(':') + 1)));
+            for (const id of ids) open.delete(id);
+            if (ids.length > 0) o.onSwept?.(ids);
             if (done.length < SWEEP_BATCH) break;
           }
         }
