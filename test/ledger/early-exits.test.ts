@@ -129,3 +129,20 @@ test('401 before authentication is not recorded', async () => {
   await new Promise((r) => setTimeout(r, 50));
   expect(g.records).toEqual([]);
 });
+
+test('audit mode: a candidate that throws leaves the live response unchanged and is recorded as a candidate error', async () => {
+  const mock = await startAnthropicMock();
+  closers.push(mock.close);
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const live = testPolicy({ upstream: mock.url });
+  const broken = { ...live, revision: 'cand', candidate: null };
+  Object.defineProperty(broken, 'routes', { get: () => { throw new Error('candidate exploded'); } });
+  const records: Rec[] = [];
+  const gw = await startGateway({ policy: { ...live, candidate: broken }, traces: { write: (r) => (records.push(r), true) }, traceSalt: 'salt' });
+  closers.push(gw.close);
+  const res = await send(gw.url, { path: '/v1/messages', headers: authHeaders, body: msgBody() });
+  expect(res.status).toBe(200);
+  await expect.poll(() => records.length).toBe(1);
+  expect(records[0]).toMatchObject({ policy: { revision: 'test', candidateRevision: 'cand', candidateError: 'Error' }, decision: { action: 'forward' } });
+  expect(records[0]?.candidateDecision).toBeUndefined();
+});

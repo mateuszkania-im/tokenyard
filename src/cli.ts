@@ -28,13 +28,29 @@ program
     '--dev-upstream <url>',
     'development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)',
   )
+  .option('--policy <dir>', 'policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes')
+  .option('--policy-url <url>', 'policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors')
+  .option('--state-dir <dir>', 'where the last-known-good bundle is kept', '.tokenyard-state')
+  .option('--candidate-policy <dir>', 'audit mode: a second policy directory whose decisions are traced but never enforced')
   .option('--experimental-subscription', 'experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)')
   .option('--trace-dir <dir>', 'write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson')
   .option('--instance-id <id>', 'instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)')
   .option('--trace-salt <salt>', 'HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string }) => {
-    if (!o.devUpstream) {
-      console.error('tokenyard serve: policy loading is not available yet; use --dev-upstream <url>');
+  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string }) => {
+    if (!o.devUpstream && !o.policy && !o.policyUrl) {
+      console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
+      process.exit(1);
+    }
+    if ((o.policy || o.policyUrl) && o.devUpstream) {
+      console.error('tokenyard serve: --dev-upstream cannot be combined with --policy or --policy-url');
+      process.exit(1);
+    }
+    if (o.policy && o.policyUrl) {
+      console.error('tokenyard serve: give --policy or --policy-url, not both');
+      process.exit(1);
+    }
+    if (o.candidatePolicy && !o.policy && !o.policyUrl) {
+      console.error('tokenyard serve: --candidate-policy needs --policy or --policy-url');
       process.exit(1);
     }
     const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
@@ -52,10 +68,34 @@ program
     const beat = writer ? setInterval(() => writer.heartbeat(), 60_000) : null;
     beat?.unref();
     const { createGateway, DEFAULT_BODY_CAP_BYTES } = await import('./edge/server.js');
-    const { devPolicy, DEV_KEY, DEV_UPSTREAM_KEY_ENV } = await import('./edge/dev-policy.js');
-    const policy = devPolicy({ upstream: o.devUpstream, keys: [DEV_KEY], credential: { env: DEV_UPSTREAM_KEY_ENV } });
+    let loader: import('./policy-loader/loader.js').PolicyLoader | null = null;
+    let activePolicy: () => import('./policy/types.js').CompiledPolicy;
+    if (o.devUpstream) {
+      const { devPolicy, DEV_KEY, DEV_UPSTREAM_KEY_ENV } = await import('./edge/dev-policy.js');
+      const dev = devPolicy({ upstream: o.devUpstream, keys: [DEV_KEY], credential: { env: DEV_UPSTREAM_KEY_ENV } });
+      activePolicy = () => dev;
+    } else {
+      const { PolicyLoader } = await import('./policy-loader/loader.js');
+      const l = new PolicyLoader({
+        ...(o.policy ? { dir: o.policy } : {}),
+        ...(o.policyUrl ? { url: o.policyUrl } : {}),
+        ...(o.candidatePolicy ? { candidateDir: o.candidatePolicy } : {}),
+        stateDir: o.stateDir,
+        experimentalSubscription: o.experimentalSubscription === true,
+      });
+      l.on('error', (e: Error) => console.error(`tokenyard: policy load failed, keeping the active revision: ${e.message}`));
+      l.on('loaded', (p: { revision: string }) => console.error(`tokenyard: policy revision ${p.revision} active`));
+      try {
+        await l.start();
+      } catch (e) {
+        console.error(`tokenyard serve: ${e instanceof Error ? e.message : String(e)}`);
+        process.exit(1);
+      }
+      loader = l;
+      activePolicy = () => l.active();
+    }
     const gw = createGateway({
-      policy: () => policy,
+      policy: activePolicy,
       store: null,
       traces: writer,
       traceSalt,
@@ -68,7 +108,7 @@ program
     console.log(await gw.listen(Number(o.port), o.host));
     const stop = (): void => {
       if (beat) clearInterval(beat);
-      void gw.close().then(() => writer?.close()).then(() => process.exit(0));
+      void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => process.exit(0));
     };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
@@ -145,6 +185,36 @@ policy
     for (const i of warnings) console.log(`warning ${i.code} ${i.path}: ${i.message}`);
     console.log(`${errors.length} errors, ${warnings.length} warnings`);
     if (errors.length > 0) process.exit(1);
+  });
+policy
+  .command('build')
+  .description('write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256')
+  .argument('[dir]', 'policy directory', 'policy')
+  .option('--out <file>', 'output file', 'dist/policy-bundle.json')
+  .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
+  .action(async (dir: string, o: { out: string; experimentalSubscription?: boolean }) => {
+    const { mkdir, writeFile } = await import('node:fs/promises');
+    const { dirname } = await import('node:path');
+    const { loadPolicyDir } = await import('./policy-loader/load-dir.js');
+    const { PolicyLoadError } = await import('./policy/load-dir.js');
+    const { validatePolicy } = await import('./policy/validate.js');
+    const { buildBundle, serializeBundle } = await import('./policy/bundle.js');
+    try {
+      const src = await loadPolicyDir(dir);
+      const { errors } = validatePolicy(src, { experimentalSubscription: o.experimentalSubscription === true });
+      if (errors.length > 0) {
+        for (const i of errors) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+        process.exit(1);
+      }
+      const bundle = buildBundle(src, { createdAt: new Date().toISOString(), ...(process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {}) });
+      await mkdir(dirname(o.out), { recursive: true });
+      await writeFile(o.out, serializeBundle(bundle));
+      console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
+    } catch (e) {
+      if (!(e instanceof PolicyLoadError)) throw e;
+      for (const i of e.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+      process.exit(1);
+    }
   });
 policy
   .command('schema')

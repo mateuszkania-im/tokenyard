@@ -62,7 +62,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       contextCompacted: false,
     },
     guardrail: { hits: [] },
-    policy: { revision: o.policyRevision, ...(o.candidate ? { candidateRevision: o.candidate.revision } : {}) },
+    policy: { revision: o.policyRevision, ...(o.candidate ? { candidateRevision: o.candidate.revision } : {}), ...(o.candidate && 'error' in o.candidate ? { candidateError: o.candidate.error } : {}) },
     decision: {
       route: o.route?.name ?? null,
       action: o.decision?.action ?? 'forward',
@@ -73,7 +73,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       taintUnchecked: false,
       audit: [],
     },
-    ...(o.candidate
+    ...(o.candidate && !('error' in o.candidate)
       ? {
           candidateDecision: {
             route: o.candidate.route,

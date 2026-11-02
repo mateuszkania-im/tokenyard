@@ -32103,10 +32103,10 @@ var require_wrap_handler = __commonJS({
 var require_dispatcher = __commonJS({
   "node_modules/undici/lib/dispatcher/dispatcher.js"(exports, module) {
     "use strict";
-    var EventEmitter2 = __require("node:events");
+    var EventEmitter3 = __require("node:events");
     var WrapHandler = require_wrap_handler();
     var wrapInterceptor = (dispatch) => (opts, handler) => dispatch(opts, WrapHandler.wrap(handler));
-    var Dispatcher = class extends EventEmitter2 {
+    var Dispatcher = class extends EventEmitter3 {
       dispatch() {
         throw new Error("not implemented");
       }
@@ -34679,10 +34679,10 @@ var require_util2 = __commonJS({
     function TAOCheck() {
       return "success";
     }
-    function appendFetchMetadata(httpRequest) {
+    function appendFetchMetadata(httpRequest2) {
       let header2 = null;
-      header2 = httpRequest.mode;
-      httpRequest.headersList.set("sec-fetch-mode", header2, true);
+      header2 = httpRequest2.mode;
+      httpRequest2.headersList.set("sec-fetch-mode", header2, true);
     }
     function appendRequestOriginHeader(request2) {
       let serializedOrigin = request2.origin;
@@ -39623,7 +39623,7 @@ var require_socks5_utils = __commonJS({
 var require_socks5_client = __commonJS({
   "node_modules/undici/lib/core/socks5-client.js"(exports, module) {
     "use strict";
-    var { EventEmitter: EventEmitter2 } = __require("node:events");
+    var { EventEmitter: EventEmitter3 } = __require("node:events");
     var { Buffer: Buffer2 } = __require("node:buffer");
     var { InvalidArgumentError: InvalidArgumentError2, Socks5ProxyError } = require_errors2();
     var { debuglog } = __require("node:util");
@@ -39668,7 +39668,7 @@ var require_socks5_client = __commonJS({
       ERROR: "error",
       CLOSED: "closed"
     };
-    var Socks5Client = class extends EventEmitter2 {
+    var Socks5Client = class extends EventEmitter3 {
       constructor(socket, options = {}) {
         super();
         if (!socket) {
@@ -43450,7 +43450,7 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile2, readFile: readFile2, mkdir: mkdir2 } = __require("node:fs/promises");
+    var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir3 } = __require("node:fs/promises");
     var { dirname, resolve: resolve2 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
@@ -43652,7 +43652,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile2(resolve2(path2), "utf8");
+          const data = await readFile3(resolve2(path2), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -43682,12 +43682,12 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         const resolvedPath = resolve2(path2);
-        await mkdir2(dirname(resolvedPath), { recursive: true });
+        await mkdir3(dirname(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
           snapshot
         }));
-        await writeFile2(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
+        await writeFile3(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
       }
       /**
        * Clears all recorded snapshots
@@ -46572,9 +46572,9 @@ var require_memory_cache_store = __commonJS({
   "node_modules/undici/lib/cache/memory-cache-store.js"(exports, module) {
     "use strict";
     var { Writable } = __require("node:stream");
-    var { EventEmitter: EventEmitter2 } = __require("node:events");
+    var { EventEmitter: EventEmitter3 } = __require("node:events");
     var { assertCacheKey, assertCacheValue } = require_cache();
-    var MemoryCacheStore = class extends EventEmitter2 {
+    var MemoryCacheStore = class extends EventEmitter3 {
       #maxCount = 1024;
       #maxSize = 104857600;
       // 100MB
@@ -51020,85 +51020,85 @@ var require_fetch = __commonJS({
     async function httpNetworkOrCacheFetch(fetchParams, isAuthenticationFetch = false, isNewConnectionFetch = false) {
       const request2 = fetchParams.request;
       let httpFetchParams = null;
-      let httpRequest = null;
+      let httpRequest2 = null;
       let response = null;
       const httpCache = null;
       const revalidatingFlag = false;
       if (request2.window === "no-window" && request2.redirect === "error") {
         httpFetchParams = fetchParams;
-        httpRequest = request2;
+        httpRequest2 = request2;
       } else {
-        httpRequest = cloneRequest(request2);
+        httpRequest2 = cloneRequest(request2);
         httpFetchParams = { ...fetchParams };
-        httpFetchParams.request = httpRequest;
+        httpFetchParams.request = httpRequest2;
       }
       const includeCredentials = request2.credentials === "include" || request2.credentials === "same-origin" && request2.responseTainting === "basic";
-      const contentLength = httpRequest.body ? httpRequest.body.length : null;
+      const contentLength = httpRequest2.body ? httpRequest2.body.length : null;
       let contentLengthHeaderValue = null;
-      if (httpRequest.body == null && ["POST", "PUT"].includes(httpRequest.method)) {
+      if (httpRequest2.body == null && ["POST", "PUT"].includes(httpRequest2.method)) {
         contentLengthHeaderValue = "0";
       }
       if (contentLength != null) {
         contentLengthHeaderValue = isomorphicEncode(`${contentLength}`);
       }
-      if (contentLengthHeaderValue != null && !httpRequest.headersList.contains("content-length", true)) {
-        httpRequest.headersList.append("content-length", contentLengthHeaderValue, true);
+      if (contentLengthHeaderValue != null && !httpRequest2.headersList.contains("content-length", true)) {
+        httpRequest2.headersList.append("content-length", contentLengthHeaderValue, true);
       }
-      if (contentLength != null && httpRequest.keepalive) {
+      if (contentLength != null && httpRequest2.keepalive) {
       }
-      if (webidl.is.URL(httpRequest.referrer)) {
-        httpRequest.headersList.append("referer", isomorphicEncode(httpRequest.referrer.href), true);
+      if (webidl.is.URL(httpRequest2.referrer)) {
+        httpRequest2.headersList.append("referer", isomorphicEncode(httpRequest2.referrer.href), true);
       }
-      appendRequestOriginHeader(httpRequest);
-      appendFetchMetadata(httpRequest);
-      if (!httpRequest.headersList.contains("user-agent", true)) {
-        httpRequest.headersList.append("user-agent", defaultUserAgent, true);
+      appendRequestOriginHeader(httpRequest2);
+      appendFetchMetadata(httpRequest2);
+      if (!httpRequest2.headersList.contains("user-agent", true)) {
+        httpRequest2.headersList.append("user-agent", defaultUserAgent, true);
       }
-      if (httpRequest.cache === "default" && (httpRequest.headersList.contains("if-modified-since", true) || httpRequest.headersList.contains("if-none-match", true) || httpRequest.headersList.contains("if-unmodified-since", true) || httpRequest.headersList.contains("if-match", true) || httpRequest.headersList.contains("if-range", true))) {
-        httpRequest.cache = "no-store";
+      if (httpRequest2.cache === "default" && (httpRequest2.headersList.contains("if-modified-since", true) || httpRequest2.headersList.contains("if-none-match", true) || httpRequest2.headersList.contains("if-unmodified-since", true) || httpRequest2.headersList.contains("if-match", true) || httpRequest2.headersList.contains("if-range", true))) {
+        httpRequest2.cache = "no-store";
       }
-      if (httpRequest.cache === "no-cache" && !httpRequest.preventNoCacheCacheControlHeaderModification && !httpRequest.headersList.contains("cache-control", true)) {
-        httpRequest.headersList.append("cache-control", "max-age=0", true);
+      if (httpRequest2.cache === "no-cache" && !httpRequest2.preventNoCacheCacheControlHeaderModification && !httpRequest2.headersList.contains("cache-control", true)) {
+        httpRequest2.headersList.append("cache-control", "max-age=0", true);
       }
-      if (httpRequest.cache === "no-store" || httpRequest.cache === "reload") {
-        if (!httpRequest.headersList.contains("pragma", true)) {
-          httpRequest.headersList.append("pragma", "no-cache", true);
+      if (httpRequest2.cache === "no-store" || httpRequest2.cache === "reload") {
+        if (!httpRequest2.headersList.contains("pragma", true)) {
+          httpRequest2.headersList.append("pragma", "no-cache", true);
         }
-        if (!httpRequest.headersList.contains("cache-control", true)) {
-          httpRequest.headersList.append("cache-control", "no-cache", true);
+        if (!httpRequest2.headersList.contains("cache-control", true)) {
+          httpRequest2.headersList.append("cache-control", "no-cache", true);
         }
       }
-      if (httpRequest.headersList.contains("range", true)) {
-        httpRequest.headersList.append("accept-encoding", "identity", true);
+      if (httpRequest2.headersList.contains("range", true)) {
+        httpRequest2.headersList.append("accept-encoding", "identity", true);
       }
-      if (!httpRequest.headersList.contains("accept-encoding", true)) {
-        if (urlHasHttpsScheme(requestCurrentURL(httpRequest))) {
-          httpRequest.headersList.append("accept-encoding", "br, gzip, deflate", true);
+      if (!httpRequest2.headersList.contains("accept-encoding", true)) {
+        if (urlHasHttpsScheme(requestCurrentURL(httpRequest2))) {
+          httpRequest2.headersList.append("accept-encoding", "br, gzip, deflate", true);
         } else {
-          httpRequest.headersList.append("accept-encoding", "gzip, deflate", true);
+          httpRequest2.headersList.append("accept-encoding", "gzip, deflate", true);
         }
       }
-      httpRequest.headersList.delete("host", true);
+      httpRequest2.headersList.delete("host", true);
       if (includeCredentials) {
-        if (!httpRequest.headersList.contains("authorization", true)) {
+        if (!httpRequest2.headersList.contains("authorization", true)) {
           let authorizationValue = null;
-          if (hasAuthenticationEntry(httpRequest) && (httpRequest.useURLCredentials === void 0 || !includesCredentials(requestCurrentURL(httpRequest)))) {
-          } else if (includesCredentials(requestCurrentURL(httpRequest)) && isAuthenticationFetch) {
-            const { username, password } = requestCurrentURL(httpRequest);
+          if (hasAuthenticationEntry(httpRequest2) && (httpRequest2.useURLCredentials === void 0 || !includesCredentials(requestCurrentURL(httpRequest2)))) {
+          } else if (includesCredentials(requestCurrentURL(httpRequest2)) && isAuthenticationFetch) {
+            const { username, password } = requestCurrentURL(httpRequest2);
             authorizationValue = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
           }
           if (authorizationValue !== null) {
-            httpRequest.headersList.append("Authorization", authorizationValue, false);
+            httpRequest2.headersList.append("Authorization", authorizationValue, false);
           }
         }
       }
       if (httpCache == null) {
-        httpRequest.cache = "no-store";
+        httpRequest2.cache = "no-store";
       }
-      if (httpRequest.cache !== "no-store" && httpRequest.cache !== "reload") {
+      if (httpRequest2.cache !== "no-store" && httpRequest2.cache !== "reload") {
       }
       if (response == null) {
-        if (httpRequest.cache === "only-if-cached") {
+        if (httpRequest2.cache === "only-if-cached") {
           return makeNetworkError("only if cached");
         }
         const forwardResponse = await httpNetworkFetch(
@@ -51106,7 +51106,7 @@ var require_fetch = __commonJS({
           includeCredentials,
           isNewConnectionFetch
         );
-        if (!safeMethodsSet.has(httpRequest.method) && forwardResponse.status >= 200 && forwardResponse.status <= 399) {
+        if (!safeMethodsSet.has(httpRequest2.method) && forwardResponse.status >= 200 && forwardResponse.status <= 399) {
         }
         if (revalidatingFlag && forwardResponse.status === 304) {
         }
@@ -51114,12 +51114,12 @@ var require_fetch = __commonJS({
           response = forwardResponse;
         }
       }
-      response.urlList = [...httpRequest.urlList];
-      if (httpRequest.headersList.contains("range", true)) {
+      response.urlList = [...httpRequest2.urlList];
+      if (httpRequest2.headersList.contains("range", true)) {
         response.rangeRequested = true;
       }
       response.requestIncludesCredentials = includeCredentials;
-      if (response.status === 401 && httpRequest.responseTainting !== "cors" && includeCredentials && (request2.useURLCredentials !== void 0 || isTraversableNavigable(request2.traversableForUserPrompts))) {
+      if (response.status === 401 && httpRequest2.responseTainting !== "cors" && includeCredentials && (request2.useURLCredentials !== void 0 || isTraversableNavigable(request2.traversableForUserPrompts))) {
         if (request2.body != null) {
           if (request2.body.source == null) {
             return response;
@@ -56112,7 +56112,7 @@ function buildTraceRecord(o, salt) {
       contextCompacted: false
     },
     guardrail: { hits: [] },
-    policy: { revision: o.policyRevision, ...o.candidate ? { candidateRevision: o.candidate.revision } : {} },
+    policy: { revision: o.policyRevision, ...o.candidate ? { candidateRevision: o.candidate.revision } : {}, ...o.candidate && "error" in o.candidate ? { candidateError: o.candidate.error } : {} },
     decision: {
       route: o.route?.name ?? null,
       action: o.decision?.action ?? "forward",
@@ -56123,7 +56123,7 @@ function buildTraceRecord(o, salt) {
       taintUnchecked: false,
       audit: []
     },
-    ...o.candidate ? {
+    ...o.candidate && !("error" in o.candidate) ? {
       candidateDecision: {
         route: o.candidate.route,
         action: o.candidate.action,
@@ -56176,6 +56176,13 @@ function pseudonymised(a, salt) {
   if (!salt) return a;
   const h = (v) => v === null ? null : pseudonym(salt, v);
   return { ...a, session: h(a.session), agent: h(a.agent), parentAgent: h(a.parentAgent), promptId: h(a.promptId) };
+}
+function auditCandidate(cp, f) {
+  try {
+    return { revision: cp.revision, ...summary(resolve(cp, decide(cp, structuredClone(f)), null)) };
+  } catch (e) {
+    return { revision: cp.revision, error: e instanceof Error ? e.name : "Error" };
+  }
 }
 function rateLimitHeaders(h) {
   const out = {};
@@ -56308,7 +56315,7 @@ async function handle(deps, id, req, res) {
   const f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy2.prices, id, startedAt, surface);
   const plan = decide(policy2, f);
   const cp = policy2.candidate;
-  const candidate = cp ? { revision: cp.revision, ...summary(resolve(cp, decide(cp, f), null)) } : void 0;
+  const candidate = cp ? auditCandidate(cp, f) : void 0;
   const chainNames = plan.chain.map((c) => c.provider);
   const decided = {
     features,
@@ -56784,6 +56791,9 @@ function compilePolicy(src, revision, o) {
   };
   return deepFreeze(compiled);
 }
+function attachCandidate(active, candidate) {
+  return Object.freeze({ ...active, candidate: candidate === null ? null : Object.freeze({ ...candidate, candidate: null }) });
+}
 var PolicyInvalidError, refuse;
 var init_compile2 = __esm({
   "src/policy/compile.ts"() {
@@ -56844,69 +56854,6 @@ var init_dev_policy = __esm({
     init_auth();
     DEV_KEY = "ty_live_dev";
     DEV_UPSTREAM_KEY_ENV = "TOKENYARD_DEV_UPSTREAM_KEY";
-  }
-});
-
-// src/env.ts
-var env_exports = {};
-__export(env_exports, {
-  buildEnvExport: () => buildEnvExport
-});
-function ticketOf(branch, pattern) {
-  const m = new RegExp(pattern ?? DEFAULT_TICKET).exec(branch);
-  return m ? m[1] ?? m[0] : null;
-}
-function buildEnvExport(o) {
-  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
-  lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
-  const ticket = ticketOf(o.branch, o.ticketPattern);
-  if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
-  return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
-`;
-}
-var DEFAULT_TICKET, OWN, oneLine, shellQuote;
-var init_env = __esm({
-  "src/env.ts"() {
-    "use strict";
-    DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
-    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
-    oneLine = (s) => s.replace(/[\r\n]+/g, " ").trim();
-    shellQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
-  }
-});
-
-// src/edge/keys.ts
-var keys_exports = {};
-__export(keys_exports, {
-  appendKey: () => appendKey,
-  createKey: () => createKey
-});
-import { randomBytes as randomBytes2 } from "node:crypto";
-import { appendFile as appendFile2 } from "node:fs/promises";
-function base62(bytes) {
-  let n = BigInt(`0x${bytes.toString("hex")}`);
-  let out = "";
-  while (n > 0n) {
-    out = B62[Number(n % 62n)] + out;
-    n /= 62n;
-  }
-  return out.padStart(B62_LEN, "0");
-}
-function createKey() {
-  const plaintext = `ty_live_${base62(randomBytes2(32))}`;
-  return { plaintext, hash: hashKey(plaintext) };
-}
-async function appendKey(file2, rec) {
-  await appendFile2(file2, `- ${JSON.stringify(rec)}
-`, "utf8");
-}
-var B62, B62_LEN;
-var init_keys2 = __esm({
-  "src/edge/keys.ts"() {
-    "use strict";
-    init_auth();
-    B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    B62_LEN = 43;
   }
 });
 
@@ -57011,6 +56958,186 @@ var init_load_dir = __esm({
   }
 });
 
+// src/policy/bundle.ts
+var bundle_exports = {};
+__export(bundle_exports, {
+  MAX_BUNDLE_BYTES: () => MAX_BUNDLE_BYTES,
+  buildBundle: () => buildBundle,
+  bundleToSource: () => bundleToSource,
+  canonicalJson: () => canonicalJson,
+  parseBundle: () => parseBundle,
+  serializeBundle: () => serializeBundle,
+  sha256Hex: () => sha256Hex
+});
+import { createHash as createHash6 } from "node:crypto";
+function canonicalJson(v) {
+  if (Array.isArray(v)) return `[${v.map((x) => x === void 0 ? "null" : canonicalJson(x)).join(",")}]`;
+  if (typeof v === "object" && v !== null) {
+    const o = v;
+    const parts = Object.keys(o).filter((k) => o[k] !== void 0).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`);
+    return `{${parts.join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+function contentSha(policy2, prices, keys2) {
+  return sha256Hex(canonicalJson({ policy: policy2, prices, keys: keys2 }));
+}
+function buildBundle(src, o) {
+  const policy2 = JSON.parse(JSON.stringify(src.policy));
+  const prices = JSON.parse(JSON.stringify(src.prices));
+  const keys2 = sortedKeys(JSON.parse(JSON.stringify(src.keys)));
+  const sha256 = contentSha(policy2, prices, keys2);
+  const revision = o.revision && o.revision.length > 0 ? o.revision : sha256.slice(0, 12);
+  return { manifest: { revision, schemaVersion: 1, createdAt: o.createdAt, sha256 }, policy: policy2, prices, keys: keys2 };
+}
+function rejectProtoKeys(v, depth = 0) {
+  if (depth > 64) bad("bundle is nested too deeply");
+  if (Array.isArray(v)) return v.forEach((x) => rejectProtoKeys(x, depth + 1));
+  if (typeof v === "object" && v !== null) {
+    if (Object.hasOwn(v, "__proto__")) bad("key __proto__ is not allowed");
+    for (const x of Object.values(v)) rejectProtoKeys(x, depth + 1);
+  }
+}
+function parseBundle(text) {
+  if (text.length > MAX_BUNDLE_BYTES) bad(`bundle is larger than ${MAX_BUNDLE_BYTES} bytes`);
+  let raw;
+  try {
+    raw = JSON.parse(text.charCodeAt(0) === 65279 ? text.slice(1) : text);
+  } catch (e) {
+    return bad(`bundle is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  rejectProtoKeys(raw);
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return bad("bundle must be a JSON object");
+  const b = raw;
+  const m = b.manifest;
+  if (typeof m !== "object" || m === null) return bad("manifest is missing");
+  const mm = m;
+  if (mm.schemaVersion !== 1) bad("manifest.schemaVersion must be 1");
+  if (typeof mm.revision !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(mm.revision)) bad("manifest.revision must be 1 to 64 characters of letters, digits, dot, dash or underscore");
+  if (typeof mm.createdAt !== "string") bad("manifest.createdAt must be a string");
+  if (typeof mm.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(mm.sha256)) bad("manifest.sha256 must be 64 hex characters");
+  const actual = contentSha(b.policy, b.prices, b.keys);
+  if (actual !== mm.sha256) bad(`sha256 mismatch: manifest says ${String(mm.sha256).slice(0, 12)}, content is ${actual.slice(0, 12)}`);
+  const p = policySchema.safeParse(b.policy);
+  if (!p.success) throw new PolicyLoadError("E_BUNDLE", "bundle", p.error.issues.map((i) => ({ path: `policy.${i.path.join(".")}`, message: i.message })));
+  let prices;
+  try {
+    prices = parsePriceTable(JSON.stringify(b.prices));
+  } catch (e) {
+    return bad(e instanceof Error ? e.message : String(e));
+  }
+  const k = keysFileSchema.safeParse(b.keys);
+  if (!k.success) throw new PolicyLoadError("E_BUNDLE", "bundle", k.error.issues.map((i) => ({ path: `keys.${i.path.join(".")}`, message: i.message })));
+  return { manifest: { revision: mm.revision, schemaVersion: 1, createdAt: mm.createdAt, sha256: mm.sha256 }, policy: p.data, prices, keys: k.data };
+}
+function bundleToSource(b) {
+  return { dir: "bundle", policy: b.policy, prices: b.prices, keys: b.keys, normalizedFiles: {} };
+}
+var MAX_BUNDLE_BYTES, sha256Hex, sortedKeys, serializeBundle, bad;
+var init_bundle = __esm({
+  "src/policy/bundle.ts"() {
+    "use strict";
+    init_prices();
+    init_load_dir();
+    init_schema();
+    MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
+    sha256Hex = (text) => createHash6("sha256").update(text).digest("hex");
+    sortedKeys = (keys2) => [...keys2].sort((a, b) => a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0);
+    serializeBundle = (b) => `${JSON.stringify(b, null, 2)}
+`;
+    bad = (message) => {
+      throw new PolicyLoadError("E_BUNDLE", "bundle", [{ path: "", message }]);
+    };
+  }
+});
+
+// src/policy-loader/fetch-bundle.ts
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+function checkPolicyUrl(raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error(`policy URL is not a valid URL: ${raw}`);
+  }
+  if (u.username || u.password) throw new Error("policy URL must not carry credentials");
+  if (u.protocol === "https:") return u;
+  if (u.protocol === "http:" && LOCAL_HOSTS.has(u.hostname)) return u;
+  throw new Error("policy URL must be https (http is allowed only for 127.0.0.1 and localhost)");
+}
+function fetchBundle(rawUrl, o) {
+  const url2 = checkPolicyUrl(rawUrl);
+  const maxBytes = o.maxBytes ?? MAX_BUNDLE_BYTES;
+  const send = url2.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolve2, reject) => {
+    let settled = false;
+    const done = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const req = send(url2, { method: "GET", headers: { accept: "application/json", ...o.etag ? { "if-none-match": o.etag } : {} } }, (res) => {
+      const status = res.statusCode ?? 0;
+      if (status === 304) {
+        res.resume();
+        return done(() => resolve2({ status: "not-modified" }));
+      }
+      if (status >= 300 && status < 400) {
+        res.resume();
+        return done(() => reject(new Error(`policy URL answered ${status}: redirects are not followed`)));
+      }
+      if (status !== 200) {
+        res.resume();
+        return done(() => reject(new Error(`policy URL answered ${status}`)));
+      }
+      const enc = res.headers["content-encoding"];
+      if (enc && enc !== "identity") {
+        res.resume();
+        return done(() => reject(new Error(`policy URL answered with content-encoding ${enc}`)));
+      }
+      const declared = Number(res.headers["content-length"]);
+      if (Number.isFinite(declared) && declared > maxBytes) {
+        res.resume();
+        return done(() => reject(new Error(`policy response is larger than ${maxBytes} bytes`)));
+      }
+      const chunks = [];
+      let size = 0;
+      res.on("data", (c) => {
+        size += c.length;
+        if (size > maxBytes) {
+          done(() => reject(new Error(`policy response is larger than ${maxBytes} bytes`)));
+          res.destroy();
+          return;
+        }
+        chunks.push(c);
+      });
+      res.on("end", () => {
+        const etag = res.headers.etag;
+        done(() => resolve2({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
+      });
+      res.on("error", (e) => done(() => reject(e)));
+      res.on("aborted", () => done(() => reject(new Error("policy response was cut off"))));
+    });
+    const timer = setTimeout(() => {
+      req.destroy();
+      done(() => reject(new Error(`policy URL did not answer within ${o.timeoutMs ?? FETCH_TIMEOUT_MS} ms`)));
+    }, o.timeoutMs ?? FETCH_TIMEOUT_MS);
+    req.on("error", (e) => done(() => reject(e)));
+    req.end();
+  });
+}
+var FETCH_TIMEOUT_MS, LOCAL_HOSTS;
+var init_fetch_bundle = __esm({
+  "src/policy-loader/fetch-bundle.ts"() {
+    "use strict";
+    init_bundle();
+    FETCH_TIMEOUT_MS = 1e4;
+    LOCAL_HOSTS = /* @__PURE__ */ new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
+  }
+});
+
 // src/policy-loader/load-dir.ts
 var load_dir_exports2 = {};
 __export(load_dir_exports2, {
@@ -57043,6 +57170,293 @@ var init_load_dir2 = __esm({
   "src/policy-loader/load-dir.ts"() {
     "use strict";
     init_load_dir();
+  }
+});
+
+// src/policy-loader/lkg.ts
+import { createHash as createHash7 } from "node:crypto";
+import { mkdir as mkdir2, readFile as readFile2, rename, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join4 } from "node:path";
+async function writeLkg(stateDir, bundleText) {
+  await mkdir2(stateDir, { recursive: true });
+  const tmp = join4(stateDir, `${LKG_FILE}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    await writeFile2(tmp, JSON.stringify({ sha256: sha(bundleText), bundle: bundleText }), { mode: 384 });
+    await rename(tmp, join4(stateDir, LKG_FILE));
+  } catch (e) {
+    await unlink2(tmp).catch(() => void 0);
+    throw e;
+  }
+}
+async function readLkg(stateDir) {
+  let text;
+  try {
+    text = await readFile2(join4(stateDir, LKG_FILE), "utf8");
+  } catch (e2) {
+    if (e2.code === "ENOENT") return null;
+    throw e2;
+  }
+  if (text.length > MAX_BUNDLE_BYTES * 2) throw new Error("last-known-good file is too large");
+  let env;
+  try {
+    env = JSON.parse(text);
+  } catch {
+    throw new Error("last-known-good file is not valid JSON");
+  }
+  const e = env;
+  if (typeof e !== "object" || e === null || typeof e.sha256 !== "string" || typeof e.bundle !== "string") throw new Error("last-known-good file has the wrong shape");
+  if (sha(e.bundle) !== e.sha256) throw new Error("last-known-good sha256 mismatch: the file was modified");
+  return parseBundle(e.bundle);
+}
+var LKG_FILE, sha;
+var init_lkg = __esm({
+  "src/policy-loader/lkg.ts"() {
+    "use strict";
+    init_bundle();
+    LKG_FILE = "last-known-good.json";
+    sha = (text) => createHash7("sha256").update(text).digest("hex");
+  }
+});
+
+// src/policy-loader/loader.ts
+var loader_exports = {};
+__export(loader_exports, {
+  DEFAULT_DEBOUNCE_MS: () => DEFAULT_DEBOUNCE_MS,
+  DEFAULT_POLL_MS: () => DEFAULT_POLL_MS,
+  PolicyLoader: () => PolicyLoader
+});
+import { EventEmitter as EventEmitter2 } from "node:events";
+import { watch } from "node:fs";
+import { join as join5 } from "node:path";
+var DEFAULT_POLL_MS, DEFAULT_DEBOUNCE_MS, PolicyLoader, msgOf;
+var init_loader = __esm({
+  "src/policy-loader/loader.ts"() {
+    "use strict";
+    init_bundle();
+    init_compile2();
+    init_fetch_bundle();
+    init_load_dir2();
+    init_lkg();
+    DEFAULT_POLL_MS = 15e3;
+    DEFAULT_DEBOUNCE_MS = 250;
+    PolicyLoader = class _PolicyLoader extends EventEmitter2 {
+      constructor(o) {
+        super();
+        this.o = o;
+        if (o.dir && o.url) throw new Error("give a policy directory or a policy URL, not both");
+      }
+      o;
+      base = null;
+      current = null;
+      activeSha = null;
+      etag = null;
+      errors = 0;
+      lastError = null;
+      queue = Promise.resolve();
+      watcher = null;
+      pollTimer = null;
+      debounceTimer = null;
+      stopped = false;
+      candidate = null;
+      /** Count of bundles that failed to load (this source and the candidate), for tokenyard_policy_load_errors_total. */
+      get loadErrors() {
+        return this.errors + (this.candidate?.loadErrors ?? 0);
+      }
+      /** The snapshot for one request. Callers read it once per request, so the request keeps its revision to the end. */
+      active() {
+        if (!this.current) throw new Error("policy is not loaded");
+        return this.current;
+      }
+      async start() {
+        const hasSource = this.o.dir !== void 0 || this.o.url !== void 0;
+        let failure3 = hasSource ? void 0 : new Error("no policy source given");
+        if (hasSource) {
+          try {
+            await this.reload("start", true);
+          } catch (e) {
+            failure3 = e;
+          }
+        }
+        if (this.current === null) {
+          let lkg = null;
+          let lkgError;
+          try {
+            lkg = await readLkg(this.o.stateDir);
+          } catch (e) {
+            lkgError = e;
+          }
+          if (!lkg) {
+            throw new Error(`cannot start: ${msgOf(failure3)}; no usable last-known-good in ${this.o.stateDir}${lkgError ? ` (${msgOf(lkgError)})` : ""}`);
+          }
+          try {
+            this.swap(lkg);
+          } catch (e) {
+            throw new Error(`cannot start: ${msgOf(failure3)}; the last-known-good does not compile (${msgOf(e)})`);
+          }
+          this.emit("loaded", this.base);
+        }
+        if (this.o.candidateDir) {
+          const c = new _PolicyLoader({ dir: this.o.candidateDir, stateDir: join5(this.o.stateDir, "candidate"), experimentalSubscription: this.o.experimentalSubscription, ...this.o.pollMs !== void 0 ? { pollMs: this.o.pollMs } : {}, ...this.o.debounceMs !== void 0 ? { debounceMs: this.o.debounceMs } : {} });
+          c.on("loaded", () => this.recompose());
+          c.on("error", (e) => this.report(e));
+          try {
+            await c.start();
+            this.candidate = c;
+            this.recompose();
+          } catch (e) {
+            this.errors++;
+            this.report(e);
+            await c.stop();
+          }
+        }
+        this.startWatching();
+      }
+      async stop() {
+        this.stopped = true;
+        this.watcher?.close();
+        this.watcher = null;
+        if (this.pollTimer) clearInterval(this.pollTimer);
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        await this.queue;
+        await this.candidate?.stop();
+      }
+      startWatching() {
+        const { dir, url: url2 } = this.o;
+        if (dir) {
+          try {
+            this.watcher = watch(dir, () => {
+              if (this.debounceTimer) clearTimeout(this.debounceTimer);
+              this.debounceTimer = setTimeout(() => void this.reload("watch", false), this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+              this.debounceTimer.unref();
+            });
+            this.watcher.on("error", () => void 0);
+          } catch {
+            this.watcher = null;
+          }
+        }
+        if (dir || url2) {
+          this.pollTimer = setInterval(() => void this.reload("poll", false), this.o.pollMs ?? DEFAULT_POLL_MS);
+          this.pollTimer.unref();
+        }
+      }
+      /** Serialised: loads never overlap. With `throwOnError` the failure is also thrown (start); it is always counted. */
+      reload(trigger, throwOnError) {
+        const run = this.queue.then(async () => {
+          if (this.stopped) return;
+          try {
+            const got = await this.fetch();
+            if (got === null || got.bundle.manifest.sha256 === this.activeSha) {
+              if (got) this.etag = got.etag;
+              this.lastError = null;
+              return;
+            }
+            const bundle = got.bundle;
+            this.swap(bundle);
+            this.etag = got.etag;
+            this.lastError = null;
+            this.emit("loaded", this.base);
+            await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e) => this.report(new Error(`could not write last-known-good: ${msgOf(e)}`)));
+          } catch (e) {
+            const message = msgOf(e);
+            if (!(trigger === "poll" && message === this.lastError)) {
+              this.errors++;
+              this.lastError = message;
+              this.report(e);
+            }
+            if (throwOnError) throw e;
+          }
+        });
+        this.queue = run.catch(() => void 0);
+        return run;
+      }
+      async fetch() {
+        if (this.o.dir) return { bundle: buildBundle(await loadPolicyDir(this.o.dir), { createdAt: (/* @__PURE__ */ new Date()).toISOString() }), etag: null };
+        if (this.o.url) {
+          const r = await fetchBundle(this.o.url, { etag: this.etag });
+          if (r.status === "not-modified") return null;
+          return { bundle: parseBundle(r.text), etag: r.etag };
+        }
+        return null;
+      }
+      /** Compiles and swaps. Throws, leaving the old snapshot in place, when the bundle does not compile. */
+      swap(bundle) {
+        const compiled = compilePolicy(bundleToSource(bundle), bundle.manifest.revision, { experimentalSubscription: this.o.experimentalSubscription });
+        this.base = compiled;
+        this.activeSha = bundle.manifest.sha256;
+        this.recompose();
+      }
+      recompose() {
+        if (!this.base) return;
+        this.current = attachCandidate(this.base, this.candidate?.base ?? null);
+      }
+      report(e) {
+        if (this.listenerCount("error") > 0) this.emit("error", e instanceof Error ? e : new Error(String(e)));
+      }
+    };
+    msgOf = (e) => e instanceof Error ? e.message : String(e);
+  }
+});
+
+// src/env.ts
+var env_exports = {};
+__export(env_exports, {
+  buildEnvExport: () => buildEnvExport
+});
+function ticketOf(branch, pattern) {
+  const m = new RegExp(pattern ?? DEFAULT_TICKET).exec(branch);
+  return m ? m[1] ?? m[0] : null;
+}
+function buildEnvExport(o) {
+  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
+  lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
+  const ticket = ticketOf(o.branch, o.ticketPattern);
+  if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
+  return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
+`;
+}
+var DEFAULT_TICKET, OWN, oneLine, shellQuote;
+var init_env = __esm({
+  "src/env.ts"() {
+    "use strict";
+    DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
+    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
+    oneLine = (s) => s.replace(/[\r\n]+/g, " ").trim();
+    shellQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
+  }
+});
+
+// src/edge/keys.ts
+var keys_exports = {};
+__export(keys_exports, {
+  appendKey: () => appendKey,
+  createKey: () => createKey
+});
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { appendFile as appendFile2 } from "node:fs/promises";
+function base62(bytes) {
+  let n = BigInt(`0x${bytes.toString("hex")}`);
+  let out = "";
+  while (n > 0n) {
+    out = B62[Number(n % 62n)] + out;
+    n /= 62n;
+  }
+  return out.padStart(B62_LEN, "0");
+}
+function createKey() {
+  const plaintext = `ty_live_${base62(randomBytes2(32))}`;
+  return { plaintext, hash: hashKey(plaintext) };
+}
+async function appendKey(file2, rec) {
+  await appendFile2(file2, `- ${JSON.stringify(rec)}
+`, "utf8");
+}
+var B62, B62_LEN;
+var init_keys2 = __esm({
+  "src/edge/keys.ts"() {
+    "use strict";
+    init_auth();
+    B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    B62_LEN = 43;
   }
 });
 
@@ -60759,9 +61173,21 @@ program2.command("mock").description("run the deterministic mock Anthropic provi
 program2.command("serve").description("run the gateway").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--host <host>", "address to bind", "127.0.0.1").option("--base-path <path>", "mount prefix stripped before path matching").option(
   "--dev-upstream <url>",
   "development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)"
-).option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").action(async (o) => {
-  if (!o.devUpstream) {
-    console.error("tokenyard serve: policy loading is not available yet; use --dev-upstream <url>");
+).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").action(async (o) => {
+  if (!o.devUpstream && !o.policy && !o.policyUrl) {
+    console.error("tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)");
+    process.exit(1);
+  }
+  if ((o.policy || o.policyUrl) && o.devUpstream) {
+    console.error("tokenyard serve: --dev-upstream cannot be combined with --policy or --policy-url");
+    process.exit(1);
+  }
+  if (o.policy && o.policyUrl) {
+    console.error("tokenyard serve: give --policy or --policy-url, not both");
+    process.exit(1);
+  }
+  if (o.candidatePolicy && !o.policy && !o.policyUrl) {
+    console.error("tokenyard serve: --candidate-policy needs --policy or --policy-url");
     process.exit(1);
   }
   const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
@@ -60776,10 +61202,34 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   const beat = writer ? setInterval(() => writer.heartbeat(), 6e4) : null;
   beat?.unref();
   const { createGateway: createGateway2, DEFAULT_BODY_CAP_BYTES: DEFAULT_BODY_CAP_BYTES2 } = await Promise.resolve().then(() => (init_server(), server_exports));
-  const { devPolicy: devPolicy2, DEV_KEY: DEV_KEY2, DEV_UPSTREAM_KEY_ENV: DEV_UPSTREAM_KEY_ENV2 } = await Promise.resolve().then(() => (init_dev_policy(), dev_policy_exports));
-  const policy2 = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 } });
+  let loader = null;
+  let activePolicy;
+  if (o.devUpstream) {
+    const { devPolicy: devPolicy2, DEV_KEY: DEV_KEY2, DEV_UPSTREAM_KEY_ENV: DEV_UPSTREAM_KEY_ENV2 } = await Promise.resolve().then(() => (init_dev_policy(), dev_policy_exports));
+    const dev = devPolicy2({ upstream: o.devUpstream, keys: [DEV_KEY2], credential: { env: DEV_UPSTREAM_KEY_ENV2 } });
+    activePolicy = () => dev;
+  } else {
+    const { PolicyLoader: PolicyLoader2 } = await Promise.resolve().then(() => (init_loader(), loader_exports));
+    const l = new PolicyLoader2({
+      ...o.policy ? { dir: o.policy } : {},
+      ...o.policyUrl ? { url: o.policyUrl } : {},
+      ...o.candidatePolicy ? { candidateDir: o.candidatePolicy } : {},
+      stateDir: o.stateDir,
+      experimentalSubscription: o.experimentalSubscription === true
+    });
+    l.on("error", (e) => console.error(`tokenyard: policy load failed, keeping the active revision: ${e.message}`));
+    l.on("loaded", (p) => console.error(`tokenyard: policy revision ${p.revision} active`));
+    try {
+      await l.start();
+    } catch (e) {
+      console.error(`tokenyard serve: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+    loader = l;
+    activePolicy = () => l.active();
+  }
   const gw = createGateway2({
-    policy: () => policy2,
+    policy: activePolicy,
     store: null,
     traces: writer,
     traceSalt,
@@ -60792,7 +61242,7 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   console.log(await gw.listen(Number(o.port), o.host));
   const stop = () => {
     if (beat) clearInterval(beat);
-    void gw.close().then(() => writer?.close()).then(() => process.exit(0));
+    void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => process.exit(0));
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
@@ -60851,6 +61301,30 @@ policy.command("check").description("validate a policy directory: schema, then t
   console.log(`${errors.length} errors, ${warnings.length} warnings`);
   if (errors.length > 0) process.exit(1);
 });
+policy.command("build").description("write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256").argument("[dir]", "policy directory", "policy").option("--out <file>", "output file", "dist/policy-bundle.json").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
+  const { mkdir: mkdir3, writeFile: writeFile3 } = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+  const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
+  const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
+  const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
+  const { buildBundle: buildBundle2, serializeBundle: serializeBundle2 } = await Promise.resolve().then(() => (init_bundle(), bundle_exports));
+  try {
+    const src = await loadPolicyDir2(dir);
+    const { errors } = validatePolicy2(src, { experimentalSubscription: o.experimentalSubscription === true });
+    if (errors.length > 0) {
+      for (const i of errors) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+      process.exit(1);
+    }
+    const bundle = buildBundle2(src, { createdAt: (/* @__PURE__ */ new Date()).toISOString(), ...process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {} });
+    await mkdir3(dirname(o.out), { recursive: true });
+    await writeFile3(o.out, serializeBundle2(bundle));
+    console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
+  } catch (e) {
+    if (!(e instanceof PolicyLoadError2)) throw e;
+    for (const i of e.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+    process.exit(1);
+  }
+});
 policy.command("schema").description("print the JSON Schema of policy.yaml for editor completion: tokenyard policy schema > policy.schema.json").action(async () => {
   const { policyJsonSchema: policyJsonSchema2 } = await Promise.resolve().then(() => (init_json_schema2(), json_schema_exports2));
   process.stdout.write(`${JSON.stringify(policyJsonSchema2(), null, 2)}
@@ -60876,8 +61350,8 @@ traces.command("prune").description("delete trace files older than a duration").
 });
 program2.command("report").description("cost report from a trace dir or an export file").requiredOption("--traces <path>", "trace directory or an export file (.ndjson or .ndjson.gz)").option("--by <dims>", "comma list of tenant, team, key, repo, branch, ticket, session, requestClass, agent, promptId", "team").option("--since <when>", "duration such as 7d, or an ISO time", "7d").option("--until <when>", "ISO time (default now)").option("--tenant <tenant>", "only this tenant").action(async (o) => {
   const dims = o.by.split(",").map((d) => d.trim()).filter(Boolean);
-  const bad = dims.filter((d) => !REPORT_DIMENSIONS.includes(d));
-  if (bad.length > 0) return void (console.error(`tokenyard report: unknown dimension ${bad.join(", ")}`), process.exit(1));
+  const bad2 = dims.filter((d) => !REPORT_DIMENSIONS.includes(d));
+  if (bad2.length > 0) return void (console.error(`tokenyard report: unknown dimension ${bad2.join(", ")}`), process.exit(1));
   const now = Date.now();
   const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...o.tenant ? { tenant: o.tenant } : {} });
   process.stdout.write(renderReportTerminal(buildReport(records, dims)));

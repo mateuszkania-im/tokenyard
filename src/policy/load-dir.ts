@@ -13,7 +13,7 @@ export interface PolicySource {
   normalizedFiles: Record<string, string>;
 }
 
-export type LoadErrorCode = 'E_FILE_MISSING' | 'E_YAML_UNSAFE' | 'E_YAML_SYNTAX' | 'E_SCHEMA' | 'E_PRICES_INVALID' | 'E_MODEL_LIMITS_MISSING';
+export type LoadErrorCode = 'E_FILE_MISSING' | 'E_YAML_UNSAFE' | 'E_YAML_SYNTAX' | 'E_SCHEMA' | 'E_PRICES_INVALID' | 'E_MODEL_LIMITS_MISSING' | 'E_BUNDLE';
 
 export interface LoadIssue {
   code: string;

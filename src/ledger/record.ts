@@ -20,7 +20,7 @@ export interface TraceRecord {
               toolCount: number; thinking: boolean; bodyBytes: number; prefixHash: string | null;
               contextCompacted: boolean };
   guardrail: { hits: Array<{ rule: string; action: 'block' | 'warn' | 'redact'; valueHmac: string; where: 'last-turn' | 'history' }> };
-  policy: { revision: string; candidateRevision?: string };
+  policy: { revision: string; candidateRevision?: string; candidateError?: string };
   decision: { route: string | null; action: 'forward' | 'block'; reason: string | null;
               chain: string[]; reservedMicroUsd: number; boundAssumed: boolean; taintUnchecked: boolean;
               audit: Array<{ name: string; wouldFail: boolean }> };

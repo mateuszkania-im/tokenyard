@@ -79,7 +79,7 @@ export interface RequestOutcome {
   /** The reservation is not a bound for this request (spec 7.4). */
   boundAssumed?: boolean;
   /** Audit mode (spec 6.5): what the candidate policy decided for the same request. */
-  candidate?: { revision: string; route: string | null; action: 'forward' | 'block'; reason: string | null; chain: string[] };
+  candidate?: { revision: string; route: string | null; action: 'forward' | 'block'; reason: string | null; chain: string[] } | { revision: string; error: string };
   /** Set for requests that failed or were refused before a response came from upstream. */
   errorClass?: string;
   /** Upstream `anthropic-ratelimit-unified-*` response headers. */
@@ -107,6 +107,15 @@ const summary = (d: Decision): { route: string | null; action: 'forward' | 'bloc
   reason: d.block?.reason ?? null,
   chain: d.plan.chain.map((c) => c.provider),
 });
+
+/** Audit mode must never touch the live request: whatever the candidate does, including throwing, ends up on the trace only. */
+function auditCandidate(cp: CompiledPolicy, f: Parameters<typeof decide>[1]): NonNullable<RequestOutcome['candidate']> {
+  try {
+    return { revision: cp.revision, ...summary(resolve(cp, decide(cp, structuredClone(f)), null)) };
+  } catch (e) {
+    return { revision: cp.revision, error: e instanceof Error ? e.name : 'Error' };
+  }
+}
 
 function rateLimitHeaders(h: UpstreamResponse['headers']): Record<string, string> {
   const out: Record<string, string> = {};
@@ -270,7 +279,7 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   const f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy.prices, id, startedAt, surface);
   const plan = decide(policy, f);
   const cp = policy.candidate;
-  const candidate = cp ? { revision: cp.revision, ...summary(resolve(cp, decide(cp, f), null)) } : undefined;
+  const candidate = cp ? auditCandidate(cp, f) : undefined;
   const chainNames = plan.chain.map((c) => c.provider);
   const decided = {
     features,
