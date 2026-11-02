@@ -35,7 +35,7 @@ test('serve --policy loads a directory and forwards; without a source it refuses
       child.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()));
       child.once('exit', () => reject(new Error('serve exited early')));
     });
-    const res = await fetch(`${url}/v1/messages`, { method: 'POST', headers: authHeaders, body: msgBody({ model: 'claude-sonnet-5-5' }) });
+    const res = await fetch(`${url}/v1/messages`, { method: 'POST', headers: authHeaders, body: new Uint8Array(msgBody({ model: 'claude-sonnet-5-5' })) });
     expect(res.status).toBe(200);
     expect(res.headers.get('x-tokenyard-policy-revision')).toMatch(/^[0-9a-f]{12}$/);
   } finally {
