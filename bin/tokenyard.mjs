@@ -28734,8 +28734,7 @@ function hasExpandingField(parsed, tools) {
     }
   }
   for (const t of tools) {
-    if (!isObj3(t) || t.type === void 0 || t.type === "custom") continue;
-    if (typeof t.type !== "string" || !SERVER_TOOL_PREFIXES.some((p) => t.type.startsWith(p))) return true;
+    if (isObj3(t) && typeof t.type === "string" && isClientTool(t.type)) return true;
   }
   return false;
 }
@@ -28775,11 +28774,13 @@ function extractAnthropicFeatures(body) {
   const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
   const serverTools = [];
   for (const t of tools) {
-    if (!isObj3(t) || typeof t.type !== "string") continue;
-    const type = t.type;
-    if (!SERVER_TOOL_PREFIXES.some((p) => type.startsWith(p))) continue;
+    if (!isObj3(t) || t.type === void 0 || t.type === "custom") continue;
+    const type = typeof t.type === "string" ? t.type : String(t.type);
+    if (isClientTool(type)) continue;
     serverTools.push({ type, maxUses: typeof t.max_uses === "number" ? t.max_uses : null });
   }
+  const mcp = parsed.mcp_servers;
+  if (mcp !== void 0 && mcp !== null && !(Array.isArray(mcp) && mcp.length === 0)) serverTools.push({ type: "mcp_servers", maxUses: null });
   const types = /* @__PURE__ */ new Set();
   const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
   collectBlockTypes(parsed.system, types);
@@ -28878,12 +28879,13 @@ function lastMessageRange(b) {
   }
   return result;
 }
-var isObj3, SERVER_TOOL_PREFIXES, EXPANDING_BLOCKS, PLAIN_FIELDS, CLEARING_EDIT_PREFIXES, QUOTE, BACKSLASH;
+var isObj3, CLIENT_TOOL_PREFIXES, isClientTool, EXPANDING_BLOCKS, PLAIN_FIELDS, CLEARING_EDIT_PREFIXES, QUOTE, BACKSLASH;
 var init_anthropic_messages = __esm({
   "src/surfaces/anthropic-messages.ts"() {
     "use strict";
     isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
-    SERVER_TOOL_PREFIXES = ["web_search_", "web_fetch_", "code_execution_", "tool_search_tool_"];
+    CLIENT_TOOL_PREFIXES = ["memory_", "bash_", "text_editor_", "computer_", "browser_toolset_"];
+    isClientTool = (type) => CLIENT_TOOL_PREFIXES.some((p) => type.startsWith(p));
     EXPANDING_BLOCKS = /* @__PURE__ */ new Set(["image", "document"]);
     PLAIN_FIELDS = /* @__PURE__ */ new Set([
       "model",

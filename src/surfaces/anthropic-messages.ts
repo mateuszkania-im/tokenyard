@@ -4,8 +4,15 @@ import type { ExtractedFeatures } from './types.js';
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Tool type prefixes of Anthropic server tools (executed by the provider, billed per use). */
-const SERVER_TOOL_PREFIXES = ['web_search_', 'web_fetch_', 'code_execution_', 'tool_search_tool_'];
+/**
+ * Type prefixes of Anthropic-defined client tools (tool reference page: memory, bash, text editor, computer use and
+ * browser use). The application runs them, so the provider adds hidden definitions but no sampling loop.
+ * Every other tool `type` except absent or `custom` (web search, web fetch, code execution, tool search, advisor,
+ * `mcp_toolset`, and any type added after this list) is treated as server-side: it lands in `serverTools`, where
+ * the estimator prices its loop or, without a price entry, reports it unpriced.
+ */
+const CLIENT_TOOL_PREFIXES = ['memory_', 'bash_', 'text_editor_', 'computer_', 'browser_toolset_'];
+const isClientTool = (type: string): boolean => CLIENT_TOOL_PREFIXES.some((p) => type.startsWith(p));
 /** Content blocks whose token count the provider decides (fetched URLs, rendered PDFs), so body bytes do not bound them. */
 const EXPANDING_BLOCKS = new Set(['image', 'document']);
 /**
@@ -36,8 +43,7 @@ function hasExpandingField(parsed: Obj, tools: unknown[]): boolean {
   // Custom tools are bounded by their bytes. Anthropic-defined client tools (bash, text editor, computer and
   // browser toolsets) add hidden definitions of up to about 6,600 tokens (pricing page); server tools are counted apart.
   for (const t of tools) {
-    if (!isObj(t) || t.type === undefined || t.type === 'custom') continue;
-    if (typeof t.type !== 'string' || !SERVER_TOOL_PREFIXES.some((p) => (t.type as string).startsWith(p))) return true;
+    if (isObj(t) && typeof t.type === 'string' && isClientTool(t.type)) return true;
   }
   return false;
 }
@@ -85,11 +91,15 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
   const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
   const serverTools: ExtractedFeatures['serverTools'] = [];
   for (const t of tools) {
-    if (!isObj(t) || typeof t.type !== 'string') continue;
-    const type = t.type;
-    if (!SERVER_TOOL_PREFIXES.some((p) => type.startsWith(p))) continue;
+    if (!isObj(t) || t.type === undefined || t.type === 'custom') continue;
+    const type = typeof t.type === 'string' ? t.type : String(t.type);
+    if (isClientTool(type)) continue;
     serverTools.push({ type, maxUses: typeof t.max_uses === 'number' ? t.max_uses : null });
   }
+  // The MCP connector samples on the provider side (mcp_tool_use and mcp_tool_result inside one response),
+  // whether or not an `mcp_toolset` entry names the server. No price entry exists, so it stays unpriced.
+  const mcp = parsed.mcp_servers;
+  if (mcp !== undefined && mcp !== null && !(Array.isArray(mcp) && mcp.length === 0)) serverTools.push({ type: 'mcp_servers', maxUses: null });
 
   const types = new Set<string>();
   const messages = Array.isArray(parsed.messages) ? parsed.messages : [];

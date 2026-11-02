@@ -25,6 +25,12 @@ const opts = { serverToolsWithoutMaxUses: 'block', assumedMaxUses: 20, reserveOu
 
 const extract = (o: object): ExtractedFeatures => extractAnthropicFeatures(Buffer.from(JSON.stringify(o)));
 
+/** Anthropic-defined client tools (tool reference page): the application runs them, so no provider-side loop. */
+const CLIENT_TOOL_TYPES = [
+  'bash_20250124', 'text_editor_20250124', 'text_editor_20250728', 'memory_20250818',
+  'computer_20250124', 'computer_20251124', 'computer_toolset_20260801', 'browser_toolset_20260801',
+] as const;
+
 /** RequestFeatures for an extracted body, with the bound computed the way the edge will compute it. */
 function req(x: ExtractedFeatures, m: ModelPrice, over: Partial<RequestFeatures> = {}): RequestFeatures {
   const bound = inputTokenBound(x, m);
@@ -156,6 +162,57 @@ test('an unpriced server tool type is reported, and outranks a missing max_uses'
   expect(worstCaseMicroUsd(proto, opus, table, opts).block).toBe('unpriced-server-tool');
 });
 
+test('MCP connector and unknown tool types take the server-tool path: unpriced, so blocked', () => {
+  const base = { model: 'claude-opus-5-5', max_tokens: 1000, messages: [{ role: 'user', content: 'hi' }] };
+  const mcp = extract({ ...base, mcp_servers: [{ type: 'url', url: 'https://example.com/mcp', name: 'gh' }], tools: [{ type: 'mcp_toolset', mcp_server_name: 'gh' }] });
+  expect(mcp.serverTools).toEqual([{ type: 'mcp_toolset', maxUses: null }, { type: 'mcp_servers', maxUses: null }]);
+  // Both rules apply (no price, no max_uses); an unpriced tool outranks a missing max_uses because it has no bound at all.
+  expect(worstCaseMicroUsd(req(mcp, opus), opus, table, opts)).toMatchObject({ block: 'unpriced-server-tool', boundAssumed: true });
+  expect(worstCaseMicroUsd(req(mcp, opus), opus, table, { ...opts, serverToolsWithoutMaxUses: 'assume' }).block).toBe('unpriced-server-tool');
+  // mcp_servers alone (no toolset entry) still runs the connector loop.
+  const servers = extract({ ...base, mcp_servers: [{ type: 'url', url: 'https://example.com/mcp', name: 'gh' }] });
+  expect(worstCaseMicroUsd(req(servers, opus), opus, table, opts).block).toBe('unpriced-server-tool');
+  // An empty mcp_servers adds no server tool (it still leaves the bytes bound, as an unknown field).
+  expect(extract({ ...base, mcp_servers: [] }).serverTools).toEqual([]);
+  for (const type of ['future_tool_20270101', 'advisor_20260301']) {
+    const x = extract({ ...base, tools: [{ type, name: 'x', max_uses: 3 }] });
+    expect(x.serverTools, type).toEqual([{ type, maxUses: 3 }]);
+    expect(worstCaseMicroUsd(req(x, opus), opus, table, opts).block, type).toBe('unpriced-server-tool');
+  }
+  const odd = extract({ ...base, tools: [{ type: 42, name: 'x' }] });
+  expect(odd.serverTools).toEqual([{ type: '42', maxUses: null }]);
+});
+
+test('custom tools and every known client tool type take the client path', () => {
+  const base = { model: 'claude-opus-5-5', max_tokens: 1000, messages: [{ role: 'user', content: 'hi' }] };
+  const custom = extract({ ...base, tools: [{ name: 'Read', input_schema: {} }, { type: 'custom', name: 'B', input_schema: {} }] });
+  expect(custom.serverTools).toEqual([]);
+  expect(inputTokenBound(custom, opus).kind).toBe('bytes');
+  for (const type of CLIENT_TOOL_TYPES) {
+    const x = extract({ ...base, tools: [{ type, name: 'x' }] });
+    expect(x.serverTools, type).toEqual([]);
+    // Hidden definitions can exceed the overhead, so the bound is the context window, one iteration, no block.
+    expect(inputTokenBound(x, opus), type).toEqual({ tokens: 1_000_000, kind: 'context-window' });
+    expect(worstCaseMicroUsd(req(x, opus), opus, table, opts), type).toEqual({ micro: Math.round((8_000_000 + 20_000) * 1.1), boundAssumed: false, block: null });
+  }
+});
+
+test('property: any tool set with a server-side tool that has no price is blocked', () => {
+  fc.assert(
+    fc.property(
+      fc.subarray(['custom', ...CLIENT_TOOL_TYPES, 'web_search_20250305']),
+      fc.constantFrom('mcp_toolset', 'advisor_20260301', 'web_fetch_20250910', 'code_execution_20250825', 'future_tool_20270101'),
+      fc.option(fc.integer({ min: 1, max: 9 }), { nil: null }),
+      (others, unpriced, maxUses) => {
+        const tools: object[] = others.map((type) => (type === 'custom' ? { name: 'c', input_schema: {} } : { type, name: type, max_uses: 2 }));
+        tools.push(maxUses === null ? { type: unpriced, name: 'u' } : { type: unpriced, name: 'u', max_uses: maxUses });
+        const x = extract({ model: 'claude-opus-5-5', max_tokens: 10, tools, messages: [] });
+        expect(worstCaseMicroUsd(req(x, opus), opus, table, opts).block).toBe('unpriced-server-tool');
+      },
+    ),
+  );
+});
+
 test('Responses request without max_output_tokens uses maxOutputTokens', () => {
   const f = req(extract({ model: 'claude-sonnet-5-5', messages: [] }), sonnet, { surface: 'openai-responses', inputTokensBound: 1000, boundKind: 'bytes', maxOutputTokens: null });
   // (1000 * 4 + 128_000 * 10) * 1.1
@@ -226,6 +283,8 @@ const arbCase = fc
     maxTokens: fc.option(fc.integer({ min: 1, max: 200_000 }), { nil: null }),
     reserve: fc.option(fc.integer({ min: 1, max: 200_000 }), { nil: null }),
     search: fc.option(fc.integer({ min: 1, max: 50 }), { nil: null }),
+    // A tool next to the search tool: none, a custom tool, or an Anthropic client tool. All stay on the client path.
+    clientTool: fc.constantFrom(null, 'custom', ...CLIENT_TOOL_TYPES),
     // How the bound is used: fractions of input per bucket, of output, of searches.
     split: fc.array(fc.double({ min: 0, max: 1, noNaN: true }), { minLength: 4, maxLength: 4 }),
     inFrac: fc.oneof(fc.constant(1), fc.double({ min: 0, max: 1, noNaN: true })),
@@ -238,10 +297,16 @@ const arbCase = fc
     const model = ids[c.modelIndex % ids.length] as string;
     const m = t.models[model] as ModelPrice;
     const fast = c.fast && m.fast !== undefined;
-    const serverTools = c.search === null ? [] : [{ type: 'web_search_20250305', maxUses: c.search }];
+    // The tool set goes through the real extractor, so its server or client classification is what is tested.
+    const tools: object[] = [];
+    if (c.clientTool !== null) tools.push(c.clientTool === 'custom' ? { name: 'Read', input_schema: {} } : { type: c.clientTool, name: 'tool' });
+    if (c.search !== null) tools.push({ type: 'web_search_20250305', name: 'web_search', max_uses: c.search });
+    const toolFeatures = extract({ model, max_tokens: 1, tools, messages: [{ role: 'user', content: 'hi' }] });
+    const serverTools = toolFeatures.serverTools;
     const x: ExtractedFeatures = {
-      model, stream: true, maxOutputTokens: c.maxTokens, toolCount: serverTools.length, thinking: false, serverTools, bodyBytes: c.bodyBytes,
-      prefixHash: null, blockTypes: c.textOnly ? ['text'] : ['image'], expandsServerSide: !c.textOnly, parseError: false, lastTurn: null, fastMode: fast,
+      model, stream: true, maxOutputTokens: c.maxTokens, toolCount: tools.length, thinking: false, serverTools, bodyBytes: c.bodyBytes,
+      prefixHash: null, blockTypes: c.textOnly ? ['text'] : ['image'], expandsServerSide: !c.textOnly || toolFeatures.expandsServerSide,
+      parseError: false, lastTurn: null, fastMode: fast,
     };
     const f = req(x, m);
     const iterations = c.search === null ? 1 : (t.serverTools.web_search?.maxIterations ?? 1);

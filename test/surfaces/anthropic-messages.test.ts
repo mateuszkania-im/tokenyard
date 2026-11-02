@@ -111,6 +111,12 @@ test('expandsServerSide: fields and tools that make the provider add input, or t
   expect(x({ context_management: 'x' })).toBe(true);
   // Anthropic-defined client tools add documented hidden tokens (toolsets about 4,500 to 6,600), more than the overhead.
   expect(x({ tools: [{ type: 'bash_20250124', name: 'bash' }] })).toBe(true);
+  // Server-side tools are counted in serverTools instead, MCP and unknown tool types included.
+  const st = (o: object) => extractAnthropicFeatures(Buffer.from(JSON.stringify({ model: 'm', messages: [], ...o }))).serverTools;
+  expect(st({ tools: [{ type: 'mcp_toolset', mcp_server_name: 'a', max_uses: 4 }] })).toEqual([{ type: 'mcp_toolset', maxUses: 4 }]);
+  expect(st({ tools: [{ type: 'future_tool_20270101', name: 'f' }] })).toEqual([{ type: 'future_tool_20270101', maxUses: null }]);
+  expect(st({ mcp_servers: [{ type: 'url', url: 'https://example.com', name: 'a' }] })).toEqual([{ type: 'mcp_servers', maxUses: null }]);
+  expect(st({ tools: [{ type: 'bash_20250124', name: 'bash' }, { name: 'Read', input_schema: {} }] })).toEqual([]);
   expect(x({ tools: [{ type: 'computer_toolset_20260801', name: 'c' }] })).toBe(true);
   // A system block that is not text is an unknown block type.
   const sys = extractAnthropicFeatures(Buffer.from(JSON.stringify({ model: 'm', system: [{ type: 'document', source: {} }], messages: [] })));
