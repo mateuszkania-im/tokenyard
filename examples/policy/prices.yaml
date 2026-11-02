@@ -21,6 +21,17 @@ models:
     cacheRead: 0.2
     maxContextTokens: 1000000
     maxOutputTokens: 128000
+    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.
+    # Cache prices are the page's prompt caching multipliers on top of the fast input price, as the page states:
+    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.
+    fast:
+      input: 8
+      output: 40
+      cacheWrite5m: 10
+      cacheWrite1h: 16
+      cacheRead: 0.4
+      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode
+      retrieved: 2026-11-02
     source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
     retrieved: 2026-11-02
   claude-sonnet-5-5:
@@ -54,6 +65,12 @@ models:
 modifiers:
   # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).
   inferenceGeoUs: 1.1
-# Server tools: web search is $10 per 1,000 searches, but the pages give no maxIterations value,
-# so the entry is left out until one is documented; requests with a server tool are then unpriced.
-serverTools: {}
+# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).
+# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10
+# iterations for each request"). Other server tools are unpriced until added here.
+serverTools:
+  web_search:
+    perUseUsd: 0.01 # $10 per 1,000 searches
+    maxIterations: 10
+    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
+    retrieved: 2026-11-02

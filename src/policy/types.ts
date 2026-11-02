@@ -73,6 +73,7 @@ export interface RequestFeatures {
   maxOutputTokens: number | null;
   serverTools: Array<{ type: string; maxUses: number | null }>;
   toolCount: number; thinking: boolean;
+  fastMode: boolean;                   // body selects fast mode (speed "fast"); priced at the model's fast rates (Task 9)
   attribution: {
     session: string | null; agent: string | null; parentAgent: string | null;
     requestClass: 'main' | 'subagent' | 'workflow' | 'compaction' | 'auxiliary' | null;

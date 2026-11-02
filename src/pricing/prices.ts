@@ -15,6 +15,16 @@ const tierSchema = z.strictObject({
   cacheRead: rate,
 });
 
+/** Fast mode (`speed: "fast"`) prices: they replace the base prices and tiers across the whole context window. */
+const fastSchema = z.strictObject({
+  input: rate,
+  output: rate,
+  cacheWrite5m: rate,
+  cacheWrite1h: rate,
+  cacheRead: rate,
+  ...provenance,
+});
+
 const modelSchema = z.strictObject({
   input: rate,
   output: rate,
@@ -24,6 +34,7 @@ const modelSchema = z.strictObject({
   maxContextTokens: tokens,
   maxOutputTokens: tokens,
   tiers: z.array(tierSchema).optional(),
+  fast: fastSchema.optional(),
   ...provenance,
 });
 

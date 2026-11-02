@@ -35,7 +35,7 @@ test('dated ids price like their table entry; unknown model, modifier or server 
   expect(costMicroUsd(t, 'claude-opus-5-5-20261001', { ...zero, output: 1000 })).toBe(20_000);
   expect(() => costMicroUsd(t, 'claude-nope', zero)).toThrow(/unpriced model/);
   expect(() => costMicroUsd(t, 'claude-opus-5-5', zero, { modifiers: ['nope'] })).toThrow(/modifier/);
-  expect(() => costMicroUsd(t, 'claude-opus-5-5', zero, { serverToolUses: { web_search: 1 } })).toThrow(/server tool/);
+  expect(() => costMicroUsd(t, 'claude-opus-5-5', zero, { serverToolUses: { web_fetch: 1 } })).toThrow(/server tool/);
 });
 
 test('server tool uses add perUseUsd each, and the final sum rounds half up', () => {
@@ -60,4 +60,17 @@ test('costMicroUsd fails closed on ids that only exist on Object.prototype and o
   expect(() => costMicroUsd(t, 'claude-opus-5-5', zero, { serverToolUses: { toString: 1 } })).toThrow(/server tool/);
   expect(() => costMicroUsd(t, 'claude-opus-5-5', { ...zero, output: Number.NaN })).toThrow(/invalid cost/);
   expect(() => costMicroUsd(t, 'claude-opus-5-5', { ...zero, output: -1 })).toThrow(/invalid cost/);
+});
+
+test('fast mode prices Opus 5.5 at the fast rates, stacks with modifiers, and throws for a model without fast prices', () => {
+  const u = { input: 1000, cacheWrite5m: 2000, cacheWrite1h: 3000, cacheRead: 10000, output: 500 };
+  // 1000*8 + 2000*10 + 3000*16 + 10000*0.4 + 500*40 = 8000+20000+48000+4000+20000
+  expect(costMicroUsd(t, 'claude-opus-5-5', u, { fast: true })).toBe(100_000);
+  expect(costMicroUsd(t, 'claude-opus-5-5', u, { fast: true, modifiers: ['inferenceGeoUs'] })).toBe(110_000);
+  expect(costMicroUsd(t, 'claude-opus-5-5', u, { fast: false })).toBe(50_000);
+  expect(() => costMicroUsd(t, 'claude-sonnet-5-5', u, { fast: true })).toThrow(/fast mode/);
+});
+
+test('web_search in the example table: $10 per 1,000 searches', () => {
+  expect(costMicroUsd(t, 'claude-opus-5-5', zero, { serverToolUses: { web_search: 3 } })).toBe(30_000);
 });

@@ -8,6 +8,39 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const SERVER_TOOL_PREFIXES = ['web_search_', 'web_fetch_', 'code_execution_', 'tool_search_tool_'];
 /** Content blocks whose token count the provider decides (fetched URLs, rendered PDFs), so body bytes do not bound them. */
 const EXPANDING_BLOCKS = new Set(['image', 'document']);
+/**
+ * Top-level Messages API fields that add no input on the provider side beyond the body's own bytes and the
+ * tool-use framing covered by the estimator's overhead. Any other field (`mcp_servers`, `container`, a field
+ * added after this list) sets `expandsServerSide`, so a new client feature fails safe (spec 7.3).
+ * `output_config` and `context_management` are checked further below.
+ */
+const PLAIN_FIELDS = new Set([
+  'model', 'messages', 'max_tokens', 'system', 'tools', 'tool_choice', 'thinking', 'stream', 'metadata', 'stop_sequences',
+  'temperature', 'top_p', 'top_k', 'cache_control', 'inference_geo', 'service_tier', 'speed', 'diagnostics',
+  'output_config', 'context_management',
+]);
+/** Context editing that only removes content from the prompt. Other edits (compaction) run extra sampling. */
+const CLEARING_EDIT_PREFIXES = ['clear_tool_uses_', 'clear_thinking_'];
+
+function hasExpandingField(parsed: Obj, tools: unknown[]): boolean {
+  for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS.has(key)) return true;
+  // Structured output formats are not documented as adding no input; effort alone is plain.
+  if (parsed.output_config !== undefined && !(isObj(parsed.output_config) && parsed.output_config.format == null)) return true;
+  const cm = parsed.context_management;
+  if (cm !== undefined) {
+    if (!isObj(cm) || (cm.edits !== undefined && !Array.isArray(cm.edits))) return true;
+    for (const e of (cm.edits as unknown[] | undefined) ?? []) {
+      if (!isObj(e) || typeof e.type !== 'string' || !CLEARING_EDIT_PREFIXES.some((p) => (e.type as string).startsWith(p))) return true;
+    }
+  }
+  // Custom tools are bounded by their bytes. Anthropic-defined client tools (bash, text editor, computer and
+  // browser toolsets) add hidden definitions of up to about 6,600 tokens (pricing page); server tools are counted apart.
+  for (const t of tools) {
+    if (!isObj(t) || t.type === undefined || t.type === 'custom') continue;
+    if (typeof t.type !== 'string' || !SERVER_TOOL_PREFIXES.some((p) => (t.type as string).startsWith(p))) return true;
+  }
+  return false;
+}
 
 function emptyFeatures(bodyBytes: number, parseError: boolean): ExtractedFeatures {
   return {
@@ -21,6 +54,7 @@ function emptyFeatures(bodyBytes: number, parseError: boolean): ExtractedFeature
     prefixHash: null,
     blockTypes: [],
     expandsServerSide: false,
+    fastMode: false,
     parseError,
     lastTurn: null,
   };
@@ -59,6 +93,7 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
 
   const types = new Set<string>();
   const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+  collectBlockTypes(parsed.system, types);
   for (const m of messages) if (isObj(m)) collectBlockTypes(m.content, types);
   const blockTypes = [...types];
 
@@ -80,7 +115,8 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     bodyBytes: body.length,
     prefixHash,
     blockTypes,
-    expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)),
+    expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
+    fastMode: parsed.speed !== undefined && parsed.speed !== null && parsed.speed !== 'standard',
     parseError: false,
     lastTurn: messages.length > 0 ? lastMessageRange(body) : null,
   };

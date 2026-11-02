@@ -7,7 +7,7 @@ const outcome = (o: Partial<RequestOutcome> = {}): RequestOutcome => ({
   key: { hash: 'h', keyId: 'key_1', tenant: 't', team: null, name: 'n', kind: 'service', billing: 'subscription' },
   attribution: { session: 's', agent: null, parentAgent: null, requestClass: null, agentType: null, promptId: null, repo: null, branch: null, ticket: null, feature: null },
   surface: 'anthropic-messages',
-  features: { model: 'm', stream: true, maxOutputTokens: null, toolCount: 0, thinking: false, serverTools: [], bodyBytes: 7, prefixHash: null, blockTypes: [], expandsServerSide: false, parseError: false, lastTurn: null },
+  features: { model: 'm', stream: true, maxOutputTokens: null, toolCount: 0, thinking: false, serverTools: [], bodyBytes: 7, prefixHash: null, blockTypes: [], expandsServerSide: false, fastMode: false, parseError: false, lastTurn: null },
   provider: 'anthropic',
   status: 200,
   usage: { usage: { input: 1, output: 2, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }, source: 'final', midStreamError: null, sawStop: true, streamedChars: 8, responseModel: 'm' },

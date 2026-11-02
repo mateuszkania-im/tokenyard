@@ -28409,7 +28409,7 @@ function lookupModel(t, model) {
   const price = best === null ? void 0 : t.models[best];
   return best !== null && price ? { id: best, price } : null;
 }
-var rate, tokens, provenance, tierSchema, modelSchema, tableSchema;
+var rate, tokens, provenance, tierSchema, fastSchema, modelSchema, tableSchema;
 var init_prices = __esm({
   "src/pricing/prices.ts"() {
     "use strict";
@@ -28426,6 +28426,14 @@ var init_prices = __esm({
       cacheWrite1h: rate,
       cacheRead: rate
     });
+    fastSchema = external_exports.strictObject({
+      input: rate,
+      output: rate,
+      cacheWrite5m: rate,
+      cacheWrite1h: rate,
+      cacheRead: rate,
+      ...provenance
+    });
     modelSchema = external_exports.strictObject({
       input: rate,
       output: rate,
@@ -28435,6 +28443,7 @@ var init_prices = __esm({
       maxContextTokens: tokens,
       maxOutputTokens: tokens,
       tiers: external_exports.array(tierSchema).optional(),
+      fast: fastSchema.optional(),
       ...provenance
     });
     tableSchema = external_exports.strictObject({
@@ -28454,7 +28463,11 @@ function costMicroUsd(t, modelId, u, o = {}) {
   const promptTokens = u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
   let p = m;
   let above = -1;
-  for (const tier of m.tiers ?? []) {
+  if (o.fast) {
+    if (!m.fast) throw new Error(`unpriced fast mode: ${modelId}`);
+    p = m.fast;
+  }
+  for (const tier of o.fast ? [] : m.tiers ?? []) {
     if (promptTokens > tier.aboveInputTokens && tier.aboveInputTokens > above) {
       p = tier;
       above = tier.aboveInputTokens;
@@ -28710,6 +28723,22 @@ var init_tee = __esm({
 
 // src/surfaces/anthropic-messages.ts
 import { createHash as createHash3 } from "node:crypto";
+function hasExpandingField(parsed, tools) {
+  for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS.has(key)) return true;
+  if (parsed.output_config !== void 0 && !(isObj3(parsed.output_config) && parsed.output_config.format == null)) return true;
+  const cm = parsed.context_management;
+  if (cm !== void 0) {
+    if (!isObj3(cm) || cm.edits !== void 0 && !Array.isArray(cm.edits)) return true;
+    for (const e of cm.edits ?? []) {
+      if (!isObj3(e) || typeof e.type !== "string" || !CLEARING_EDIT_PREFIXES.some((p) => e.type.startsWith(p))) return true;
+    }
+  }
+  for (const t of tools) {
+    if (!isObj3(t) || t.type === void 0 || t.type === "custom") continue;
+    if (typeof t.type !== "string" || !SERVER_TOOL_PREFIXES.some((p) => t.type.startsWith(p))) return true;
+  }
+  return false;
+}
 function emptyFeatures(bodyBytes, parseError) {
   return {
     model: null,
@@ -28722,6 +28751,7 @@ function emptyFeatures(bodyBytes, parseError) {
     prefixHash: null,
     blockTypes: [],
     expandsServerSide: false,
+    fastMode: false,
     parseError,
     lastTurn: null
   };
@@ -28752,6 +28782,7 @@ function extractAnthropicFeatures(body) {
   }
   const types = /* @__PURE__ */ new Set();
   const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+  collectBlockTypes(parsed.system, types);
   for (const m of messages) if (isObj3(m)) collectBlockTypes(m.content, types);
   const blockTypes = [...types];
   const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
@@ -28767,7 +28798,8 @@ function extractAnthropicFeatures(body) {
     bodyBytes: body.length,
     prefixHash,
     blockTypes,
-    expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)),
+    expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
+    fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
     parseError: false,
     lastTurn: messages.length > 0 ? lastMessageRange(body) : null
   };
@@ -28846,13 +28878,36 @@ function lastMessageRange(b) {
   }
   return result;
 }
-var isObj3, SERVER_TOOL_PREFIXES, EXPANDING_BLOCKS, QUOTE, BACKSLASH;
+var isObj3, SERVER_TOOL_PREFIXES, EXPANDING_BLOCKS, PLAIN_FIELDS, CLEARING_EDIT_PREFIXES, QUOTE, BACKSLASH;
 var init_anthropic_messages = __esm({
   "src/surfaces/anthropic-messages.ts"() {
     "use strict";
     isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     SERVER_TOOL_PREFIXES = ["web_search_", "web_fetch_", "code_execution_", "tool_search_tool_"];
     EXPANDING_BLOCKS = /* @__PURE__ */ new Set(["image", "document"]);
+    PLAIN_FIELDS = /* @__PURE__ */ new Set([
+      "model",
+      "messages",
+      "max_tokens",
+      "system",
+      "tools",
+      "tool_choice",
+      "thinking",
+      "stream",
+      "metadata",
+      "stop_sequences",
+      "temperature",
+      "top_p",
+      "top_k",
+      "cache_control",
+      "inference_geo",
+      "service_tier",
+      "speed",
+      "diagnostics",
+      "output_config",
+      "context_management"
+    ]);
+    CLEARING_EDIT_PREFIXES = ["clear_tool_uses_", "clear_thinking_"];
     QUOTE = 34;
     BACKSLASH = 92;
   }
@@ -55726,6 +55781,7 @@ var init_handler = __esm({
       prefixHash: null,
       blockTypes: [],
       expandsServerSide: false,
+      fastMode: false,
       parseError: false,
       lastTurn: null
     };

@@ -160,7 +160,7 @@ function afterResponse(deps: GatewayDeps, outcome: RequestOutcome): void {
 
 const NO_FEATURES: ExtractedFeatures = {
   model: null, stream: false, maxOutputTokens: null, toolCount: 0, thinking: false, serverTools: [], bodyBytes: 0,
-  prefixHash: null, blockTypes: [], expandsServerSide: false, parseError: false, lastTurn: null,
+  prefixHash: null, blockTypes: [], expandsServerSide: false, fastMode: false, parseError: false, lastTurn: null,
 };
 
 async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: ServerResponse): Promise<void> {

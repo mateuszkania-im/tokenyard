@@ -76,3 +76,23 @@ test('a price table with a __proto__ key is rejected and does not pollute Object
   }
   expect(({} as Record<string, unknown>).input).toBeUndefined();
 });
+
+test('example table: Opus 5.5 fast prices and web_search are sourced from the docs', () => {
+  const t = loadPrices();
+  const fast = t.models['claude-opus-5-5']?.fast;
+  expect(fast).toMatchObject({ input: 8, output: 40, cacheWrite5m: 10, cacheWrite1h: 16, cacheRead: 0.4, retrieved: '2026-11-02' });
+  expect(fast?.source).toContain('https://platform.claude.com/docs/en/about-claude/pricing');
+  expect(t.models['claude-sonnet-5-5']?.fast).toBeUndefined();
+  expect(t.serverTools.web_search).toMatchObject({ perUseUsd: 0.01, maxIterations: 10, retrieved: '2026-11-02' });
+  expect(t.serverTools.web_search?.source).toContain('https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons');
+});
+
+test('a fast block must be complete', () => {
+  const text = (fast: string) => `
+version: x
+models:
+  claude-a: { input: 1, output: 1, cacheWrite5m: 1, cacheWrite1h: 1, cacheRead: 1, maxContextTokens: 10, maxOutputTokens: 10, source: s, retrieved: r, fast: ${fast} }
+`;
+  expect(parsePriceTable(text('{ input: 2, output: 2, cacheWrite5m: 2, cacheWrite1h: 2, cacheRead: 2, source: s, retrieved: r }')).models['claude-a']?.fast?.input).toBe(2);
+  expect(() => parsePriceTable(text('{ input: 2, output: 2, source: s, retrieved: r }'))).toThrow(/fast/);
+});

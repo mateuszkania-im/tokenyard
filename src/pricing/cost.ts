@@ -7,11 +7,14 @@ export interface CostOptions {
   modifiers?: string[];
   /** Server tool uses by tool name, charged at `perUseUsd` each and not touched by modifiers. */
   serverToolUses?: Record<string, number>;
+  /** The response reported `usage.speed: "fast"`: the model's `fast` prices apply instead of the base prices and tiers. */
+  fast?: boolean;
 }
 
 /**
  * Actual cost in integer micro-USD, rounded half up. The prompt length for tier selection is every input
  * bucket together (input, cache reads and cache writes); the highest tier whose threshold it exceeds applies.
+ * Fast mode prices apply across the full context window (pricing page), so tiers are skipped for them.
  * Throws on an unknown model, modifier or server tool: the caller decides what an unpriced request means.
  */
 export function costMicroUsd(t: PriceTable, modelId: string, u: Usage, o: CostOptions = {}): number {
@@ -21,7 +24,11 @@ export function costMicroUsd(t: PriceTable, modelId: string, u: Usage, o: CostOp
   const promptTokens = u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
   let p: { input: number; output: number; cacheWrite5m: number; cacheWrite1h: number; cacheRead: number } = m;
   let above = -1;
-  for (const tier of m.tiers ?? []) {
+  if (o.fast) {
+    if (!m.fast) throw new Error(`unpriced fast mode: ${modelId}`);
+    p = m.fast;
+  }
+  for (const tier of o.fast ? [] : (m.tiers ?? [])) {
     if (promptTokens > tier.aboveInputTokens && tier.aboveInputTokens > above) {
       p = tier;
       above = tier.aboveInputTokens;

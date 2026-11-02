@@ -79,3 +79,40 @@ test('defaults and parse errors', () => {
   const doc = extractAnthropicFeatures(Buffer.from('{"messages":[{"role":"user","content":[{"type":"document","source":{}}]}]}'));
   expect(doc.expandsServerSide).toBe(true);
 });
+
+test('fastMode is set by speed "fast" (any value other than standard fails safe to fast)', () => {
+  const f = (o: object) => extractAnthropicFeatures(Buffer.from(JSON.stringify({ model: 'm', messages: [], ...o }))).fastMode;
+  expect(f({})).toBe(false);
+  expect(f({ speed: 'standard' })).toBe(false);
+  expect(f({ speed: null })).toBe(false);
+  expect(f({ speed: 'fast' })).toBe(true);
+  expect(f({ speed: 'turbo' })).toBe(true);
+  expect(extractAnthropicFeatures(Buffer.from('{')).fastMode).toBe(false);
+});
+
+test('expandsServerSide: fields and tools that make the provider add input, or that are unknown, fail safe', () => {
+  const x = (o: object) =>
+    extractAnthropicFeatures(Buffer.from(JSON.stringify({ model: 'm', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }], ...o }))).expandsServerSide;
+  // Documented Messages API fields that add no provider-side input stay on the bytes bound.
+  expect(
+    x({
+      stream: true, system: [{ type: 'text', text: 's' }], metadata: { user_id: 'u' }, stop_sequences: ['x'], temperature: 1, top_p: 1, top_k: 1,
+      thinking: { type: 'adaptive' }, tool_choice: { type: 'auto' }, tools: [{ name: 'Read', input_schema: {} }, { type: 'custom', name: 'B', input_schema: {} }],
+      cache_control: { type: 'ephemeral' }, inference_geo: 'us', service_tier: 'auto', speed: 'fast', diagnostics: { previous_message_id: null },
+      output_config: { effort: 'high' },
+      context_management: { edits: [{ type: 'clear_tool_uses_20250919' }, { type: 'clear_thinking_20251015' }] },
+    }),
+  ).toBe(false);
+  expect(x({ mcp_servers: [{ type: 'url', url: 'https://example.com', name: 'a' }] })).toBe(true);
+  expect(x({ container: 'container_1' })).toBe(true);
+  expect(x({ some_future_field: 1 })).toBe(true);
+  expect(x({ output_config: { format: { type: 'json_schema', schema: {} } } })).toBe(true);
+  expect(x({ context_management: { edits: [{ type: 'compact_20260112' }] } })).toBe(true);
+  expect(x({ context_management: 'x' })).toBe(true);
+  // Anthropic-defined client tools add documented hidden tokens (toolsets about 4,500 to 6,600), more than the overhead.
+  expect(x({ tools: [{ type: 'bash_20250124', name: 'bash' }] })).toBe(true);
+  expect(x({ tools: [{ type: 'computer_toolset_20260801', name: 'c' }] })).toBe(true);
+  // A system block that is not text is an unknown block type.
+  const sys = extractAnthropicFeatures(Buffer.from(JSON.stringify({ model: 'm', system: [{ type: 'document', source: {} }], messages: [] })));
+  expect(sys.blockTypes).toContain('document');
+});
