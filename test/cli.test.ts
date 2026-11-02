@@ -27,3 +27,27 @@ test('tokenyard mock prints its URL and serves count_tokens', async () => {
     child.kill('SIGTERM');
   }
 });
+
+test('tokenyard serve --dev-upstream forwards to the upstream', async () => {
+  const { spawn } = await import('node:child_process');
+  const { startAnthropicMock } = await import('../src/mock/anthropic.js');
+  const mock = await startAnthropicMock();
+  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url]);
+  try {
+    const url = await new Promise<string>((resolve, reject) => {
+      child.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()));
+      child.once('error', reject);
+      child.once('exit', () => reject(new Error('serve exited early')));
+    });
+    const res = await fetch(`${url}/v1/messages?beta=true`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ty_live_dev', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-test', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    expect(res.status).toBe(200);
+    expect(mock.received[0]?.pathAndQuery).toBe('/v1/messages?beta=true');
+  } finally {
+    child.kill('SIGTERM');
+    await mock.close();
+  }
+});
