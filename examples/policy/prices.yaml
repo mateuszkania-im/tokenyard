@@ -74,3 +74,16 @@ serverTools:
     maxIterations: 10
     source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
     retrieved: 2026-11-02
+  # Tool search runs on Anthropic's servers in the same sampling loop; "Tool search isn't metered as a separate server
+  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same
+  # 10 iterations as above, so the reservation covers 10 sampling iterations.
+  tool_search_tool_regex:
+    perUseUsd: 0
+    maxIterations: 10
+    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
+    retrieved: 2026-11-02
+  tool_search_tool_bm25:
+    perUseUsd: 0
+    maxIterations: 10
+    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
+    retrieved: 2026-11-02

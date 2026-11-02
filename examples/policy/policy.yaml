@@ -30,7 +30,7 @@ routes:                               # first match wins
     chain: [anthropic, anthropic-backup]
     allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]
     # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;
-    # tool search has no per-use fee in prices.yaml, so failure.unpricedModel (allow-and-flag) covers it.
+    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).
     serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]
   - name: codex
     match: { surface: openai-responses, traffic: coding-agent }

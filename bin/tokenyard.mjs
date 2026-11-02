@@ -28871,15 +28871,17 @@ function decide(policy2, f) {
   plan.route = route2.name;
   const authz = route2.match.requestClass === null && route2.match.agentType === null && route2.match.repo === null && route2.match.feature === null ? route2 : findAuthzRoute(policy2, f);
   if (authz === null) return { ...plan, preBlock: "no-route" };
-  const allows = (r) => r.allowModels === null || r.allowModels.some((re) => globTest(re, f.model));
-  if (!allows(route2) || !allows(authz)) return { ...plan, preBlock: "model-not-allowed" };
-  const refused = f.serverTools.filter((tool) => !(route2.serverTools ?? []).includes(serverToolKey(tool.type)));
+  const allows = (r, model) => r.allowModels === null || r.allowModels.some((re) => globTest(re, model));
+  if (!allows(route2, f.model) || !allows(authz, f.model)) return { ...plan, preBlock: "model-not-allowed" };
+  const lists = (r, type) => (r.serverTools ?? []).includes(serverToolKey(type));
+  const refused = f.serverTools.filter((tool) => !lists(route2, tool.type) || !lists(authz, tool.type));
   if (refused.length > 0) {
     return { ...plan, preBlock: "server-tool-not-allowed", warnings: [...warnings, ...refused.map((tool) => ({ kind: "server-tool-not-allowed", type: tool.type }))] };
   }
   const mayRewrite = route2.rewriteModel !== null && (f.traffic === "product" || route2.allowBodyRewrite);
   const upstreamModel = mayRewrite ? route2.rewriteModel : f.model;
   const rewritesModel = upstreamModel !== f.model;
+  if (rewritesModel && (!allows(route2, upstreamModel) || !allows(authz, upstreamModel))) return { ...plan, preBlock: "model-not-allowed" };
   plan.chain = orderChain(route2, session ?? f.id).map((provider2) => ({ provider: provider2, upstreamModel, rewritesModel }));
   if (lastTurnBlocks.length > 0) return { ...plan, preBlock: "secret" };
   if (f.surface === "anthropic-count-tokens") return plan;
@@ -28903,12 +28905,17 @@ function decide(policy2, f) {
     const r = policy2.reservation;
     const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route2.reserveOutputTokens });
     est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price, t, null, route2.reserveOutputTokens) : worst.micro;
+    const enforced = levels.some((l) => l.enforce);
     if (worst.block === "unpriced-server-tool") {
-      if (policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
+      if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
       warnings.push({ kind: "bound-assumed", reason: "unpriced-server-tool" });
     }
-    if (f.serverTools.some((tool) => tool.maxUses === null && Object.hasOwn(t.serverTools, serverToolKey(tool.type)))) {
-      if (r.serverToolsWithoutMaxUses === "block" && levels.some((l) => l.enforce)) return { ...plan, preBlock: "server-tool-no-max-uses" };
+    const feeWithoutMaxUses = f.serverTools.some((tool) => {
+      const key = serverToolKey(tool.type);
+      return tool.maxUses === null && Object.hasOwn(t.serverTools, key) && (t.serverTools[key]?.perUseUsd ?? 0) > 0;
+    });
+    if (feeWithoutMaxUses) {
+      if (r.serverToolsWithoutMaxUses === "block" && enforced) return { ...plan, preBlock: "server-tool-no-max-uses" };
       warnings.push({ kind: "bound-assumed", reason: "server-tool-no-max-uses" });
     }
   } else if (levels.length > 0) {
@@ -56299,34 +56306,34 @@ async function handle(deps, id, req, res) {
   }
   const features = extractFeatures(surface, body);
   const f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy2.prices, id, startedAt, surface);
-  const decision = resolve(policy2, decide(policy2, f), null);
+  const plan = decide(policy2, f);
   const cp = policy2.candidate;
   const candidate = cp ? { revision: cp.revision, ...summary(resolve(cp, decide(cp, f), null)) } : void 0;
-  const planned = summary(decision);
-  const routeInfo = planned.route === null ? null : { name: planned.route, chain: planned.chain };
+  const chainNames = plan.chain.map((c) => c.provider);
   const decided = {
     features,
     inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
-    boundAssumed: decision.plan.warnings.some((w) => w.kind === "bound-assumed"),
-    route: routeInfo,
+    boundAssumed: plan.warnings.some((w) => w.kind === "bound-assumed"),
+    route: plan.route === null ? null : { name: plan.route, chain: chainNames },
     ...candidate ? { candidate } : {}
   };
-  const first2 = decision.plan.chain[0];
+  const first2 = plan.chain[0];
+  let upstreamBody = body;
+  if (plan.preBlock === null && first2?.rewritesModel) {
+    const rewritten = rewriteTopLevelModel(body, first2.upstreamModel);
+    if (!rewritten) {
+      const msg = `route "${plan.route ?? ""}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
+      sendError(req, res, anthropicError(400, "invalid_request_error", msg, null, id));
+      return early({ ...decided, status: 400, decision: { action: "block", reason: "model-rewrite-failed" }, errorClass: "invalid_request_error" });
+    }
+    upstreamBody = rewritten;
+  }
+  const decision = resolve(policy2, plan, null);
   const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
   if (decision.block || !provider2) {
     const b = decision.block ?? { status: 403, type: "permission_error", reason: "no-route", message: "no provider serves this route", retryAfterS: null };
     sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
     return early({ ...decided, status: b.status, decision: { action: "block", reason: b.reason }, errorClass: b.type });
-  }
-  let upstreamBody = body;
-  if (first2?.rewritesModel) {
-    const rewritten = rewriteTopLevelModel(body, first2.upstreamModel);
-    if (!rewritten) {
-      const msg = `route "${planned.route ?? ""}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
-      sendError(req, res, anthropicError(400, "invalid_request_error", msg, null, id));
-      return early({ ...decided, status: 400, decision: { action: "block", reason: "model-rewrite-failed" }, errorClass: "invalid_request_error" });
-    }
-    upstreamBody = rewritten;
   }
   const mode = provider2.credential === "passthrough" ? "passthrough" : "api";
   const headers = upstreamHeaders(req.headers, {
@@ -56621,7 +56628,20 @@ function validatePolicy(src, o) {
     if (extra.length > 0 || r.allowModels === void 0 && authz.allowModels !== void 0) {
       warn("W_HEADER_ROUTE_GRANTS", `routes[${j}]`, `route "${r.name}" allows models that route "${authz.name}" does not (${extra.join(", ") || "any model"}); client headers cannot grant them, so those requests get 403`);
     }
+    const extraTools = (r.serverTools ?? []).filter((t) => !(authz.serverTools ?? []).includes(t));
+    if (extraTools.length > 0) {
+      warn("W_HEADER_ROUTE_GRANTS", `routes[${j}].serverTools`, `route "${r.name}" lists server tools that route "${authz.name}" does not (${extraTools.join(", ")}); client headers cannot grant them, so those requests get 403`);
+    }
+    if (r.rewriteModel !== void 0 && !allowsId(authz, r.rewriteModel)) {
+      err("E_REWRITE_NOT_AUTHORIZED", `routes[${j}].rewriteModel`, `route "${r.name}" is chosen by client headers and rewrites to "${r.rewriteModel}", which route "${authz.name}" does not allow`);
+    }
   });
+  if (policy2.failure.unpricedModel === "allow-and-flag" && enforced.length > 0) {
+    policy2.routes.forEach((r, j) => {
+      const unpriced = (r.serverTools ?? []).filter((t) => !Object.hasOwn(prices.serverTools, t));
+      if (unpriced.length > 0) warn("W_UNPRICED_TOOL_ENFORCED", `routes[${j}].serverTools`, `server tools ${unpriced.join(", ")} have no price; with enforced budgets they are refused despite failure.unpricedModel: allow-and-flag`);
+    });
+  }
   if (policy2.reservation.estimator === "session-aware") {
     policy2.budgets.forEach((b, i) => {
       if (b.scope === "session" && b.onExceed === "block") warn("W_SESSION_AWARE_BLOCK", `budgets[${i}]`, "estimator: session-aware with onExceed: block on a session budget; the budget guarantee does not hold");
@@ -56658,9 +56678,10 @@ var init_validate = __esm({
       "E_BUDGET_WINDOW",
       "E_BUDGET_USD",
       "E_STORE_DOWN_UNSTATED",
-      "E_CREDENTIAL_ENV"
+      "E_CREDENTIAL_ENV",
+      "E_REWRITE_NOT_AUTHORIZED"
     ];
-    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK", "W_HEADER_ROUTE_GRANTS"];
+    WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK", "W_HEADER_ROUTE_GRANTS", "W_UNPRICED_TOOL_ENFORCED"];
     LOAD_ERROR_CODES = ["E_FILE_MISSING", "E_YAML_UNSAFE", "E_YAML_SYNTAX", "E_SCHEMA", "E_PRICES_INVALID", "E_MODEL_LIMITS_MISSING"];
     OFFICIAL_HOST = { anthropic: "api.anthropic.com", openai: "api.openai.com" };
     ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;

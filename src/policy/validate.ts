@@ -26,9 +26,10 @@ export const ERROR_CODES = [
   'E_BUDGET_USD',
   'E_STORE_DOWN_UNSTATED',
   'E_CREDENTIAL_ENV',
+  'E_REWRITE_NOT_AUTHORIZED',
 ] as const;
 
-export const WARNING_CODES = ['W_CHILD_BUDGET', 'W_SURFACE_NO_ROUTE', 'W_ROUTE_SHADOWED', 'W_SESSION_AWARE_BLOCK', 'W_SERVER_TOOLS_ASSUME', 'W_SUBSCRIPTION_BLOCK', 'W_HEADER_ROUTE_GRANTS'] as const;
+export const WARNING_CODES = ['W_CHILD_BUDGET', 'W_SURFACE_NO_ROUTE', 'W_ROUTE_SHADOWED', 'W_SESSION_AWARE_BLOCK', 'W_SERVER_TOOLS_ASSUME', 'W_SUBSCRIPTION_BLOCK', 'W_HEADER_ROUTE_GRANTS', 'W_UNPRICED_TOOL_ENFORCED'] as const;
 
 /** Codes `loadPolicyDir` throws with (PolicyLoadError.code) before validation can run. */
 export const LOAD_ERROR_CODES = ['E_FILE_MISSING', 'E_YAML_UNSAFE', 'E_YAML_SYNTAX', 'E_SCHEMA', 'E_PRICES_INVALID', 'E_MODEL_LIMITS_MISSING'] as const;
@@ -197,7 +198,23 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
     if (extra.length > 0 || (r.allowModels === undefined && authz.allowModels !== undefined)) {
       warn('W_HEADER_ROUTE_GRANTS', `routes[${j}]`, `route "${r.name}" allows models that route "${authz.name}" does not (${extra.join(', ') || 'any model'}); client headers cannot grant them, so those requests get 403`);
     }
+    const extraTools = (r.serverTools ?? []).filter((t) => !(authz.serverTools ?? []).includes(t));
+    if (extraTools.length > 0) {
+      warn('W_HEADER_ROUTE_GRANTS', `routes[${j}].serverTools`, `route "${r.name}" lists server tools that route "${authz.name}" does not (${extraTools.join(', ')}); client headers cannot grant them, so those requests get 403`);
+    }
+    if (r.rewriteModel !== undefined && !allowsId(authz, r.rewriteModel)) {
+      err('E_REWRITE_NOT_AUTHORIZED', `routes[${j}].rewriteModel`, `route "${r.name}" is chosen by client headers and rewrites to "${r.rewriteModel}", which route "${authz.name}" does not allow`);
+    }
   });
+
+  // An unpriced server tool is refused on any request that touches an enforced budget (decide.ts), so allow-and-flag
+  // cannot admit it there.
+  if (policy.failure.unpricedModel === 'allow-and-flag' && enforced.length > 0) {
+    policy.routes.forEach((r, j) => {
+      const unpriced = (r.serverTools ?? []).filter((t) => !Object.hasOwn(prices.serverTools, t));
+      if (unpriced.length > 0) warn('W_UNPRICED_TOOL_ENFORCED', `routes[${j}].serverTools`, `server tools ${unpriced.join(', ')} have no price; with enforced budgets they are refused despite failure.unpricedModel: allow-and-flag`);
+    });
+  }
 
   if (policy.reservation.estimator === 'session-aware') {
     policy.budgets.forEach((b, i) => {

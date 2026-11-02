@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'vitest';
 import type { TraceRecord } from '../../src/ledger/record.js';
+import type { CounterStore } from '../../src/limits/store.js';
 import { startAnthropicMock, type MockServer } from '../../src/mock/anthropic.js';
 import { startGateway } from '../helpers/gateway.js';
 import { authHeaders, msgBody, send } from '../helpers/conformance.js';
@@ -54,4 +55,31 @@ test('a client request-class header cannot reach a route with wider allowModels'
   const allowed = await send(s.url, { path: '/v1/messages', headers, body: msgBody({ model: 'claude-haiku-5-5' }) });
   expect(allowed.status).toBe(200);
   expect(s.mock.received).toHaveLength(1);
+});
+
+test('a rewrite that cannot be applied is refused before admission: the store is never called', async () => {
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const mock = await startAnthropicMock();
+  closers.push(mock.close);
+  const calls: string[] = [];
+  const store: CounterStore = {
+    admit: async () => {
+      calls.push('admit');
+      return { admitted: true, failed: null, audit: [], totals: [] };
+    },
+    settle: async () => {
+      calls.push('settle');
+      return 'unknown';
+    },
+    sweep: async () => 0,
+    snapshot: async () => ({}),
+    seed: async () => undefined,
+  };
+  const gw = await startGateway({ policy: testPolicy({ upstream: mock.url, rewriteModel: 'claude-haiku-5-5' }), store });
+  closers.push(gw.close);
+  const raw = '{"model":"claude-opus-5-5","model":"claude-opus-5-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}';
+  const res = await send(gw.url, { path: '/v1/messages', headers: authHeaders, body: raw });
+  expect(res.status).toBe(400);
+  expect(calls).toEqual([]);
+  expect(mock.received).toHaveLength(0);
 });

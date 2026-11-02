@@ -266,39 +266,43 @@ async function handle(deps: GatewayDeps, id: string, req: IncomingMessage, res: 
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);
 
-  // 5 to 8. Guardrails (Task 16), decide, admit (Task 14: until then no admission), resolve.
+  // 5 and 6. Guardrails (Task 16), decide.
   const f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy.prices, id, startedAt, surface);
-  const decision = resolve(policy, decide(policy, f), null);
+  const plan = decide(policy, f);
   const cp = policy.candidate;
   const candidate = cp ? { revision: cp.revision, ...summary(resolve(cp, decide(cp, f), null)) } : undefined;
-  const planned = summary(decision);
-  const routeInfo = planned.route === null ? null : { name: planned.route, chain: planned.chain };
+  const chainNames = plan.chain.map((c) => c.provider);
   const decided = {
     features,
     inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
-    boundAssumed: decision.plan.warnings.some((w) => w.kind === 'bound-assumed'),
-    route: routeInfo,
+    boundAssumed: plan.warnings.some((w) => w.kind === 'bound-assumed'),
+    route: plan.route === null ? null : { name: plan.route, chain: chainNames },
     ...(candidate ? { candidate } : {}),
   };
-  const first = decision.plan.chain[0];
+  const first = plan.chain[0];
+
+  // rewriteModel (product routes, or coding-agent routes behind allowBodyRewrite): only the bytes of the top-level
+  // model value change; the reservation is priced at this served model. Not locatable exactly: refuse, never guess.
+  // Decided before admission, so a request that cannot be sent never reserves anything.
+  let upstreamBody = body;
+  if (plan.preBlock === null && first?.rewritesModel) {
+    const rewritten = rewriteTopLevelModel(body, first.upstreamModel);
+    if (!rewritten) {
+      const msg = `route "${plan.route ?? ''}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
+      sendError(req, res, anthropicError(400, 'invalid_request_error', msg, null, id));
+      return early({ ...decided, status: 400, decision: { action: 'block', reason: 'model-rewrite-failed' }, errorClass: 'invalid_request_error' });
+    }
+    upstreamBody = rewritten;
+  }
+
+  // 7. Admit: Task 14 calls the counter store here; until then there is no admission.
+  // 8. Resolve.
+  const decision = resolve(policy, plan, null);
   const provider = first === undefined ? undefined : policy.providers.get(first.provider);
   if (decision.block || !provider) {
     const b = decision.block ?? { status: 403 as const, type: 'permission_error', reason: 'no-route' as const, message: 'no provider serves this route', retryAfterS: null };
     sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
     return early({ ...decided, status: b.status, decision: { action: 'block', reason: b.reason }, errorClass: b.type });
-  }
-
-  // rewriteModel (product routes, or coding-agent routes behind allowBodyRewrite): only the bytes of the top-level
-  // model value change; the reservation was priced at this served model. Not locatable exactly: refuse, never guess.
-  let upstreamBody = body;
-  if (first?.rewritesModel) {
-    const rewritten = rewriteTopLevelModel(body, first.upstreamModel);
-    if (!rewritten) {
-      const msg = `route "${planned.route ?? ''}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
-      sendError(req, res, anthropicError(400, 'invalid_request_error', msg, null, id));
-      return early({ ...decided, status: 400, decision: { action: 'block', reason: 'model-rewrite-failed' }, errorClass: 'invalid_request_error' });
-    }
-    upstreamBody = rewritten;
   }
 
   // 9. Forward.

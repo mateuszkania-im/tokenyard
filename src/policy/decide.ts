@@ -162,10 +162,11 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   // Client headers may pick the route, not widen the models: the header-free route must allow the model too (spec 11).
   const authz = route.match.requestClass === null && route.match.agentType === null && route.match.repo === null && route.match.feature === null ? route : findAuthzRoute(policy, f);
   if (authz === null) return { ...plan, preBlock: 'no-route' };
-  const allows = (r: CompiledRoute): boolean => r.allowModels === null || r.allowModels.some((re) => globTest(re, f.model));
-  if (!allows(route) || !allows(authz)) return { ...plan, preBlock: 'model-not-allowed' };
-  // Server tools are denied unless the route lists their type (date suffix dropped).
-  const refused = f.serverTools.filter((tool) => !(route.serverTools ?? []).includes(serverToolKey(tool.type)));
+  const allows = (r: CompiledRoute, model: string): boolean => r.allowModels === null || r.allowModels.some((re) => globTest(re, model));
+  if (!allows(route, f.model) || !allows(authz, f.model)) return { ...plan, preBlock: 'model-not-allowed' };
+  // Server tools are denied unless both routes list their type (date suffix dropped): a header cannot unlock a tool.
+  const lists = (r: CompiledRoute, type: string): boolean => (r.serverTools ?? []).includes(serverToolKey(type));
+  const refused = f.serverTools.filter((tool) => !lists(route, tool.type) || !lists(authz, tool.type));
   if (refused.length > 0) {
     return { ...plan, preBlock: 'server-tool-not-allowed', warnings: [...warnings, ...refused.map((tool): Warning => ({ kind: 'server-tool-not-allowed', type: tool.type }))] };
   }
@@ -174,6 +175,8 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const mayRewrite = route.rewriteModel !== null && (f.traffic === 'product' || route.allowBodyRewrite);
   const upstreamModel = mayRewrite ? (route.rewriteModel as string) : f.model;
   const rewritesModel = upstreamModel !== f.model;
+  // The served model must be one both routes allow, so a header-chosen rewrite cannot reach a model the key may not use.
+  if (rewritesModel && (!allows(route, upstreamModel) || !allows(authz, upstreamModel))) return { ...plan, preBlock: 'model-not-allowed' };
   plan.chain = orderChain(route, session ?? f.id).map((provider) => ({ provider, upstreamModel, rewritesModel }));
   if (lastTurnBlocks.length > 0) return { ...plan, preBlock: 'secret' };
   // count_tokens is free: forwarded with no reservation, rate check or stream slot (spec 5.3).
@@ -203,14 +206,21 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     const r = policy.reservation;
     const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route.reserveOutputTokens });
     est = r.estimator === 'session-aware' ? sessionAwareMicroUsd(uf, price, t, null, route.reserveOutputTokens) : worst.micro;
+    const enforced = levels.some((l) => l.enforce);
+    // An unpriced server tool has no bound at all (its loop is reserved as one iteration): refused whenever an
+    // enforced level applies; failure.unpricedModel: allow-and-flag admits it only when none does.
     if (worst.block === 'unpriced-server-tool') {
-      if (policy.failure.unpricedModel !== 'allow-and-flag') return { ...plan, preBlock: 'unpriced' };
+      if (enforced || policy.failure.unpricedModel !== 'allow-and-flag') return { ...plan, preBlock: 'unpriced' };
       warnings.push({ kind: 'bound-assumed', reason: 'unpriced-server-tool' });
     }
-    // Spec 7.3: a priced server tool without max_uses has no fee bound; refuse it when the request would touch an
-    // enforced budget. An unpriced tool type follows failure.unpricedModel alone (handled above).
-    if (f.serverTools.some((tool) => tool.maxUses === null && Object.hasOwn(t.serverTools, serverToolKey(tool.type)))) {
-      if (r.serverToolsWithoutMaxUses === 'block' && levels.some((l) => l.enforce)) return { ...plan, preBlock: 'server-tool-no-max-uses' };
+    // Spec 7.3: a priced server tool with a per-use fee and no max_uses has no fee bound; refuse it when the request
+    // would touch an enforced budget. A tool without a fee (tool search) is bounded by its loop alone.
+    const feeWithoutMaxUses = f.serverTools.some((tool) => {
+      const key = serverToolKey(tool.type);
+      return tool.maxUses === null && Object.hasOwn(t.serverTools, key) && (t.serverTools[key]?.perUseUsd ?? 0) > 0;
+    });
+    if (feeWithoutMaxUses) {
+      if (r.serverToolsWithoutMaxUses === 'block' && enforced) return { ...plan, preBlock: 'server-tool-no-max-uses' };
       warnings.push({ kind: 'bound-assumed', reason: 'server-tool-no-max-uses' });
     }
   } else if (levels.length > 0) {

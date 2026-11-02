@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { anthropicError } from '../../src/edge/errors.js';
-import { inputTokenBound, reservationPrice, worstCaseMicroUsd } from '../../src/limits/estimator.js';
+import { inputTokenBound, maxInputRate, maxOutputRate, modifierProduct, reservationPrice, worstCaseMicroUsd } from '../../src/limits/estimator.js';
 import { budgetKey } from '../../src/limits/keys.js';
 import { attachCandidate, compilePolicy, PolicyInvalidError } from '../../src/policy/compile.js';
 import { buildFeatures, decide } from '../../src/policy/decide.js';
@@ -328,15 +328,33 @@ test('server tools: no max_uses blocks only when an enforced budget is touched; 
   expect(assumed.warnings).toContainEqual({ kind: 'bound-assumed', reason: 'server-tool-no-max-uses' });
 
   const unpricedTool = features({ serverTools: [{ type: 'code_execution_20250825', maxUses: 3 }], boundKind: 'context-window', inputTokensBound: 1_000_000 });
-  const flagged = decide(p, unpricedTool);
-  expect(flagged.preBlock).toBeNull();
-  expect(flagged.warnings).toContainEqual({ kind: 'bound-assumed', reason: 'unpriced-server-tool' });
+  // An unpriced tool has no bound: under an enforced level it is refused whatever failure.unpricedModel says.
+  expect(decide(p, unpricedTool).preBlock).toBe('unpriced');
   const strict = compile(BUDGETS.replace('unpricedModel: allow-and-flag', 'unpricedModel: block'));
   expect(decide(strict, unpricedTool).preBlock).toBe('unpriced');
-  // An unpriced tool type without max_uses follows failure.unpricedModel only.
-  const unpricedNoMax = decide(p, features({ serverTools: [{ type: 'tool_search_tool_regex_20251119', maxUses: null }], boundKind: 'context-window', inputTokensBound: 1_000_000 }));
-  expect(unpricedNoMax.preBlock).toBeNull();
-  expect(unpricedNoMax.warnings).toEqual([{ kind: 'bound-assumed', reason: 'unpriced-server-tool' }]);
+  // allow-and-flag lets it through only when no enforced level applies.
+  const auditFlag = compile(`${HEAD}routes:\n  - { name: all, chain: [a], serverTools: [code_execution] }\nbudgets:\n  - { name: d, scope: key, window: day, usd: 5, mode: audit }\n${STORE}`);
+  const flagged = decide(auditFlag, unpricedTool);
+  expect(flagged.preBlock).toBeNull();
+  expect(flagged.warnings).toContainEqual({ kind: 'bound-assumed', reason: 'unpriced-server-tool' });
+});
+
+test('tool search is priced with no fee and a 10-iteration loop: a tool-search-only request reserves maxIterations times the bound, without max_uses', () => {
+  const p = compile(BUDGETS);
+  expect(p.prices.serverTools.tool_search_tool_regex).toMatchObject({ perUseUsd: 0, maxIterations: 10 });
+  expect(p.prices.serverTools.tool_search_tool_bm25).toMatchObject({ perUseUsd: 0, maxIterations: 10 });
+  const f = features({ serverTools: [{ type: 'tool_search_tool_regex_20251119', maxUses: null }], boundKind: 'context-window', inputTokensBound: 1_000_000 });
+  const plan = decide(p, f);
+  expect(plan.preBlock).toBeNull();
+  const opus = reservationPrice(p.prices, 'claude-opus-5-5').price;
+  const one = worstCaseMicroUsd({ ...f, serverTools: [] }, opus, p.prices, { serverToolsWithoutMaxUses: 'block', assumedMaxUses: 25, reserveOutputTokens: null }).micro;
+  const est = plan.reservations[0]?.estMicroUsd ?? 0;
+  // Input bound becomes 10 x maxContextTokens and output 10 x maxOutputTokens; no fee.
+  expect(est).toBe(worstCaseMicroUsd(f, opus, p.prices, { serverToolsWithoutMaxUses: 'block', assumedMaxUses: 25, reserveOutputTokens: null }).micro);
+  const tenLoops = (10 * opus.maxContextTokens * maxInputRate(opus) + 10 * opus.maxOutputTokens * maxOutputRate(opus)) * modifierProduct(p.prices);
+  expect(Math.abs(est - tenLoops)).toBeLessThanOrEqual(1);
+  expect(est).toBeGreaterThanOrEqual(10 * one - 10);
+  expect(plan.warnings).toEqual([]);
 });
 
 test('rewriteModel prices the reservation at the upstream model and marks the chain', () => {
@@ -482,4 +500,30 @@ ${STORE}`);
   const opts = { serverToolsWithoutMaxUses: 'block', assumedMaxUses: 25, reserveOutputTokens: null } as const;
   expect(plan.reservations[0]?.estMicroUsd).toBe(worstCaseMicroUsd(f, haiku, p.prices, opts).micro);
   expect(plan.reservations[0]?.estMicroUsd).not.toBe(worstCaseMicroUsd(f, opus, p.prices, opts).micro);
+});
+
+test('a forged header cannot unlock a server tool the header-free route does not list', () => {
+  const p = compile(`${HEAD}routes:
+  - { name: compaction, match: { requestClass: compaction }, chain: [a], serverTools: [web_search, code_execution] }
+  - { name: base, chain: [a], serverTools: [web_search] }
+${STORE}`);
+  const req = (type: string): Plan => decide(p, features({ attribution: { requestClass: 'compaction' }, serverTools: [{ type, maxUses: 1 }], boundKind: 'context-window', inputTokensBound: 1_000_000 }));
+  expect(req('web_search_20250305').preBlock).toBeNull();
+  expect(req('code_execution_20250825')).toMatchObject({ route: 'compaction', preBlock: 'server-tool-not-allowed' });
+});
+
+test('a rewrite target must be allowed by both the selected and the header-free route', () => {
+  const p = compile(`${HEAD}routes:
+  - { name: summary, match: { feature: summary }, chain: [a], rewriteModel: claude-opus-5-5, allowBodyRewrite: true, because: test }
+  - { name: summary-ok, match: { traffic: product, feature: ok }, chain: [a], rewriteModel: claude-haiku-5-5 }
+  - { name: own, match: { traffic: product, feature: own }, chain: [a], allowModels: ["claude-haiku-*", "claude-sonnet-*"], rewriteModel: claude-sonnet-5-5 }
+  - { name: product, match: { traffic: product }, chain: [a], allowModels: ["claude-haiku-*", "claude-sonnet-*"] }
+  - { name: rest, chain: [a] }
+${STORE}`);
+  // Statically "summary" is covered by "rest" (which allows any model); at runtime product traffic is authorised by
+  // "product", which does not allow the opus rewrite.
+  const req = (feature: string): Plan => decide(p, features({ traffic: 'product', model: 'claude-haiku-5-5', attribution: { feature } }));
+  expect(req('summary')).toMatchObject({ route: 'summary', preBlock: 'model-not-allowed' });
+  expect(req('ok')).toMatchObject({ route: 'summary-ok', preBlock: null, chain: [{ upstreamModel: 'claude-haiku-5-5' }] });
+  expect(req('own')).toMatchObject({ route: 'own', preBlock: null, chain: [{ upstreamModel: 'claude-sonnet-5-5', rewritesModel: true }] });
 });

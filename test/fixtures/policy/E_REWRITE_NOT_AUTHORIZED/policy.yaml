@@ -1,0 +1,18 @@
+apiVersion: tokenyard/v1
+kind: Policy
+metadata: { name: fixture }
+pricing: ./prices.yaml
+keys: ./keys.yaml
+providers:
+  anthropic: { format: anthropic, baseUrl: https://api.anthropic.com, credential: { env: ANTHROPIC_API_KEY } }
+tenants:
+  acme: { teams: [web] }
+routes:
+  # The feature comes from a client header; the rewrite target must be a model the header-free route allows.
+  - { name: summary, match: { traffic: product, feature: summary }, chain: [anthropic], allowModels: ["claude-haiku-*"], rewriteModel: claude-sonnet-5-5 }
+  - { name: product, match: { traffic: product }, chain: [anthropic], allowModels: ["claude-haiku-*"] }
+  - { name: all, match: { traffic: coding-agent }, chain: [anthropic] }
+budgets:
+  - { name: org-month, scope: tenant, window: month, usd: 100, onExceed: block }
+failure:
+  counterStoreDown: { rateLimits: open, budgets: closed }
