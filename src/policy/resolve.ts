@@ -41,8 +41,11 @@ function preBlock(policy: CompiledPolicy, plan: Plan, reason: BlockReason): Bloc
       return block(403, 'permission_error', reason, `server tool ${types || 'type'} is not allowed${route}; list it under the route's serverTools`);
     }
     case 'secret': {
-      const rules = [...new Set(plan.taint?.add.map((a) => a.rule) ?? [])].join(', ') || 'a secret rule';
-      return block(400, 'invalid_request_error', reason, `the last message contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);
+      const add = plan.taint?.add ?? [];
+      const rules = [...new Set(add.map((a) => a.rule))].join(', ') || 'a secret rule';
+      const at = add.find((a) => a.message !== undefined)?.message;
+      const where = at === undefined ? 'the last message' : `the last message (message ${at})`;
+      return block(400, 'invalid_request_error', reason, `${where} contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);
     }
     default:
       return block(403, 'permission_error', reason, `request refused (${reason})`);
@@ -64,8 +67,11 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
     }
     case 'streams':
       return block(429, 'rate_limit_error', 'streams', `concurrent stream limit "${failed.name}" reached`, STREAMS_RETRY_S);
-    case 'taint':
-      return block(400, 'invalid_request_error', 'taint', `this session's history holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+    case 'taint': {
+      const at = failed.valueHmac === undefined ? undefined : plan.taint?.messages?.[failed.valueHmac];
+      const where = at === undefined ? '' : ` (message ${at})`;
+      return block(400, 'invalid_request_error', 'taint', `this session's history${where} holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+    }
   }
 }
 

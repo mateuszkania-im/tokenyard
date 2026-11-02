@@ -93,7 +93,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
       const set = live(taints, t.key, now);
       for (const h of t.check) {
         const rule = set?.rules.get(h);
-        if (rule !== undefined) return refused({ kind: 'taint', name: 'taint', rule });
+        if (rule !== undefined) return refused({ kind: 'taint', name: 'taint', rule, valueHmac: h });
       }
     }
 

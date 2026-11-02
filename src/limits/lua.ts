@@ -59,7 +59,7 @@ if p.t then
   end
   for _, h in ipairs(p.t.c) do
     local rule = redis.call('HGET', tk, h)
-    if rule then return cjson.encode({ r = 'taint', rule = rule }) end
+    if rule then return cjson.encode({ r = 'taint', rule = rule, h = h }) end
   end
 end
 

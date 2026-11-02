@@ -60,6 +60,24 @@ test('lastTurn handles whitespace and a duplicate messages key (last one wins, l
   expect(extractAnthropicFeatures(Buffer.from('{"messages":[]}')).lastTurn).toBeNull();
 });
 
+test('lastTurn is the newest user-role message, not an assistant prefill after it (spec 5.3 step 5)', () => {
+  const b = Buffer.from(JSON.stringify({
+    model: 'm',
+    messages: [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'reply' },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'newest' }] },
+      { role: 'assistant', content: 'prefill' },
+    ],
+  }));
+  const f = extractAnthropicFeatures(b);
+  expect(f.lastTurn).toMatchObject({ index: 2 });
+  expect(JSON.parse(b.subarray(f.lastTurn?.start, f.lastTurn?.end).toString())).toEqual({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'newest' }] });
+  expect(f.messages?.map((r) => JSON.parse(b.subarray(r.start, r.end).toString()).content)).toEqual(['first', 'reply', [{ type: 'tool_result', tool_use_id: 't1', content: 'newest' }], 'prefill']);
+  // No user message at all: there is no last turn.
+  expect(extractAnthropicFeatures(Buffer.from('{"messages":[{"role":"assistant","content":"x"}]}')).lastTurn).toBeNull();
+});
+
 test('prefixHash changes with system or tools and not with messages', () => {
   const base = { model: 'm', max_tokens: 1, system: 's', tools: [{ name: 'a' }], messages: [{ role: 'user', content: 'x' }] };
   const h = (o: object): string | null => extractAnthropicFeatures(Buffer.from(JSON.stringify(o))).prefixHash;

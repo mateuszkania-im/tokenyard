@@ -129,8 +129,25 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     fastMode: parsed.speed !== undefined && parsed.speed !== null && parsed.speed !== 'standard',
     ...(typeof parsed.inference_geo === 'string' ? { inferenceGeo: parsed.inference_geo } : {}),
     parseError: false,
-    lastTurn: messages.length > 0 ? lastMessageRange(body) : null,
+    ...turnRanges(body, messages),
   };
+}
+
+/**
+ * Byte ranges of the messages and of the newest user-role message (spec 5.3 step 5): an assistant prefill after it is
+ * not the last turn. No user message, or ranges that do not line up with the parsed array: no last turn.
+ */
+function turnRanges(body: Buffer, messages: unknown[]): Pick<ExtractedFeatures, 'lastTurn' | 'messages'> {
+  if (messages.length === 0) return { lastTurn: null };
+  const ranges = messageRanges(body);
+  if (ranges === null || ranges.length !== messages.length) return { lastTurn: null };
+  let index = -1;
+  for (let i = messages.length - 1; i >= 0 && index < 0; i--) {
+    const m = messages[i];
+    if (isObj(m) && m.role === 'user') index = i;
+  }
+  const r = ranges[index];
+  return { lastTurn: r === undefined ? null : { ...r, index }, messages: ranges };
 }
 
 // Byte-level JSON walker. Only called on bodies JSON.parse accepted, so the input is valid JSON.
@@ -177,12 +194,12 @@ function skipValue(b: Buffer, i: number): number {
   return i;
 }
 
-/** Byte range of the last element of the top-level `messages` array (the last `messages` key wins, as in JSON.parse). */
-function lastMessageRange(b: Buffer): { start: number; end: number } | null {
+/** Byte ranges of the elements of the top-level `messages` array (the last `messages` key wins, as in JSON.parse). */
+function messageRanges(b: Buffer): Array<{ start: number; end: number }> | null {
   let i = skipWs(b, 0);
   if (b[i] !== 0x7b) return null;
   i++;
-  let result: { start: number; end: number } | null = null;
+  let result: Array<{ start: number; end: number }> | null = null;
   for (;;) {
     i = skipWs(b, i);
     if (i >= b.length || b[i] === 0x7d) break;
@@ -194,7 +211,7 @@ function lastMessageRange(b: Buffer): { start: number; end: number } | null {
     i = skipWs(b, i);
     if (key === 'messages' && b[i] === 0x5b) {
       i++;
-      let last: { start: number; end: number } | null = null;
+      const all: Array<{ start: number; end: number }> = [];
       for (;;) {
         i = skipWs(b, i);
         if (i >= b.length) break;
@@ -204,11 +221,11 @@ function lastMessageRange(b: Buffer): { start: number; end: number } | null {
         }
         const start = i;
         i = skipValue(b, i);
-        last = { start, end: i };
+        all.push({ start, end: i });
         i = skipWs(b, i);
         if (b[i] === 0x2c) i++;
       }
-      result = last;
+      result = all;
     } else {
       i = skipValue(b, i);
     }

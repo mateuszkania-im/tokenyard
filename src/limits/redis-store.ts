@@ -30,6 +30,8 @@ interface AdmitReply {
   r: 'ok' | 'dup' | 'taint' | 'rate' | 'streams' | 'budget';
   name?: string;
   rule?: string;
+  /** Taint: the history HMAC found in the set. */
+  h?: string;
   retry?: string;
   spent?: string;
   audit?: Array<[string, boolean]> | Record<string, never>;
@@ -99,7 +101,7 @@ export function createRedisStore(client: Client, o: { deadlineMs: number; onSwep
         case 'dup':
           return NOTHING;
         case 'taint':
-          return { admitted: false, failed: { kind: 'taint', name: 'taint', rule: reply.rule ?? '' }, audit: [], totals: [] };
+          return { admitted: false, failed: { kind: 'taint', name: 'taint', rule: reply.rule ?? '', ...(reply.h ? { valueHmac: reply.h } : {}) }, audit: [], totals: [] };
         case 'rate':
           return { admitted: false, failed: { kind: 'rate', name, retryAfterMs: Number(reply.retry) }, audit: [], totals: [] };
         case 'streams':

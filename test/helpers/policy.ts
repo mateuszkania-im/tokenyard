@@ -34,6 +34,8 @@ export function testPolicy(o: {
   editRoutes?: (routes: RouteSpec[]) => void;
   /** Last edit of the whole parsed policy (budgets, rate limits, failure) before compiling. */
   edit?: (policy: PolicyDoc) => void;
+  /** Keys added beside TEST_KEY, for example a service key for product routes. */
+  extraKeys?: KeyRecord[];
 }): CompiledPolicy {
   const credential = o.credential ?? { env: PROVIDER_KEY_ENV };
   const billing = o.billing ?? 'api';
@@ -45,7 +47,7 @@ export function testPolicy(o: {
     p.baseUrl = passthrough ? 'https://api.anthropic.com' : o.upstream;
     p.credential = credential;
   }
-  src.keys = [{ hash: hashKey(TEST_KEY), keyId: 'key_test', tenant: 'acme', team: 'platform', name: 'test', kind: 'developer', billing }];
+  src.keys = [{ hash: hashKey(TEST_KEY), keyId: 'key_test', tenant: 'acme', team: 'platform', name: 'test', kind: 'developer', billing }, ...(o.extraKeys ?? [])];
   const route = src.policy.routes.find((r) => r.name === 'claude-code');
   if (!route) throw new Error('examples/policy has no claude-code route');
   route.match.billing = billing;

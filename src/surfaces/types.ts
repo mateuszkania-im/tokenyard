@@ -21,6 +21,11 @@ export interface ExtractedFeatures {
   /** `inference_geo` when it is a string (for example "us"); it selects a price modifier (`inferenceGeoUs`). Absent otherwise. */
   inferenceGeo?: string;
   parseError: boolean;
-  /** Byte range of the last message in the original body, for the guardrail scanner. */
-  lastTurn: { start: number; end: number } | null;
+  /**
+   * Byte range of the newest user-role message in the original body and its index in `messages`, for the guardrail
+   * scanner (spec 5.3 step 5). Null without a user message.
+   */
+  lastTurn: { start: number; end: number; index: number } | null;
+  /** Byte ranges of every element of `messages`, so guardrail hits can name a message index. Absent without messages. */
+  messages?: Array<{ start: number; end: number }>;
 }

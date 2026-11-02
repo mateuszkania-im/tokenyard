@@ -161,6 +161,7 @@ export interface GuardrailHit {
   rule: string; action: 'block' | 'warn' | 'redact';
   valueHmac: string;                   // HMAC-SHA256 of the matched value with the deployment salt
   where: 'last-turn' | 'history';
+  message?: number;                    // not in spec 6.5: index in `messages` of the hit, for the error message; never traced
 }
 
 export interface Plan {
@@ -175,8 +176,9 @@ export interface Plan {
   taint: {                             // null when the request has no session key and no block hits
     key: string;                       // tenant-tagged session key, or the key id when there is no session
     check: string[];                   // valueHmacs of history hits: blocked if any is in the taint set
-    add: Array<{ rule: string; valueHmac: string }>;   // last-turn block hits: written to the taint set
+    add: Array<{ rule: string; valueHmac: string; message?: number }>;   // last-turn block hits: written to the taint set
     ttlMs: number;
+    messages?: Record<string, number>; // not in spec 6.5: message index of each history HMAC, for the taint error message
   } | null;
   preBlock: BlockReason | null;        // decided without counters: model not allowed, no route, last-turn secret
   warnings: Warning[];                 // guardrail warns, audit-mode notes
@@ -184,7 +186,8 @@ export interface Plan {
 
 export interface Admission {           // returned by CounterStore.admit(plan)
   admitted: boolean;
-  failed: { kind: 'budget' | 'rate' | 'streams' | 'taint'; name: string; spentMicroUsd?: number; retryAfterMs?: number; rule?: string } | null;
+  failed: { kind: 'budget' | 'rate' | 'streams' | 'taint'; name: string; spentMicroUsd?: number; retryAfterMs?: number; rule?: string;
+            valueHmac?: string } | null;   // not in spec 6.5: the tainted HMAC a history hit matched, to name its message
   audit: Array<{ name: string; wouldFail: boolean }>;
   totals: Array<{ key: string; spentMicroUsd: number; reservedMicroUsd: number; limitMicroUsd: number }>;  // post-admit, enforced levels
   storeDown?: true;                    // admit could not reach the store; failure.counterStoreDown applied

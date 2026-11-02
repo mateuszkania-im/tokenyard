@@ -85,3 +85,14 @@ $20 cap through the harness, the others from a store that answers admit with tha
 Every message is shown whole with the `tokenyard:` prefix. A 429 without `retry-after` is retried like any other
 429: the budget error is not shown at once. The secret block in the last turn needs the guardrails (Task 16); its
 envelope is the same 400 `invalid_request_error` as the taint block above.
+
+### After Task 16: `x-should-retry: false` on errors that waiting cannot clear
+
+Own blocks for budget, taint, secret, model or route not allowed, server tool not allowed, unpriced and server tool
+without `max_uses` now carry `x-should-retry: false`; rate, stream and store-down blocks keep their `retry-after`.
+Checked against the mock (no live key) with Claude Code 2.1.316, `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY claude -p`:
+
+| Error | How | What Claude Code printed | Time to the message |
+|---|---|---|---|
+| Budget | `serve --policy` with `org-month` at $0.01, prompt "say hello" | `API Error: Request rejected (429) · tokenyard: this request's reservation of $3.57 is larger than budget "org-month" allows in total ($0.01); lower max_tokens or the context sent, or raise the budget` | 2 s, no retries (was about 3 minutes) |
+| Secret (last turn) | `serve --dev-upstream <mock>`, the AWS documented example key id in the prompt | `API Error: 400 tokenyard: the last message (message 0) contains a secret (rule aws-access-key-id); it was not sent. Remove it, then run /clear to drop it from the conversation, rotate the secret, and add a deny rule for the file it came from` | 3 s |

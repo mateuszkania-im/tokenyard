@@ -795,6 +795,323 @@ var init_writer = __esm({
   }
 });
 
+// src/guardrails/pii.ts
+function peselValid(s) {
+  if (!/^\d{11}$/.test(s)) return false;
+  const d = [...s].map(Number);
+  const month = ((d[2] ?? 0) * 10 + (d[3] ?? 0)) % 20;
+  const day = (d[4] ?? 0) * 10 + (d[5] ?? 0);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const sum = PESEL_WEIGHTS.reduce((acc, w, i) => acc + w * (d[i] ?? 0), 0);
+  return (10 - sum % 10) % 10 === d[10];
+}
+function ibanValid(s) {
+  const iban3 = s.replace(/ /g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban3)) return false;
+  const moved = iban3.slice(4) + iban3.slice(0, 4);
+  let rem = 0;
+  for (const ch of moved) {
+    const v = ch >= "A" && ch <= "Z" ? String(ch.charCodeAt(0) - 55) : ch;
+    for (const digit of v) rem = (rem * 10 + Number(digit)) % 97;
+  }
+  return rem === 1;
+}
+function luhnValid(s) {
+  const digits = s.replace(/[ -]/g, "");
+  if (!/^\d{13,19}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let n = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    sum += n;
+  }
+  return sum % 10 === 0;
+}
+var PESEL_WEIGHTS, TOKENYARD, PII_RULES;
+var init_pii = __esm({
+  "src/guardrails/pii.ts"() {
+    "use strict";
+    PESEL_WEIGHTS = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+    TOKENYARD = "MIT (tokenyard)";
+    PII_RULES = Object.freeze([
+      {
+        id: "email",
+        keywords: ["@"],
+        regex: /\b([A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(?:\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,24})\b/,
+        source: "tokenyard",
+        licence: TOKENYARD
+      },
+      {
+        id: "pesel",
+        keywords: [],
+        regex: /(?<![0-9])(\d{11})(?![0-9])/,
+        source: "tokenyard (checksum per the PESEL specification)",
+        licence: TOKENYARD,
+        validate: peselValid
+      },
+      {
+        id: "iban",
+        keywords: [],
+        regex: /\b([A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?)\b/,
+        source: "tokenyard (ISO 13616 mod-97)",
+        licence: TOKENYARD,
+        validate: ibanValid
+      },
+      {
+        id: "card-number",
+        keywords: [],
+        regex: /(?<![0-9])(\d(?:[ -]?\d){12,18})(?![0-9])/,
+        source: "tokenyard (Luhn)",
+        licence: TOKENYARD,
+        validate: luhnValid
+      }
+    ]);
+  }
+});
+
+// src/guardrails/redact.ts
+function redactProductBody(body, hits) {
+  if (hits.length === 0) return body;
+  const sorted = [...hits].sort((a, b) => a.start - b.start || b.end - a.end);
+  const numbers = /* @__PURE__ */ new Map();
+  const parts = [];
+  let at = 0;
+  for (const h of sorted) {
+    if (h.start < at || h.end <= h.start || h.end > body.length) continue;
+    const value = body.toString("latin1", h.start, h.end);
+    let perRule = numbers.get(h.rule);
+    if (perRule === void 0) {
+      perRule = /* @__PURE__ */ new Map();
+      numbers.set(h.rule, perRule);
+    }
+    let n = perRule.get(value);
+    if (n === void 0) {
+      n = perRule.size + 1;
+      perRule.set(value, n);
+    }
+    parts.push(body.subarray(at, h.start), Buffer.from(placeholder(h.rule, n), "latin1"));
+    at = h.end;
+  }
+  parts.push(body.subarray(at));
+  return Buffer.concat(parts);
+}
+var placeholder;
+var init_redact = __esm({
+  "src/guardrails/redact.ts"() {
+    "use strict";
+    placeholder = (rule, n) => `[REDACTED:${rule.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_${n}]`;
+  }
+});
+
+// src/guardrails/rules.ts
+var GITLEAKS, DEFAULT_RULES;
+var init_rules = __esm({
+  "src/guardrails/rules.ts"() {
+    "use strict";
+    GITLEAKS = "MIT (gitleaks)";
+    DEFAULT_RULES = Object.freeze([
+      {
+        id: "aws-access-key-id",
+        keywords: ["AKIA", "ASIA"],
+        regex: /\b((?:AKIA|ASIA)[A-Z2-7]{16})\b/,
+        source: "gitleaks aws-access-token (AKIA and ASIA prefixes only)",
+        licence: GITLEAKS
+      },
+      {
+        id: "github-pat",
+        keywords: ["ghp_"],
+        regex: /\b(ghp_[0-9A-Za-z]{36})\b/,
+        source: "gitleaks github-pat",
+        licence: GITLEAKS
+      },
+      {
+        id: "github-oauth",
+        keywords: ["gho_"],
+        regex: /\b(gho_[0-9A-Za-z]{36})\b/,
+        source: "gitleaks github-oauth",
+        licence: GITLEAKS
+      },
+      {
+        id: "github-app-token",
+        keywords: ["ghs_", "ghu_"],
+        regex: /\b((?:ghs|ghu)_[0-9A-Za-z]{36})\b/,
+        source: "gitleaks github-app-token",
+        licence: GITLEAKS
+      },
+      {
+        id: "github-fine-grained-pat",
+        keywords: ["github_pat_"],
+        regex: /\b(github_pat_\w{82})\b/,
+        source: "gitleaks github-fine-grained-pat",
+        licence: GITLEAKS
+      },
+      {
+        id: "slack-token",
+        keywords: ["xoxa-", "xoxb-", "xoxp-", "xoxo-", "xoxs-", "xoxr-"],
+        regex: /\b(xox[abposr]-\d{6,13}-[0-9A-Za-z-]{10,})/,
+        source: "gitleaks slack-bot-token, slack-user-token, slack-legacy-token (one rule over xox[abposr]-)",
+        licence: GITLEAKS
+      },
+      {
+        id: "stripe-live-key",
+        keywords: ["sk_live_", "rk_live_"],
+        regex: /\b((?:sk|rk)_live_[0-9A-Za-z]{10,99})\b/,
+        source: "gitleaks stripe-access-token (live keys only)",
+        licence: GITLEAKS
+      },
+      {
+        id: "private-key",
+        keywords: ["-----BEGIN"],
+        // Inside a JSON body the line breaks are `\n` escapes, so any character may sit in the key body, except a run of five
+        // dashes: a match never spans from one block's BEGIN to a later block's END.
+        regex: /(-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----(?:[^-]|-(?!----)){64,65536}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----)/,
+        source: "gitleaks private-key (key body capped at 64 KiB and never across a BEGIN or END line)",
+        licence: GITLEAKS
+      },
+      {
+        id: "jwt",
+        keywords: ["eyJ"],
+        regex: /\b(eyJ[0-9A-Za-z_-]{15,}\.eyJ[0-9A-Za-z_-]{15,}\.[0-9A-Za-z_-]{10,})/,
+        source: "gitleaks jwt (signed tokens with a JSON header and payload only)",
+        licence: GITLEAKS
+      },
+      {
+        id: "anthropic-api-key",
+        keywords: ["sk-ant-"],
+        // api03, admin01, oat01 (OAuth) and later numbered kinds; the repo's `sk-ant-test-CANARY` fake has no number.
+        regex: /\b(sk-ant-[a-z]{2,8}\d{2}-[0-9A-Za-z_-]{80,})/,
+        source: "gitleaks anthropic-api-key and anthropic-admin-api-key (any numbered key kind, length not pinned)",
+        licence: GITLEAKS
+      },
+      {
+        id: "openai-api-key",
+        keywords: ["sk-proj-", "sk-svcacct-", "sk-admin-"],
+        regex: /\b(sk-(?:proj|svcacct|admin)-[0-9A-Za-z_-]{40,})/,
+        source: "gitleaks openai-api-key (project, service account and admin keys, without the T3BlbkFJ marker)",
+        licence: GITLEAKS
+      },
+      {
+        id: "google-api-key",
+        keywords: ["AIza"],
+        regex: /\b(AIza[0-9A-Za-z_-]{35})(?![0-9A-Za-z_-])/,
+        source: "gitleaks gcp-api-key",
+        licence: GITLEAKS
+      },
+      {
+        id: "tokenyard-key",
+        keywords: ["ty_live_"],
+        regex: /\b(ty_live_[0-9A-Za-z]{43})\b/,
+        source: "tokenyard (src/edge/keys.ts: ty_live_ plus 43 base62 characters)",
+        licence: "MIT (tokenyard)"
+      },
+      {
+        id: "generic-secret-assignment",
+        keywords: ["secret", "Secret", "SECRET", "token", "Token", "TOKEN", "passw", "Passw", "PASSW", "api_key", "apiKey", "API_KEY", "apikey", "APIKEY", "api-key"],
+        // A name ending in secret, token, password or api key, `=` or `:`, then a long random-looking value (JSON-escaped
+        // quotes allowed). Entropy only: never blocks.
+        regex: /(?:secret|token|passw(?:or)?d|api[_-]?key)[0-9A-Za-z_-]{0,20}\\?["']?\s{0,4}[:=]\s{0,4}\\?["']?([0-9A-Za-z+/_.=-]{32,128})/i,
+        source: "gitleaks generic-api-key (simplified; entropy threshold 4.0)",
+        licence: GITLEAKS,
+        entropyOnly: true,
+        minEntropy: 4
+      }
+    ]);
+  }
+});
+
+// src/guardrails/scan.ts
+function shannonEntropy(s) {
+  if (s.length === 0) return 0;
+  const counts = /* @__PURE__ */ new Map();
+  for (const ch of s) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+  let h = 0;
+  for (const n of counts.values()) {
+    const p = n / s.length;
+    h -= p * Math.log2(p);
+  }
+  return h;
+}
+function globalOf(rule) {
+  let re = globalRegex.get(rule);
+  if (re === void 0) {
+    re = new RegExp(rule.regex.source, rule.regex.flags.includes("g") ? rule.regex.flags : `${rule.regex.flags}g`);
+    globalRegex.set(rule, re);
+  }
+  return re;
+}
+function keywordIn(body, rule, start, end) {
+  if (rule.keywords.length === 0) return true;
+  return rule.keywords.some((k) => {
+    const at = body.indexOf(k, start, "latin1");
+    return at >= 0 && at + k.length <= end;
+  });
+}
+function findSpans(body, rules, range = { start: 0, end: body.length }, text) {
+  const out = [];
+  let view = text;
+  for (const rule of rules) {
+    if (!keywordIn(body, rule, range.start, range.end)) continue;
+    view ??= body.toString("latin1");
+    const slice = view.slice(range.start, range.end);
+    const re = globalOf(rule);
+    re.lastIndex = 0;
+    for (let m = re.exec(slice); m !== null; m = re.exec(slice)) {
+      if (m[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
+      const value = m[1] ?? m[0];
+      const offset = m[1] === void 0 ? 0 : m[0].indexOf(m[1]);
+      if (rule.minEntropy !== void 0 && shannonEntropy(value) < rule.minEntropy) continue;
+      if (rule.validate && !rule.validate(value)) continue;
+      const start = range.start + m.index + offset;
+      out.push({ rule, start, end: start + value.length, value });
+    }
+  }
+  return out;
+}
+function messageAt(messages, pos) {
+  if (!messages) return void 0;
+  const i = messages.findIndex((m) => pos >= m.start && pos < m.end);
+  return i < 0 ? void 0 : i;
+}
+function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
+  const action = (r) => r.entropyOnly ? "warn" : actionFor(r);
+  const historyRules = rules.filter((r) => action(r) !== "warn");
+  const text = body.toString("latin1");
+  const regions = lastTurn ? [
+    { where: "last-turn", start: lastTurn.start, end: lastTurn.end, rules },
+    { where: "history", start: 0, end: lastTurn.start, rules: historyRules },
+    { where: "history", start: lastTurn.end, end: body.length, rules: historyRules }
+  ] : [{ where: "history", start: 0, end: body.length, rules: historyRules }];
+  const hits = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const region of regions) {
+    if (region.end <= region.start || region.rules.length === 0) continue;
+    for (const s of findSpans(body, region.rules, region, text)) {
+      const valueHmac = pseudonym(salt, s.value);
+      const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const message = messageAt(opts.messages, s.start);
+      hits.push({ rule: s.rule.id, action: action(s.rule), valueHmac, where: region.where, ...message === void 0 ? {} : { message } });
+    }
+  }
+  const order = new Map(rules.map((r, i) => [r.id, i]));
+  return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
+}
+var globalRegex;
+var init_scan = __esm({
+  "src/guardrails/scan.ts"() {
+    "use strict";
+    init_hmac();
+    globalRegex = /* @__PURE__ */ new WeakMap();
+  }
+});
+
 // node_modules/yaml/dist/nodes/identity.js
 var require_identity = __commonJS({
   "node_modules/yaml/dist/nodes/identity.js"(exports) {
@@ -29092,11 +29409,15 @@ function decide(policy2, f) {
   const warnings = hits.filter((h) => h.action === "warn").map((h) => ({ kind: "guardrail", rule: h.rule, where: h.where }));
   const lastTurnBlocks = hits.filter((h) => h.action === "block" && h.where === "last-turn");
   const session = f.attribution.session;
+  const history = hits.filter((h) => h.where === "history");
+  const messages = {};
+  for (const h of history) if (h.message !== void 0 && !Object.hasOwn(messages, h.valueHmac)) messages[h.valueHmac] = h.message;
   const taint = session === null && !hits.some((h) => h.action === "block") ? null : {
     key: session === null ? keyTaintKey(f.tenant, f.keyId) : taintKey(f.tenant, session),
-    check: [...new Set(hits.filter((h) => h.where === "history").map((h) => h.valueHmac))],
-    add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac })),
-    ttlMs: Math.round(policy2.guardrails.secrets.taintTtlHours * 36e5)
+    check: [...new Set(history.map((h) => h.valueHmac))],
+    add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac, ...h.message === void 0 ? {} : { message: h.message } })),
+    ttlMs: Math.round(policy2.guardrails.secrets.taintTtlHours * 36e5),
+    ...Object.keys(messages).length > 0 ? { messages } : {}
   };
   const plan = { id: f.id, policyRevision: policy2.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
   const route2 = findRoute(policy2, f);
@@ -29206,8 +29527,11 @@ function preBlock(policy2, plan, reason) {
       return block(403, "permission_error", reason, `server tool ${types || "type"} is not allowed${route2}; list it under the route's serverTools`);
     }
     case "secret": {
-      const rules = [...new Set(plan.taint?.add.map((a) => a.rule) ?? [])].join(", ") || "a secret rule";
-      return block(400, "invalid_request_error", reason, `the last message contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);
+      const add2 = plan.taint?.add ?? [];
+      const rules = [...new Set(add2.map((a) => a.rule))].join(", ") || "a secret rule";
+      const at = add2.find((a) => a.message !== void 0)?.message;
+      const where = at === void 0 ? "the last message" : `the last message (message ${at})`;
+      return block(400, "invalid_request_error", reason, `${where} contains a secret (rule ${rules}); it was not sent. Remove it, then ${ADVICE}`);
     }
     default:
       return block(403, "permission_error", reason, `request refused (${reason})`);
@@ -29227,8 +29551,11 @@ function failedBlock(plan, failed) {
     }
     case "streams":
       return block(429, "rate_limit_error", "streams", `concurrent stream limit "${failed.name}" reached`, STREAMS_RETRY_S);
-    case "taint":
-      return block(400, "invalid_request_error", "taint", `this session's history holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+    case "taint": {
+      const at = failed.valueHmac === void 0 ? void 0 : plan.taint?.messages?.[failed.valueHmac];
+      const where = at === void 0 ? "" : ` (message ${at})`;
+      return block(400, "invalid_request_error", "taint", `this session's history${where} holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+    }
   }
 }
 function oversizedReservation(plan) {
@@ -29630,8 +29957,20 @@ function extractAnthropicFeatures(body) {
     fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
     ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
     parseError: false,
-    lastTurn: messages.length > 0 ? lastMessageRange(body) : null
+    ...turnRanges(body, messages)
   };
+}
+function turnRanges(body, messages) {
+  if (messages.length === 0) return { lastTurn: null };
+  const ranges = messageRanges(body);
+  if (ranges === null || ranges.length !== messages.length) return { lastTurn: null };
+  let index = -1;
+  for (let i = messages.length - 1; i >= 0 && index < 0; i--) {
+    const m = messages[i];
+    if (isObj3(m) && m.role === "user") index = i;
+  }
+  const r = ranges[index];
+  return { lastTurn: r === void 0 ? null : { ...r, index }, messages: ranges };
 }
 function skipWs(b, i) {
   while (i < b.length && (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13)) i++;
@@ -29668,7 +30007,7 @@ function skipValue(b, i) {
   while (i < b.length && b[i] !== 44 && b[i] !== 125 && b[i] !== 93 && b[i] !== 32 && b[i] !== 10 && b[i] !== 13 && b[i] !== 9) i++;
   return i;
 }
-function lastMessageRange(b) {
+function messageRanges(b) {
   let i = skipWs(b, 0);
   if (b[i] !== 123) return null;
   i++;
@@ -29684,7 +30023,7 @@ function lastMessageRange(b) {
     i = skipWs(b, i);
     if (key === "messages" && b[i] === 91) {
       i++;
-      let last = null;
+      const all = [];
       for (; ; ) {
         i = skipWs(b, i);
         if (i >= b.length) break;
@@ -29694,11 +30033,11 @@ function lastMessageRange(b) {
         }
         const start = i;
         i = skipValue(b, i);
-        last = { start, end: i };
+        all.push({ start, end: i });
         i = skipWs(b, i);
         if (b[i] === 44) i++;
       }
-      result = last;
+      result = all;
     } else {
       i = skipValue(b, i);
     }
@@ -56239,15 +56578,15 @@ async function runChain(plan, policy2, req, signal, deps) {
     }
     const checked = await checkSpendCap(res);
     res = checked.response;
-    let retryable = RETRYABLE.has(res.status);
+    let retryable2 = RETRYABLE.has(res.status);
     if (checked.spendCap) {
       breaker2.open(credKey, clock() + openMs);
-      retryable = true;
+      retryable2 = true;
     } else if (res.status === 429 && fallbackOn429) {
-      retryable = true;
+      retryable2 = true;
     }
     if (!checked.spendCap) breaker2.record(provider2.name, !RETRYABLE.has(res.status));
-    if (!retryable) {
+    if (!retryable2) {
       if (held) discard(held.response);
       return { attempt: attempts, provider: provider2.name, response: res };
     }
@@ -56431,19 +56770,32 @@ var init_body = __esm({
 });
 
 // src/edge/errors.ts
-function anthropicError(status, type, message, retryAfterS, requestId) {
+function anthropicError(status, type, message, retryAfterS, requestId, opts = {}) {
   const body = Buffer.from(JSON.stringify({ type: "error", error: { type, message: `tokenyard: ${message}` } }));
   const headers = {
     "content-type": "application/json",
     "content-length": String(body.length),
     "x-tokenyard-request-id": requestId
   };
+  if (opts.shouldRetry === false) headers["x-should-retry"] = "false";
   if (retryAfterS !== null) headers["retry-after"] = String(Number.isFinite(retryAfterS) ? Math.min(60, Math.max(0, Math.ceil(retryAfterS))) : 60);
   return { status, headers, body };
 }
+var NOT_RETRYABLE, retryable;
 var init_errors3 = __esm({
   "src/edge/errors.ts"() {
     "use strict";
+    NOT_RETRYABLE = /* @__PURE__ */ new Set([
+      "no-route",
+      "model-not-allowed",
+      "secret",
+      "taint",
+      "budget",
+      "unpriced",
+      "server-tool-no-max-uses",
+      "server-tool-not-allowed"
+    ]);
+    retryable = (reason) => !NOT_RETRYABLE.has(reason);
   }
 });
 
@@ -56581,7 +56933,8 @@ function buildTraceRecord(o, salt) {
       prefixHash: o.features.prefixHash,
       contextCompacted: false
     },
-    guardrail: { hits: [] },
+    // The message index stays out: it is for the error message only.
+    guardrail: { hits: (o.guardrailHits ?? []).map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) },
     policy: { revision: o.policyRevision, ...o.candidate ? { candidateRevision: o.candidate.revision } : {}, ...o.candidate && "error" in o.candidate ? { candidateError: o.candidate.error } : {} },
     decision: {
       route: o.route?.name ?? null,
@@ -56647,6 +57000,7 @@ __export(handler_exports, {
   createGatewayRuntime: () => createGatewayRuntime,
   createHandler: () => createHandler
 });
+import { randomBytes as randomBytes3 } from "node:crypto";
 import { pipeline } from "node:stream/promises";
 function withDeadline(p, ms) {
   let timer;
@@ -56794,6 +57148,17 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   } catch {
   }
 }
+function scanGuardrails(policy2, product, body, x, salt) {
+  const g = policy2.guardrails;
+  const lastTurn = x.parseError ? { start: 0, end: body.length } : x.lastTurn;
+  const opts = x.messages ? { messages: x.messages } : {};
+  const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => product ? g.secrets.product : g.secrets.codingAgent, salt, opts);
+  if (!product) return { hits, redactions: [] };
+  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
+  const redactRules = [...g.secrets.product === "redact" ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : [], ...g.pii.product === "redact" ? PII_RULES : []];
+  const redactions = findSpans(body, redactRules).map((sp) => ({ rule: sp.rule.id, start: sp.start, end: sp.end }));
+  return { hits, redactions };
+}
 async function handle(deps, failure3, runtime, held, id, req, res) {
   const startedAt = deps.clock();
   const policy2 = deps.policy();
@@ -56868,14 +57233,16 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     return early({ status: 499, aborted: true, errorClass: "client_abort" });
   }
   const features = extractFeatures(surface, body);
+  const product = key.kind === "service";
+  const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? deps.traceSalt ?? "");
   let f;
   let plan;
   try {
-    f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
+    f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
     plan = decide(policy2, f);
   } catch {
     sendError(req, res, anthropicError(500, "api_error", "the reservation for this request could not be computed; it was not sent", null, id));
-    return early({ features, status: 500, decision: { action: "block", reason: "reservation-error" }, errorClass: "reservation_error" });
+    return early({ features, guardrailHits: guard.hits, status: 500, decision: { action: "block", reason: "reservation-error" }, errorClass: "reservation_error" });
   }
   held.plan = plan;
   held.features = f;
@@ -56887,12 +57254,21 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
     boundAssumed: plan.warnings.some((w) => w.kind === "bound-assumed"),
     route: plan.route === null ? null : { name: plan.route, chain: chainNames },
+    guardrailHits: guard.hits,
     ...candidate ? { candidate } : {}
   };
   const first2 = plan.chain[0];
   let upstreamBody = body;
+  if (plan.preBlock === null && product && guard.redactions.length > 0) {
+    const redacted = redactProductBody(body, guard.redactions);
+    if (!features.parseError && !isJson(redacted)) {
+      sendError(req, res, anthropicError(400, "invalid_request_error", "a redacted value could not be replaced without breaking the JSON body; it was not sent", null, id));
+      return early({ ...decided, status: 400, decision: { action: "block", reason: "redaction-failed" }, errorClass: "invalid_request_error" });
+    }
+    upstreamBody = redacted;
+  }
   if (plan.preBlock === null && first2?.rewritesModel) {
-    const rewritten = rewriteTopLevelModel(body, first2.upstreamModel);
+    const rewritten = rewriteTopLevelModel(upstreamBody, first2.upstreamModel);
     if (!rewritten) {
       const msg = `route "${plan.route ?? ""}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
       sendError(req, res, anthropicError(400, "invalid_request_error", msg, null, id));
@@ -56940,7 +57316,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
   if (decision.block || !provider2) {
     const b = decision.block ?? { status: 403, type: "permission_error", reason: "no-route", message: "no provider serves this route", retryAfterS: null };
-    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
+    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id, retryable(b.reason) ? {} : { shouldRetry: false }));
     return early({ ...decided, ...admitted, status: b.status, decision: { action: "block", reason: b.reason }, errorClass: b.type });
   }
   const headersFor = (p) => upstreamHeaders(req.headers, {
@@ -57022,6 +57398,7 @@ function holdsCounters(plan) {
 }
 function createHandler(deps) {
   if (deps.traces && !deps.traceSalt) throw new Error("traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
+  if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes3(16).toString("hex") };
   const runtime = deps.runtime ?? createGatewayRuntime();
   const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   let state = null;
@@ -57078,11 +57455,15 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, StoreTimeoutError, SWEPT_MAX, summary, totalInput, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, StoreTimeoutError, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
     init_hmac();
+    init_pii();
+    init_redact();
+    init_rules();
+    init_scan();
     init_decide();
     init_match();
     init_resolve();
@@ -57114,6 +57495,14 @@ var init_handler = __esm({
       chain: d.plan.chain.map((c) => c.provider)
     });
     totalInput = (u) => u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
+    isJson = (b) => {
+      try {
+        JSON.parse(b.toString("utf8"));
+        return true;
+      } catch {
+        return false;
+      }
+    };
     NO_FEATURES = {
       model: null,
       stream: false,
@@ -58176,7 +58565,7 @@ function createMemoryStore(o) {
       const set2 = live(taints, t.key, now);
       for (const h of t.check) {
         const rule = set2?.rules.get(h);
-        if (rule !== void 0) return refused({ kind: "taint", name: "taint", rule });
+        if (rule !== void 0) return refused({ kind: "taint", name: "taint", rule, valueHmac: h });
       }
     }
     const nextTats = [];
@@ -101850,7 +102239,7 @@ if p.t then
   end
   for _, h in ipairs(p.t.c) do
     local rule = redis.call('HGET', tk, h)
-    if rule then return cjson.encode({ r = 'taint', rule = rule }) end
+    if rule then return cjson.encode({ r = 'taint', rule = rule, h = h }) end
   end
 end
 
@@ -101995,7 +102384,7 @@ function createRedisStore(client, o) {
         case "dup":
           return NOTHING2;
         case "taint":
-          return { admitted: false, failed: { kind: "taint", name: "taint", rule: reply.rule ?? "" }, audit: [], totals: [] };
+          return { admitted: false, failed: { kind: "taint", name: "taint", rule: reply.rule ?? "", ...reply.h ? { valueHmac: reply.h } : {} }, audit: [], totals: [] };
         case "rate":
           return { admitted: false, failed: { kind: "rate", name: name2, retryAfterMs: Number(reply.retry) }, audit: [], totals: [] };
         case "streams":
@@ -102199,7 +102588,7 @@ __export(keys_exports, {
   appendKey: () => appendKey,
   createKey: () => createKey
 });
-import { randomBytes as randomBytes3 } from "node:crypto";
+import { randomBytes as randomBytes4 } from "node:crypto";
 import { appendFile as appendFile2 } from "node:fs/promises";
 function base62(bytes) {
   let n = BigInt(`0x${bytes.toString("hex")}`);
@@ -102211,7 +102600,7 @@ function base62(bytes) {
   return out.padStart(B62_LEN, "0");
 }
 function createKey() {
-  const plaintext = `ty_live_${base62(randomBytes3(32))}`;
+  const plaintext = `ty_live_${base62(randomBytes4(32))}`;
   return { plaintext, hash: hashKey(plaintext) };
 }
 async function appendKey(file2, rec) {
@@ -102240,7 +102629,7 @@ __export(harness_exports, {
   loadLivePolicy: () => loadLivePolicy,
   startLiveHarness: () => startLiveHarness
 });
-import { randomBytes as randomBytes4 } from "node:crypto";
+import { randomBytes as randomBytes5 } from "node:crypto";
 import { access, constants, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
 import { closeSync, existsSync as existsSync2, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
 import { hostname as hostname3 } from "node:os";
@@ -102391,7 +102780,7 @@ async function startLiveHarness(o) {
     store,
     runtime,
     traces: writer,
-    traceSalt: o.env.TOKENYARD_TRACE_SALT || randomBytes4(16).toString("hex"),
+    traceSalt: o.env.TOKENYARD_TRACE_SALT || randomBytes5(16).toString("hex"),
     clock: Date.now,
     newId: () => ulid(),
     basePath: null,
@@ -105904,7 +106293,7 @@ var package_default = {
     typecheck: "tsc --noEmit",
     lint: "oxlint",
     test: "vitest run",
-    "test:redis": `node -e "process.env.REDIS_URL || (console.error('test:redis needs REDIS_URL, for example redis://127.0.0.1:6379'), process.exit(1))" && vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts`,
+    "test:redis": `node -e "process.env.REDIS_URL || (console.error('test:redis needs REDIS_URL, for example redis://127.0.0.1:6379'), process.exit(1))" && vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts`,
     bench: `node -e "console.error('bench: not implemented yet'); process.exit(1)"`,
     "bench:check": `node -e "console.error('bench:check: not implemented yet'); process.exit(1)"`,
     live: "node --env-file=.env bin/tokenyard.mjs live",

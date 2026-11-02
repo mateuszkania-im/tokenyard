@@ -61,7 +61,8 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       prefixHash: o.features.prefixHash,
       contextCompacted: false,
     },
-    guardrail: { hits: [] },
+    // The message index stays out: it is for the error message only.
+    guardrail: { hits: (o.guardrailHits ?? []).map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) },
     policy: { revision: o.policyRevision, ...(o.candidate ? { candidateRevision: o.candidate.revision } : {}), ...(o.candidate && 'error' in o.candidate ? { candidateError: o.candidate.error } : {}) },
     decision: {
       route: o.route?.name ?? null,

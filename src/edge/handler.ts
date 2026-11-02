@@ -1,12 +1,17 @@
+import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import type { TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
 import { pseudonym } from '../guardrails/hmac.js';
+import { PII_RULES } from '../guardrails/pii.js';
+import { redactProductBody } from '../guardrails/redact.js';
+import { DEFAULT_RULES } from '../guardrails/rules.js';
+import { findSpans, scanBody } from '../guardrails/scan.js';
 import { buildFeatures, decide } from '../policy/decide.js';
 import { modelsForKey } from '../policy/match.js';
 import { resolve } from '../policy/resolve.js';
-import type { Admission, CompiledPolicy, Decision, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
+import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
 import { costMicroUsd } from '../pricing/cost.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
 import { SseParser } from '../stream/sse.js';
@@ -22,7 +27,7 @@ import { RetryBudget } from '../upstream/retry-budget.js';
 import { readAttribution, type RawAttribution } from './attribution.js';
 import { extractCredentials, hashKey } from './auth.js';
 import { BodyTooLargeError, readBody } from './body.js';
-import { anthropicError } from './errors.js';
+import { anthropicError, retryable } from './errors.js';
 import { clientHeaders, upstreamHeaders } from './headers.js';
 import { matchRoute } from './paths.js';
 import { buildTraceRecord, parseClient } from './trace-record.js';
@@ -50,6 +55,11 @@ export interface GatewayDeps {
   experimentalSubscription?: boolean;
   /** HMAC salt for session, agent, parent agent and prompt id in traces (spec 9.1); required when `traces` is set. */
   traceSalt?: string;
+  /**
+   * HMAC salt for secret values (session taint, trace hits). Defaults to `traceSalt`, else a random salt per process:
+   * then taint written by one instance is not recognised by another sharing the same Redis.
+   */
+  guardrailSalt?: string;
   /** Called after settlement with what the request knew (tests). The trace record is queued separately. */
   onSettled?: (outcome: RequestOutcome) => void;
   /** Process state that outlives requests (R11 latch, sweeper notices); one is created when absent. */
@@ -161,6 +171,8 @@ export interface RequestOutcome {
   storeDown?: boolean;
   /** The store was down, so the session taint was not checked (spec 6.6). */
   taintUnchecked?: boolean;
+  /** Guardrail hits (spec 6.6): rule, action, value HMAC and where; never the value. */
+  guardrailHits?: GuardrailHit[];
   /** `sweeper` when the reservation was settled by the sweeper at its estimate, not by this request. */
   settledBy?: 'request' | 'sweeper';
   /** Actual cost above the reservation (spec 7.4: cannot happen under its premises). */
@@ -350,6 +362,32 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   }
 }
 
+/**
+ * Step 5 (spec 5.3, 6.6): secret rules on every route, PII rules on product routes only; and for product routes, the
+ * byte ranges a `redact` action replaces, over the whole body (a product client resends its history unredacted).
+ * A body JSON.parse refused has no structure to trust, so all of it counts as the last turn.
+ */
+function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, x: ExtractedFeatures, salt: string): { hits: GuardrailHit[]; redactions: Array<{ rule: string; start: number; end: number }> } {
+  const g = policy.guardrails;
+  const lastTurn = x.parseError ? { start: 0, end: body.length } : x.lastTurn;
+  const opts = x.messages ? { messages: x.messages } : {};
+  const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => (product ? g.secrets.product : g.secrets.codingAgent), salt, opts);
+  if (!product) return { hits, redactions: [] };
+  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, opts));
+  const redactRules = [...(g.secrets.product === 'redact' ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : []), ...(g.pii.product === 'redact' ? PII_RULES : [])];
+  const redactions = findSpans(body, redactRules).map((sp) => ({ rule: sp.rule.id, start: sp.start, end: sp.end }));
+  return { hits, redactions };
+}
+
+const isJson = (b: Buffer): boolean => {
+  try {
+    JSON.parse(b.toString('utf8'));
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const NO_FEATURES: ExtractedFeatures = {
   model: null, stream: false, maxOutputTokens: null, toolCount: 0, thinking: false, serverTools: [], bodyBytes: 0,
   prefixHash: null, blockTypes: [], expandsServerSide: false, fastMode: false, parseError: false, lastTurn: null,
@@ -449,16 +487,20 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);
 
-  // 5 and 6. Guardrails (Task 16), decide. A reservation that cannot be priced (the estimator throws) fails closed:
-  // refused before admit, so nothing is reserved.
+  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan.
+  const product = key.kind === 'service';
+  const guard = scanGuardrails(policy, product, body, features, deps.guardrailSalt ?? deps.traceSalt ?? '');
+
+  // 6. Decide. A reservation that cannot be priced (the estimator throws) fails closed: refused before admit, so nothing
+  // is reserved.
   let f: RequestFeatures;
   let plan: Plan;
   try {
-    f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), [], policy.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
+    f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
     plan = decide(policy, f);
   } catch {
     sendError(req, res, anthropicError(500, 'api_error', 'the reservation for this request could not be computed; it was not sent', null, id));
-    return early({ features, status: 500, decision: { action: 'block', reason: 'reservation-error' }, errorClass: 'reservation_error' });
+    return early({ features, guardrailHits: guard.hits, status: 500, decision: { action: 'block', reason: 'reservation-error' }, errorClass: 'reservation_error' });
   }
   held.plan = plan;
   held.features = f;
@@ -470,6 +512,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
     boundAssumed: plan.warnings.some((w) => w.kind === 'bound-assumed'),
     route: plan.route === null ? null : { name: plan.route, chain: chainNames },
+    guardrailHits: guard.hits,
     ...(candidate ? { candidate } : {}),
   };
   const first = plan.chain[0];
@@ -478,8 +521,18 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // model value change; the reservation is priced at this served model. Not locatable exactly: refuse, never guess.
   // Decided before admission, so a request that cannot be sent never reserves anything.
   let upstreamBody = body;
+  // Redaction (product routes only, spec 6.6): matched values become placeholders; the HTTP client sets the new
+  // content-length. Coding-agent bodies are never touched. A result that is not JSON is refused, never sent.
+  if (plan.preBlock === null && product && guard.redactions.length > 0) {
+    const redacted = redactProductBody(body, guard.redactions);
+    if (!features.parseError && !isJson(redacted)) {
+      sendError(req, res, anthropicError(400, 'invalid_request_error', 'a redacted value could not be replaced without breaking the JSON body; it was not sent', null, id));
+      return early({ ...decided, status: 400, decision: { action: 'block', reason: 'redaction-failed' }, errorClass: 'invalid_request_error' });
+    }
+    upstreamBody = redacted;
+  }
   if (plan.preBlock === null && first?.rewritesModel) {
-    const rewritten = rewriteTopLevelModel(body, first.upstreamModel);
+    const rewritten = rewriteTopLevelModel(upstreamBody, first.upstreamModel);
     if (!rewritten) {
       const msg = `route "${plan.route ?? ''}" rewrites the model, but the request's top-level model field could not be located exactly (send one JSON object with a single string "model")`;
       sendError(req, res, anthropicError(400, 'invalid_request_error', msg, null, id));
@@ -534,7 +587,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const provider = first === undefined ? undefined : policy.providers.get(first.provider);
   if (decision.block || !provider) {
     const b = decision.block ?? { status: 403 as const, type: 'permission_error', reason: 'no-route' as const, message: 'no provider serves this route', retryAfterS: null };
-    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id));
+    sendError(req, res, anthropicError(b.status, b.type, b.message, b.retryAfterS, id, retryable(b.reason) ? {} : { shouldRetry: false }));
     return early({ ...decided, ...admitted, status: b.status, decision: { action: 'block', reason: b.reason }, errorClass: b.type });
   }
 
@@ -631,6 +684,7 @@ function holdsCounters(plan: Plan): boolean {
 
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
   if (deps.traces && !deps.traceSalt) throw new Error('traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
+  if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes(16).toString('hex') };
   const runtime = deps.runtime ?? createGatewayRuntime();
   const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   // Breaker and retry budget outlive requests; they are rebuilt only when a reload changes the `failure` settings.
