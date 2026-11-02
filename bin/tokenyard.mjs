@@ -108,10 +108,10 @@ async function* readLedger(paths) {
     const file2 = createReadStream(path2);
     const input2 = path2.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
     file2.on("error", (e) => input2.destroy(e));
-    for await (const text of createInterface({ input: input2, crlfDelay: Infinity })) {
-      if (text === "") continue;
+    for await (const text2 of createInterface({ input: input2, crlfDelay: Infinity })) {
+      if (text2 === "") continue;
       try {
-        const line = JSON.parse(text);
+        const line = JSON.parse(text2);
         if (typeof line === "object" && line !== null && typeof line.kind === "string") yield line;
       } catch {
       }
@@ -222,9 +222,9 @@ async function exportTraces(o) {
   };
   records.sort((a, b) => a.ms - b.ms || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
   const p = o.anonymizeSalt === void 0 ? null : saltedPseudonyms(o.anonymizeSalt);
-  const text = [manifest, ...records.map(({ r }) => p ? anonymizeRecord(r, p) : r)].map((l) => `${JSON.stringify(l)}
+  const text2 = [manifest, ...records.map(({ r }) => p ? anonymizeRecord(r, p) : r)].map((l) => `${JSON.stringify(l)}
 `).join("");
-  await writeFile(o.out, o.out.endsWith(".gz") ? gzipSync(text) : text);
+  await writeFile(o.out, o.out.endsWith(".gz") ? gzipSync(text2) : text2);
   return manifest;
 }
 async function pruneTraces(o) {
@@ -550,12 +550,12 @@ async function startAnthropicMock(opts = {}) {
     const maxTokens = typeof body.max_tokens === "number" ? body.max_tokens : 1024;
     const usage = simFor(rec).usageFor(body, model, now());
     const timing = { ttftMs: 0, tokensPerSec: 0, pingEveryMs: null };
-    let outputTokens = DEFAULT_SCENARIO.kind === "ok" ? DEFAULT_SCENARIO.outputTokens : 16;
+    let outputTokens2 = DEFAULT_SCENARIO.kind === "ok" ? DEFAULT_SCENARIO.outputTokens : 16;
     if (sc.kind === "ok") {
       timing.ttftMs = sc.ttftMs;
       timing.tokensPerSec = sc.tokensPerSec;
       timing.pingEveryMs = sc.pingEveryMs;
-      outputTokens = sc.outputTokens;
+      outputTokens2 = sc.outputTokens;
     } else if (sc.kind === "randomUsage") {
       const rng = mulberry32(sc.seed + requestCount);
       const bytes = rec.body.length;
@@ -565,9 +565,9 @@ async function startAnthropicMock(opts = {}) {
       usage.cacheRead = cuts[1] - cuts[0];
       usage.cacheWrite5m = cuts[2] - cuts[1];
       usage.cacheWrite1h = totalIn - cuts[2];
-      outputTokens = Math.floor(rng() * (maxTokens + 1));
+      outputTokens2 = Math.floor(rng() * (maxTokens + 1));
     }
-    usage.output = outputTokens;
+    usage.output = outputTokens2;
     const id = `msg_mock_${String(++msgCount).padStart(6, "0")}`;
     if (body.stream !== true) {
       if (sc.kind === "drop") {
@@ -586,7 +586,7 @@ async function startAnthropicMock(opts = {}) {
           type: "message",
           role: "assistant",
           model,
-          content: [{ type: "text", text: "x".repeat(outputTokens * 4) }],
+          content: [{ type: "text", text: "x".repeat(outputTokens2 * 4) }],
           stop_reason: "end_turn",
           stop_sequence: null,
           usage: usageJson(usage)
@@ -613,7 +613,7 @@ async function startAnthropicMock(opts = {}) {
     if (timing.pingEveryMs !== null && timing.pingEveryMs > 0) {
       pinger = setInterval(() => void write('event: ping\ndata: {"type": "ping"}\n\n'), timing.pingEveryMs);
     }
-    const perDeltaMs = timing.tokensPerSec > 0 ? 1e3 * Math.max(1, outputTokens / Math.max(1, deltas.length)) / timing.tokensPerSec : 0;
+    const perDeltaMs = timing.tokensPerSec > 0 ? 1e3 * Math.max(1, outputTokens2 / Math.max(1, deltas.length)) / timing.tokensPerSec : 0;
     try {
       for (let i = 0; i < all.length; i++) {
         if (sc.kind === "midStreamError" && i === sc.afterEvents) {
@@ -793,7 +793,7 @@ var init_writer = __esm({
         for (const [path2, items] of byPath) {
           const first2 = items[0];
           if (!first2) continue;
-          let text = "";
+          let text2 = "";
           if (!this.opened.has(path2)) {
             const firstSeq = items.find((i) => i.request)?.line.seq;
             const seg = {
@@ -803,15 +803,15 @@ var init_writer = __esm({
               startedAt: new Date(first2.at).toISOString(),
               firstSeq: typeof firstSeq === "number" ? firstSeq : this.seq + 1
             };
-            text += `${JSON.stringify(seg)}
+            text2 += `${JSON.stringify(seg)}
 `;
             this.opened.add(path2);
           }
-          text += items.map((i) => `${JSON.stringify(i.line)}
+          text2 += items.map((i) => `${JSON.stringify(i.line)}
 `).join("");
           try {
             await mkdir(join2(path2, ".."), { recursive: true });
-            await appendFile(path2, text);
+            await appendFile(path2, text2);
           } catch {
             this.opened.delete(path2);
             this.dropped += items.filter((i) => i.request).length;
@@ -947,8 +947,8 @@ function redactProductBody(body, hits) {
       n = perRule.size + 1;
       perRule.set(value, n);
     }
-    const text = placeholder(h.rule, n);
-    parts.push(Buffer.from(h.bare ? `"${text}"` : text, "latin1"));
+    const text2 = placeholder(h.rule, n);
+    parts.push(Buffer.from(h.bare ? `"${text2}"` : text2, "latin1"));
   }
   parts.push(body.subarray(at));
   return Buffer.concat(parts);
@@ -1223,11 +1223,11 @@ function bareNumberOk(body, rule, value, segments, quotedOnly) {
   return isDelimiter(g.start > 0 ? body[g.start - 1] : void 0) && isDelimiter(body[g.end]) && rule.bareNumber(value);
 }
 function matchView(view, rule, crossingOnly, out, body, quotedOnly) {
-  const text = view.text;
-  if (rule.keywords.length > 0 && !rule.keywords.some((k) => text.includes(k))) return;
+  const text2 = view.text;
+  if (rule.keywords.length > 0 && !rule.keywords.some((k) => text2.includes(k))) return;
   const re = globalOf(rule);
   re.lastIndex = 0;
-  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+  for (let m = re.exec(text2); m !== null; m = re.exec(text2)) {
     if (m[0].length === 0) {
       re.lastIndex++;
       continue;
@@ -1319,11 +1319,11 @@ var init_scan = __esm({
       runs = [];
       length = 0;
       textCache = null;
-      push(text, bStart, bEnd, kind) {
-        if (text.length === 0) return;
-        this.parts.push(text);
+      push(text2, bStart, bEnd, kind) {
+        if (text2.length === 0) return;
+        this.parts.push(text2);
         this.runs.push(this.length, bStart, bEnd, kind);
-        this.length += text.length;
+        this.length += text2.length;
         this.textCache = null;
       }
       runCount() {
@@ -1336,8 +1336,8 @@ var init_scan = __esm({
       copyRuns(from, to, into) {
         for (let k = from; k < to; k++) into.push(this.parts[k], this.runs[k * 4 + 1], this.runs[k * 4 + 2], this.runs[k * 4 + 3]);
       }
-      separate(at, text = SEP) {
-        if (this.length > 0) this.push(text, at, at, SEPARATOR);
+      separate(at, text2 = SEP) {
+        if (this.length > 0) this.push(text2, at, at, SEPARATOR);
       }
       get text() {
         this.textCache ??= this.parts.join("");
@@ -2346,14 +2346,14 @@ var require_foldFlowLines = __commonJS({
     var FOLD_FLOW = "flow";
     var FOLD_BLOCK = "block";
     var FOLD_QUOTED = "quoted";
-    function foldFlowLines(text, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+    function foldFlowLines(text2, indent, mode = "flow", { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
       if (!lineWidth || lineWidth < 0)
-        return text;
+        return text2;
       if (lineWidth < minContentWidth)
         minContentWidth = 0;
       const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
-      if (text.length <= endStep)
-        return text;
+      if (text2.length <= endStep)
+        return text2;
       const folds = [];
       const escapedFolds = {};
       let end = lineWidth - indent.length;
@@ -2370,14 +2370,14 @@ var require_foldFlowLines = __commonJS({
       let escStart = -1;
       let escEnd = -1;
       if (mode === FOLD_BLOCK) {
-        i = consumeMoreIndentedLines(text, i, indent.length);
+        i = consumeMoreIndentedLines(text2, i, indent.length);
         if (i !== -1)
           end = i + endStep;
       }
-      for (let ch; ch = text[i += 1]; ) {
+      for (let ch; ch = text2[i += 1]; ) {
         if (mode === FOLD_QUOTED && ch === "\\") {
           escStart = i;
-          switch (text[i + 1]) {
+          switch (text2[i + 1]) {
             case "x":
               i += 3;
               break;
@@ -2394,12 +2394,12 @@ var require_foldFlowLines = __commonJS({
         }
         if (ch === "\n") {
           if (mode === FOLD_BLOCK)
-            i = consumeMoreIndentedLines(text, i, indent.length);
+            i = consumeMoreIndentedLines(text2, i, indent.length);
           end = i + indent.length + endStep;
           split = void 0;
         } else {
           if (ch === " " && prev && prev !== " " && prev !== "\n" && prev !== "	") {
-            const next = text[i + 1];
+            const next = text2[i + 1];
             if (next && next !== " " && next !== "\n" && next !== "	")
               split = i;
           }
@@ -2411,12 +2411,12 @@ var require_foldFlowLines = __commonJS({
             } else if (mode === FOLD_QUOTED) {
               while (prev === " " || prev === "	") {
                 prev = ch;
-                ch = text[i += 1];
+                ch = text2[i += 1];
                 overflow = true;
               }
               const j = i > escEnd + 1 ? i - 2 : escStart - 1;
               if (escapedFolds[j])
-                return text;
+                return text2;
               folds.push(j);
               escapedFolds[j] = true;
               end = j + endStep;
@@ -2431,39 +2431,39 @@ var require_foldFlowLines = __commonJS({
       if (overflow && onOverflow)
         onOverflow();
       if (folds.length === 0)
-        return text;
+        return text2;
       if (onFold)
         onFold();
-      let res = text.slice(0, folds[0]);
+      let res = text2.slice(0, folds[0]);
       for (let i2 = 0; i2 < folds.length; ++i2) {
         const fold = folds[i2];
-        const end2 = folds[i2 + 1] || text.length;
+        const end2 = folds[i2 + 1] || text2.length;
         if (fold === 0)
           res = `
-${indent}${text.slice(0, end2)}`;
+${indent}${text2.slice(0, end2)}`;
         else {
           if (mode === FOLD_QUOTED && escapedFolds[fold])
-            res += `${text[fold]}\\`;
+            res += `${text2[fold]}\\`;
           res += `
-${indent}${text.slice(fold + 1, end2)}`;
+${indent}${text2.slice(fold + 1, end2)}`;
         }
       }
       return res;
     }
-    function consumeMoreIndentedLines(text, i, indent) {
+    function consumeMoreIndentedLines(text2, i, indent) {
       let end = i;
       let start = i + 1;
-      let ch = text[start];
+      let ch = text2[start];
       while (ch === " " || ch === "	") {
         if (i < start + indent) {
-          ch = text[++i];
+          ch = text2[++i];
         } else {
           do {
-            ch = text[++i];
+            ch = text2[++i];
           } while (ch && ch !== "\n");
           end = i;
           start = i + 1;
-          ch = text[start];
+          ch = text2[start];
         }
       }
       return end;
@@ -8710,11 +8710,11 @@ var require_dist = __commonJS({
 });
 
 // src/policy/safe-yaml.ts
-function parseYamlSafe(text) {
-  if (text.length > MAX_YAML_BYTES) throw new YamlError("E_YAML_UNSAFE", `file is larger than ${MAX_YAML_BYTES} bytes`);
+function parseYamlSafe(text2) {
+  if (text2.length > MAX_YAML_BYTES) throw new YamlError("E_YAML_UNSAFE", `file is larger than ${MAX_YAML_BYTES} bytes`);
   let doc;
   try {
-    doc = (0, import_yaml.parseDocument)(text, { uniqueKeys: true, merge: false });
+    doc = (0, import_yaml.parseDocument)(text2, { uniqueKeys: true, merge: false });
   } catch (e) {
     throw new YamlError("E_YAML_SYNTAX", e instanceof Error ? e.message : String(e));
   }
@@ -9379,8 +9379,8 @@ function base64urlToUint8Array(base64url3) {
 function uint8ArrayToBase64url(bytes) {
   return uint8ArrayToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
-function hexToUint8Array(hex3) {
-  const cleanHex = hex3.replace(/^0x/, "");
+function hexToUint8Array(hex5) {
+  const cleanHex = hex5.replace(/^0x/, "");
   if (cleanHex.length % 2 !== 0) {
     throw new Error("Invalid hex string length");
   }
@@ -17737,8 +17737,8 @@ var capitalizeFirstCharacter, error33;
 var init_lt = __esm({
   "node_modules/zod/v4/locales/lt.js"() {
     init_util();
-    capitalizeFirstCharacter = (text) => {
-      return text.charAt(0).toUpperCase() + text.slice(1);
+    capitalizeFirstCharacter = (text2) => {
+      return text2.charAt(0).toUpperCase() + text2.slice(1);
     };
     error33 = () => {
       const Sizable = {
@@ -29161,8 +29161,8 @@ var init_zod = __esm({
 });
 
 // src/pricing/prices.ts
-function parsePriceTable(text) {
-  const raw = parseYamlSafe(text);
+function parsePriceTable(text2) {
+  const raw = parseYamlSafe(text2);
   if (typeof raw === "object" && raw !== null) {
     for (const section of ["models", "modifiers", "serverTools"]) {
       const map2 = raw[section];
@@ -29293,7 +29293,7 @@ function roundUp(micro, what) {
 function worstCaseMicroUsd(f, m, t, o) {
   const fast = f.fastMode && m.fast !== void 0;
   let inputTokens = f.inputTokensBound;
-  let outputTokens = outputTokenBound(f, m, o.reserveOutputTokens);
+  let outputTokens2 = outputTokenBound(f, m, o.reserveOutputTokens);
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
@@ -29315,9 +29315,9 @@ function worstCaseMicroUsd(f, m, t, o) {
       feeMicro += Math.max(0, Math.ceil(uses)) * price2.perUseUsd * 1e6;
     }
     inputTokens = iterations * m.maxContextTokens;
-    outputTokens = iterations * m.maxOutputTokens;
+    outputTokens2 = iterations * m.maxOutputTokens;
   }
-  const tokenMicro = (inputTokens * maxInputRate(m, fast) + outputTokens * maxOutputRate(m, fast)) * modifierProduct(t);
+  const tokenMicro = (inputTokens * maxInputRate(m, fast) + outputTokens2 * maxOutputRate(m, fast)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);
   const block2 = unpriced ? "unpriced-server-tool" : withoutMaxUses && o.serverToolsWithoutMaxUses === "block" ? "server-tool-no-max-uses" : null;
   return { micro, boundAssumed: unpriced || withoutMaxUses, block: block2 };
@@ -51434,7 +51434,7 @@ var require_fetch = __commonJS({
     function handleFetchDone(response) {
       finalizeAndReportTiming(response, "fetch");
     }
-    function fetch(input2, init = void 0) {
+    function fetch2(input2, init = void 0) {
       webidl.argumentLengthCheck(arguments, 1, "globalThis.fetch");
       let p = createDeferredPromise();
       let requestObject;
@@ -52464,7 +52464,7 @@ var require_fetch = __commonJS({
       }
     }
     module.exports = {
-      fetch,
+      fetch: fetch2,
       Fetch,
       fetching,
       finalizeAndReportTiming
@@ -56718,7 +56718,7 @@ var require_undici = __commonJS({
       err.stack = stack ? `${stack}
 ${captureLines}` : capture.stack;
     }
-    module.exports.fetch = function fetch(init, options = void 0) {
+    module.exports.fetch = function fetch2(init, options = void 0) {
       return fetchImpl(init, options).catch((err) => {
         if (currentFilename) {
           appendFetchStackTrace(err, currentFilename);
@@ -57878,16 +57878,16 @@ __export(validate_exports, {
   globMatch: () => globMatch,
   validatePolicy: () => validatePolicy
 });
-function globMatch(pattern, text) {
+function globMatch(pattern, text2) {
   let p = 0;
   let t = 0;
   let star = -1;
   let mark = 0;
-  while (t < text.length) {
+  while (t < text2.length) {
     if (p < pattern.length && pattern[p] === "*") {
       star = p++;
       mark = t;
-    } else if (p < pattern.length && pattern[p] === text[t]) {
+    } else if (p < pattern.length && pattern[p] === text2[t]) {
       p++;
       t++;
     } else if (star >= 0) {
@@ -58240,8 +58240,8 @@ __export(load_dir_exports, {
   parsePolicyFiles: () => parsePolicyFiles,
   policyFileNames: () => policyFileNames
 });
-function normalizeText(text) {
-  return (text.charCodeAt(0) === 65279 ? text.slice(1) : text).replace(/\r\n/g, "\n");
+function normalizeText(text2) {
+  return (text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2).replace(/\r\n/g, "\n");
 }
 function policyFileNames(policyText) {
   let pricing = DEFAULT_PRICES;
@@ -58257,9 +58257,9 @@ function policyFileNames(policyText) {
   }
   return [.../* @__PURE__ */ new Set([POLICY_FILE, pricing, keys2])];
 }
-function yamlOf(file2, text) {
+function yamlOf(file2, text2) {
   try {
-    return parseYamlSafe(text);
+    return parseYamlSafe(text2);
   } catch (e) {
     if (e instanceof YamlError) throw new PolicyLoadError(e.code, file2, [{ path: "", message: e.message }]);
     throw e;
@@ -58267,9 +58267,9 @@ function yamlOf(file2, text) {
 }
 function parsePolicyFiles(dir, files) {
   const get = (name2) => {
-    const text = Object.hasOwn(files, name2) ? files[name2] : void 0;
-    if (text === void 0) throw new PolicyLoadError("E_FILE_MISSING", name2, [{ path: "", message: `${name2} not found in ${dir}` }]);
-    return normalizeText(text);
+    const text2 = Object.hasOwn(files, name2) ? files[name2] : void 0;
+    if (text2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", name2, [{ path: "", message: `${name2} not found in ${dir}` }]);
+    return normalizeText(text2);
   };
   const policyText = get(POLICY_FILE);
   const p = policySchema.safeParse(yamlOf(POLICY_FILE, policyText));
@@ -58372,11 +58372,11 @@ function rejectProtoKeys(v, depth = 0) {
     for (const x of Object.values(v)) rejectProtoKeys(x, depth + 1);
   }
 }
-function parseBundle(text) {
-  if (text.length > MAX_BUNDLE_BYTES) bad(`bundle is larger than ${MAX_BUNDLE_BYTES} bytes`);
+function parseBundle(text2) {
+  if (text2.length > MAX_BUNDLE_BYTES) bad(`bundle is larger than ${MAX_BUNDLE_BYTES} bytes`);
   let raw;
   try {
-    raw = JSON.parse(text.charCodeAt(0) === 65279 ? text.slice(1) : text);
+    raw = JSON.parse(text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2);
   } catch (e) {
     return bad(`bundle is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -58415,7 +58415,7 @@ var init_bundle = __esm({
     init_load_dir();
     init_schema();
     MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
-    sha256Hex = (text) => createHash7("sha256").update(text).digest("hex");
+    sha256Hex = (text2) => createHash7("sha256").update(text2).digest("hex");
     sortedKeys = (keys2) => [...keys2].sort((a, b) => a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0);
     serializeBundle = (b) => `${JSON.stringify(b, null, 2)}
 `;
@@ -58535,8 +58535,8 @@ async function loadPolicyDir(dir) {
   files[POLICY_FILE] = policy2;
   for (const name2 of policyFileNames(policy2)) {
     if (name2 === POLICY_FILE) continue;
-    const text = await readOrMissing(dir, name2);
-    if (text !== void 0) files[name2] = text;
+    const text2 = await readOrMissing(dir, name2);
+    if (text2 !== void 0) files[name2] = text2;
   }
   return parsePolicyFiles(dir, files);
 }
@@ -58563,17 +58563,17 @@ async function writeLkg(stateDir, bundleText) {
   }
 }
 async function readLkg(stateDir) {
-  let text;
+  let text2;
   try {
-    text = await readFile2(join4(stateDir, LKG_FILE), "utf8");
+    text2 = await readFile2(join4(stateDir, LKG_FILE), "utf8");
   } catch (e2) {
     if (e2.code === "ENOENT") return null;
     throw e2;
   }
-  if (text.length > MAX_BUNDLE_BYTES * 2) throw new Error("last-known-good file is too large");
+  if (text2.length > MAX_BUNDLE_BYTES * 2) throw new Error("last-known-good file is too large");
   let env;
   try {
-    env = JSON.parse(text);
+    env = JSON.parse(text2);
   } catch {
     throw new Error("last-known-good file is not valid JSON");
   }
@@ -58588,7 +58588,7 @@ var init_lkg = __esm({
     "use strict";
     init_bundle();
     LKG_FILE = "last-known-good.json";
-    sha = (text) => createHash8("sha256").update(text).digest("hex");
+    sha = (text2) => createHash8("sha256").update(text2).digest("hex");
   }
 });
 
@@ -102892,321 +102892,219 @@ var init_sweeper = __esm({
   }
 });
 
-// src/edge/keys.ts
-var keys_exports = {};
-__export(keys_exports, {
-  appendKey: () => appendKey,
-  createKey: () => createKey
-});
-import { randomBytes as randomBytes4 } from "node:crypto";
-import { appendFile as appendFile2 } from "node:fs/promises";
-function base62(bytes) {
-  let n = BigInt(`0x${bytes.toString("hex")}`);
-  let out = "";
-  while (n > 0n) {
-    out = B62[Number(n % 62n)] + out;
-    n /= 62n;
-  }
-  return out.padStart(B62_LEN, "0");
-}
-function createKey() {
-  const plaintext = `ty_live_${base62(randomBytes4(32))}`;
-  return { plaintext, hash: hashKey(plaintext) };
-}
-async function appendKey(file2, rec) {
-  await appendFile2(file2, `- ${JSON.stringify(rec)}
-`, "utf8");
-}
-var B62, B62_LEN;
-var init_keys2 = __esm({
-  "src/edge/keys.ts"() {
-    "use strict";
-    init_auth();
-    B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    B62_LEN = 43;
-  }
-});
-
-// src/live/harness.ts
-var harness_exports = {};
-__export(harness_exports, {
-  LIVE_BUDGET: () => LIVE_BUDGET,
-  LIVE_LAST_DAY: () => LIVE_LAST_DAY,
-  LIVE_LOCK_FILE: () => LIVE_LOCK_FILE,
-  LIVE_MAX_USD: () => LIVE_MAX_USD,
-  defaultLivePaths: () => defaultLivePaths,
-  liveGuard: () => liveGuard,
-  loadLivePolicy: () => loadLivePolicy,
-  startLiveHarness: () => startLiveHarness
-});
-import { randomBytes as randomBytes5 } from "node:crypto";
-import { access, constants, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
-import { closeSync, existsSync as existsSync2, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
-import { hostname as hostname3 } from "node:os";
-import { dirname, join as join6 } from "node:path";
-import { fileURLToPath } from "node:url";
-function packageRoot() {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (; ; ) {
-    const pkg = join6(dir, "package.json");
-    if (existsSync2(pkg)) {
-      try {
-        if (JSON.parse(readFileSync(pkg, "utf8")).name === PACKAGE_NAME) return dir;
-      } catch {
-      }
-    }
-    const up = dirname(dir);
-    if (up === dir) throw new Error(`tokenyard live: cannot find the ${PACKAGE_NAME} package root above ${fileURLToPath(import.meta.url)}`);
-    dir = up;
-  }
-}
-function defaultLivePaths() {
-  const root = packageRoot();
-  return { traceDir: join6(root, ".live", "traces"), policyDir: join6(root, "test", "live") };
-}
-function acquireLock(traceDir) {
-  const path2 = join6(traceDir, LIVE_LOCK_FILE);
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const fd = openSync(path2, "wx");
-      try {
-        writeSync(fd, `${process.pid}
-`);
-      } finally {
-        closeSync(fd);
-      }
-      break;
-    } catch (e) {
-      if (e.code !== "EEXIST" || attempt > 0) throw e;
-      let holder = Number.NaN;
-      try {
-        holder = Number.parseInt(readFileSync(path2, "utf8").trim(), 10);
-      } catch {
-      }
-      if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
-        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path2})`);
-      }
-      try {
-        unlinkSync(path2);
-      } catch {
-      }
-    }
-  }
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    process.off("exit", release);
-    try {
-      if (readFileSync(path2, "utf8").trim() === String(process.pid)) unlinkSync(path2);
-    } catch {
-    }
-  };
-  process.on("exit", release);
-  return release;
-}
-function liveGuard(env, today) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || today > LIVE_LAST_DAY) return { ok: false, reason: `live tests end on ${LIVE_LAST_DAY} (the credits expire); today is ${today}` };
-  if (!env.ANTHROPIC_API_KEY) return { ok: false, reason: "ANTHROPIC_API_KEY is not set (npm run live reads it from .env)" };
-  const raw = env.TOKENYARD_LIVE_BUDGET_USD;
-  if (raw === void 0 || raw.trim() === "") return { ok: false, reason: `TOKENYARD_LIVE_BUDGET_USD is not set (at most ${LIVE_MAX_USD})` };
-  const capUsd = Number(raw);
-  if (!Number.isFinite(capUsd) || capUsd <= 0 || capUsd > LIVE_MAX_USD) return { ok: false, reason: `TOKENYARD_LIVE_BUDGET_USD must be a number above 0 and at most ${LIVE_MAX_USD}` };
-  return { ok: true, capUsd, codexLive: Boolean(env.OPENAI_API_KEY) };
-}
-function loadLivePolicy(o) {
-  const dir = o.dir ?? defaultLivePaths().policyDir;
-  const read = (f) => readFileSync(join6(dir, f), "utf8");
-  const keys2 = `- ${JSON.stringify({ hash: o.keyHash, keyId: `key_${o.keyHash.slice(0, 8)}`, tenant: LIVE_TENANT, team: LIVE_TENANT, name: "live", kind: "developer", billing: "api" })}
-`;
-  const src = parsePolicyFiles(dir, { "policy.yaml": read("policy.yaml"), "prices.yaml": read("prices.yaml"), "keys.yaml": keys2 });
-  const budgets = src.policy.budgets;
-  const total = budgets[0];
-  if (budgets.length !== 1 || total?.name !== LIVE_BUDGET || total.scope !== "tenant" || total.window !== "month") {
-    throw new Error(`the live policy must have exactly one budget, ${LIVE_BUDGET} (scope tenant, window month)`);
-  }
-  total.usd = o.capUsd;
-  total.onExceed = "block";
-  total.mode = "enforce";
-  if (o.upstream !== void 0) {
-    const p = src.policy.providers.anthropic;
-    if (!p) throw new Error("the live policy has no provider anthropic");
-    p.baseUrl = o.upstream;
-  }
-  return compilePolicy(src, "live", { experimentalSubscription: false });
-}
-async function assertReadable(dir) {
-  for (const e of await readdir2(dir, { withFileTypes: true })) {
-    const p = join6(dir, e.name);
-    if (e.isDirectory()) await assertReadable(p);
-    else await access(p, constants.R_OK);
-  }
-}
-async function startLiveHarness(o) {
-  const guard = liveGuard(o.env, o.today);
-  if (!guard.ok) throw new Error(`tokenyard live: ${guard.reason}`);
-  const traceDir = o.traceDir ?? defaultLivePaths().traceDir;
-  const { plaintext: clientKey, hash: hash2 } = createKey();
-  const policy2 = loadLivePolicy({ capUsd: guard.capUsd, keyHash: hash2, ...o.policyDir ? { dir: o.policyDir } : {}, ...o.upstream ? { upstream: o.upstream } : {} });
-  const now = Date.now();
-  let spentMicroUsd;
-  const store = createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: (ids) => runtime.onSwept(ids) });
-  const runtime = createGatewayRuntime();
-  try {
-    await mkdir3(traceDir, { recursive: true });
-  } catch (e) {
-    const code = e.code;
-    throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code ? ` (${code})` : ""}`);
-  }
-  const release = acquireLock(traceDir);
-  try {
-    await assertReadable(traceDir);
-    const records = await loadTraceRecords({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
-    const entries = await warmupEntries(
-      (async function* () {
-        yield* records;
-      })(),
-      policy2,
-      now
-    );
-    await store.seed(entries);
-    spentMicroUsd = entries.reduce((n, e) => n + e.spentMicroUsd, 0);
-  } catch (e) {
-    release();
-    const code = e.code;
-    throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code ? ` (${code})` : ""}; refusing to start without the earlier spend`);
-  }
-  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
-  let ticks = 0;
-  const stopSweeper = startSweeper(store, {
-    intervalMs: SWEEP_INTERVAL_MS,
-    onTick: () => {
-      if (++ticks % 2 === 0) writer.heartbeat();
-    },
-    onError: (e) => console.error(`tokenyard live: sweeper: ${e instanceof Error ? e.message : String(e)}`)
-  });
-  const gw = createGateway({
-    policy: () => policy2,
-    store,
-    runtime,
-    traces: writer,
-    traceSalt: o.env.TOKENYARD_TRACE_SALT || randomBytes5(16).toString("hex"),
-    clock: Date.now,
-    newId: () => ulid(),
-    basePath: null,
-    bodyCapBytes: DEFAULT_BODY_CAP_BYTES,
-    env: o.env
-  });
-  let url2;
-  try {
-    url2 = await gw.listen(o.port, "127.0.0.1");
-  } catch (e) {
-    stopSweeper();
-    await writer.close();
-    release();
-    throw e;
-  }
-  const capMicro = Math.round(guard.capUsd * 1e6);
-  process.stdout.write(
-    [
-      `tokenyard live: gateway ${url2}`,
-      `tokenyard live: client key ${clientKey}`,
-      `tokenyard live: ${LIVE_BUDGET} ${usd2(capMicro)}, spent ${usd2(spentMicroUsd)}, remaining ${usd2(Math.max(0, capMicro - spentMicroUsd))}`,
-      `tokenyard live: codex ${guard.codexLive ? "live" : "not live (no OPENAI_API_KEY)"}`,
-      ""
-    ].join("\n")
+// src/mock/traffic.ts
+function auxiliaryBody(rng, model) {
+  return Buffer.from(
+    JSON.stringify({
+      model,
+      max_tokens: 512,
+      stream: true,
+      system: [{ type: "text", text: "Write a short title for this coding session." }],
+      messages: [{ role: "user", content: [{ type: "text", text: text(rng, between(rng, 20, 80)), cache_control: { type: "ephemeral" } }] }]
+    })
   );
-  return {
-    url: url2,
-    clientKey,
-    spentMicroUsd,
-    async close() {
-      stopSweeper();
-      try {
-        await gw.close();
-        await writer.close();
-      } finally {
-        release();
+}
+function planSession(rng, dev, startAt, secret, out, counter) {
+  const session = {
+    dev,
+    id: `${hex3(rng, 8)}-${hex3(rng, 4)}-${hex3(rng, 4)}-${hex3(rng, 4)}-${hex3(rng, 12)}`,
+    branch: `feat/WEB-${between(rng, 100, 999)}`,
+    ticket: "",
+    tolerance: secret ? 2 : 1,
+    failures: 0
+  };
+  session.ticket = /WEB-\d+/.exec(session.branch)?.[0] ?? "";
+  const system = text(mulberry32(hashString(dev.repo)), 700);
+  const main = new Conversation(rng, { model: MODELS.main, system, tools: MAIN_TOOLS, maxTokens: 32e3, thinking: true, resultWords: [150, 900] });
+  const mainAgent = `agent-${hex3(rng, 10)}`;
+  const turns = between(rng, 8, 26);
+  const compactAt = turns >= 16 && rng() < 0.4 ? Math.floor(turns * 0.6) : -1;
+  const secretTurn = secret ? 3 : -1;
+  const add2 = (p) => {
+    out.push({ ...p, order: counter.n++, session });
+  };
+  let t = startAt;
+  let promptId = `prompt-${hex3(rng, 10)}`;
+  add2({ at: t, kind: "auxiliary", agent: null, parent: null, agentType: null, promptId, build: () => auxiliaryBody(rng, MODELS.auxiliary) });
+  t += between(rng, 2, 6) * 1e3;
+  for (let i = 0; i < turns; i++) {
+    if (i > 0 && i % 6 === 0) promptId = `prompt-${hex3(rng, 10)}`;
+    const pid = promptId;
+    const pasted = i === secretTurn ? `The deploy fails with this config, can you check it?
+aws_access_key_id = ${FAKE_AWS_KEY}
+region = eu-west-1` : void 0;
+    add2({ at: t, kind: "main", agent: mainAgent, parent: null, agentType: null, promptId: pid, build: () => main.next(pasted) });
+    if (i === compactAt) {
+      t += between(rng, 5, 15) * 1e3;
+      add2({ at: t, kind: "compaction", agent: mainAgent, parent: null, agentType: null, promptId: pid, build: () => main.compact() });
+    }
+    if (i > 0 && i % 8 === 0) add2({ at: t + 1500, kind: "auxiliary", agent: null, parent: null, agentType: null, promptId: pid, build: () => auxiliaryBody(rng, MODELS.auxiliary) });
+    if (i >= 2 && rng() < 0.22) {
+      const subs = between(rng, 1, 3);
+      for (let s2 = 0; s2 < subs; s2++) {
+        const sub = new Conversation(rng, { model: MODELS.subagent, system: text(rng, 250), tools: SUB_TOOLS, maxTokens: 16e3, thinking: false, resultWords: [100, 500] });
+        const agent2 = `agent-${hex3(rng, 10)}`;
+        const agentType = rng() < 0.6 ? "Explore" : "general-purpose";
+        let st = t + between(rng, 2, 6) * 1e3;
+        for (let k = between(rng, 3, 6); k > 0; k--) {
+          add2({ at: st, kind: "subagent", agent: agent2, parent: mainAgent, agentType, promptId: pid, build: () => sub.next() });
+          st += between(rng, 3, 14) * 1e3;
+        }
+        t = Math.max(t, st - 5e3);
       }
     }
-  };
+    t += between(rng, 6, 45) * 1e3;
+  }
+  return session;
 }
-var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_LOCK_FILE, PACKAGE_NAME, alive, WARMUP_LOOKBACK_MS2, usd2;
-var init_harness = __esm({
-  "src/live/harness.ts"() {
+function hashString(s2) {
+  let h = 2166136261;
+  for (let i = 0; i < s2.length; i++) h = Math.imul(h ^ s2.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+async function generateTraffic(o) {
+  const rng = mulberry32(o.seed ^ 2654435769);
+  const startMs = o.startMs ?? DEMO_START_MS;
+  const planned = [];
+  const counter = { n: 0 };
+  const sessions = [];
+  for (let d = 0; d < o.days; d++) {
+    const dayStart = startMs + d * DAY_MS4;
+    const weekend = new Date(dayStart).getUTCDay() % 6 === 0;
+    for (const dev of DEMO_DEVELOPERS) {
+      const n = Math.floor(dev.load * (weekend ? 0.3 : 1.7) + rng());
+      for (let s2 = 0; s2 < n; s2++) {
+        const startAt = dayStart + (8 + s2 * 4) * 36e5 + between(rng, 0, 90) * 6e4 + between(rng, 0, 59) * 1e3;
+        const secret = dev.name === SECRET_DEV && d === SECRET_DAY && s2 === 0;
+        sessions.push(planSession(rng, dev, startAt, secret, planned, counter));
+      }
+    }
+  }
+  planned.sort((a, b) => a.at - b.at || a.order - b.order);
+  let requests = 0;
+  const stopped = /* @__PURE__ */ new Set();
+  for (const p of planned) {
+    const s2 = p.session;
+    if (stopped.has(s2)) continue;
+    const body = p.build();
+    o.setTime?.(p.at);
+    const headers = {
+      "x-api-key": o.keys[s2.dev.name] ?? "",
+      "content-type": "application/json",
+      "anthropic-version": "2023-06-01",
+      "user-agent": "claude-cli/2.1.0 (external, cli)",
+      "x-claude-code-session-id": s2.id,
+      "x-claude-code-request-class": p.kind,
+      "x-claude-code-prompt-id": p.promptId,
+      "x-tokenyard-repo": s2.dev.repo,
+      "x-tokenyard-branch": s2.branch,
+      "x-tokenyard-ticket": s2.ticket,
+      ...p.agent ? { "x-claude-code-agent-id": p.agent } : {},
+      ...p.parent ? { "x-claude-code-parent-agent-id": p.parent } : {},
+      ...p.agentType ? { "x-claude-code-agent-type": p.agentType } : {}
+    };
+    const res = await fetch(`${o.gatewayUrl}/v1/messages`, { method: "POST", headers, body: new Uint8Array(body) });
+    await res.arrayBuffer();
+    requests++;
+    await o.afterRequest?.();
+    if (res.status >= 400 && ++s2.failures >= s2.tolerance) stopped.add(s2);
+  }
+  return { requests, sessions: sessions.length };
+}
+var DEMO_DEVELOPERS, FAKE_AWS_KEY, SECRET_DEV, SECRET_DAY, DEMO_START_MS, DAY_MS4, WORDS, text, between, hex3, toolDefs, MAIN_TOOLS, SUB_TOOLS, Conversation, MODELS;
+var init_traffic = __esm({
+  "src/mock/traffic.ts"() {
     "use strict";
-    init_keys2();
-    init_handler();
-    init_server();
-    init_ulid();
-    init_export();
-    init_writer();
-    init_memory_store();
-    init_open_store();
-    init_sweeper();
-    init_warmup();
-    init_compile2();
-    init_load_dir();
-    LIVE_LAST_DAY = "2026-11-16";
-    LIVE_MAX_USD = 20;
-    LIVE_BUDGET = "live-total";
-    LIVE_TENANT = "live";
-    LIVE_LOCK_FILE = "live.lock";
-    PACKAGE_NAME = "@mateuszkania-im/tokenyard";
-    alive = (pid) => {
-      try {
-        process.kill(pid, 0);
-        return true;
-      } catch (e) {
-        return e.code === "EPERM";
+    init_scenarios();
+    DEMO_DEVELOPERS = [
+      { name: "alice", team: "platform", repo: "gateway-core", load: 1 },
+      { name: "bruno", team: "platform", repo: "infra-tools", load: 0.8 },
+      { name: "chen", team: "platform", repo: "gateway-core", load: 0.9 },
+      { name: "dana", team: "web", repo: "shop-web", load: 1.6 },
+      { name: "elif", team: "web", repo: "shop-web", load: 1.5 },
+      { name: "farid", team: "web", repo: "design-system", load: 1.3 },
+      { name: "gosia", team: "data", repo: "etl-jobs", load: 0.8 },
+      { name: "hiro", team: "data", repo: "etl-jobs", load: 0.7 }
+    ];
+    FAKE_AWS_KEY = "AKIAIOSFODNN7EXAMPLE";
+    SECRET_DEV = "farid";
+    SECRET_DAY = 2;
+    DEMO_START_MS = Date.UTC(2026, 9, 26, 0, 0, 0);
+    DAY_MS4 = 864e5;
+    WORDS = ["alpha", "build", "cache", "diff", "edit", "file", "grep", "hook", "index", "jest", "kind", "lint", "merge", "node", "patch", "query", "route", "state", "token", "view"];
+    text = (rng, words) => Array.from({ length: words }, () => WORDS[Math.floor(rng() * WORDS.length)]).join(" ");
+    between = (rng, lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+    hex3 = (rng, n) => Array.from({ length: n }, () => Math.floor(rng() * 16).toString(16)).join("");
+    toolDefs = (names) => names.map((name2) => ({
+      name: name2,
+      description: `${name2} tool for the coding agent. `.repeat(20),
+      input_schema: { type: "object", properties: { input: { type: "string" } }, required: ["input"] }
+    }));
+    MAIN_TOOLS = toolDefs(["Bash", "Read", "Edit", "Grep", "Glob", "Write"]);
+    SUB_TOOLS = toolDefs(["Read", "Grep", "Glob"]);
+    Conversation = class {
+      constructor(rng, o) {
+        this.rng = rng;
+        this.o = o;
+      }
+      rng;
+      o;
+      history = [];
+      n = 0;
+      body(messages, model = this.o.model, maxTokens = this.o.maxTokens, thinking = this.o.thinking) {
+        return Buffer.from(
+          JSON.stringify({
+            model,
+            max_tokens: maxTokens,
+            stream: true,
+            ...thinking ? { thinking: { type: "enabled", budget_tokens: 8e3 } } : {},
+            system: [
+              { type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." },
+              { type: "text", text: this.o.system, cache_control: { type: "ephemeral" } }
+            ],
+            ...this.o.tools.length > 0 ? { tools: this.o.tools } : {},
+            messages
+          })
+        );
+      }
+      withMarker() {
+        return this.history.map((m, i) => {
+          if (i !== this.history.length - 1) return m;
+          const blocks = [...m.content];
+          const last = blocks.length - 1;
+          blocks[last] = { ...blocks[last], cache_control: { type: "ephemeral" } };
+          return { ...m, content: blocks };
+        });
+      }
+      /** Next turn: a prompt (first turn, or `prompt` given) or the result of the previous tool call, then the assistant's reply is appended. */
+      next(extraUserText) {
+        const i = this.n++;
+        const [lo, hi] = this.o.resultWords;
+        const big = this.rng() < 0.08;
+        const content = i === 0 ? [{ type: "text", text: `Task: ${text(this.rng, between(this.rng, 20, 60))}` }] : [{ type: "tool_result", tool_use_id: `toolu_${i - 1}`, content: text(this.rng, big ? hi * 3 : between(this.rng, lo, hi)) }];
+        if (extraUserText !== void 0) content.push({ type: "text", text: extraUserText });
+        this.history.push({ role: "user", content });
+        const out = this.body(this.withMarker());
+        this.history.push({
+          role: "assistant",
+          content: [
+            ...this.o.thinking ? [{ type: "thinking", thinking: text(this.rng, 30), signature: `sig_${i}_${hex3(this.rng, 8)}` }] : [],
+            { type: "text", text: text(this.rng, 15) },
+            { type: "tool_use", id: `toolu_${i}`, name: "Bash", input: { input: text(this.rng, 4) } }
+          ]
+        });
+        return out;
+      }
+      /** A compaction request: the whole conversation plus a summary instruction; the history then restarts from the summary. */
+      compact() {
+        this.history.push({ role: "user", content: [{ type: "text", text: "Summarize the conversation so far so work can continue in a fresh context." }] });
+        const out = this.body(this.withMarker(), this.o.model, 2e4, false);
+        this.history = [{ role: "user", content: [{ type: "text", text: `Summary of earlier work: ${text(this.rng, 300)}` }] }];
+        this.n = 1;
+        return out;
       }
     };
-    WARMUP_LOOKBACK_MS2 = 32 * 864e5;
-    usd2 = (micro) => `$${(micro / 1e6).toFixed(2)}`;
-  }
-});
-
-// src/env.ts
-var env_exports = {};
-__export(env_exports, {
-  buildEnvExport: () => buildEnvExport
-});
-function ticketOf(branch, pattern) {
-  const m = new RegExp(pattern ?? DEFAULT_TICKET).exec(branch);
-  return m ? m[1] ?? m[0] : null;
-}
-function buildEnvExport(o) {
-  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
-  lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
-  const ticket = ticketOf(o.branch, o.ticketPattern);
-  if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
-  return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
-`;
-}
-var DEFAULT_TICKET, OWN, oneLine, shellQuote;
-var init_env = __esm({
-  "src/env.ts"() {
-    "use strict";
-    DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
-    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
-    oneLine = (s2) => s2.replace(/[\r\n]+/g, " ").trim();
-    shellQuote = (s2) => `'${s2.replaceAll("'", "'\\''")}'`;
-  }
-});
-
-// src/policy/json-schema.ts
-var json_schema_exports2 = {};
-__export(json_schema_exports2, {
-  policyJsonSchema: () => policyJsonSchema
-});
-function policyJsonSchema() {
-  return external_exports.toJSONSchema(policySchema, { io: "input", unrepresentable: "any" });
-}
-var init_json_schema2 = __esm({
-  "src/policy/json-schema.ts"() {
-    "use strict";
-    init_zod();
-    init_schema();
+    MODELS = { main: "claude-opus-5-5", subagent: "claude-sonnet-5-5", compaction: "claude-opus-5-5", auxiliary: "claude-sonnet-5-5" };
   }
 });
 
@@ -103726,113 +103624,6 @@ var init_engine = __esm({
   }
 });
 
-// src/policy-loader/replay-input.ts
-var replay_input_exports = {};
-__export(replay_input_exports, {
-  loadReplayPolicy: () => loadReplayPolicy,
-  openReplayTraces: () => openReplayTraces
-});
-import { execFileSync } from "node:child_process";
-import { stat as stat2 } from "node:fs/promises";
-import { join as join7, relative, resolve as resolve2 } from "node:path";
-async function openReplayTraces(paths) {
-  for (const p of paths) if ((await stat2(p)).isDirectory()) throw new RawTraceDirError(p);
-  return readLedger(paths);
-}
-function filesAtRef(ref, dir) {
-  if (ref === "" || ref.startsWith("-")) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  const git = (args) => execFileSync("git", args, { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
-  let commit;
-  try {
-    commit = git(["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]).trim();
-  } catch {
-    throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  }
-  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
-  const top = git(["rev-parse", "--show-toplevel"]).trim();
-  const rel = relative(top, resolve2(dir)).split("\\").join("/");
-  const show = (name2) => {
-    try {
-      return git(["show", `${commit}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
-    } catch {
-      return void 0;
-    }
-  };
-  const policy2 = show(POLICY_FILE);
-  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir} at ${ref} (${commit})` }]);
-  const files = { [POLICY_FILE]: policy2 };
-  for (const name2 of policyFileNames(policy2)) {
-    if (name2 === POLICY_FILE) continue;
-    const text = show(name2);
-    if (text !== void 0) files[name2] = text;
-  }
-  return files;
-}
-async function loadReplayPolicy(o) {
-  const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join7(o.headDir, `@${o.source}`), filesAtRef(o.source, o.headDir));
-  const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
-  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
-}
-var init_replay_input = __esm({
-  "src/policy-loader/replay-input.ts"() {
-    "use strict";
-    init_reader();
-    init_bundle();
-    init_compile2();
-    init_load_dir();
-    init_engine();
-    init_load_dir2();
-  }
-});
-
-// src/replay/render-json.ts
-var render_json_exports = {};
-__export(render_json_exports, {
-  renderJson: () => renderJson
-});
-function renderJson(r) {
-  const ordered = {
-    schemaVersion: r.schemaVersion,
-    window: { sinceMs: r.window.sinceMs, untilMs: r.window.untilMs },
-    tenant: r.tenant,
-    requests: r.requests,
-    sessions: r.sessions,
-    fidelity: {
-      agreement: r.fidelity.agreement,
-      disagreements: r.fidelity.disagreements.map((d) => ({ reason: d.reason, count: d.count })),
-      missingInstances: r.fidelity.missingInstances.map((m) => ({ instance: m.instance, hours: [...m.hours], kind: m.kind }))
-    },
-    base: totals2(r.base),
-    head: totals2(r.head),
-    rerouted: r.rerouted.map((x) => ({ fromRoute: x.fromRoute, toRoute: x.toRoute, requestClass: x.requestClass, count: x.count })),
-    blocked: r.blocked.map((x) => ({ policy: x.policy, reason: x.reason, name: x.name, count: x.count })),
-    cutSessions: r.cutSessions.map((c) => ({
-      policy: c.policy,
-      session: c.session,
-      team: c.team,
-      repo: c.repo,
-      requestClass: c.requestClass,
-      requestIndex: c.requestIndex,
-      cause: c.cause,
-      droppedRequests: c.droppedRequests,
-      droppedCostMicroUsd: c.droppedCostMicroUsd
-    })),
-    budgetHits: r.budgetHits.map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: h.firstHitTs, days: h.days })),
-    exactness: r.exactness.map((e) => ({ output: e.output, exactness: e.exactness, applied: e.applied })),
-    gates: { failed: [...r.gates.failed] }
-  };
-  return `${JSON.stringify(ordered, null, 2)}
-`;
-}
-var totals2;
-var init_render_json = __esm({
-  "src/replay/render-json.ts"() {
-    "use strict";
-    totals2 = (t) => ({ costMicroUsd: t.costMicroUsd, costBasis: t.costBasis, estimated: t.estimated, forwarded: t.forwarded, blocked: t.blocked });
-  }
-});
-
 // src/replay/render-terminal.ts
 var render_terminal_exports = {};
 __export(render_terminal_exports, {
@@ -103916,6 +103707,608 @@ var init_render_terminal2 = __esm({
       "not-computed": "not computed",
       never: "never"
     };
+  }
+});
+
+// src/demo/example-files.ts
+var EXAMPLE_BASE, EXAMPLE_HEAD;
+var init_example_files = __esm({
+  "src/demo/example-files.ts"() {
+    "use strict";
+    EXAMPLE_BASE = {
+      "policy.yaml": 'apiVersion: tokenyard/v1\nkind: Policy\nmetadata:\n  name: acme-coding-agents\n  owners: ["@acme/platform"]          # informational\n\npricing: ./prices.yaml                # versioned price table; part of the bundle\nkeys: ./keys.yaml                     # key hash, tenant, team, name, kind (developer|service), billing (api)\n\nproviders:\n  anthropic:\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY }\n  anthropic-backup:                   # second workspace; a fallback here starts a cold cache\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY_BACKUP }\n  openai:\n    format: openai\n    baseUrl: https://api.openai.com/v1\n    credential: { env: OPENAI_API_KEY }\n\ntenants:\n  acme: { teams: [platform, web, data] }\n\nroutes:                               # first match wins\n  - name: claude-code\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;\n    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).\n    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]\n  - name: codex\n    match: { surface: openai-responses, traffic: coding-agent }\n    chain: [openai]\n  - name: support-summaries\n    match: { traffic: product, feature: support-summary }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5    # product traffic only\n    criticality: sheddable\n  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too\n    match: { traffic: product }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5\n    criticality: sheddable\n\nbudgets:\n  - { name: org-month,  scope: tenant,  window: month, usd: 6000, onExceed: block }\n  - { name: team-day,   scope: team,    window: day,   usd: 300,  onExceed: block }\n  - { name: dev-day,    scope: key,     window: day,   usd: 40,   onExceed: block, mode: audit }\n  - { name: session,    scope: session,                usd: 25,   onExceed: block, mode: audit }\n\nreservation:\n  estimator: worst-case               # worst-case | session-aware\n  onOverrun: allow-and-debit\n  serverToolsWithoutMaxUses: block    # block | assume (assume prices assumedMaxUses and voids the bound, 7.4)\n\nrateLimits:\n  - { name: dev-rpm, scope: key, rpm: 120, burst: 30 }\n  - { name: dev-streams, scope: key, concurrentStreams: 8 }   # checked inside admit, released at settle\n\nguardrails:\n  secrets:\n    rules: default                    # curated prefix rules, section 6.6\n    codingAgent: block                # block | warn\n    product: redact                   # block | warn | redact\n    entropyOnly: warn                 # entropy-only hits never block\n    taintTtlHours: 24                 # how long a session stays tainted after a block\n  pii:\n    product: redact                   # email, PESEL, IBAN, card numbers with Luhn\n\nfailure:\n  counterStoreDown: { rateLimits: open, budgets: closed }\n  unpricedModel: allow-and-flag       # block | allow-and-flag\n  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }\n  retryBudgetRatio: 0.1\n\nci:\n  failOn:\n    cutSessions: 0                    # fail the check if any recorded session would be cut mid-task\n    costIncreasePct: 10\n',
+      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-02\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
+      "keys.yaml": '- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}\n- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}\n'
+    };
+    EXAMPLE_HEAD = {
+      "policy.yaml": 'apiVersion: tokenyard/v1\nkind: Policy\nmetadata:\n  name: acme-coding-agents\n  owners: ["@acme/platform"]          # informational\n\npricing: ./prices.yaml                # versioned price table; part of the bundle\nkeys: ./keys.yaml                     # key hash, tenant, team, name, kind (developer|service), billing (api)\n\nproviders:\n  anthropic:\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY }\n  anthropic-backup:                   # second workspace; a fallback here starts a cold cache\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY_BACKUP }\n  openai:\n    format: openai\n    baseUrl: https://api.openai.com/v1\n    credential: { env: OPENAI_API_KEY }\n\ntenants:\n  acme: { teams: [platform, web, data] }\n\nroutes:                               # first match wins\n  # The demo PR (spec 13): compaction and auxiliary requests run on a cheaper Claude model. This rewrites the model on\n  # coding-agent traffic, so each route needs allowBodyRewrite: true and a because: line. Requests are still authorised\n  # by the claude-code route below (same allowModels), which header-selected routes cannot widen.\n  - name: claude-code-compaction\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: compaction }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    rewriteModel: claude-haiku-5-5\n    allowBodyRewrite: true\n    because: "compaction summaries do not need the main model; Haiku is priced far below Opus"\n  - name: claude-code-auxiliary\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: auxiliary }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    rewriteModel: claude-haiku-5-5\n    allowBodyRewrite: true\n    because: "titles and command-prefix checks are small tasks; Haiku is priced far below Sonnet"\n  - name: claude-code\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;\n    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).\n    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]\n  - name: codex\n    match: { surface: openai-responses, traffic: coding-agent }\n    chain: [openai]\n  - name: support-summaries\n    match: { traffic: product, feature: support-summary }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5    # product traffic only\n    criticality: sheddable\n  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too\n    match: { traffic: product }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5\n    criticality: sheddable\n\nbudgets:\n  - { name: org-month,  scope: tenant,  window: month, usd: 6000, onExceed: block }\n  - { name: team-day,   scope: team,    window: day,   usd: 6,    onExceed: block }   # was 300; sized for the demo traffic, where only web spends this much\n  - { name: dev-day,    scope: key,     window: day,   usd: 40,   onExceed: block, mode: audit }\n  - { name: session,    scope: session,                usd: 25,   onExceed: block, mode: audit }\n\nreservation:\n  estimator: worst-case               # worst-case | session-aware\n  onOverrun: allow-and-debit\n  serverToolsWithoutMaxUses: block    # block | assume (assume prices assumedMaxUses and voids the bound, 7.4)\n\nrateLimits:\n  - { name: dev-rpm, scope: key, rpm: 120, burst: 30 }\n  - { name: dev-streams, scope: key, concurrentStreams: 8 }   # checked inside admit, released at settle\n\nguardrails:\n  secrets:\n    rules: default                    # curated prefix rules, section 6.6\n    codingAgent: block                # block | warn\n    product: redact                   # block | warn | redact\n    entropyOnly: warn                 # entropy-only hits never block\n    taintTtlHours: 24                 # how long a session stays tainted after a block\n  pii:\n    product: redact                   # email, PESEL, IBAN, card numbers with Luhn\n\nfailure:\n  counterStoreDown: { rateLimits: open, budgets: closed }\n  unpricedModel: allow-and-flag       # block | allow-and-flag\n  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }\n  retryBudgetRatio: 0.1\n\nci:\n  failOn:\n    cutSessions: 0                    # fail the check if any recorded session would be cut mid-task\n    costIncreasePct: 10\n',
+      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-02\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
+      "keys.yaml": '- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}\n- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}\n'
+    };
+  }
+});
+
+// src/demo/policy.ts
+function compileDemo(dir, files, upstream) {
+  const src = parsePolicyFiles(dir, files);
+  const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
+  for (const p of Object.values(src.policy.providers)) {
+    p.baseUrl = upstream;
+    p.credential = { env: DEMO_CREDENTIAL_ENV };
+  }
+  src.keys = DEMO_DEVELOPERS.map(
+    (d) => ({ hash: hashKey(demoKey(d.name)), keyId: `key_${hashKey(demoKey(d.name)).slice(0, 8)}`, tenant: DEMO_TENANT, team: d.team, name: d.name, kind: "developer", billing: "api" })
+  );
+  return compilePolicy(src, revision, { experimentalSubscription: false });
+}
+function demoPolicies(upstream) {
+  return { base: compileDemo("examples/policy", EXAMPLE_BASE, upstream), head: compileDemo("examples/policy-head", EXAMPLE_HEAD, upstream) };
+}
+var DEMO_CREDENTIAL_ENV, DEMO_TENANT, demoKey;
+var init_policy = __esm({
+  "src/demo/policy.ts"() {
+    "use strict";
+    init_auth();
+    init_traffic();
+    init_bundle();
+    init_compile2();
+    init_load_dir();
+    init_example_files();
+    DEMO_CREDENTIAL_ENV = "TOKENYARD_DEMO_UPSTREAM_KEY";
+    DEMO_TENANT = "acme";
+    demoKey = (name2) => `ty_live_demo_${name2}`;
+  }
+});
+
+// src/demo/run.ts
+var run_exports = {};
+__export(run_exports, {
+  DEMO_DAYS: () => DEMO_DAYS,
+  recordDemo: () => recordDemo,
+  runDemo: () => runDemo
+});
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join as join6 } from "node:path";
+function outputTokens(seed, body) {
+  let max = 32e3;
+  try {
+    const m = JSON.parse(body.toString("utf8")).max_tokens;
+    if (typeof m === "number") max = m;
+  } catch {
+  }
+  const rng = mulberry32(seed ^ body.length ^ (body.at(-97) ?? 0) << 8);
+  if (max <= 512) return 30 + Math.floor(rng() * 90);
+  if (max === 2e4) return 1800 + Math.floor(rng() * 1400);
+  return 120 + Math.floor(rng() * 1300);
+}
+async function recordDemo(o) {
+  const days = o.days ?? DEMO_DAYS;
+  let now = DEMO_START_MS;
+  const clock = () => now;
+  const prevKey = process.env[DEMO_CREDENTIAL_ENV];
+  process.env[DEMO_CREDENTIAL_ENV] = "demo-not-a-key";
+  const dir = await mkdtemp(join6(tmpdir(), "tokenyard-demo-"));
+  const scenario = (r) => ({ kind: "ok", ttftMs: 0, tokensPerSec: 0, pingEveryMs: null, outputTokens: outputTokens(o.seed, r.body) });
+  const mock = await startAnthropicMock({ now: clock });
+  mock.setScenario(scenario);
+  const { base, head } = demoPolicies(mock.url);
+  const store = createMemoryStore({ clock });
+  const writer = new TraceWriter({ dir, instanceId: INSTANCE_ID, queueMax: 1e6, clock });
+  let settled = 0;
+  let ids = 0;
+  const gw = createGateway({
+    policy: () => base,
+    store,
+    traces: writer,
+    traceSalt: TRACE_SALT,
+    clock,
+    newId: () => `req_${String(++ids).padStart(6, "0")}`,
+    basePath: null,
+    bodyCapBytes: 32 * 1024 * 1024,
+    experimentalSubscription: false,
+    onSettled: () => void settled++
+  });
+  try {
+    const url2 = await gw.listen(0, "127.0.0.1");
+    let sent = 0;
+    let heartbeatHour = -Infinity;
+    const result = await generateTraffic({
+      gatewayUrl: url2,
+      keys: Object.fromEntries(DEMO_DEVELOPERS.map((d) => [d.name, demoKey(d.name)])),
+      seed: o.seed,
+      days,
+      setTime: (ms) => {
+        for (let h = Math.max(heartbeatHour + HOUR_MS3, Math.ceil(DEMO_START_MS / HOUR_MS3) * HOUR_MS3); h <= ms; h += HOUR_MS3) {
+          now = h;
+          writer.heartbeat();
+          heartbeatHour = h;
+        }
+        now = ms;
+      },
+      // A request is accounted (settled and queued as a trace record) before the next one starts, so record order is fixed.
+      afterRequest: async () => {
+        sent++;
+        for (let i = 0; settled < sent && i < 1e3; i++) await new Promise((r) => setImmediate(r));
+      }
+    });
+    await writer.close();
+    await exportTraces({ dir, sinceMs: DEMO_START_MS, untilMs: DEMO_START_MS + days * DAY_MS5, out: o.traceFile });
+    return { ...result, base, head };
+  } finally {
+    await gw.close();
+    await mock.close();
+    await rm(dir, { recursive: true, force: true });
+    if (prevKey === void 0) delete process.env[DEMO_CREDENTIAL_ENV];
+    else process.env[DEMO_CREDENTIAL_ENV] = prevKey;
+  }
+}
+async function runDemo(o) {
+  const dir = await mkdtemp(join6(tmpdir(), "tokenyard-demo-export-"));
+  try {
+    const file2 = join6(dir, "demo.ndjson.gz");
+    o.out.write(`tokenyard demo: ${DEMO_DAYS} days of synthetic traffic from ${DEMO_DEVELOPERS.length} developers in 3 teams, through a gateway with examples/policy and a mock Anthropic provider (seed ${o.seed}).
+`);
+    const rec = await recordDemo({ seed: o.seed, traceFile: file2 });
+    o.out.write(`${rec.requests} requests in ${rec.sessions} sessions recorded. Replaying them against examples/policy-head (the demo PR: compaction and auxiliary on a cheaper model, a tighter team budget).
+`);
+    const result = await replay({ base: rec.base, head: rec.head, traces: readLedger([file2]), sinceMs: null, tenant: null });
+    if (o.writeTraces) {
+      await copyFile(file2, o.writeTraces);
+      o.out.write(`Traces written to ${o.writeTraces}.
+`);
+    }
+    o.out.write(renderTerminal(result));
+    return result;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+var HOUR_MS3, DAY_MS5, TRACE_SALT, INSTANCE_ID, DEMO_DAYS;
+var init_run = __esm({
+  "src/demo/run.ts"() {
+    "use strict";
+    init_server();
+    init_export();
+    init_reader();
+    init_writer();
+    init_memory_store();
+    init_anthropic();
+    init_traffic();
+    init_scenarios();
+    init_engine();
+    init_render_terminal2();
+    init_policy();
+    HOUR_MS3 = 36e5;
+    DAY_MS5 = 24 * HOUR_MS3;
+    TRACE_SALT = "tokenyard-demo-salt";
+    INSTANCE_ID = "demo0001";
+    DEMO_DAYS = 7;
+  }
+});
+
+// src/edge/keys.ts
+var keys_exports = {};
+__export(keys_exports, {
+  appendKey: () => appendKey,
+  createKey: () => createKey
+});
+import { randomBytes as randomBytes4 } from "node:crypto";
+import { appendFile as appendFile2 } from "node:fs/promises";
+function base62(bytes) {
+  let n = BigInt(`0x${bytes.toString("hex")}`);
+  let out = "";
+  while (n > 0n) {
+    out = B62[Number(n % 62n)] + out;
+    n /= 62n;
+  }
+  return out.padStart(B62_LEN, "0");
+}
+function createKey() {
+  const plaintext = `ty_live_${base62(randomBytes4(32))}`;
+  return { plaintext, hash: hashKey(plaintext) };
+}
+async function appendKey(file2, rec) {
+  await appendFile2(file2, `- ${JSON.stringify(rec)}
+`, "utf8");
+}
+var B62, B62_LEN;
+var init_keys2 = __esm({
+  "src/edge/keys.ts"() {
+    "use strict";
+    init_auth();
+    B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    B62_LEN = 43;
+  }
+});
+
+// src/live/harness.ts
+var harness_exports = {};
+__export(harness_exports, {
+  LIVE_BUDGET: () => LIVE_BUDGET,
+  LIVE_LAST_DAY: () => LIVE_LAST_DAY,
+  LIVE_LOCK_FILE: () => LIVE_LOCK_FILE,
+  LIVE_MAX_USD: () => LIVE_MAX_USD,
+  defaultLivePaths: () => defaultLivePaths,
+  liveGuard: () => liveGuard,
+  loadLivePolicy: () => loadLivePolicy,
+  startLiveHarness: () => startLiveHarness
+});
+import { randomBytes as randomBytes5 } from "node:crypto";
+import { access, constants, mkdir as mkdir3, readdir as readdir2 } from "node:fs/promises";
+import { closeSync, existsSync as existsSync2, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { hostname as hostname3 } from "node:os";
+import { dirname, join as join7 } from "node:path";
+import { fileURLToPath } from "node:url";
+function packageRoot() {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (; ; ) {
+    const pkg = join7(dir, "package.json");
+    if (existsSync2(pkg)) {
+      try {
+        if (JSON.parse(readFileSync(pkg, "utf8")).name === PACKAGE_NAME) return dir;
+      } catch {
+      }
+    }
+    const up = dirname(dir);
+    if (up === dir) throw new Error(`tokenyard live: cannot find the ${PACKAGE_NAME} package root above ${fileURLToPath(import.meta.url)}`);
+    dir = up;
+  }
+}
+function defaultLivePaths() {
+  const root = packageRoot();
+  return { traceDir: join7(root, ".live", "traces"), policyDir: join7(root, "test", "live") };
+}
+function acquireLock(traceDir) {
+  const path2 = join7(traceDir, LIVE_LOCK_FILE);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const fd = openSync(path2, "wx");
+      try {
+        writeSync(fd, `${process.pid}
+`);
+      } finally {
+        closeSync(fd);
+      }
+      break;
+    } catch (e) {
+      if (e.code !== "EEXIST" || attempt > 0) throw e;
+      let holder = Number.NaN;
+      try {
+        holder = Number.parseInt(readFileSync(path2, "utf8").trim(), 10);
+      } catch {
+      }
+      if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
+        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path2})`);
+      }
+      try {
+        unlinkSync(path2);
+      } catch {
+      }
+    }
+  }
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    process.off("exit", release);
+    try {
+      if (readFileSync(path2, "utf8").trim() === String(process.pid)) unlinkSync(path2);
+    } catch {
+    }
+  };
+  process.on("exit", release);
+  return release;
+}
+function liveGuard(env, today) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today) || today > LIVE_LAST_DAY) return { ok: false, reason: `live tests end on ${LIVE_LAST_DAY} (the credits expire); today is ${today}` };
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, reason: "ANTHROPIC_API_KEY is not set (npm run live reads it from .env)" };
+  const raw = env.TOKENYARD_LIVE_BUDGET_USD;
+  if (raw === void 0 || raw.trim() === "") return { ok: false, reason: `TOKENYARD_LIVE_BUDGET_USD is not set (at most ${LIVE_MAX_USD})` };
+  const capUsd = Number(raw);
+  if (!Number.isFinite(capUsd) || capUsd <= 0 || capUsd > LIVE_MAX_USD) return { ok: false, reason: `TOKENYARD_LIVE_BUDGET_USD must be a number above 0 and at most ${LIVE_MAX_USD}` };
+  return { ok: true, capUsd, codexLive: Boolean(env.OPENAI_API_KEY) };
+}
+function loadLivePolicy(o) {
+  const dir = o.dir ?? defaultLivePaths().policyDir;
+  const read = (f) => readFileSync(join7(dir, f), "utf8");
+  const keys2 = `- ${JSON.stringify({ hash: o.keyHash, keyId: `key_${o.keyHash.slice(0, 8)}`, tenant: LIVE_TENANT, team: LIVE_TENANT, name: "live", kind: "developer", billing: "api" })}
+`;
+  const src = parsePolicyFiles(dir, { "policy.yaml": read("policy.yaml"), "prices.yaml": read("prices.yaml"), "keys.yaml": keys2 });
+  const budgets = src.policy.budgets;
+  const total = budgets[0];
+  if (budgets.length !== 1 || total?.name !== LIVE_BUDGET || total.scope !== "tenant" || total.window !== "month") {
+    throw new Error(`the live policy must have exactly one budget, ${LIVE_BUDGET} (scope tenant, window month)`);
+  }
+  total.usd = o.capUsd;
+  total.onExceed = "block";
+  total.mode = "enforce";
+  if (o.upstream !== void 0) {
+    const p = src.policy.providers.anthropic;
+    if (!p) throw new Error("the live policy has no provider anthropic");
+    p.baseUrl = o.upstream;
+  }
+  return compilePolicy(src, "live", { experimentalSubscription: false });
+}
+async function assertReadable(dir) {
+  for (const e of await readdir2(dir, { withFileTypes: true })) {
+    const p = join7(dir, e.name);
+    if (e.isDirectory()) await assertReadable(p);
+    else await access(p, constants.R_OK);
+  }
+}
+async function startLiveHarness(o) {
+  const guard = liveGuard(o.env, o.today);
+  if (!guard.ok) throw new Error(`tokenyard live: ${guard.reason}`);
+  const traceDir = o.traceDir ?? defaultLivePaths().traceDir;
+  const { plaintext: clientKey, hash: hash2 } = createKey();
+  const policy2 = loadLivePolicy({ capUsd: guard.capUsd, keyHash: hash2, ...o.policyDir ? { dir: o.policyDir } : {}, ...o.upstream ? { upstream: o.upstream } : {} });
+  const now = Date.now();
+  let spentMicroUsd;
+  const store = createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: (ids) => runtime.onSwept(ids) });
+  const runtime = createGatewayRuntime();
+  try {
+    await mkdir3(traceDir, { recursive: true });
+  } catch (e) {
+    const code = e.code;
+    throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code ? ` (${code})` : ""}`);
+  }
+  const release = acquireLock(traceDir);
+  try {
+    await assertReadable(traceDir);
+    const records = await loadTraceRecords({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
+    const entries = await warmupEntries(
+      (async function* () {
+        yield* records;
+      })(),
+      policy2,
+      now
+    );
+    await store.seed(entries);
+    spentMicroUsd = entries.reduce((n, e) => n + e.spentMicroUsd, 0);
+  } catch (e) {
+    release();
+    const code = e.code;
+    throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code ? ` (${code})` : ""}; refusing to start without the earlier spend`);
+  }
+  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
+  let ticks = 0;
+  const stopSweeper = startSweeper(store, {
+    intervalMs: SWEEP_INTERVAL_MS,
+    onTick: () => {
+      if (++ticks % 2 === 0) writer.heartbeat();
+    },
+    onError: (e) => console.error(`tokenyard live: sweeper: ${e instanceof Error ? e.message : String(e)}`)
+  });
+  const gw = createGateway({
+    policy: () => policy2,
+    store,
+    runtime,
+    traces: writer,
+    traceSalt: o.env.TOKENYARD_TRACE_SALT || randomBytes5(16).toString("hex"),
+    clock: Date.now,
+    newId: () => ulid(),
+    basePath: null,
+    bodyCapBytes: DEFAULT_BODY_CAP_BYTES,
+    env: o.env
+  });
+  let url2;
+  try {
+    url2 = await gw.listen(o.port, "127.0.0.1");
+  } catch (e) {
+    stopSweeper();
+    await writer.close();
+    release();
+    throw e;
+  }
+  const capMicro = Math.round(guard.capUsd * 1e6);
+  process.stdout.write(
+    [
+      `tokenyard live: gateway ${url2}`,
+      `tokenyard live: client key ${clientKey}`,
+      `tokenyard live: ${LIVE_BUDGET} ${usd2(capMicro)}, spent ${usd2(spentMicroUsd)}, remaining ${usd2(Math.max(0, capMicro - spentMicroUsd))}`,
+      `tokenyard live: codex ${guard.codexLive ? "live" : "not live (no OPENAI_API_KEY)"}`,
+      ""
+    ].join("\n")
+  );
+  return {
+    url: url2,
+    clientKey,
+    spentMicroUsd,
+    async close() {
+      stopSweeper();
+      try {
+        await gw.close();
+        await writer.close();
+      } finally {
+        release();
+      }
+    }
+  };
+}
+var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_LOCK_FILE, PACKAGE_NAME, alive, WARMUP_LOOKBACK_MS2, usd2;
+var init_harness = __esm({
+  "src/live/harness.ts"() {
+    "use strict";
+    init_keys2();
+    init_handler();
+    init_server();
+    init_ulid();
+    init_export();
+    init_writer();
+    init_memory_store();
+    init_open_store();
+    init_sweeper();
+    init_warmup();
+    init_compile2();
+    init_load_dir();
+    LIVE_LAST_DAY = "2026-11-16";
+    LIVE_MAX_USD = 20;
+    LIVE_BUDGET = "live-total";
+    LIVE_TENANT = "live";
+    LIVE_LOCK_FILE = "live.lock";
+    PACKAGE_NAME = "@mateuszkania-im/tokenyard";
+    alive = (pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (e) {
+        return e.code === "EPERM";
+      }
+    };
+    WARMUP_LOOKBACK_MS2 = 32 * 864e5;
+    usd2 = (micro) => `$${(micro / 1e6).toFixed(2)}`;
+  }
+});
+
+// src/env.ts
+var env_exports = {};
+__export(env_exports, {
+  buildEnvExport: () => buildEnvExport
+});
+function ticketOf(branch, pattern) {
+  const m = new RegExp(pattern ?? DEFAULT_TICKET).exec(branch);
+  return m ? m[1] ?? m[0] : null;
+}
+function buildEnvExport(o) {
+  const lines = (o.existing ?? "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !OWN.test(l));
+  lines.push(`x-tokenyard-repo: ${oneLine(o.repo)}`, `x-tokenyard-branch: ${oneLine(o.branch)}`);
+  const ticket = ticketOf(o.branch, o.ticketPattern);
+  if (ticket) lines.push(`x-tokenyard-ticket: ${oneLine(ticket)}`);
+  return `export ANTHROPIC_CUSTOM_HEADERS=${shellQuote(lines.join("\n"))}
+`;
+}
+var DEFAULT_TICKET, OWN, oneLine, shellQuote;
+var init_env = __esm({
+  "src/env.ts"() {
+    "use strict";
+    DEFAULT_TICKET = "[A-Z][A-Z0-9]+-\\d+";
+    OWN = /^x-tokenyard-(repo|branch|ticket)\s*:/i;
+    oneLine = (s2) => s2.replace(/[\r\n]+/g, " ").trim();
+    shellQuote = (s2) => `'${s2.replaceAll("'", "'\\''")}'`;
+  }
+});
+
+// src/policy/json-schema.ts
+var json_schema_exports2 = {};
+__export(json_schema_exports2, {
+  policyJsonSchema: () => policyJsonSchema
+});
+function policyJsonSchema() {
+  return external_exports.toJSONSchema(policySchema, { io: "input", unrepresentable: "any" });
+}
+var init_json_schema2 = __esm({
+  "src/policy/json-schema.ts"() {
+    "use strict";
+    init_zod();
+    init_schema();
+  }
+});
+
+// src/policy-loader/replay-input.ts
+var replay_input_exports = {};
+__export(replay_input_exports, {
+  loadReplayPolicy: () => loadReplayPolicy,
+  openReplayTraces: () => openReplayTraces
+});
+import { execFileSync } from "node:child_process";
+import { stat as stat2 } from "node:fs/promises";
+import { join as join8, relative, resolve as resolve2 } from "node:path";
+async function openReplayTraces(paths) {
+  for (const p of paths) if ((await stat2(p)).isDirectory()) throw new RawTraceDirError(p);
+  return readLedger(paths);
+}
+function filesAtRef(ref, dir) {
+  if (ref === "" || ref.startsWith("-")) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+  const git = (args) => execFileSync("git", args, { cwd: resolve2(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  let commit;
+  try {
+    commit = git(["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]).trim();
+  } catch {
+    throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+  }
+  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
+  const top = git(["rev-parse", "--show-toplevel"]).trim();
+  const rel = relative(top, resolve2(dir)).split("\\").join("/");
+  const show = (name2) => {
+    try {
+      return git(["show", `${commit}:${rel === "" ? name2 : `${rel}/${name2}`}`]);
+    } catch {
+      return void 0;
+    }
+  };
+  const policy2 = show(POLICY_FILE);
+  if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir} at ${ref} (${commit})` }]);
+  const files = { [POLICY_FILE]: policy2 };
+  for (const name2 of policyFileNames(policy2)) {
+    if (name2 === POLICY_FILE) continue;
+    const text2 = show(name2);
+    if (text2 !== void 0) files[name2] = text2;
+  }
+  return files;
+}
+async function loadReplayPolicy(o) {
+  const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
+  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join8(o.headDir, `@${o.source}`), filesAtRef(o.source, o.headDir));
+  const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
+  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+}
+var init_replay_input = __esm({
+  "src/policy-loader/replay-input.ts"() {
+    "use strict";
+    init_reader();
+    init_bundle();
+    init_compile2();
+    init_load_dir();
+    init_engine();
+    init_load_dir2();
+  }
+});
+
+// src/replay/render-json.ts
+var render_json_exports = {};
+__export(render_json_exports, {
+  renderJson: () => renderJson
+});
+function renderJson(r) {
+  const ordered = {
+    schemaVersion: r.schemaVersion,
+    window: { sinceMs: r.window.sinceMs, untilMs: r.window.untilMs },
+    tenant: r.tenant,
+    requests: r.requests,
+    sessions: r.sessions,
+    fidelity: {
+      agreement: r.fidelity.agreement,
+      disagreements: r.fidelity.disagreements.map((d) => ({ reason: d.reason, count: d.count })),
+      missingInstances: r.fidelity.missingInstances.map((m) => ({ instance: m.instance, hours: [...m.hours], kind: m.kind }))
+    },
+    base: totals2(r.base),
+    head: totals2(r.head),
+    rerouted: r.rerouted.map((x) => ({ fromRoute: x.fromRoute, toRoute: x.toRoute, requestClass: x.requestClass, count: x.count })),
+    blocked: r.blocked.map((x) => ({ policy: x.policy, reason: x.reason, name: x.name, count: x.count })),
+    cutSessions: r.cutSessions.map((c) => ({
+      policy: c.policy,
+      session: c.session,
+      team: c.team,
+      repo: c.repo,
+      requestClass: c.requestClass,
+      requestIndex: c.requestIndex,
+      cause: c.cause,
+      droppedRequests: c.droppedRequests,
+      droppedCostMicroUsd: c.droppedCostMicroUsd
+    })),
+    budgetHits: r.budgetHits.map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: h.firstHitTs, days: h.days })),
+    exactness: r.exactness.map((e) => ({ output: e.output, exactness: e.exactness, applied: e.applied })),
+    gates: { failed: [...r.gates.failed] }
+  };
+  return `${JSON.stringify(ordered, null, 2)}
+`;
+}
+var totals2;
+var init_render_json = __esm({
+  "src/replay/render-json.ts"() {
+    "use strict";
+    totals2 = (t) => ({ costMicroUsd: t.costMicroUsd, costBasis: t.costBasis, estimated: t.estimated, forwarded: t.forwarded, blocked: t.blocked });
   }
 });
 
@@ -107049,9 +107442,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
       helpWidth: context.helpWidth,
       outputHasColors: context.hasColors
     });
-    const text = helper.formatHelp(this, helper);
-    if (context.hasColors) return text;
-    return this._outputConfiguration.stripColor(text);
+    const text2 = helper.formatHelp(this, helper);
+    if (context.hasColors) return text2;
+    return this._outputConfiguration.stripColor(text2);
   }
   /**
    * @typedef HelpContext
@@ -107211,7 +107604,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {(string | Function)} text - string to add, or a function returning a string
    * @return {Command} `this` command for chaining
    */
-  addHelpText(position, text) {
+  addHelpText(position, text2) {
     const allowedValues = ["beforeAll", "before", "after", "afterAll"];
     if (!allowedValues.includes(position)) {
       throw new Error(`Unexpected value for position to addHelpText.
@@ -107220,10 +107613,10 @@ Expecting one of '${allowedValues.join("', '")}'`);
     const helpEvent = `${position}Help`;
     this.on(helpEvent, (context) => {
       let helpStr;
-      if (typeof text === "function") {
-        helpStr = text({ error: context.error, command: context.command });
+      if (typeof text2 === "function") {
+        helpStr = text2({ error: context.error, command: context.command });
       } else {
-        helpStr = text;
+        helpStr = text2;
       }
       if (helpStr) {
         context.write(`${helpStr}
@@ -107520,6 +107913,12 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
+});
+program2.command("demo").description("one-process demo: synthetic coding-agent traffic through the gateway, then a replay of the demo PR policy change").option("--seed <n>", "seed of the traffic generator; the same seed gives byte-identical traces", "1").option("--write-traces <file>", "also write the recorded traces as an export file (a name ending in .gz is gzipped)").action(async (o) => {
+  const seed = Number(o.seed);
+  if (!Number.isInteger(seed)) return void (console.error("tokenyard demo: --seed must be an integer"), process.exit(1));
+  const { runDemo: runDemo2 } = await Promise.resolve().then(() => (init_run(), run_exports));
+  await runDemo2({ out: process.stdout, seed, ...o.writeTraces ? { writeTraces: o.writeTraces } : {} });
 });
 program2.command("live", { hidden: true }).description("live-test harness: the gateway with the live policy and the tokenyard-enforced cap (npm run live)").option("--port <n>", "port to listen on (0 picks a free one)", "4000").action(async (o) => {
   const { startLiveHarness: startLiveHarness2 } = await Promise.resolve().then(() => (init_harness(), harness_exports));

@@ -152,6 +152,17 @@ program
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
+program
+  .command('demo')
+  .description('one-process demo: synthetic coding-agent traffic through the gateway, then a replay of the demo PR policy change')
+  .option('--seed <n>', 'seed of the traffic generator; the same seed gives byte-identical traces', '1')
+  .option('--write-traces <file>', 'also write the recorded traces as an export file (a name ending in .gz is gzipped)')
+  .action(async (o: { seed: string; writeTraces?: string }) => {
+    const seed = Number(o.seed);
+    if (!Number.isInteger(seed)) return void (console.error('tokenyard demo: --seed must be an integer'), process.exit(1));
+    const { runDemo } = await import('./demo/run.js');
+    await runDemo({ out: process.stdout, seed, ...(o.writeTraces ? { writeTraces: o.writeTraces } : {}) });
+  });
 // Live tests (spec 14.1): `npm run live` reads .env with node --env-file; hidden from --help.
 program
   .command('live', { hidden: true })
