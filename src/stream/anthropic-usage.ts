@@ -114,7 +114,7 @@ export class AnthropicUsageAccumulator {
     const usage = { ...this.usage };
     if (!this.deltaOutput) {
       usage.output = Math.ceil(this.chars / 4);
-      return { ...base, usage, source: 'estimated' };
+      return { ...base, usage, source: this.sawStop ? 'final' : 'estimated' };
     }
     return { ...base, usage, source: this.sawStop ? 'final' : 'partial' };
   }

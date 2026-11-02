@@ -83,3 +83,11 @@ test('parseAnthropicJsonUsage: absent usage or garbage gives none', () => {
   expect(parseAnthropicJsonUsage(Buffer.from('{"model":"m"}'))).toMatchObject({ source: 'none', usage: null, responseModel: 'm' });
   expect(parseAnthropicJsonUsage(Buffer.from('<html>'))).toMatchObject({ source: 'none', usage: null });
 });
+
+test('message_stop seen with no delta output is final, output estimated from chars', () => {
+  const acc = new AnthropicUsageAccumulator();
+  acc.onEvent(ev('message_start', { message: { model: 'm', usage: { input_tokens: 2, output_tokens: 1 } } }));
+  acc.onEvent(ev('content_block_delta', { index: 0, delta: { type: 'text_delta', text: '123456789' } }));
+  acc.onEvent(ev('message_stop', {}));
+  expect(acc.result()).toMatchObject({ source: 'final', sawStop: true, usage: { input: 2, output: 3 } });
+});
