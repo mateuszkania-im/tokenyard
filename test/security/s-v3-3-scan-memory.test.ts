@@ -37,8 +37,9 @@ test.skipIf(!TIMING_BOUNDS)('S-V3-3 32 MiB hostile bodies, both routes, last tur
     expect(row.heapLeftMb, what).toBeLessThan(32);
     // The work bound is CPU time, which competing processes do not inflate (the stall did, past 1 s on a loaded machine).
     // Measured: at most about 0.2 s of stall and of CPU (dense matches: the scan stops at its match budget); the CPU
-    // time includes the RSS sampler thread and parallel GC. The stall keeps a ceiling that only a hang would reach.
-    expect(row.cpuMs, what).toBeLessThan(1_500);
+    // time includes the RSS sampler thread and parallel GC. The bound is about four times the measured 0.22 s (V5 review;
+    // the child runs uninstrumented, so coverage does not scale it). The stall keeps a ceiling only a hang would reach.
+    expect(row.cpuMs, what).toBeLessThan(1_000);
     expect(row.lagMs, what).toBeLessThan(10_000);
   }
 }, 150_000);
