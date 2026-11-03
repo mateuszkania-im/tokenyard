@@ -112,30 +112,3 @@ export function topLevelValueRanges(b: Buffer, key: string): Array<{ start: numb
   }
   return out;
 }
-
-
-/** Every key of the JSON object `b` in order, unescaped, duplicates kept; null when `b` is not an object. */
-export function objectKeys(b: Buffer): string[] | null {
-  let i = skipWs(b, 0);
-  if (b[i] !== 0x7b) return null;
-  i++;
-  const out: string[] = [];
-  for (;;) {
-    i = skipWs(b, i);
-    if (i >= b.length || b[i] !== QUOTE) break;
-    const keyStart = i;
-    i = skipString(b, i);
-    const rawKey = b.toString('utf8', keyStart, i);
-    try {
-      out.push(rawKey.includes('\\') ? (JSON.parse(rawKey) as string) : rawKey.slice(1, -1));
-    } catch {
-      return null;
-    }
-    i = skipWs(b, i) + 1; // colon
-    i = skipWs(b, i);
-    i = skipValue(b, i);
-    i = skipWs(b, i);
-    if (b[i] === 0x2c) i++;
-  }
-  return out;
-}

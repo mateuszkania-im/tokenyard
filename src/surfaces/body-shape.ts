@@ -1,41 +1,77 @@
-// Request body shapes the gateway refuses because another parser may read them differently (security review A5, C7).
-// Pure: no I/O. The gateway prices and authorises its own JSON.parse of bytes it forwards unchanged, so a body that the
-// provider's parser could read another way (a UTF-8 BOM some parsers skip, duplicate keys a first-wins parser keeps)
-// is refused instead of guessed at.
-import { arrayElementRanges, objectKeys } from './json-ranges.js';
+// Request body shapes the gateway refuses because another parser may read them differently (security review A5, C7,
+// S25-2). Pure: no I/O. The gateway prices, authorises and scans its own JSON.parse of bytes it forwards unchanged, so
+// a body that the provider's parser could read another way (a UTF-8 BOM some parsers skip, a duplicate key a
+// first-wins parser keeps, at any depth) is refused instead of guessed at.
 
-export type BodyShapeRefusal = 'body-bom' | 'duplicate-keys';
+export type BodyShapeRefusal = 'body-bom' | 'duplicate-keys' | 'too-deep';
 
-const BOM = [0xef, 0xbb, 0xbf] as const;
-/** Namespaces nest tools this deep at most (as the Responses extractor reads them). */
-const MAX_TOOL_DEPTH = 4;
+/** Objects and arrays nested deeper than this are refused (tool schemas and tool results stay far below it). */
+export const MAX_BODY_DEPTH = 128;
 
-function hasDuplicate(keys: string[]): boolean {
-  return new Set(keys).size !== keys.length;
-}
+const QUOTE = 0x22;
+const BACKSLASH = 0x5c;
+const COMMA = 0x2c;
 
-/** A duplicate key in a `tools` entry, or in a namespace's own `tools`, at any depth the extractor reads. */
-function duplicateInTools(b: Buffer, depth: number): boolean {
-  for (const r of arrayElementRanges(b, 'tools') ?? []) {
-    if (b[r.start] !== 0x7b) continue;
-    const entry = b.subarray(r.start, r.end);
-    const keys = objectKeys(entry);
-    if (keys === null || hasDuplicate(keys)) return true;
-    if (depth < MAX_TOOL_DEPTH && keys.includes('tools') && duplicateInTools(entry, depth + 1)) return true;
+/**
+ * One linear pass over a body JSON.parse accepted: a Set of keys (compared after unescaping) per open object, so a
+ * repeated key in any object at any depth, inside arrays included, is found without pairwise compares.
+ */
+function scan(b: Buffer): BodyShapeRefusal | null {
+  // One entry per open container: a Set for an object, null for an array.
+  const stack: Array<Set<string> | null> = [];
+  // True when the next string in the current object is a key.
+  let expectKey = false;
+  let i = 0;
+  while (i < b.length) {
+    const c = b[i] as number;
+    if (c === QUOTE) {
+      const start = i;
+      let escaped = false;
+      i++;
+      while (i < b.length && b[i] !== QUOTE) {
+        if (b[i] === BACKSLASH) {
+          escaped = true;
+          i++;
+        }
+        i++;
+      }
+      i++;
+      const top = stack.at(-1);
+      if (expectKey && top) {
+        const rawKey = b.toString('utf8', start, i);
+        let key: string;
+        try {
+          key = escaped ? (JSON.parse(rawKey) as string) : rawKey.slice(1, -1);
+        } catch {
+          return 'duplicate-keys'; // not reachable on a body JSON.parse accepted; fail closed
+        }
+        if (top.has(key)) return 'duplicate-keys';
+        top.add(key);
+        expectKey = false;
+      }
+      continue;
+    }
+    if (c === 0x7b || c === 0x5b) {
+      if (stack.length >= MAX_BODY_DEPTH) return 'too-deep';
+      stack.push(c === 0x7b ? new Set() : null);
+      expectKey = c === 0x7b;
+    } else if (c === 0x7d || c === 0x5d) {
+      stack.pop();
+      expectKey = false;
+    } else if (c === COMMA) {
+      expectKey = stack.at(-1) instanceof Set;
+    }
+    i++; // colons, whitespace, numbers, literals
   }
-  return false;
+  return null;
 }
 
 /**
  * Why the body must be refused, or null. A UTF-8 BOM is refused whether or not JSON.parse accepts the rest; duplicate
- * keys are checked only on a body JSON.parse accepted: any key repeated at the top level (keys compared unescaped), or
- * inside one `tools` entry.
+ * keys (in any object, at any depth) and nesting deeper than MAX_BODY_DEPTH are checked on a body JSON.parse accepted.
  */
 export function bodyShapeRefusal(body: Buffer, parsed: boolean): BodyShapeRefusal | null {
-  if (body.length >= 3 && body[0] === BOM[0] && body[1] === BOM[1] && body[2] === BOM[2]) return 'body-bom';
+  if (body.length >= 3 && body[0] === 0xef && body[1] === 0xbb && body[2] === 0xbf) return 'body-bom';
   if (!parsed) return null;
-  const top = objectKeys(body);
-  if (top === null) return null;
-  if (hasDuplicate(top) || duplicateInTools(body, 0)) return 'duplicate-keys';
-  return null;
+  return scan(body);
 }

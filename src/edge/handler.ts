@@ -595,7 +595,8 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       const reason = shape ?? 'unparsable-body';
       const msg =
         reason === 'body-bom' ? 'the request body starts with a byte order mark; send plain UTF-8 JSON'
-        : reason === 'duplicate-keys' ? 'the request body repeats a JSON key (at the top level or inside a tool); send each key once'
+        : reason === 'duplicate-keys' ? 'the request body repeats a key inside one JSON object; send each key once'
+        : reason === 'too-deep' ? 'the request body nests objects or arrays too deeply'
         : 'the request body is not valid JSON, and this request touches an enforced budget, so it cannot be priced; it was not sent';
       sendError(req, res, own(400, 'invalid_request_error', reason, msg, null, { shouldRetry: false }));
       return early({ features, guardrailHits: guard.hits, status: 400, decision: { action: 'block', reason }, errorClass: 'invalid_request_error' });

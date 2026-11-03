@@ -7514,7 +7514,7 @@ var require_cst = __commonJS({
     var cstScalar = require_cst_scalar();
     var cstStringify = require_cst_stringify();
     var cstVisit = require_cst_visit();
-    var BOM2 = "\uFEFF";
+    var BOM = "\uFEFF";
     var DOCUMENT = "";
     var FLOW_END = "";
     var SCALAR = "";
@@ -7522,7 +7522,7 @@ var require_cst = __commonJS({
     var isScalar2 = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
     function prettyToken(token) {
       switch (token) {
-        case BOM2:
+        case BOM:
           return "<BOM>";
         case DOCUMENT:
           return "<DOC>";
@@ -7536,7 +7536,7 @@ var require_cst = __commonJS({
     }
     function tokenType(source) {
       switch (source) {
-        case BOM2:
+        case BOM:
           return "byte-order-mark";
         case DOCUMENT:
           return "doc-mode";
@@ -7598,7 +7598,7 @@ var require_cst = __commonJS({
     exports.setScalarValue = cstScalar.setScalarValue;
     exports.stringify = cstStringify.stringify;
     exports.visit = cstVisit.visit;
-    exports.BOM = BOM2;
+    exports.BOM = BOM;
     exports.DOCUMENT = DOCUMENT;
     exports.FLOW_END = FLOW_END;
     exports.SCALAR = SCALAR;
@@ -30395,170 +30395,67 @@ var init_decide = __esm({
   }
 });
 
-// src/surfaces/json-ranges.ts
-function skipWs(b, i) {
-  while (i < b.length && (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13)) i++;
-  return i;
-}
-function skipString(b, i) {
-  i++;
+// src/surfaces/body-shape.ts
+function scan(b) {
+  const stack = [];
+  let expectKey = false;
+  let i = 0;
   while (i < b.length) {
     const c = b[i];
-    if (c === BACKSLASH) i += 2;
-    else if (c === QUOTE) return i + 1;
-    else i++;
-  }
-  return i;
-}
-function skipValue(b, i) {
-  const c = b[i];
-  if (c === QUOTE) return skipString(b, i);
-  if (c === 123 || c === 91) {
-    let depth = 0;
-    while (i < b.length) {
-      const d = b[i];
-      if (d === QUOTE) {
-        i = skipString(b, i);
-        continue;
-      }
-      if (d === 123 || d === 91) depth++;
-      else if (d === 125 || d === 93) depth--;
+    if (c === QUOTE) {
+      const start = i;
+      let escaped = false;
       i++;
-      if (depth === 0) return i;
-    }
-    return i;
-  }
-  while (i < b.length && b[i] !== 44 && b[i] !== 125 && b[i] !== 93 && b[i] !== 32 && b[i] !== 10 && b[i] !== 13 && b[i] !== 9) i++;
-  return i;
-}
-function arrayElementRanges(b, name2) {
-  let i = skipWs(b, 0);
-  if (b[i] !== 123) return null;
-  i++;
-  let result = null;
-  for (; ; ) {
-    i = skipWs(b, i);
-    if (i >= b.length || b[i] === 125) break;
-    const keyStart = i;
-    i = skipString(b, i);
-    const rawKey = b.toString("utf8", keyStart, i);
-    const key = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
-    i = skipWs(b, i) + 1;
-    i = skipWs(b, i);
-    if (key === name2 && b[i] === 91) {
-      i++;
-      const all = [];
-      for (; ; ) {
-        i = skipWs(b, i);
-        if (i >= b.length) break;
-        if (b[i] === 93) {
+      while (i < b.length && b[i] !== QUOTE) {
+        if (b[i] === BACKSLASH) {
+          escaped = true;
           i++;
-          break;
         }
-        const start = i;
-        i = skipValue(b, i);
-        all.push({ start, end: i });
-        i = skipWs(b, i);
-        if (b[i] === 44) i++;
+        i++;
       }
-      result = all;
-    } else {
-      i = skipValue(b, i);
+      i++;
+      const top = stack.at(-1);
+      if (expectKey && top) {
+        const rawKey = b.toString("utf8", start, i);
+        let key;
+        try {
+          key = escaped ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+        } catch {
+          return "duplicate-keys";
+        }
+        if (top.has(key)) return "duplicate-keys";
+        top.add(key);
+        expectKey = false;
+      }
+      continue;
     }
-    i = skipWs(b, i);
-    if (b[i] === 44) i++;
-  }
-  return result;
-}
-function topLevelValueRanges(b, key) {
-  const out = [];
-  let i = skipWs(b, 0);
-  if (b[i] !== 123) return out;
-  i++;
-  for (; ; ) {
-    i = skipWs(b, i);
-    if (i >= b.length || b[i] !== QUOTE) break;
-    const keyStart = i;
-    i = skipString(b, i);
-    const rawKey = b.toString("utf8", keyStart, i);
-    let k;
-    try {
-      k = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
-    } catch {
-      return [];
+    if (c === 123 || c === 91) {
+      if (stack.length >= MAX_BODY_DEPTH) return "too-deep";
+      stack.push(c === 123 ? /* @__PURE__ */ new Set() : null);
+      expectKey = c === 123;
+    } else if (c === 125 || c === 93) {
+      stack.pop();
+      expectKey = false;
+    } else if (c === COMMA) {
+      expectKey = stack.at(-1) instanceof Set;
     }
-    i = skipWs(b, i) + 1;
-    i = skipWs(b, i);
-    const start = i;
-    i = skipValue(b, i);
-    if (k === key) out.push({ start, end: i });
-    i = skipWs(b, i);
-    if (b[i] === 44) i++;
+    i++;
   }
-  return out;
-}
-function objectKeys(b) {
-  let i = skipWs(b, 0);
-  if (b[i] !== 123) return null;
-  i++;
-  const out = [];
-  for (; ; ) {
-    i = skipWs(b, i);
-    if (i >= b.length || b[i] !== QUOTE) break;
-    const keyStart = i;
-    i = skipString(b, i);
-    const rawKey = b.toString("utf8", keyStart, i);
-    try {
-      out.push(rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1));
-    } catch {
-      return null;
-    }
-    i = skipWs(b, i) + 1;
-    i = skipWs(b, i);
-    i = skipValue(b, i);
-    i = skipWs(b, i);
-    if (b[i] === 44) i++;
-  }
-  return out;
-}
-var QUOTE, BACKSLASH;
-var init_json_ranges = __esm({
-  "src/surfaces/json-ranges.ts"() {
-    "use strict";
-    QUOTE = 34;
-    BACKSLASH = 92;
-  }
-});
-
-// src/surfaces/body-shape.ts
-function hasDuplicate(keys2) {
-  return new Set(keys2).size !== keys2.length;
-}
-function duplicateInTools(b, depth) {
-  for (const r of arrayElementRanges(b, "tools") ?? []) {
-    if (b[r.start] !== 123) continue;
-    const entry = b.subarray(r.start, r.end);
-    const keys2 = objectKeys(entry);
-    if (keys2 === null || hasDuplicate(keys2)) return true;
-    if (depth < MAX_TOOL_DEPTH && keys2.includes("tools") && duplicateInTools(entry, depth + 1)) return true;
-  }
-  return false;
-}
-function bodyShapeRefusal(body, parsed) {
-  if (body.length >= 3 && body[0] === BOM[0] && body[1] === BOM[1] && body[2] === BOM[2]) return "body-bom";
-  if (!parsed) return null;
-  const top = objectKeys(body);
-  if (top === null) return null;
-  if (hasDuplicate(top) || duplicateInTools(body, 0)) return "duplicate-keys";
   return null;
 }
-var BOM, MAX_TOOL_DEPTH;
+function bodyShapeRefusal(body, parsed) {
+  if (body.length >= 3 && body[0] === 239 && body[1] === 187 && body[2] === 191) return "body-bom";
+  if (!parsed) return null;
+  return scan(body);
+}
+var MAX_BODY_DEPTH, QUOTE, BACKSLASH, COMMA;
 var init_body_shape = __esm({
   "src/surfaces/body-shape.ts"() {
     "use strict";
-    init_json_ranges();
-    BOM = [239, 187, 191];
-    MAX_TOOL_DEPTH = 4;
+    MAX_BODY_DEPTH = 128;
+    QUOTE = 34;
+    BACKSLASH = 92;
+    COMMA = 44;
   }
 });
 
@@ -31064,6 +30961,117 @@ var init_tee = __esm({
   }
 });
 
+// src/surfaces/json-ranges.ts
+function skipWs(b, i) {
+  while (i < b.length && (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13)) i++;
+  return i;
+}
+function skipString(b, i) {
+  i++;
+  while (i < b.length) {
+    const c = b[i];
+    if (c === BACKSLASH2) i += 2;
+    else if (c === QUOTE2) return i + 1;
+    else i++;
+  }
+  return i;
+}
+function skipValue(b, i) {
+  const c = b[i];
+  if (c === QUOTE2) return skipString(b, i);
+  if (c === 123 || c === 91) {
+    let depth = 0;
+    while (i < b.length) {
+      const d = b[i];
+      if (d === QUOTE2) {
+        i = skipString(b, i);
+        continue;
+      }
+      if (d === 123 || d === 91) depth++;
+      else if (d === 125 || d === 93) depth--;
+      i++;
+      if (depth === 0) return i;
+    }
+    return i;
+  }
+  while (i < b.length && b[i] !== 44 && b[i] !== 125 && b[i] !== 93 && b[i] !== 32 && b[i] !== 10 && b[i] !== 13 && b[i] !== 9) i++;
+  return i;
+}
+function arrayElementRanges(b, name2) {
+  let i = skipWs(b, 0);
+  if (b[i] !== 123) return null;
+  i++;
+  let result = null;
+  for (; ; ) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] === 125) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString("utf8", keyStart, i);
+    const key = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+    i = skipWs(b, i) + 1;
+    i = skipWs(b, i);
+    if (key === name2 && b[i] === 91) {
+      i++;
+      const all = [];
+      for (; ; ) {
+        i = skipWs(b, i);
+        if (i >= b.length) break;
+        if (b[i] === 93) {
+          i++;
+          break;
+        }
+        const start = i;
+        i = skipValue(b, i);
+        all.push({ start, end: i });
+        i = skipWs(b, i);
+        if (b[i] === 44) i++;
+      }
+      result = all;
+    } else {
+      i = skipValue(b, i);
+    }
+    i = skipWs(b, i);
+    if (b[i] === 44) i++;
+  }
+  return result;
+}
+function topLevelValueRanges(b, key) {
+  const out = [];
+  let i = skipWs(b, 0);
+  if (b[i] !== 123) return out;
+  i++;
+  for (; ; ) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] !== QUOTE2) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString("utf8", keyStart, i);
+    let k;
+    try {
+      k = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+    } catch {
+      return [];
+    }
+    i = skipWs(b, i) + 1;
+    i = skipWs(b, i);
+    const start = i;
+    i = skipValue(b, i);
+    if (k === key) out.push({ start, end: i });
+    i = skipWs(b, i);
+    if (b[i] === 44) i++;
+  }
+  return out;
+}
+var QUOTE2, BACKSLASH2;
+var init_json_ranges = __esm({
+  "src/surfaces/json-ranges.ts"() {
+    "use strict";
+    QUOTE2 = 34;
+    BACKSLASH2 = 92;
+  }
+});
+
 // src/surfaces/anthropic-messages.ts
 import { createHash as createHash5 } from "node:crypto";
 function hasExpandingField(parsed, tools) {
@@ -31186,7 +31194,7 @@ function rewriteTopLevelModel(b, model) {
   if (!isObj4(parsed) || typeof parsed.model !== "string") return null;
   const ranges = topLevelValueRanges(b, "model");
   const r = ranges[0];
-  if (ranges.length !== 1 || r === void 0 || b[r.start] !== QUOTE) return null;
+  if (ranges.length !== 1 || r === void 0 || b[r.start] !== QUOTE2) return null;
   try {
     if (JSON.parse(b.toString("utf8", r.start, r.end)) !== parsed.model) return null;
   } catch {
@@ -56882,7 +56890,7 @@ var require_eventsource_stream = __commonJS({
     var buffer = __require("node:buffer");
     var { Transform: Transform3 } = __require("node:stream");
     var { isASCIINumber, isValidLastEventId } = require_util6();
-    var BOM2 = [239, 187, 191];
+    var BOM = [239, 187, 191];
     var LF = 10;
     var CR = 13;
     var COLON = 58;
@@ -57255,20 +57263,20 @@ ${value}`;
         const second = this.peekBufferedByte(1);
         const third = this.peekBufferedByte(2);
         if (second === void 0) {
-          if (first2 === BOM2[0]) {
+          if (first2 === BOM[0]) {
             return true;
           }
           this.checkBOM = false;
           return true;
         }
         if (third === void 0) {
-          if (first2 === BOM2[0] && second === BOM2[1]) {
+          if (first2 === BOM[0] && second === BOM[1]) {
             return true;
           }
           this.checkBOM = false;
           return false;
         }
-        if (first2 === BOM2[0] && second === BOM2[1] && third === BOM2[2]) {
+        if (first2 === BOM[0] && second === BOM[1] && third === BOM[2]) {
           this.discardLeadingBytes(3);
         }
         this.checkBOM = false;
@@ -58864,7 +58872,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     const secret = guard.hits.some((h) => h.action === "block" && h.where === "last-turn");
     if (!secret && (shape !== null || unreadable)) {
       const reason = shape ?? "unparsable-body";
-      const msg = reason === "body-bom" ? "the request body starts with a byte order mark; send plain UTF-8 JSON" : reason === "duplicate-keys" ? "the request body repeats a JSON key (at the top level or inside a tool); send each key once" : "the request body is not valid JSON, and this request touches an enforced budget, so it cannot be priced; it was not sent";
+      const msg = reason === "body-bom" ? "the request body starts with a byte order mark; send plain UTF-8 JSON" : reason === "duplicate-keys" ? "the request body repeats a key inside one JSON object; send each key once" : reason === "too-deep" ? "the request body nests objects or arrays too deeply" : "the request body is not valid JSON, and this request touches an enforced budget, so it cannot be priced; it was not sent";
       sendError(req, res, own2(400, "invalid_request_error", reason, msg, null, { shouldRetry: false }));
       return early({ features, guardrailHits: guard.hits, status: 400, decision: { action: "block", reason }, errorClass: "invalid_request_error" });
     }
