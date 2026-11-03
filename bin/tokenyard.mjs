@@ -59990,6 +59990,7 @@ function createHandler(deps) {
     const held = { plan: null, features: null, admitted: false, est: 0, settled: false, chargeReservation: false, envelope: "anthropic", known: null };
     running++;
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
+      let traced = Promise.resolve();
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
         deps.metrics?.inc("tokenyard_reservations_open", {}, -1);
@@ -60001,7 +60002,7 @@ function createHandler(deps) {
           now = deps.clock();
         } catch {
         }
-        void withDeadline(deps.store.settle(id, charge), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
+        traced = withDeadline(deps.store.settle(id, charge), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
           if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
           const swept = runtime.takeSwept(id) || !settled;
           const current = deps.policy();
@@ -60036,6 +60037,7 @@ function createHandler(deps) {
       } catch {
         res.destroy();
       }
+      return traced;
     }).finally(finished);
   };
   return Object.assign(listener, { idle: () => running === 0 ? Promise.resolve() : new Promise((r) => waiters.push(r)) });

@@ -653,3 +653,48 @@ test('a fault after admit records the end it had when it called settle, with the
   expect(settleCalledAt).toBeGreaterThan(0);
   expect(Date.parse(t.ts) + t.outcome.totalMs).toBeLessThanOrEqual(settleCalledAt);
 });
+
+// Final fix re-review residual: the fault path settled and queued its trace line in a detached promise, so idle() (and
+// with it shutdown, after which the CLI closes the trace sink) could resolve before the line was written.
+test('a fault after admit has queued its trace line by the time a graceful shutdown resolves', async () => {
+  let n = 0;
+  let faults = 0;
+  const up = await raw((req, res) => {
+    req.resume();
+    if (n === 1) faults = 2;
+    res.writeHead(200, { 'content-type': 'application/json' }).end(json('claude-haiku-5-5', { input_tokens: 5, output_tokens: 1 }));
+  });
+  const inner = createMemoryStore({ clock: Date.now });
+  const store: CounterStore = Object.assign(Object.create(inner) as CounterStore, {
+    admit: inner.admit.bind(inner),
+    settle: async (id: string, actual: number) => {
+      await new Promise((r) => setTimeout(r, 300));
+      return inner.settle(id, actual);
+    },
+  });
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const traces: Rec[] = [];
+  const policy = testPolicy({ upstream: up.url });
+  const gw = createGateway({
+    policy: () => policy,
+    store,
+    traces: { write: (r) => (traces.push(r), true) },
+    traceSalt: 's',
+    clock: () => {
+      if (faults > 0) {
+        faults--;
+        throw new Error('injected fault');
+      }
+      return Date.now();
+    },
+    newId: () => `req_${++n}`,
+    basePath: null,
+    bodyCapBytes: 1 << 20,
+  });
+  const url = await gw.listen(0);
+  closers.push(gw.close);
+  await sendTolerant(url, '/v1/messages', authHeaders, msgBody({ model: 'claude-haiku-5-5' }));
+  expect(traces).toHaveLength(0); // settle is still running
+  await gw.shutdown(10_000);
+  expect(traces.map((t) => t.outcome.errorClass)).toEqual(['internal_error']);
+});

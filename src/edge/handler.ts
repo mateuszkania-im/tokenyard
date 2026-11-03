@@ -1082,7 +1082,9 @@ export function createHandler(deps: GatewayDeps): GatewayHandler {
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
       // (whether upstream billed is unknown, so fail closed), and queue the trace line with that charge so warm-up
-      // (and the live cap across runs) counts it.
+      // (and the live cap across runs) counts it. The request counts as running until that line is queued (settle is
+      // bounded by admitTimeoutMs), so idle() and a graceful shutdown wait for it before the trace sink closes.
+      let traced: Promise<void> = Promise.resolve();
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
         deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
@@ -1097,7 +1099,7 @@ export function createHandler(deps: GatewayDeps): GatewayHandler {
         } catch {
           // the clock is what failed; the line still goes out
         }
-        void withDeadline(deps.store.settle(id, charge), admitTimeoutMs)
+        traced = withDeadline(deps.store.settle(id, charge), admitTimeoutMs)
           .then((r) => r === 'settled', () => false)
           .then((settled) => {
             if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
@@ -1135,6 +1137,7 @@ export function createHandler(deps: GatewayDeps): GatewayHandler {
       } catch {
         res.destroy();
       }
+      return traced;
     }).finally(finished);
   };
   return Object.assign(listener, { idle: (): Promise<void> => (running === 0 ? Promise.resolve() : new Promise<void>((r) => waiters.push(r))) });
