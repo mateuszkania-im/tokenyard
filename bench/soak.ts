@@ -24,10 +24,10 @@ import { classifyKey, type GatewayRun, type GatewaySample, judge, parseMetrics, 
 type Mode = 'memory' | 'redis';
 const MINUTES = Number(process.env.SOAK_MINUTES ?? 45);
 /**
- * Requests per second offered per gateway, Poisson arrivals (the bursts come on top). 100 keeps one gateway at about
- * 40% of a core on this mix, which saturates it at about 250 per second: moderate load, as V2 asks (30 to 50%).
+ * Requests per second offered per gateway, Poisson arrivals (the bursts come on top). 100 kept one gateway at about
+ * 54% of a core on this mix (so it saturates near 185 per second); 80 is about 43%: moderate load, as V2 asks (30 to 50%).
  */
-const RATE = Number(process.env.SOAK_RATE ?? 100);
+const RATE = Number(process.env.SOAK_RATE ?? 80);
 const SAMPLE_MS = 30_000;
 const BIN = join(ROOT, 'bin', 'tokenyard.mjs');
 const PROBE = join(ROOT, 'bench', 'soak-probe.mjs');
@@ -104,13 +104,14 @@ function writePolicy(dir: string, mock: { anthropic: string; openai: string }): 
     prov.credential = { env: 'SOAK_PROVIDER_KEY' };
   }
   p.tenants = { acme: { teams: ['platform', 'web', 'data'] }, globex: { teams: ['core'] } };
-  // Every level enforced. The session budget is the example's 25 USD: ordinary sessions stay under it; the heavy bursts
-  // (a dozen 128k max_tokens requests at once on one session) go over it, which gives a few budget blocks.
+  // Every level enforced. Sessions cycle through fixed ids (Load.ringId), so a session id collects spend for the whole
+  // run: 200 USD keeps ordinary sessions under it for 45 minutes (25 USD did not: a third of the requests were refused
+  // after half an hour). The heavy bursts (24 requests of about 10.6 USD each at once on one session) go over it.
   p.budgets = [
     { name: 'org-month', scope: 'tenant', window: 'month', usd: 1_000_000, onExceed: 'block' },
     { name: 'team-day', scope: 'team', window: 'day', usd: 100_000, onExceed: 'block' },
     { name: 'dev-day', scope: 'key', window: 'day', usd: 10_000, onExceed: 'block' },
-    { name: SESSION_BUDGET, scope: 'session', usd: 25, onExceed: 'block' },
+    { name: SESSION_BUDGET, scope: 'session', usd: 200, onExceed: 'block' },
   ];
   // Room for the steady load; the noisy key's minute bursts go over both limits.
   p.rateLimits = [
@@ -389,12 +390,17 @@ class Load {
     return Array.from({ length: 12 }, () => ({ kind: 'noisy' as const, path: '/v1/messages', stream: true, headers: { ...this.ccHeaders(d, s.id, 'main'), 'x-soak-mock': 'slow' }, body: Buffer.from(JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 256, stream: true, messages: [{ role: 'user', content: 'go' }] })) }));
   }
 
-  /** A dozen 128k max_tokens requests at once on one session: the session budget refuses some of them. */
+  /**
+   * 24 requests at once on one session, three from each of eight keys of one tenant (under each key's limit of 8
+   * concurrent requests): a 1.1 MB body and max_tokens 128,000 on Opus reserve about 10.6 USD each, so the 200 USD
+   * session budget refuses some of them.
+   */
   heavyBurst(): Planned[] {
-    const dev = this.pick(this.setup.devs);
     const id = this.ringId('heavy', 'all', 4);
     this.sessionValues.add(id);
-    return Array.from({ length: 12 }, () => ({ kind: 'heavy' as const, path: '/v1/messages?beta=true', stream: false, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-output': '100' }, body: messagesBody({ model: 'claude-opus-5-5', maxTokens: 128_000, stream: false, turns: 60, last: 'Refactor everything.' }) }));
+    const devs = this.setup.devs.filter((d) => d.tenant === 'acme').slice(0, 8);
+    const body = messagesBody({ model: 'claude-opus-5-5', maxTokens: 128_000, stream: false, turns: 2, last: 'Refactor everything.', extraKb: 1_100 });
+    return devs.flatMap((dev) => Array.from({ length: 3 }, () => ({ kind: 'heavy' as const, path: '/v1/messages?beta=true', stream: false, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-output': '100' }, body })));
   }
 
   /** Per key, its stream limit plus one at once, each on a slow stream and a new session. */
@@ -412,6 +418,16 @@ interface Result {
   status: number | null;
   error: string | null;
   totalMs: number;
+  /** For tokenyard's own refusals, what refused: budget, streams, rate, taint, secret, model or other. */
+  reason: string | null;
+}
+
+/** The kind of one of tokenyard's own error answers, from its message. */
+function refusal(body: string): string | null {
+  const m = /"message":"tokenyard: ([^"]*)"/.exec(body)?.[1];
+  if (m === undefined) return null;
+  for (const [re, r] of [[/budget/i, 'budget'], [/concurrent|stream/i, 'streams'], [/rate/i, 'rate'], [/taint/i, 'taint'], [/secret|credential/i, 'secret'], [/model|pric/i, 'model']] as const) if (re.test(m)) return r;
+  return 'other';
 }
 
 function send(agent: Agent, base: string, p: Planned): Promise<Result> {
@@ -419,14 +435,16 @@ function send(agent: Agent, base: string, p: Planned): Promise<Result> {
   const t0 = performance.now();
   return new Promise((resolve) => {
     let done = false;
+    let errBody = '';
     const finish = (status: number | null, error: string | null): void => {
       if (done) return;
       done = true;
-      resolve({ kind: p.kind, status, error, totalMs: performance.now() - t0 });
+      resolve({ kind: p.kind, status, error, totalMs: performance.now() - t0, reason: status !== null && status >= 400 ? refusal(errBody) : null });
     };
     const req = request({ host: url.hostname, port: url.port, method: 'POST', path: p.path, headers: { ...p.headers, 'content-length': String(p.body.length) }, agent }, (res) => {
       let first = true;
-      res.on('data', () => {
+      res.on('data', (c: Buffer) => {
+        if ((res.statusCode ?? 0) >= 400 && errBody.length < 2048) errBody += c.toString('utf8');
         if (first && p.abortAfterMs !== undefined) setTimeout(() => (req.destroy(), finish(res.statusCode ?? null, 'aborted-by-client')), p.abortAfterMs);
         first = false;
       });
@@ -839,7 +857,7 @@ async function main(mode: Mode): Promise<void> {
     const byKind: Record<string, Record<string, number>> = {};
     for (const r of loadResults) {
       const k = (byKind[r.kind] ??= {});
-      const s = r.error ?? String(r.status);
+      const s = r.error ?? (r.reason ? `${r.status} ${r.reason}` : String(r.status));
       k[s] = (k[s] ?? 0) + 1;
     }
     const avg = (xs: number[]): number => (xs.length === 0 ? 0 : Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 10) / 10);
@@ -905,7 +923,7 @@ async function main(mode: Mode): Promise<void> {
 }
 
 const SOAK_METHOD = [
-  'The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and a burst over the session budget every two minutes. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state for 30 days by design; that cost is measured on its own (Redis keys and bytes per key).',
+  'The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state for 30 days by design; that cost is measured on its own (Redis keys and bytes per key).',
   'A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory.',
   'Memory is judged after a 5 minute warm-up: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.',
 ].join(' ');
