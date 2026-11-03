@@ -127,7 +127,7 @@ async function main(): Promise<void> {
       ...env,
       quick,
       overhead: {
-        method: `autocannon drives each scenario at the mock provider directly and through the gateway (both in their own processes, loopback); the mock answers after a fixed ${MOCK.ttftMs} ms time to first token and streams ${MOCK.outputTokens} tokens at ${MOCK.tokensPerSec} tokens/s. Each connection is one stream with a fixed request rate below what it can complete directly; latencies are corrected for coordinated omission with that intended interval. Added time is the gateway percentile minus the direct percentile; CPU and RSS are the gateway process's, RSS above its idle size. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.`,
+        method: `autocannon drives each scenario at the mock provider directly and through the gateway (both in their own processes, loopback); the mock answers after a fixed ${MOCK.ttftMs} ms time to first token and streams ${MOCK.outputTokens} tokens at ${MOCK.tokensPerSec} tokens/s. Each connection is one stream with a fixed request rate below what it can complete directly; latencies are corrected for coordinated omission with that intended interval. Added time is the gateway percentile minus the direct percentile; CPU and RSS are the gateway process's; RSS per 100 streams is its peak growth during the run above its size just before it, scaled to 100 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.`,
         mock: MOCK,
         redis: redisNote,
         rows: overhead,

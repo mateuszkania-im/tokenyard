@@ -173,9 +173,9 @@ function spawn(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<Ch
   });
 }
 
-/** Child side: CPU over a measured window and RSS sampled every 50 ms. */
+/** Child side: CPU over a measured window, and RSS sampled every 50 ms against the RSS at the window's start. */
 function serveStats(url: string): void {
-  const baselineRssMb = process.memoryUsage.rss() / 1024 / 1024;
+  let baselineRssMb = 0;
   let cpu0 = process.cpuUsage();
   let t0 = process.hrtime.bigint();
   let peak = 0;
@@ -185,6 +185,8 @@ function serveStats(url: string): void {
       cpu0 = process.cpuUsage();
       t0 = process.hrtime.bigint();
       peak = process.memoryUsage.rss();
+      // RSS of the warmed-up process just before this run's load: the growth above it is what the load costs.
+      baselineRssMb = peak / 1024 / 1024;
       sampler = setInterval(() => (peak = Math.max(peak, process.memoryUsage.rss())), 50);
       process.send?.({});
     } else if (cmd === 'stop') {
