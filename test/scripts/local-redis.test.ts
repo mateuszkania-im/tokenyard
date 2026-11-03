@@ -26,3 +26,25 @@ test('only a loopback Redis may be flushed by the benchmark', () => {
   expect(isLoopbackRedisUrl('rediss://cache.example.com:6380')).toBe(false);
   expect(isLoopbackRedisUrl('not a url')).toBe(false);
 });
+
+test.skipIf(process.platform === 'win32')('SIGTERM to the runner reaches the command, which is not orphaned', async () => {
+  const { spawn } = await import('node:child_process');
+  const { join } = await import('node:path');
+  const runner = spawn(process.execPath, [join(import.meta.dirname, '../../scripts/local-redis.mjs'), process.execPath, '-e', 'console.log(process.pid); setInterval(() => {}, 1000)'], {
+    env: { ...process.env, REDIS_URL: 'redis://127.0.0.1:9' },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const pid = Number(await new Promise<string>((resolve) => runner.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()))));
+  const done = new Promise<number | null>((resolve) => runner.once('exit', (code) => resolve(code)));
+  runner.kill('SIGTERM');
+  expect(await done).toBe(1);
+  const gone = (): boolean => {
+    try {
+      process.kill(pid, 0);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  expect(gone()).toBe(true);
+});

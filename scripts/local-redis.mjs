@@ -94,6 +94,18 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exit(1);
   }
   const child = spawn(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, REDIS_URL: redis.url, ...(redis.name ? { REDIS_CONTAINER: redis.name } : {}) } });
+  // SIGINT or SIGTERM goes to the command first (it would be orphaned otherwise) and the container is removed once the
+  // command has exited; a command that ignores the signal is killed after 10 s. These listeners replace the ones
+  // startLocalRedis installed, which remove the container and re-raise the signal at once.
+  process.removeAllListeners('SIGINT');
+  process.removeAllListeners('SIGTERM');
+  const forward = (sig) => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    child.kill(sig);
+    setTimeout(() => child.kill('SIGKILL'), 10_000).unref();
+  };
+  process.on('SIGINT', forward);
+  process.on('SIGTERM', forward);
   child.on('exit', (code, signal) => {
     redis.stop();
     process.exit(code ?? (signal ? 1 : 0));
