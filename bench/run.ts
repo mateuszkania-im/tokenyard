@@ -12,7 +12,7 @@ import { isLoopbackRedisUrl, startLocalRedis } from '../scripts/local-redis.mjs'
 import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
-import { cpuRssSlopes, environment, type Percentiles, ROOT, ttfbVerdict } from './lib.js';
+import { cpuRssSlopes, environment, keptSoak, type Percentiles, ROOT, ttfbVerdict } from './lib.js';
 import { benchOverhead, CONCURRENCY, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
 import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
@@ -197,8 +197,9 @@ async function main(): Promise<void> {
       replay,
       calibration,
     };
-    const full = { ...results, slo: slos({ overhead, budget: budget.runs, cache: cache.rows, replay, redis: redisNote }) };
-    writeFileSync(join(ROOT, 'bench', 'results.json'), `${JSON.stringify(full, null, 2)}\n`);
+    const file = join(ROOT, 'bench', 'results.json');
+    const full = { ...results, slo: slos({ overhead, budget: budget.runs, cache: cache.rows, replay, redis: redisNote }), ...keptSoak(file) };
+    writeFileSync(file, `${JSON.stringify(full, null, 2)}\n`);
     log('bench/results.json written');
     for (const s of full.slo) log(`SLO ${s.sli}: ${s.measured} (${s.met === true ? 'met' : s.met === false ? 'missed' : 'not measured'})`);
     if (calibration.violations > 0) {

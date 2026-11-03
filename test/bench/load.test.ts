@@ -47,3 +47,21 @@ test('BENCH_CPU_PROF profiles the gateway child only, into the named directory (
   expect(profileArgs('mock', '/tmp/prof')).toEqual([]);
   expect(profileArgs('gateway', undefined)).toEqual([]);
 });
+
+test('a full bench run keeps the soak section that npm run soak wrote (V2)', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { keptSoak } = await import('../../bench/lib.js');
+  const dir = mkdtempSync(join(tmpdir(), 'ty-soak-keep-'));
+  try {
+    const file = join(dir, 'results.json');
+    expect(keptSoak(file)).toEqual({});
+    writeFileSync(file, JSON.stringify({ overhead: {}, soak: { runs: [{ mode: 'memory' }] } }));
+    expect(keptSoak(file)).toEqual({ soak: { runs: [{ mode: 'memory' }] } });
+    writeFileSync(file, JSON.stringify({ overhead: {} }));
+    expect(keptSoak(file)).toEqual({});
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

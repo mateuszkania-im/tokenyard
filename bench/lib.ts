@@ -173,6 +173,16 @@ export async function preconnect(agents: Agent[], base: string): Promise<void> {
   }
 }
 
+/** The `soak` section of an existing results file: written by `npm run soak` (V2), which this run does not repeat. */
+export function keptSoak(file: string): { soak?: unknown } {
+  try {
+    const soak = (JSON.parse(readFileSync(file, 'utf8')) as { soak?: unknown }).soak;
+    return soak === undefined ? {} : { soak };
+  } catch {
+    return {};
+  }
+}
+
 /** SLO target for added TTFB (spec 12.1), ms. */
 export const ADDED_TTFB_TARGET = { p50: 5, p99: 25 } as const;
 

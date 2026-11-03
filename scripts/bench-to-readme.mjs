@@ -161,6 +161,30 @@ function calibrationSection(c) {
   return lines.join('\n');
 }
 
+/** Soak runs (V2, `npm run soak`): one row per store; absent before the first soak. */
+function soakSection(k) {
+  const lines = [
+    '#### Soak',
+    '',
+    `${k.method}`,
+    '',
+    '| Store | Gateways | Minutes | Requests (per second) | Gateway CPU | RSS, first / last 5 min after warm-up (MB), trend | Heap after GC, same (MB), trend | Open fds idle, before / after | Metric series, end | Redis keys after | Trace hours, MB per hour | Checks passed |',
+    '|---|---:|---:|---:|---:|---|---|---|---:|---:|---|---:|',
+  ];
+  for (const r of k.runs) {
+    const v = (part) => r.verdicts.filter((x) => x.check.endsWith(part));
+    const trend = (part) => v(part).map((x) => /^([\d.]+ to [\d.]+) MB; trend (-?[\d.]+)%/.exec(x.measured)).map((m) => (m ? `${m[1]}, ${m[2]}%` : 'n/a')).join('; ');
+    const gws = r.perGateway;
+    lines.push(
+      `| ${r.mode} | ${num(r.gateways)} | ${num(r.minutes)} | ${num(r.requests)} (${num(r.answeredPerS, 1)}) | ${gws.map((g) => `${num(g.cpuPct, 1)}%`).join(', ')} | ${trend(': RSS growth')} | ${trend(': heap used after GC growth')} | ${gws.map((g) => `${num(g.idleBefore.fds)} / ${num(g.idleAfter.fds)}`).join('; ')} | ${gws.map((g) => num(g.idleAfter.series)).join(', ')} | ${r.redis ? num(r.redis.after.keys) : 'n/a'} | ${gws.map((g) => `${num(g.traceHours)}, ${num(g.traceMbPerHourOfLoad, 1)}`).join('; ')} | ${num(r.verdicts.filter((x) => x.ok).length)} of ${num(r.verdicts.length)} |`,
+    );
+  }
+  const failed = k.runs.flatMap((r) => r.verdicts.filter((x) => !x.ok).map((x) => `${r.mode}: ${x.check} (${x.measured}; threshold ${x.threshold})`));
+  if (failed.length > 0) lines.push('', 'Failed checks:', '', ...failed.map((f) => `- ${f}`));
+  lines.push('', 'Thresholds, every check and the commands: docs/benchmarks.md, "Soak".', '');
+  return lines.join('\n');
+}
+
 /** The Markdown between the markers, without the markers. Deterministic: the same results give the same text. */
 export function renderBenchBlock(r) {
   const tools = Object.entries(r.tools)
@@ -182,6 +206,7 @@ export function renderBenchBlock(r) {
     scanSection(r.scan),
     replaySection(r.replay),
     calibrationSection(r.calibration),
+    ...(r.soak ? [soakSection(r.soak)] : []),
   ];
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
 }

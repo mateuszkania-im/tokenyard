@@ -118,3 +118,36 @@ test('overhead tables show the gateway-measured added TTFB with n, absolute late
   expect(block).toContain('Why the naive proxy costs the same.');
   expect(block).toContain('| memory | worst-case | $1.00 | 1,000 | 1,000 | 40 | 40 |');
 });
+
+test('a soak section (V2) renders one row per store with memory trends, idle fds, series, keys and failed checks', () => {
+  const r = results();
+  expect(renderBenchBlock(r)).not.toContain('#### Soak');
+  const gw = (instance: string) => ({ instance, cpuPct: 31.2, idleBefore: { fds: 40, series: 3 }, idleAfter: { fds: 41, series: 96 }, traceHours: 2, traceMbPerHourOfLoad: 812.4 });
+  const verdict = (check: string, measured: string, ok = true) => ({ check, threshold: 't', measured, ok });
+  const soak = {
+    method: 'Soak method.',
+    runs: [
+      {
+        mode: 'redis',
+        gateways: 2,
+        minutes: 45,
+        requests: 405_000,
+        answeredPerS: 150,
+        perGateway: [gw('soak0001'), gw('soak0002')],
+        redis: { after: { keys: 31_234 } },
+        verdicts: [
+          verdict('soak0001: RSS growth', '120.5 to 121.2 MB; trend 0.4% (0.9 MB/h), windows 0.58% (n = 81)'),
+          verdict('soak0002: RSS growth', '119 to 125 MB; trend 4.1% (6 MB/h), windows 5% (n = 81)'),
+          verdict('soak0001: heap used after GC growth', '30 to 30.5 MB; trend 1.2% (0.5 MB/h), windows 1.6% (n = 81)'),
+          verdict('soak0002: heap used after GC growth', '30 to 31 MB; trend 2% (1 MB/h), windows 3.3% (n = 81)'),
+          verdict('stream slots after the load', '319 of 320 admitted', false),
+        ],
+      },
+    ],
+  };
+  const block = renderBenchBlock({ ...r, soak });
+  expect(block).toContain('#### Soak');
+  expect(block).toContain('| redis | 2 | 45 | 405,000 (150.0) | 31.2%, 31.2% | 120.5 to 121.2, 0.4%; 119 to 125, 4.1% | 30 to 30.5, 1.2%; 30 to 31, 2% | 40 / 41; 40 / 41 | 96, 96 | 31,234 | 2, 812.4; 2, 812.4 | 4 of 5 |');
+  expect(block).toContain('- redis: stream slots after the load (319 of 320 admitted; threshold t)');
+  expect(block).not.toMatch(/[—–←-⇿⟵-⟿]/);
+});
