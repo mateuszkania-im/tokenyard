@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import fc from 'fast-check';
 import { Breaker } from '../../src/upstream/breaker.js';
 import { RetryBudget } from '../../src/upstream/retry-budget.js';
 
@@ -66,4 +67,89 @@ test('retry budget is per tenant, forgets after a minute, and a ratio of 0 allow
   const none = new RetryBudget(0, () => t);
   none.request('a');
   expect(none.tryRetry('a')).toBe(false);
+});
+
+/** The breaker's window as first written (filter the whole window on every outcome), kept as the reference behaviour. */
+class ReferenceBreaker {
+  private readonly states = new Map<string, { events: Array<{ at: number; ok: boolean }>; openUntil: number; halfOpen: boolean }>();
+  constructor(
+    private readonly o: typeof opts,
+    private readonly clock: () => number,
+  ) {}
+  private state(p: string): { events: Array<{ at: number; ok: boolean }>; openUntil: number; halfOpen: boolean } {
+    let s = this.states.get(p);
+    if (!s) this.states.set(p, (s = { events: [], openUntil: 0, halfOpen: false }));
+    return s;
+  }
+  allow(p: string): boolean {
+    const s = this.states.get(p);
+    if (!s || s.openUntil === 0) return true;
+    if (this.clock() < s.openUntil) return false;
+    s.openUntil = 0;
+    s.halfOpen = true;
+    s.events = [];
+    return true;
+  }
+  record(p: string, ok: boolean): void {
+    const s = this.state(p);
+    const now = this.clock();
+    if (s.openUntil > now) return;
+    if (s.halfOpen) {
+      s.halfOpen = false;
+      if (!ok) this.open(p, now + this.o.openSeconds * 1000);
+      return;
+    }
+    const cutoff = now - this.o.windowSeconds * 1000;
+    s.events = s.events.filter((e) => e.at > cutoff);
+    s.events.push({ at: now, ok });
+    const failures = s.events.filter((e) => !e.ok).length;
+    if (s.events.length >= this.o.minRequests && failures / s.events.length >= this.o.failureRatio) this.open(p, now + this.o.openSeconds * 1000);
+  }
+  open(p: string, untilMs: number): void {
+    const s = this.state(p);
+    s.openUntil = untilMs;
+    s.halfOpen = false;
+    s.events = [];
+  }
+}
+
+test('breaker decisions match the whole-window reference for any outcome sequence, clock steps backwards included (V1)', () => {
+  type Op = { kind: 'record'; ok: boolean; dt: number } | { kind: 'allow'; dt: number } | { kind: 'open'; dt: number; forMs: number };
+  const op: fc.Arbitrary<Op> = fc.oneof(
+    { weight: 6, arbitrary: fc.record({ kind: fc.constant('record' as const), ok: fc.boolean(), dt: fc.integer({ min: -2_000, max: 8_000 }) }) },
+    { weight: 3, arbitrary: fc.record({ kind: fc.constant('allow' as const), dt: fc.integer({ min: 0, max: 8_000 }) }) },
+    { weight: 1, arbitrary: fc.record({ kind: fc.constant('open' as const), dt: fc.integer({ min: 0, max: 1_000 }), forMs: fc.integer({ min: 0, max: 20_000 }) }) },
+  );
+  fc.assert(
+    fc.property(fc.array(op, { maxLength: 400 }), fc.integer({ min: 1, max: 6 }), fc.double({ min: 0.1, max: 1, noNaN: true }), (ops, minRequests, failureRatio) => {
+      const o = { minRequests, failureRatio, windowSeconds: 10, openSeconds: 5 };
+      let t = 1_000_000;
+      const b = new Breaker(o, () => t);
+      const ref = new ReferenceBreaker(o, () => t);
+      for (const x of ops) {
+        t += x.dt;
+        if (x.kind === 'record') {
+          b.record('p', x.ok);
+          ref.record('p', x.ok);
+        } else if (x.kind === 'open') {
+          b.open('p', t + x.forMs);
+          ref.open('p', t + x.forMs);
+        }
+        expect(b.allow('p')).toBe(ref.allow('p'));
+      }
+    }),
+    { numRuns: 300 },
+  );
+});
+
+test('recording an outcome does not scan the whole window: 30,000 outcomes inside one 30 s window in well under 250 ms (V1)', () => {
+  let t = 0;
+  const b = new Breaker({ minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }, () => t);
+  const t0 = performance.now();
+  for (let i = 0; i < 30_000; i++) {
+    t += 0.5; // 2,000 outcomes per second (500 streams at 4 requests a second): the whole run stays inside the window
+    b.record('p', i % 4 !== 0);
+  }
+  expect(performance.now() - t0).toBeLessThan(250);
+  expect(b.allow('p')).toBe(true);
 });

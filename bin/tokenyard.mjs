@@ -31768,7 +31768,7 @@ var init_openai_responses = __esm({
 });
 
 // src/upstream/breaker.ts
-var Breaker;
+var Breaker, emptyWindow;
 var init_breaker = __esm({
   "src/upstream/breaker.ts"() {
     "use strict";
@@ -31784,8 +31784,40 @@ var init_breaker = __esm({
       states = /* @__PURE__ */ new Map();
       state(provider2) {
         let s2 = this.states.get(provider2);
-        if (!s2) this.states.set(provider2, s2 = { events: [], openUntil: 0, halfOpen: false });
+        if (!s2) this.states.set(provider2, s2 = { ...emptyWindow(), openUntil: 0, halfOpen: false });
         return s2;
+      }
+      /**
+       * Drops outcomes at or before `cutoff`. In time order that is a prefix, dropped by moving `head` (constant time per
+       * outcome, V1: the window holds every outcome of the last `windowSeconds`, tens of thousands under load); after
+       * the clock stepped back the whole window is filtered, as before.
+       */
+      expire(s2, cutoff) {
+        if (s2.sorted) {
+          while (s2.head < s2.ats.length && s2.ats[s2.head] <= cutoff) {
+            if (!s2.oks[s2.head]) s2.failures--;
+            s2.head++;
+          }
+          if (s2.head > 1024 && s2.head * 2 > s2.ats.length) {
+            s2.ats = s2.ats.slice(s2.head);
+            s2.oks = s2.oks.slice(s2.head);
+            s2.head = 0;
+          }
+          return;
+        }
+        const ats = [];
+        const oks = [];
+        let failures = 0;
+        let sorted = true;
+        for (let k = s2.head; k < s2.ats.length; k++) {
+          const at = s2.ats[k];
+          if (at <= cutoff) continue;
+          if (ats.length > 0 && at < ats[ats.length - 1]) sorted = false;
+          ats.push(at);
+          oks.push(s2.oks[k]);
+          if (!s2.oks[k]) failures++;
+        }
+        Object.assign(s2, { ats, oks, head: 0, failures, sorted });
       }
       allow(provider2) {
         const s2 = this.states.get(provider2);
@@ -31793,7 +31825,7 @@ var init_breaker = __esm({
         if (this.clock() < s2.openUntil) return false;
         s2.openUntil = 0;
         s2.halfOpen = true;
-        s2.events = [];
+        Object.assign(s2, emptyWindow());
         return true;
       }
       record(provider2, ok) {
@@ -31805,11 +31837,13 @@ var init_breaker = __esm({
           if (!ok) this.open(provider2, now + this.o.openSeconds * 1e3);
           return;
         }
-        const cutoff = now - this.o.windowSeconds * 1e3;
-        s2.events = s2.events.filter((e2) => e2.at > cutoff);
-        s2.events.push({ at: now, ok });
-        const failures = s2.events.filter((e2) => !e2.ok).length;
-        if (s2.events.length >= this.o.minRequests && failures / s2.events.length >= this.o.failureRatio) {
+        this.expire(s2, now - this.o.windowSeconds * 1e3);
+        if (s2.ats.length > s2.head && now < s2.ats[s2.ats.length - 1]) s2.sorted = false;
+        s2.ats.push(now);
+        s2.oks.push(ok);
+        if (!ok) s2.failures++;
+        const count = s2.ats.length - s2.head;
+        if (count >= this.o.minRequests && s2.failures / count >= this.o.failureRatio) {
           this.open(provider2, now + this.o.openSeconds * 1e3);
         }
       }
@@ -31822,9 +31856,10 @@ var init_breaker = __esm({
         }
         s2.openUntil = untilMs;
         s2.halfOpen = false;
-        s2.events = [];
+        Object.assign(s2, emptyWindow());
       }
     };
+    emptyWindow = () => ({ ats: [], oks: [], head: 0, failures: 0, sorted: true });
   }
 });
 
