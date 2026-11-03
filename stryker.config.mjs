@@ -9,9 +9,10 @@ export default {
   vitest: { configFile: 'vitest.stryker.config.ts', related: true },
   mutate: ['src/policy/decide.ts', 'src/limits/memory-store.ts', 'src/limits/store.ts', 'src/limits/estimator.ts', 'src/guardrails/scan.ts'],
   coverageAnalysis: 'perTest',
-  // Static mutants (module-level values: the rule tables, budget constants) run every test once per mutant: a third of
-  // the mutants and an estimated 61% of the run. They are ignored (reported as such); the tests of the rule tables are
-  // the rule fixtures and the false-positive corpus, which pin each rule's matches directly.
+  // Static mutants (module-level values: the rule tables, budget constants) run every test once per mutant: 33 of the
+  // 1,963 mutants in the last full run, an estimated 61% of its time. They are ignored (reported as such); the rule
+  // tables are pinned by the rule fixtures and the false-positive corpus, which check each rule's matches directly, and
+  // the scan budget caps by test/guardrails/scan-budget-caps.test.ts (each cap at its boundary, values written out).
   ignoreStatic: true,
   incremental: true,
   incrementalFile: 'reports/stryker-incremental.json',

@@ -39,7 +39,8 @@ bounds are ten times looser under coverage instrumentation (`test/helpers/timing
 
 `npm run test:mutation`: Stryker 10.1 with the Vitest runner, `perTest` coverage analysis (each mutant runs only the
 tests that reach it), incremental (`reports/stryker-incremental.json`), static mutants ignored (module-level values such
-as the rule tables; they ran every test per mutant, an estimated 61% of the run). The test set is
+as the rule tables and the scan budget caps: 33 of 1,963 mutants, but they ran every test per mutant, an estimated 61%
+of the run; `test/guardrails/scan-budget-caps.test.ts` pins each scan cap at its boundary instead). The test set is
 `vitest.stryker.config.ts`: the in-process tests of the mutated modules and their callers, about 5 s, without the
 gateway-level suites (with them the run was estimated at five hours), the tests that call `process.chdir` (unsupported
 in Vitest's worker threads) or read this repository's git history (the sandbox has none), and with timing bounds off.
