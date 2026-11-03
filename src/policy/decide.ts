@@ -218,8 +218,12 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   // that reaches the store (a last-turn secret writes a taint set for the session, so it counts too).
   const idleTtlMs = policy.sessions.idleTtlHours * 3_600_000;
   if (session !== null) {
-    const perHour = policy.sessions.newPerKeyPerHour;
-    plan.newSession = { limit: 'sessions.newPerKeyPerHour', markerKey: sessionKey(f.tenant, session), key: newSessionsKey(f.tenant, f.keyId), emissionMs: Math.ceil(3_600_000 / perHour), burst: perHour, ttlMs: idleTtlMs };
+    // A key's own limit, else the default for its kind (service keys carry product traffic).
+    const own = policy.newSessionLimits.get(f.keyId);
+    const service = f.traffic === 'product';
+    const perHour = own ?? (service ? policy.sessions.newPerServiceKeyPerHour : policy.sessions.newPerKeyPerHour);
+    const limit = own !== undefined ? 'maxNewSessionsPerHour in keys.yaml' : service ? 'sessions.newPerServiceKeyPerHour' : 'sessions.newPerKeyPerHour';
+    plan.newSession = { limit, markerKey: sessionKey(f.tenant, session), key: newSessionsKey(f.tenant, f.keyId), emissionMs: Math.ceil(3_600_000 / perHour), burst: perHour, ttlMs: idleTtlMs };
   }
 
   const route = findRoute(policy, f);

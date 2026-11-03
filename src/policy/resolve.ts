@@ -75,7 +75,7 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
     }
     case 'sessions': {
       const limit = plan.newSession?.burst;
-      return block(429, 'rate_limit_error', 'session-churn', `this key started more than ${limit ?? 'its limit of'} new sessions per hour (sessions.newPerKeyPerHour); continue in a session it already uses, or ask the policy owner to raise the limit`);
+      return block(429, 'rate_limit_error', 'session-churn', `this key started more than ${limit ?? 'its limit of'} new sessions per hour (${failed.name}); continue in a session it already uses, or ask the policy owner to raise the limit`);
     }
     case 'duplicate':
       // A second admit under an id that already holds a reservation: never forwarded on the first one's reservation.

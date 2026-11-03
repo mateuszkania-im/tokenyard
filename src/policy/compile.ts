@@ -116,6 +116,7 @@ export function compilePolicy(src: PolicySource, revision: string, o: { experime
     streamLimits,
     reservation: structuredClone(policy.reservation),
     sessions: structuredClone(policy.sessions),
+    newSessionLimits: frozenMap(keys.flatMap((k): Array<[string, number]> => (k.maxNewSessionsPerHour === undefined ? [] : [[k.keyId, k.maxNewSessionsPerHour]]))),
     guardrails: structuredClone(policy.guardrails),
     failure: structuredClone(policy.failure),
     ci: structuredClone(policy.ci),

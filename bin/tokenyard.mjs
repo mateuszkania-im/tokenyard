@@ -30391,7 +30391,7 @@ var init_match = __esm({
 });
 
 // src/policy/schema.ts
-var SURFACES, name, fileRef, httpUrl2, REQUEST_CLASSES2, chainEntry, provider, route, budget, rateLimit, reservation, sessions, guardrails, failure2, ci, policySchema, chainProvider, keyRecordSchema, keysFileSchema, SURFACE_LIST;
+var SURFACES, name, fileRef, httpUrl2, REQUEST_CLASSES2, chainEntry, provider, route, budget, rateLimit, reservation, newSessionsPerHour, sessions, guardrails, failure2, ci, policySchema, chainProvider, keyRecordSchema, keysFileSchema, SURFACE_LIST;
 var init_schema = __esm({
   "src/policy/schema.ts"() {
     "use strict";
@@ -30469,9 +30469,11 @@ var init_schema = __esm({
       serverToolsWithoutMaxUses: external_exports.enum(["block", "assume"]).default("block"),
       assumedMaxUses: external_exports.number().int().positive().default(25)
     });
+    newSessionsPerHour = external_exports.number().int().positive().max(1e6);
     sessions = external_exports.strictObject({
       idleTtlHours: external_exports.number().int().min(1).max(720).default(24),
-      newPerKeyPerHour: external_exports.number().int().positive().max(1e6).default(1e3)
+      newPerKeyPerHour: newSessionsPerHour.default(1e3),
+      newPerServiceKeyPerHour: newSessionsPerHour.default(1e4)
     });
     guardrails = external_exports.strictObject({
       secrets: external_exports.strictObject({
@@ -30528,7 +30530,9 @@ var init_schema = __esm({
       team: name.nullable(),
       name,
       kind: external_exports.enum(["developer", "service"]),
-      billing: external_exports.enum(["api", "subscription"])
+      billing: external_exports.enum(["api", "subscription"]),
+      /** S-V2-1: this key's own limit on new sessions an hour, instead of the policy's default for its kind. */
+      maxNewSessionsPerHour: newSessionsPerHour.optional()
     });
     keysFileSchema = external_exports.array(keyRecordSchema);
     SURFACE_LIST = SURFACES;
@@ -30669,8 +30673,11 @@ function decide(policy2, f) {
   const plan = { id: f.id, policyRevision: policy2.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
   const idleTtlMs = policy2.sessions.idleTtlHours * 36e5;
   if (session !== null) {
-    const perHour = policy2.sessions.newPerKeyPerHour;
-    plan.newSession = { limit: "sessions.newPerKeyPerHour", markerKey: sessionKey(f.tenant, session), key: newSessionsKey(f.tenant, f.keyId), emissionMs: Math.ceil(36e5 / perHour), burst: perHour, ttlMs: idleTtlMs };
+    const own2 = policy2.newSessionLimits.get(f.keyId);
+    const service = f.traffic === "product";
+    const perHour = own2 ?? (service ? policy2.sessions.newPerServiceKeyPerHour : policy2.sessions.newPerKeyPerHour);
+    const limit = own2 !== void 0 ? "maxNewSessionsPerHour in keys.yaml" : service ? "sessions.newPerServiceKeyPerHour" : "sessions.newPerKeyPerHour";
+    plan.newSession = { limit, markerKey: sessionKey(f.tenant, session), key: newSessionsKey(f.tenant, f.keyId), emissionMs: Math.ceil(36e5 / perHour), burst: perHour, ttlMs: idleTtlMs };
   }
   const route2 = findRoute(policy2, f);
   if (!route2) return { ...plan, preBlock: "no-route" };
@@ -31023,7 +31030,7 @@ function failedBlock(plan, failed) {
     }
     case "sessions": {
       const limit = plan.newSession?.burst;
-      return block(429, "rate_limit_error", "session-churn", `this key started more than ${limit ?? "its limit of"} new sessions per hour (sessions.newPerKeyPerHour); continue in a session it already uses, or ask the policy owner to raise the limit`);
+      return block(429, "rate_limit_error", "session-churn", `this key started more than ${limit ?? "its limit of"} new sessions per hour (${failed.name}); continue in a session it already uses, or ask the policy owner to raise the limit`);
     }
     case "duplicate":
       return block(409, "invalid_request_error", "duplicate", `request id ${plan.id} already holds a reservation; it was not sent again`);
@@ -60150,6 +60157,7 @@ function compilePolicy(src, revision, o) {
     streamLimits,
     reservation: structuredClone(policy2.reservation),
     sessions: structuredClone(policy2.sessions),
+    newSessionLimits: frozenMap(keys2.flatMap((k) => k.maxNewSessionsPerHour === void 0 ? [] : [[k.keyId, k.maxNewSessionsPerHour]])),
     guardrails: structuredClone(policy2.guardrails),
     failure: structuredClone(policy2.failure),
     ci: structuredClone(policy2.ci),

@@ -18,6 +18,8 @@ import { startGateway, type TestGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV, TEST_KEY, testPolicy } from '../helpers/policy.js';
 
 const HOSTILE_KEY = 'ty_live_hostile';
+/** A key with its own limit in keys.yaml (maxNewSessionsPerHour), below the policy default. */
+const SMALL_KEY = 'ty_live_small';
 const ALLOWANCE = 20;
 
 let mock: MockServer | undefined;
@@ -35,9 +37,12 @@ async function stack(store: CounterStore): Promise<{ url: string; traces: Array<
   const traces: Array<Omit<TraceRecord, 'instance' | 'seq'>> = [];
   const policy = testPolicy({
     upstream: mock.url,
-    extraKeys: [{ hash: hashKey(HOSTILE_KEY), keyId: 'key_hostile', tenant: 'acme', team: 'platform', name: 'hostile', kind: 'developer', billing: 'api' }],
+    extraKeys: [
+      { hash: hashKey(HOSTILE_KEY), keyId: 'key_hostile', tenant: 'acme', team: 'platform', name: 'hostile', kind: 'developer', billing: 'api' },
+      { hash: hashKey(SMALL_KEY), keyId: 'key_small', tenant: 'acme', team: 'platform', name: 'small', kind: 'developer', billing: 'api', maxNewSessionsPerHour: 5 },
+    ],
     edit: (p) => {
-      p.sessions = { idleTtlHours: 24, newPerKeyPerHour: ALLOWANCE };
+      p.sessions = { idleTtlHours: 24, newPerKeyPerHour: ALLOWANCE, newPerServiceKeyPerHour: 10_000 };
       p.rateLimits = [];
     },
   });
@@ -74,14 +79,18 @@ async function scenario(store: CounterStore, countKeys: () => Promise<number>): 
   expect((await call(url, HOSTILE_KEY, 'hostile-0')).status).toBe(200);
   // A legitimate key with three sessions is unaffected by the other key's churn.
   for (let i = 0; i < 30; i++) expect((await call(url, TEST_KEY, `dev-${i % 3}`)).status).toBe(200);
+  // A key's own limit in keys.yaml applies in the store as well: 5 of 8 new sessions.
+  const small = [];
+  for (let i = 0; i < 8; i++) small.push((await call(url, SMALL_KEY, `small-${i}`)).status);
+  expect(small).toEqual([200, 200, 200, 200, 200, 429, 429, 429]);
 }
 
 test('S-V2-1 memory store: a new session id per request is refused past the allowance and the store stops growing', async () => {
   const store = createMemoryStore({ clock: Date.now });
   await scenario(store, async () => store.keys().length);
   // Session state is bounded by the allowance: one marker and one session budget level per admitted session.
-  expect(store.keys().filter((k) => k.includes(':sess:'))).toHaveLength(ALLOWANCE + 3);
-  expect(store.keys().filter((k) => k.includes(':b:session:'))).toHaveLength(ALLOWANCE + 3);
+  expect(store.keys().filter((k) => k.includes(':sess:'))).toHaveLength(ALLOWANCE + 3 + 5);
+  expect(store.keys().filter((k) => k.includes(':b:session:'))).toHaveLength(ALLOWANCE + 3 + 5);
 }, 60_000);
 
 const url = process.env.REDIS_URL;
@@ -105,7 +114,7 @@ describe.skipIf(!url)('S-V2-1 redis store (REDIS_URL)', () => {
       return Number(await client.dbSize());
     });
     const keys = (await client.keys('*')).filter((k) => k.includes(':sess:'));
-    expect(keys).toHaveLength(ALLOWANCE + 3);
+    expect(keys).toHaveLength(ALLOWANCE + 3 + 5);
     for (const k of keys) expect(await client.pTTL(k)).toBeLessThanOrEqual(24 * 3_600_000);
     // The thousand refused new sessions wrote nothing: used_memory moved by allocator noise only.
     expect(Math.abs((samples[1] as number) - (samples[0] as number))).toBeLessThan(64 * 1024);

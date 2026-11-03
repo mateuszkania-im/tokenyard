@@ -87,14 +87,19 @@ const reservation = z.strictObject({
   assumedMaxUses: z.number().int().positive().default(25),
 });
 
+/** New sessions one key may start in an hour: a GCRA, that many at once, refilled evenly over the hour. */
+const newSessionsPerHour = z.number().int().positive().max(1_000_000);
+
 /**
  * Session-scoped state (S-V2-1). A session id is chosen by the client, and every new one creates counter state, so
  * session keys expire `idleTtlHours` after their last use and one key may start at most `newPerKeyPerHour` new sessions
- * (a GCRA: that many at once, refilled evenly over the hour).
+ * an hour (developer keys) or `newPerServiceKeyPerHour` (service keys); a key's own `maxNewSessionsPerHour` in
+ * keys.yaml overrides either.
  */
 const sessions = z.strictObject({
   idleTtlHours: z.number().int().min(1).max(720).default(24),
-  newPerKeyPerHour: z.number().int().positive().max(1_000_000).default(1_000),
+  newPerKeyPerHour: newSessionsPerHour.default(1_000),
+  newPerServiceKeyPerHour: newSessionsPerHour.default(10_000),
 });
 
 const guardrails = z.strictObject({
@@ -172,6 +177,8 @@ export const keyRecordSchema = z.strictObject({
   name,
   kind: z.enum(['developer', 'service']),
   billing: z.enum(['api', 'subscription']),
+  /** S-V2-1: this key's own limit on new sessions an hour, instead of the policy's default for its kind. */
+  maxNewSessionsPerHour: newSessionsPerHour.optional(),
 });
 export const keysFileSchema = z.array(keyRecordSchema);
 

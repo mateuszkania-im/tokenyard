@@ -61,6 +61,8 @@ export interface KeyRecord {
   name: string;
   kind: 'developer' | 'service';
   billing: 'api' | 'subscription';
+  /** S-V2-1: this key's own limit on new sessions an hour (keys.yaml), instead of the policy default for its kind. */
+  maxNewSessionsPerHour?: number;
 }
 
 /** A route with its globs compiled to anchored RegExps (spec 6.7: precomputed matchers). */
@@ -130,6 +132,8 @@ export interface CompiledPolicy {
   streamLimits: readonly CompiledStreamLimit[];
   reservation: PolicyDoc['reservation'];
   sessions: PolicyDoc['sessions'];
+  /** S-V2-1: keys with their own `maxNewSessionsPerHour`, by key id. */
+  newSessionLimits: ReadonlyMap<string, number>;
   guardrails: PolicyDoc['guardrails'];
   failure: PolicyDoc['failure'];
   ci: PolicyDoc['ci'];
