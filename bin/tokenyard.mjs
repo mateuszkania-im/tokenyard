@@ -58928,8 +58928,22 @@ function readUpTo(s2, cap2) {
     s2.once("error", onEnd);
   });
 }
-async function withoutCredentialEcho(up, p, env, headers) {
-  const key = p.credential === "passthrough" || up.status >= 200 && up.status < 300 ? void 0 : env[p.credential.env];
+async function withoutCredentialEcho(up, p, env, headers, envelope) {
+  if (p.credential === "passthrough" || up.status >= 200 && up.status < 300) return up.body;
+  const encoding = String(headers["content-encoding"] ?? "identity").trim().toLowerCase();
+  if (encoding !== "identity" && encoding !== "") {
+    up.body.on("error", () => void 0);
+    up.body.destroy();
+    const message = `tokenyard: upstream answered ${up.status} with a ${encoding.replace(/[^a-z0-9,-]/g, "").slice(0, 32)}-encoded body, withheld because it could not be checked for the provider key`;
+    const body = Buffer.from(
+      JSON.stringify(envelope === "openai" ? { error: { type: "server_error", code: "upstream_error_encoded", message } } : { type: "error", error: { type: "api_error", message } })
+    );
+    delete headers["content-encoding"];
+    headers["content-type"] = "application/json";
+    headers["content-length"] = String(body.length);
+    return Readable2.from([body]);
+  }
+  const key = env[p.credential.env];
   if (!key) return up.body;
   const head = await readUpTo(up.body, ERROR_BODY_CAP_BYTES + 2 * key.length + 128);
   if (!head.ended) {
@@ -59327,7 +59341,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     { "x-tokenyard-request-id": id, "x-tokenyard-policy-revision": policy2.revision, "X-Accel-Buffering": "no" },
     answered.credential === "passthrough" ? "passthrough" : "api"
   );
-  const clientBody = await withoutCredentialEcho(up, answered, deps.env ?? process.env, outHeaders);
+  const clientBody = await withoutCredentialEcho(up, answered, deps.env ?? process.env, outHeaders, held.envelope);
   res.writeHead(up.status, outHeaders);
   res.flushHeaders();
   const tap = usageTap(surface, up, deps.bodyCapBytes);

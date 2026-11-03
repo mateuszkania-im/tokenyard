@@ -346,11 +346,28 @@ function readUpTo(s: Readable, cap: number): Promise<{ bytes: Buffer; ended: boo
  * The body to send the client. In API mode every client shares the operator's key, so a non-2xx answer that quotes it
  * (a 401 echoing the header, OpenAI's masked `sk-proj-****WXYZ`) is cut to 64 KiB with a marker and has the key and its
  * masked forms replaced in everything forwarded; `headers` gets the new content-length (B2, S25-3). Bytes past the cut
- * are read so the redaction sees a key or masked form that straddles it whole, then dropped. Everything else is the
+ * are read so the redaction sees a key or masked form that straddles it whole, then dropped. Such an answer with a
+ * content-encoding other than identity becomes tokenyard's own error with the same status. Everything else is the
  * upstream stream, untouched.
  */
-async function withoutCredentialEcho(up: UpstreamResponse, p: ProviderSpec, env: NodeJS.ProcessEnv, headers: Record<string, string | string[]>): Promise<Readable> {
-  const key = p.credential === 'passthrough' || (up.status >= 200 && up.status < 300) ? undefined : env[p.credential.env];
+async function withoutCredentialEcho(up: UpstreamResponse, p: ProviderSpec, env: NodeJS.ProcessEnv, headers: Record<string, string | string[]>, envelope: ErrorEnvelope): Promise<Readable> {
+  if (p.credential === 'passthrough' || (up.status >= 200 && up.status < 300)) return up.body;
+  // Redaction cannot read compressed bytes (the gateway asked for identity, a provider or proxy may still compress): the
+  // error is replaced by tokenyard's own, with the upstream status.
+  const encoding = String(headers['content-encoding'] ?? 'identity').trim().toLowerCase();
+  if (encoding !== 'identity' && encoding !== '') {
+    up.body.on('error', () => undefined);
+    up.body.destroy();
+    const message = `tokenyard: upstream answered ${up.status} with a ${encoding.replace(/[^a-z0-9,-]/g, '').slice(0, 32)}-encoded body, withheld because it could not be checked for the provider key`;
+    const body = Buffer.from(
+      JSON.stringify(envelope === 'openai' ? { error: { type: 'server_error', code: 'upstream_error_encoded', message } } : { type: 'error', error: { type: 'api_error', message } }),
+    );
+    delete headers['content-encoding'];
+    headers['content-type'] = 'application/json';
+    headers['content-length'] = String(body.length);
+    return Readable.from([body]);
+  }
+  const key = env[p.credential.env];
   if (!key) return up.body;
   // Margin past the cap: a key, or a masked form (look-back of at most the key's length, a mask of at most 64), that
   // starts before the cut ends inside it.
@@ -897,7 +914,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     { 'x-tokenyard-request-id': id, 'x-tokenyard-policy-revision': policy.revision, 'X-Accel-Buffering': 'no' },
     answered.credential === 'passthrough' ? 'passthrough' : 'api',
   );
-  const clientBody = await withoutCredentialEcho(up, answered, deps.env ?? process.env, outHeaders);
+  const clientBody = await withoutCredentialEcho(up, answered, deps.env ?? process.env, outHeaders, held.envelope);
   res.writeHead(up.status, outHeaders);
   res.flushHeaders();
 
