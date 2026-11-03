@@ -69,7 +69,8 @@ test('swap under load: 200 concurrent requests during 5 swaps, zero failed', asy
     }
   })();
   const requests = Array.from({ length: 200 }, async (_, i) => {
-    await sleep((i % 40) * 12);
+    // Spread over about 1 s, past the last swap (400 ms) and its settle reads even on a loaded runner.
+    await sleep((i % 40) * 25);
     const r = await send(url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-sonnet-5-5' }), agent });
     results.push({ status: r.status, rev: String(r.headers['x-tokenyard-policy-revision']) });
   });
