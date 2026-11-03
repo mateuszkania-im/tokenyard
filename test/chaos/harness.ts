@@ -401,7 +401,9 @@ const sessionPseudonym = (chaosId: string): string => pseudonym(SALT, `s-${chaos
 export async function checkInvariants(h: Harness, sent: ClientResult[], o: InvariantOptions = {}): Promise<void> {
   // Every request the gateway received gets exactly one line; a client that left before its request reached the
   // gateway (its connection reset before the headers were read) has none, and nothing else.
-  await expect.poll(() => h.records.length, { timeout: 10_000 }).toBe(h.ids.length);
+  // Both counts are read on every poll: a request that reaches the handler only after the clients are done (its
+  // headers still queued on a busy machine) adds to both. Reading ids.length once made the target stale (V5 flake).
+  await expect.poll(() => h.records.length - h.ids.length, { timeout: 10_000 }).toBe(0);
   await new Promise((r) => setTimeout(r, 30)); // a late duplicate would show here
   expect(new Set(h.records.map((r) => r.id)).size).toBe(h.records.length);
   expect(h.records.map((r) => r.id).sort()).toEqual([...h.ids].sort());
