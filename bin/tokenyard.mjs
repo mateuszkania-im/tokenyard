@@ -61104,7 +61104,7 @@ var init_loader = __esm({
           await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e2) => this.report(new Error(`could not write last-known-good: ${msgOf(e2)}`)));
         } catch (e2) {
           const message = msgOf(e2);
-          if (!(trigger === "poll" && message === this.lastError)) {
+          if (!(trigger !== "start" && message === this.lastError)) {
             this.errors++;
             this.lastError = message;
             this.report(e2);

@@ -97,6 +97,23 @@ test('broken file keeps the old revision and increments loadErrors', async () =>
   expect(errors[0]?.message).toMatch(/E_YAML|E_SCHEMA/);
 });
 
+test('the same broken file found again by the watcher is still one failure (a loaded machine spreads one write over two events)', async () => {
+  const dir = tempDir();
+  writePolicyDir(dir, UP, 'one');
+  const l = await started({ dir, pollMs: 60_000 });
+  const rev = l.active().revision;
+  writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: [unclosed');
+  await expect.poll(() => l.loadErrors).toBe(1);
+  // The same content written again: the watcher fires, the reload finds the same failure.
+  writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: [unclosed');
+  await sleep(300);
+  expect(l.loadErrors).toBe(1);
+  expect(l.active().revision).toBe(rev);
+  // A different failure counts again.
+  writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: {unclosed');
+  await expect.poll(() => l.loadErrors).toBe(2);
+});
+
 test('truncated mid-write then complete write: old revision serves, then the new one activates', async () => {
   const dir = tempDir();
   writePolicyDir(dir, UP, 'one');

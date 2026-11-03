@@ -206,8 +206,9 @@ export class PolicyLoader extends EventEmitter {
       await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e: unknown) => this.report(new Error(`could not write last-known-good: ${msgOf(e)}`)));
     } catch (e) {
       const message = msgOf(e);
-      // A broken file that the poll finds again is one failure, not one per tick.
-      if (!(trigger === 'poll' && message === this.lastError)) {
+      // A broken file that the poll or the watcher finds again is one failure, not one per tick or per event (one
+      // write can reach the watcher as several events, spread past the debounce on a loaded machine).
+      if (!(trigger !== 'start' && message === this.lastError)) {
         this.errors++;
         this.lastError = message;
         this.report(e);
