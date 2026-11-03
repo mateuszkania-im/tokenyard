@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import type { RedisClientType } from 'redis';
 import type { Admission } from '../policy/types.js';
-import { deadlinesKey, reservationKey, sweepLockKey, tenantOfKey } from './keys.js';
+import { deadlinesKey, r11LatchKey, reservationKey, sweepLockKey, tenantOfKey } from './keys.js';
 import { ADMIT_LUA, SEED_LUA, SETTLE_LUA, SWEEP_LUA } from './lua.js';
 import { assertMicroUsd, budgetExpiresAt, type CounterStore, planTenant, SESSION_BUDGET_TTL_MS } from './store.js';
 
@@ -150,6 +150,15 @@ export function createRedisStore(client: Client, o: { deadlineMs: number; onSwep
         const [s, r] = rows[i] ?? [];
         return [k, { spent: Number(s ?? 0), reserved: Number(r ?? 0) }];
       }));
+    },
+
+    // No TTL: the latch stays until an operator deletes the key, once the tokenizer factor is understood (README).
+    async latchBoundOff() {
+      await client.sendCommand(['SET', r11LatchKey(), '1']);
+    },
+
+    async boundOffLatched() {
+      return Number(await client.sendCommand(['EXISTS', r11LatchKey()])) === 1;
     },
 
     async seed(entries) {

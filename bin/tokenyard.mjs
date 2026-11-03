@@ -29973,6 +29973,9 @@ function deadlinesKey(tenant) {
 function sweepLockKey(tenant) {
   return `${prefix(tenant)}:sweep-lock`;
 }
+function r11LatchKey() {
+  return `${prefix(GLOBAL_TENANT)}:r11`;
+}
 function tenantOfKey(key) {
   const m = TAG.exec(key);
   if (!m) return null;
@@ -29982,13 +29985,14 @@ function tenantOfKey(key) {
     return null;
   }
 }
-var part, prefix, SWEEP_LOCK_TENANT, TAG;
+var part, prefix, SWEEP_LOCK_TENANT, GLOBAL_TENANT, TAG;
 var init_keys = __esm({
   "src/limits/keys.ts"() {
     "use strict";
     part = (s2) => encodeURIComponent(s2);
     prefix = (tenant) => `ty:{${part(tenant)}}`;
     SWEEP_LOCK_TENANT = "_sweeper";
+    GLOBAL_TENANT = "_global";
     TAG = /^ty:\{([^{}]*)\}:/;
   }
 });
@@ -58581,6 +58585,7 @@ var handler_exports = {};
 __export(handler_exports, {
   DEFAULT_ADMIT_TIMEOUT_MS: () => DEFAULT_ADMIT_TIMEOUT_MS,
   DEFAULT_REQUEST_DEADLINE_MS: () => DEFAULT_REQUEST_DEADLINE_MS,
+  LATCH_REFRESH_MS: () => LATCH_REFRESH_MS,
   createGatewayRuntime: () => createGatewayRuntime,
   createHandler: () => createHandler
 });
@@ -58604,10 +58609,24 @@ function withDeadline(p, ms) {
   });
   return Promise.race([p, deadline]).finally(() => clearTimeout(timer));
 }
+async function readLatch(deps, runtime) {
+  const store = deps.store;
+  if (runtime.bytesBoundOff || !store?.boundOffLatched) return;
+  const now = deps.clock();
+  const first2 = runtime.latchReadAt === null;
+  if (!first2 && now - runtime.latchReadAt < LATCH_REFRESH_MS) return;
+  runtime.latchReadAt = now;
+  const read = withDeadline(store.boundOffLatched(), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS).then(
+    (on) => void (on && (runtime.bytesBoundOff = true)),
+    () => void 0
+  );
+  if (first2) await read;
+}
 function createGatewayRuntime() {
   const swept = /* @__PURE__ */ new Set();
   return {
     bytesBoundOff: false,
+    latchReadAt: null,
     boundViolations: 0,
     admits: 0,
     onSwept(ids) {
@@ -58752,7 +58771,8 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
     deps.metrics?.inc("tokenyard_bound_violations_total");
     if (!runtime.bytesBoundOff) {
       runtime.bytesBoundOff = true;
-      console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) until restart`);
+      if (deps.store?.latchBoundOff) await withDeadline(deps.store.latchBoundOff(), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS).catch(() => void 0);
+      console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) on every instance sharing this counter store until the key ty:{_global}:r11 is deleted`);
     }
   }
   try {
@@ -58869,6 +58889,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     }
     return early({ status: 499, aborted: true, errorClass: "client_abort" });
   }
+  await readLatch(deps, runtime);
   const features = extractFeatures(surface, body);
   const product = key.kind === "service";
   const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? deps.traceSalt ?? "");
@@ -59122,7 +59143,7 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -59162,6 +59183,7 @@ var init_handler = __esm({
     StoreTimeoutError = class extends Error {
     };
     recorders = /* @__PURE__ */ new WeakMap();
+    LATCH_REFRESH_MS = 3e4;
     SWEPT_MAX = 1e5;
     summary = (d) => ({
       route: d.plan.route,
@@ -60242,6 +60264,7 @@ function createMemoryStore(o) {
   const streams = /* @__PURE__ */ new Map();
   const taints = /* @__PURE__ */ new Map();
   const reservations = /* @__PURE__ */ new Map();
+  let r11 = false;
   function live(m, key, now) {
     const v = m.get(key);
     if (v !== void 0 && v.exp <= now) {
@@ -60385,9 +60408,16 @@ function createMemoryStore(o) {
         b.exp = Math.max(b.exp, now + e2.ttlMs);
       }
     },
+    async latchBoundOff() {
+      r11 = true;
+    },
+    async boundOffLatched() {
+      return r11;
+    },
     keys() {
       const now = o.clock();
       const out = /* @__PURE__ */ new Set();
+      if (r11) out.add(r11LatchKey());
       for (const m of [budgets, tats, taints]) for (const key of m.keys()) if (live(m, key, now)) out.add(key);
       for (const key of streams.keys()) out.add(key);
       for (const [id, res] of reservations) {
@@ -105686,6 +105716,13 @@ function createRedisStore(client, o) {
         return [k, { spent: Number(s2 ?? 0), reserved: Number(r ?? 0) }];
       }));
     },
+    // No TTL: the latch stays until an operator deletes the key, once the tokenizer factor is understood (README).
+    async latchBoundOff() {
+      await client.sendCommand(["SET", r11LatchKey(), "1"]);
+    },
+    async boundOffLatched() {
+      return Number(await client.sendCommand(["EXISTS", r11LatchKey()])) === 1;
+    },
     async seed(entries) {
       for (const e2 of entries) {
         if (tenantOfKey(e2.key) === null) throw new Error(`counter key without a tenant tag: ${e2.key}`);
@@ -125782,7 +125819,7 @@ var package_default = {
     typecheck: "tsc --noEmit",
     lint: "oxlint",
     test: "vitest run",
-    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts",
+    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts",
     bench: "tsx bench/run.ts",
     "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
     live: "node --env-file=.env bin/tokenyard.mjs live",

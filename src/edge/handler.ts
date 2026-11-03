@@ -124,8 +124,13 @@ function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
 
 /** Per-process runtime state: never in `policy/`, which is pure, and gone on restart by design. */
 export interface GatewayRuntime {
-  /** R11: set when a settled request billed more input than its bytes bound; every later request uses the context-window bound until restart. */
+  /**
+   * R11: set when a settled request billed more input than its bytes bound, here or (through the store's shared latch,
+   * A9) on any instance; every later request uses the context-window bound.
+   */
   bytesBoundOff: boolean;
+  /** When this process last read the store's R11 latch (ms, its clock); null before the first read. */
+  latchReadAt: number | null;
   /** Requests whose billed input exceeded their bytes bound (a counter for /metrics). */
   boundViolations: number;
   /** Admit calls made by this process, in call order; each request's number is traced so replay can order admits that share a millisecond. */
@@ -136,6 +141,29 @@ export interface GatewayRuntime {
   takeSwept(id: string): boolean;
 }
 
+/** How often a process re-reads the store's R11 latch in the background once it has read it (A9). */
+export const LATCH_REFRESH_MS = 30_000;
+
+/**
+ * The store's R11 latch (A9): the first request of a process waits for one read (bounded by the admit deadline), so a
+ * restarted or second instance never decides with a bytes bound another one has shown to fail; later reads run in the
+ * background every LATCH_REFRESH_MS and keep the hot path at one store round trip. A store that cannot answer leaves
+ * the process latch as it is.
+ */
+async function readLatch(deps: GatewayDeps, runtime: GatewayRuntime): Promise<void> {
+  const store = deps.store;
+  if (runtime.bytesBoundOff || !store?.boundOffLatched) return;
+  const now = deps.clock();
+  const first = runtime.latchReadAt === null;
+  if (!first && now - (runtime.latchReadAt as number) < LATCH_REFRESH_MS) return;
+  runtime.latchReadAt = now;
+  const read = withDeadline(store.boundOffLatched(), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS).then(
+    (on) => void (on && (runtime.bytesBoundOff = true)),
+    () => undefined,
+  );
+  if (first) await read;
+}
+
 /** Ids remembered for requests the sweeper settled; a request that never comes back must not grow it without end. */
 const SWEPT_MAX = 100_000;
 
@@ -143,6 +171,7 @@ export function createGatewayRuntime(): GatewayRuntime {
   const swept = new Set<string>();
   return {
     bytesBoundOff: false,
+    latchReadAt: null,
     boundViolations: 0,
     admits: 0,
     onSwept(ids) {
@@ -423,7 +452,8 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     o.costMicroUsd = cost;
   }
 
-  // R11: the bytes bound rests on at most one token per byte; one violation turns it off for this process.
+  // R11: the bytes bound rests on at most one token per byte; one violation turns it off for this process and, through
+  // the store's latch, for every instance on the store until the latch key is deleted (A9).
   const f = held.features;
   if (r?.usage && f?.boundKind === 'bytes' && totalInput(r.usage, o.surface) > f.inputTokensBound) {
     o.boundExceeded = true;
@@ -431,7 +461,9 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     deps.metrics?.inc('tokenyard_bound_violations_total');
     if (!runtime.bytesBoundOff) {
       runtime.bytesBoundOff = true;
-      console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) until restart`);
+      // Shared with every instance on the store, and kept across restarts (A9).
+      if (deps.store?.latchBoundOff) await withDeadline(deps.store.latchBoundOff(), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS).catch(() => undefined);
+      console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) on every instance sharing this counter store until the key ty:{_global}:r11 is deleted`);
     }
   }
   try {
@@ -592,6 +624,8 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     }
     return early({ status: 499, aborted: true, errorClass: 'client_abort' }); // the client went away mid-upload
   }
+
+  await readLatch(deps, runtime);
 
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);

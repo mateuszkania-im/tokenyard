@@ -3,7 +3,7 @@
 // All state lives in Maps, so a key or id such as `__proto__` is just a string.
 import type { Admission, Plan } from '../policy/types.js';
 import { gcra } from './gcra.js';
-import { deadlinesKey, reservationKey, tenantOfKey } from './keys.js';
+import { deadlinesKey, r11LatchKey, reservationKey, tenantOfKey } from './keys.js';
 import { assertMicroUsd, budgetExpiresAt, type CounterStore, DEFAULT_DEADLINE_MS, planTenant } from './store.js';
 
 interface Expiring {
@@ -44,6 +44,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
   const streams = new Map<string, number>();
   const taints = new Map<string, Taint>();
   const reservations = new Map<string, Reservation>();
+  let r11 = false;
 
   function live<V extends Expiring>(m: Map<string, V>, key: string, now: number): V | undefined {
     const v = m.get(key);
@@ -212,9 +213,18 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
       }
     },
 
+    async latchBoundOff() {
+      r11 = true;
+    },
+
+    async boundOffLatched() {
+      return r11;
+    },
+
     keys() {
       const now = o.clock();
       const out = new Set<string>();
+      if (r11) out.add(r11LatchKey());
       for (const m of [budgets, tats, taints] as Array<Map<string, Expiring>>) for (const key of m.keys()) if (live(m, key, now)) out.add(key);
       for (const key of streams.keys()) out.add(key);
       for (const [id, res] of reservations) {

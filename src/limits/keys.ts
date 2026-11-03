@@ -52,6 +52,17 @@ export function sweepLockKey(tenant: string): string {
   return `${prefix(tenant)}:sweep-lock`;
 }
 
+/**
+ * Reserved tenant name of process-independent gateway state (the R11 latch): every instance reads the same key, which
+ * still follows the `{tenant}` rule.
+ */
+export const GLOBAL_TENANT = '_global';
+
+/** R11 latch: set once a billed input exceeded its bytes bound; while it exists every instance uses the context-window bound. */
+export function r11LatchKey(): string {
+  return `${prefix(GLOBAL_TENANT)}:r11`;
+}
+
 const TAG = /^ty:\{([^{}]*)\}:/;
 
 /** The tenant of a counter key, or null when the key is not in the `ty:{tenant}:` layout. */

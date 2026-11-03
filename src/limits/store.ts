@@ -8,6 +8,10 @@ export interface CounterStore {
   sweep(nowMs: number): Promise<number>;                            // settles overdue reservations and frees their slots
   snapshot(keys: string[]): Promise<Record<string, { spent: number; reserved: number }>>;
   seed(entries: Array<{ key: string; spentMicroUsd: number; ttlMs: number }>): Promise<void>;  // warm-up from traces (9.2, 14.1)
+  /** Not in spec 7.1: sets the shared R11 latch (`ty:{_global}:r11`), so every instance, restarts included, drops the bytes bound (A9). */
+  latchBoundOff?(): Promise<void>;
+  /** Not in spec 7.1: whether the shared R11 latch is set. */
+  boundOffLatched?(): Promise<boolean>;
 }
 
 const DAY_MS = 86_400_000;
