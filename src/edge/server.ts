@@ -22,7 +22,7 @@ function listenOn(server: Server, port: number, host: string): Promise<string> {
 
 export function createGateway(deps: GatewayDeps): {
   listen(port: number, host?: string): Promise<string>;
-  /** A second listener with only /metrics, /healthz and /readyz (pair it with `metricsOnOtherPort: true`). */
+  /** A second listener with only /metrics, /healthz and /readyz (the only place /metrics is served). */
   listenOps(port: number, host?: string): Promise<string>;
   close(): Promise<void>;
 } {

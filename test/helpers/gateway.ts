@@ -25,6 +25,7 @@ export async function startGateway(o: {
   spans?: GatewayDeps['spans'];
   /** Serve /metrics on a second listener only. */
   opsListener?: boolean;
+  metricsToken?: string;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
@@ -42,7 +43,7 @@ export async function startGateway(o: {
     ...(o.admitTimeoutMs !== undefined ? { admitTimeoutMs: o.admitTimeoutMs } : {}),
     ...(o.metrics ? { metrics: o.metrics } : {}),
     ...(o.spans ? { spans: o.spans } : {}),
-    ...(o.opsListener ? { metricsOnOtherPort: true } : {}),
+    ...(o.metricsToken ? { metricsToken: o.metricsToken } : {}),
   });
   const url = await gw.listen(0, '127.0.0.1');
   const opsUrl = o.opsListener ? await gw.listenOps(0, '127.0.0.1') : undefined;

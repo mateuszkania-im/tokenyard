@@ -32,7 +32,7 @@ test('tokenyard serve --dev-upstream forwards to the upstream', async () => {
   const { spawn } = await import('node:child_process');
   const { startAnthropicMock } = await import('../src/mock/anthropic.js');
   const mock = await startAnthropicMock();
-  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url]);
+  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url, '--no-metrics']);
   try {
     const url = await new Promise<string>((resolve, reject) => {
       child.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()));

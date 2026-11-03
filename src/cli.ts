@@ -37,11 +37,13 @@ program
   .option('--instance-id <id>', 'instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)')
   .option('--trace-salt <salt>', 'HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
   .option('--otlp-endpoint <url>', 'export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs --trace-salt')
-  .option('--metrics-port <n>', 'serve /metrics, /healthz and /readyz on this port only; /metrics is then a 404 on --port (default: /metrics on --port)')
-  .option('--metrics-host <host>', 'address to bind for --metrics-port', '127.0.0.1')
+  .option('--metrics-port <n>', 'ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it', '9464')
+  .option('--metrics-host <host>', 'address the ops listener binds; a non-loopback address needs --metrics-token', '127.0.0.1')
+  .option('--metrics-token <token>', 'bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback')
+  .option('--no-metrics', 'do not start the ops listener')
   .option('--store <kind>', 'counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis', 'memory')
   .option('--redis-url <url>', 'Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; store: string; redisUrl?: string; otlpEndpoint?: string; metricsPort?: string; metricsHost: string }) => {
+  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; store: string; redisUrl?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metrics: boolean }) => {
     if (!o.devUpstream && !o.policy && !o.policyUrl) {
       console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
       process.exit(1);
@@ -86,8 +88,15 @@ program
       console.error('tokenyard serve: --otlp-endpoint needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids on spans are HMAC pseudonyms)');
       process.exit(1);
     }
-    if (o.metricsPort !== undefined && !/^\d+$/.test(o.metricsPort)) {
+    if (!/^\d+$/.test(o.metricsPort)) {
       console.error('tokenyard serve: --metrics-port must be a port number');
+      process.exit(1);
+    }
+    const opsOn = o.metrics && Number(o.metricsPort) !== 0;
+    const metricsToken = o.metricsToken ?? process.env.TOKENYARD_METRICS_TOKEN;
+    const { isLoopbackHost } = await import('./edge/ops.js');
+    if (opsOn && !isLoopbackHost(o.metricsHost) && !metricsToken) {
+      console.error('tokenyard serve: --metrics-host is not a loopback address, so --metrics-token or TOKENYARD_METRICS_TOKEN is required (or use --no-metrics)');
       process.exit(1);
     }
     const { hostname } = await import('node:os');
@@ -134,6 +143,7 @@ program
     const spans = await createTracer(otlpEndpoint); // loads the OpenTelemetry packages only when an endpoint is set
     registerCollectors(metrics, {
       revision: () => activePolicy().revision,
+      candidateRevision: () => activePolicy().candidate?.revision ?? null,
       ...(loader ? { loadErrors: () => (loader as import('./policy-loader/loader.js').PolicyLoader).loadErrors } : {}),
       ...(writer ? { traceDrops: () => writer.dropped } : {}),
     });
@@ -176,10 +186,18 @@ program
       experimentalSubscription: o.experimentalSubscription === true,
       metrics,
       ...(otlpEndpoint !== null ? { spans } : {}),
-      ...(o.metricsPort !== undefined ? { metricsOnOtherPort: true } : {}),
+      ...(metricsToken ? { metricsToken } : {}),
     });
-    console.log(await gw.listen(Number(o.port), o.host));
-    if (o.metricsPort !== undefined) console.error(`tokenyard: metrics on ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)}/metrics`);
+    const apiUrl = await gw.listen(Number(o.port), o.host);
+    if (opsOn) {
+      try {
+        console.error(`tokenyard: ops listener ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)} (/metrics${metricsToken ? ', bearer token required' : ''}, /healthz, /readyz)`);
+      } catch (e) {
+        console.error(`tokenyard serve: ops listener on ${o.metricsHost}:${o.metricsPort}: ${e instanceof Error ? e.message : String(e)} (use --metrics-port or --no-metrics)`);
+        process.exit(1);
+      }
+    }
+    console.log(apiUrl); // printed last: by then both listeners are up
     const stop = (): void => {
       stopSweeper();
       void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => undefined)).then(() => counters.close()).then(() => process.exit(0));

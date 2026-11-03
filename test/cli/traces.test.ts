@@ -24,7 +24,7 @@ test('serve --trace-dir without a salt refuses to start', async () => {
 test('serve writes traces with a ULID request id, then export and report read them', async () => {
   dir = await mkdtemp(join(tmpdir(), 'ty-cli-trace-'));
   const mock = await startAnthropicMock();
-  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url, '--trace-dir', dir, '--instance-id', 'cli1', '--trace-salt', 's'], { env: { ...process.env, TOKENYARD_DEV_UPSTREAM_KEY: 'x' } });
+  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url, '--trace-dir', dir, '--instance-id', 'cli1', '--trace-salt', 's', '--no-metrics'], { env: { ...process.env, TOKENYARD_DEV_UPSTREAM_KEY: 'x' } });
   try {
     const url = await new Promise<string>((resolve, reject) => {
       child.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()));

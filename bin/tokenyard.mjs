@@ -970,6 +970,84 @@ data: ${JSON.stringify(e2.data)}
   }
 });
 
+// src/edge/ops.ts
+var ops_exports = {};
+__export(ops_exports, {
+  isLoopbackHost: () => isLoopbackHost,
+  matchOps: () => matchOps,
+  serveOps: () => serveOps
+});
+import { createHash as createHash2, timingSafeEqual } from "node:crypto";
+function matchOps(method, rawUrl, basePath) {
+  if (method !== "GET" && method !== "HEAD") return null;
+  let path3 = rawUrl.split("?")[0] ?? "";
+  const base = basePath?.replace(/\/+$/, "") ?? "";
+  if (base !== "") {
+    if (!path3.startsWith(`${base}/`)) return null;
+    path3 = path3.slice(base.length);
+  }
+  return path3 === "/metrics" ? "metrics" : path3 === "/healthz" ? "healthz" : path3 === "/readyz" ? "readyz" : null;
+}
+function isLoopbackHost(host) {
+  const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+  return h === "localhost" || h === "::1" || /^127(\.\d{1,3}){3}$/.test(h);
+}
+function bearerOk(req, token) {
+  const m = /^Bearer (.+)$/.exec(String(req.headers.authorization ?? ""));
+  return timingSafeEqual(digest(m?.[1] ?? ""), digest(token)) && m !== null;
+}
+async function readiness(d) {
+  let policy2;
+  try {
+    policy2 = d.policy();
+  } catch {
+    return { ok: false, reason: "policy not loaded" };
+  }
+  if (d.store === null) return { ok: true, reason: "ready" };
+  let timer;
+  try {
+    await Promise.race([
+      d.store.snapshot([PROBE_KEY]),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), d.admitTimeoutMs ?? 1e3);
+      })
+    ]);
+    return { ok: true, reason: "ready" };
+  } catch {
+    const down = policy2.failure.counterStoreDown;
+    if (down.budgets === "closed" || down.rateLimits === "closed") return { ok: false, reason: "counter store unreachable and the policy fails closed" };
+    return { ok: true, reason: "counter store unreachable, the policy fails open" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function serveOps(d, kind, req, res) {
+  req.resume();
+  const send = (status, type, body) => {
+    res.writeHead(status, { "content-type": type, "content-length": String(Buffer.byteLength(body)), "cache-control": "no-store" });
+    res.end(req.method === "HEAD" ? void 0 : body);
+  };
+  if (kind === "healthz") return send(200, "application/json", '{"status":"ok"}');
+  if (kind === "readyz") {
+    const r = await readiness(d);
+    return send(r.ok ? 200 : 503, "application/json", JSON.stringify({ status: r.ok ? "ready" : "not ready", reason: r.reason }));
+  }
+  if (d.metricsToken !== void 0 && !bearerOk(req, d.metricsToken)) {
+    res.setHeader("www-authenticate", "Bearer");
+    return send(401, "application/json", '{"error":"unauthorized"}');
+  }
+  if (!d.metrics) return send(404, "application/json", '{"error":"metrics are not enabled"}');
+  send(200, "text/plain; version=0.0.4; charset=utf-8", d.metrics.render());
+}
+var PROBE_KEY, digest;
+var init_ops = __esm({
+  "src/edge/ops.ts"() {
+    "use strict";
+    PROBE_KEY = "ty:{tokenyard-health}:probe";
+    digest = (s2) => createHash2("sha256").update(s2).digest();
+  }
+});
+
 // src/edge/ulid.ts
 var ulid_exports = {};
 __export(ulid_exports, {
@@ -1006,10 +1084,10 @@ __export(writer_exports, {
   defaultInstanceId: () => defaultInstanceId,
   safeTenantDir: () => safeTenantDir
 });
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import { join as join3 } from "node:path";
 function defaultInstanceId(hostname4, startedAtMs) {
-  return createHash2("sha256").update(`${hostname4}
+  return createHash3("sha256").update(`${hostname4}
 ${startedAtMs}`).digest("hex").slice(0, 8);
 }
 function safeTenantDir(tenant) {
@@ -29916,7 +29994,7 @@ var init_schema = __esm({
 });
 
 // src/policy/decide.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 function buildFeatures(x, key, attr, hits, prices, id, ts, surface, o = {}) {
   const model = x.parseError ? "" : x.model ?? "";
   let bound = hasModels(prices) ? inputTokenBound(x, reservationPrice(prices, pricedName(prices, model)).price) : { tokens: Number.MAX_SAFE_INTEGER, kind: "context-window" };
@@ -30000,7 +30078,7 @@ function orderChain(route2, seed) {
   const names = route2.chain.map((e2) => e2.provider);
   const total = route2.chain.reduce((s2, e2) => s2 + (e2.weight ?? 0), 0);
   if (total <= 0) return names;
-  const h = createHash3("sha256").update(route2.name).update("\0").update(seed).digest().readUInt32BE(0);
+  const h = createHash4("sha256").update(route2.name).update("\0").update(seed).digest().readUInt32BE(0);
   const x = h / 2 ** 32 * total;
   let acc = 0;
   let pick2 = route2.chain.findIndex((e2) => {
@@ -30717,7 +30795,7 @@ var init_json_ranges = __esm({
 });
 
 // src/surfaces/anthropic-messages.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 function hasExpandingField(parsed, tools) {
   for (const key of Object.keys(parsed)) if (!PLAIN_FIELDS.has(key)) return true;
   if (parsed.output_config !== void 0 && !(isObj4(parsed.output_config) && parsed.output_config.format == null)) return true;
@@ -30782,7 +30860,7 @@ function extractAnthropicFeatures(body) {
   for (const m of messages) if (isObj4(m)) collectBlockTypes(m.content, types);
   const blockTypes = [...types];
   const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
-  const prefixHash = hasPrefix ? createHash4("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
+  const prefixHash = hasPrefix ? createHash5("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
   const thinking = parsed.thinking;
   return {
     model: typeof parsed.model === "string" ? parsed.model : null,
@@ -30908,7 +30986,7 @@ var init_anthropic_models = __esm({
 });
 
 // src/surfaces/openai-responses.ts
-import { createHash as createHash5 } from "node:crypto";
+import { createHash as createHash6 } from "node:crypto";
 function emptyFeatures2(bodyBytes) {
   return {
     model: null,
@@ -31016,7 +31094,7 @@ function extractResponsesFeatures(body) {
   collectServerTools(tools, maxUses, serverTools, 0, seen);
   const types = /* @__PURE__ */ new Set();
   collectTypes(parsed.input, types);
-  const prefixHash = parsed.tools !== void 0 || parsed.instructions !== void 0 ? createHash5("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.instructions ?? null])).digest("hex") : null;
+  const prefixHash = parsed.tools !== void 0 || parsed.instructions !== void 0 ? createHash6("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.instructions ?? null])).digest("hex") : null;
   const reasoning = parsed.reasoning;
   return {
     model: typeof parsed.model === "string" ? parsed.model : null,
@@ -54962,8 +55040,8 @@ var require_connection = __commonJS({
             return;
           }
           const secWSAccept = response.headersList.get("Sec-WebSocket-Accept");
-          const digest = crypto.hash("sha1", keyValue + uid, "base64");
-          if (secWSAccept !== digest) {
+          const digest2 = crypto.hash("sha1", keyValue + uid, "base64");
+          if (secWSAccept !== digest2) {
             failHandshake(handler, response, 1002, "Incorrect hash received in Sec-WebSocket-Accept header.");
             return;
           }
@@ -57436,14 +57514,14 @@ var init_forward = __esm({
 });
 
 // src/upstream/chain.ts
-import { createHash as createHash6, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash7, randomBytes as randomBytes2 } from "node:crypto";
 import { Readable } from "node:stream";
 function workspaceOf(p) {
   return `${new URL(p.baseUrl).origin}|${p.credential === "passthrough" ? "passthrough" : p.credential.env}`;
 }
 function credentialBreakerKey(p, headers) {
   if (p.credential !== "passthrough") return `${p.name}|${workspaceOf(p)}`;
-  const h = createHash6("sha256").update(CREDENTIAL_SALT);
+  const h = createHash7("sha256").update(CREDENTIAL_SALT);
   for (const name2 of ["authorization", "x-api-key"]) h.update(`${name2}=${String(headers[name2] ?? "")};`);
   return `${p.name}|passthrough:${h.digest("hex")}`;
 }
@@ -57629,7 +57707,7 @@ var init_attribution = __esm({
 });
 
 // src/edge/auth.ts
-import { createHash as createHash7 } from "node:crypto";
+import { createHash as createHash8 } from "node:crypto";
 function extractCredentials(h) {
   const out = [];
   const own2 = first(h["x-tokenyard-key"])?.trim();
@@ -57641,7 +57719,7 @@ function extractCredentials(h) {
   return out;
 }
 function hashKey(v) {
-  return createHash7("sha256").update(v).digest("hex");
+  return createHash8("sha256").update(v).digest("hex");
 }
 var first;
 var init_auth = __esm({
@@ -57817,34 +57895,30 @@ var init_headers = __esm({
 // src/telemetry/metrics.ts
 var metrics_exports = {};
 __export(metrics_exports, {
-  MAX_VALUES_PER_LABEL: () => MAX_VALUES_PER_LABEL,
+  MAX_SERIES_PER_METRIC: () => MAX_SERIES_PER_METRIC,
   METRIC_DEFS: () => METRIC_DEFS,
+  agentTypeLabel: () => agentTypeLabel,
   createMetrics: () => createMetrics,
   createRequestRecorder: () => createRequestRecorder,
   modelLabel: () => modelLabel,
-  registerCollectors: () => registerCollectors
+  registerCollectors: () => registerCollectors,
+  requestClassLabel: () => requestClassLabel
 });
 function createMetrics() {
   const series = /* @__PURE__ */ new Map();
-  const seen = /* @__PURE__ */ new Map();
   const collectors = [];
   const seriesFor = (name2, labels) => {
     const def = METRIC_DEFS[name2];
     if (!Object.hasOwn(METRIC_DEFS, name2)) throw new Error(`unknown metric ${String(name2)}`);
     const values = def.labels.map((l) => {
       const raw = labels && Object.hasOwn(labels, l) ? String(labels[l]) : "";
-      const v = sanitizeHeaderValue(raw).value;
-      let kept = seen.get(l);
-      if (!kept) seen.set(l, kept = /* @__PURE__ */ new Set());
-      if (kept.has(v)) return v;
-      if (kept.size >= MAX_VALUES_PER_LABEL) return "other";
-      kept.add(v);
-      return v;
+      return sanitizeHeaderValue(raw).value;
     });
     let byKey = series.get(name2);
     if (!byKey) series.set(name2, byKey = /* @__PURE__ */ new Map());
     const k = JSON.stringify(values);
     let s2 = byKey.get(k);
+    if (!s2 && byKey.size >= MAX_SERIES_PER_METRIC) return null;
     if (!s2) {
       s2 = { values, value: 0, ...def.kind === "histogram" ? { buckets: Array.from({ length: (def.buckets ?? []).length }, () => 0), sum: 0, count: 0 } : {} };
       byKey.set(k, s2);
@@ -57855,12 +57929,14 @@ function createMetrics() {
     inc(name2, labels, v = 1) {
       if (!Number.isFinite(v)) return;
       if (METRIC_DEFS[name2].kind === "counter" && v < 0) return;
-      seriesFor(name2, labels).value += v;
+      const s2 = seriesFor(name2, labels);
+      if (s2) s2.value += v;
     },
     observe(name2, v, labels) {
       if (!Number.isFinite(v) || v < 0) return;
       const def = METRIC_DEFS[name2];
       const s2 = seriesFor(name2, labels);
+      if (!s2) return;
       def.buckets?.forEach((b, i) => {
         if (v <= b && s2.buckets) s2.buckets[i] = (s2.buckets[i] ?? 0) + 1;
       });
@@ -57869,7 +57945,8 @@ function createMetrics() {
     },
     set(name2, v, labels) {
       if (!Number.isFinite(v)) return;
-      seriesFor(name2, labels).value = v;
+      const s2 = seriesFor(name2, labels);
+      if (s2) s2.value = v;
     },
     reset(name2) {
       series.delete(name2);
@@ -57914,7 +57991,7 @@ function createRequestRecorder(metrics2) {
     metrics2.inc("tokenyard_requests_total", { route: route2, decision: r.decision.action, status_class: `${Math.floor(o.status / 100)}xx` });
     if (o.addedTtfbMs !== null) metrics2.observe("tokenyard_added_ttfb_seconds", o.addedTtfbMs / 1e3);
     if (o.costMicroUsd !== null && o.costMicroUsd > 0) {
-      metrics2.inc("tokenyard_cost_usd_total", { tenant: r.tenant, team: r.team ?? "", route: route2, request_class: r.attribution.requestClass ?? "" }, o.costMicroUsd / 1e6);
+      metrics2.inc("tokenyard_cost_usd_total", { tenant: r.tenant, team: r.team ?? "", route: route2, request_class: requestClassLabel(r.attribution.requestClass) }, o.costMicroUsd / 1e6);
     }
     if (o.provider === null) return;
     const model = modelLabel(prices, o.upstreamModel ?? r.features.model);
@@ -57936,12 +58013,14 @@ function createRequestRecorder(metrics2) {
 function registerCollectors(metrics2, src) {
   metrics2.addCollector(() => {
     metrics2.reset("tokenyard_policy_revision_info");
-    metrics2.set("tokenyard_policy_revision_info", 1, { revision: src.revision() });
+    metrics2.set("tokenyard_policy_revision_info", 1, { revision: src.revision(), role: "active" });
+    const candidate = src.candidateRevision?.() ?? null;
+    if (candidate !== null) metrics2.set("tokenyard_policy_revision_info", 1, { revision: candidate, role: "candidate" });
   });
   metrics2.addCollector(() => metrics2.set("tokenyard_policy_load_errors_total", src.loadErrors?.() ?? 0));
   if (src.traceDrops) metrics2.addCollector(() => metrics2.set("tokenyard_traces_dropped_total", src.traceDrops()));
 }
-var SECONDS, TTFB_SECONDS, METRIC_DEFS, MAX_VALUES_PER_LABEL, escapeLabel, escapeHelp, num3, modelLabel;
+var SECONDS, TTFB_SECONDS, METRIC_DEFS, MAX_SERIES_PER_METRIC, escapeLabel, escapeHelp, num3, REQUEST_CLASSES3, AGENT_TYPES2, requestClassLabel, agentTypeLabel, modelLabel;
 var init_metrics = __esm({
   "src/telemetry/metrics.ts"() {
     "use strict";
@@ -57957,7 +58036,7 @@ var init_metrics = __esm({
       tokenyard_inference_duration_seconds: { kind: "histogram", help: "Request duration by provider and priced model.", labels: ["provider", "model"], buckets: SECONDS },
       tokenyard_time_to_first_chunk_seconds: { kind: "histogram", help: "Time to the first response byte by provider and priced model.", labels: ["provider", "model"], buckets: SECONDS },
       tokenyard_cache_hit_ratio: { kind: "gauge", help: "Cache read tokens over all input tokens since start.", labels: [] },
-      tokenyard_policy_revision_info: { kind: "gauge", help: "The active policy revision (value 1).", labels: ["revision"] },
+      tokenyard_policy_revision_info: { kind: "gauge", help: "The active and candidate policy revisions (value 1).", labels: ["revision", "role"] },
       tokenyard_policy_load_errors_total: { kind: "counter", help: "Policy bundles that failed to load.", labels: [] },
       tokenyard_traces_dropped_total: { kind: "counter", help: "Trace records dropped (queue full or write failed).", labels: [] },
       tokenyard_reservations_open: { kind: "gauge", help: "Admitted requests of this process not yet settled.", labels: [] },
@@ -57968,69 +58047,15 @@ var init_metrics = __esm({
       tokenyard_breaker_opens_total: { kind: "counter", help: "Circuit breaker openings by scope (provider or credential).", labels: ["scope"] },
       tokenyard_should_retry_refusals_total: { kind: "counter", help: "Own errors sent with x-should-retry: false, by reason.", labels: ["reason"] }
     };
-    MAX_VALUES_PER_LABEL = 100;
+    MAX_SERIES_PER_METRIC = 2e3;
     escapeLabel = (v) => v.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n");
     escapeHelp = (v) => v.replaceAll("\\", "\\\\").replaceAll("\n", "\\n");
     num3 = (v) => Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(15)));
+    REQUEST_CLASSES3 = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
+    AGENT_TYPES2 = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
+    requestClassLabel = (v) => v === null ? "none" : REQUEST_CLASSES3.has(v) ? v : "other";
+    agentTypeLabel = (v) => v === null ? "none" : AGENT_TYPES2.has(v) ? v : "other";
     modelLabel = (prices, model) => model ? lookupModel(prices, model)?.id ?? "other" : "other";
-  }
-});
-
-// src/edge/ops.ts
-function matchOps(method, rawUrl, basePath) {
-  if (method !== "GET" && method !== "HEAD") return null;
-  let path3 = rawUrl.split("?")[0] ?? "";
-  const base = basePath?.replace(/\/+$/, "") ?? "";
-  if (base !== "") {
-    if (!path3.startsWith(`${base}/`)) return null;
-    path3 = path3.slice(base.length);
-  }
-  return path3 === "/metrics" ? "metrics" : path3 === "/healthz" ? "healthz" : path3 === "/readyz" ? "readyz" : null;
-}
-async function readiness(d) {
-  let policy2;
-  try {
-    policy2 = d.policy();
-  } catch {
-    return { ok: false, reason: "policy not loaded" };
-  }
-  if (d.store === null) return { ok: true, reason: "ready" };
-  let timer;
-  try {
-    await Promise.race([
-      d.store.snapshot([PROBE_KEY]),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error("timeout")), d.admitTimeoutMs ?? 1e3);
-      })
-    ]);
-    return { ok: true, reason: "ready" };
-  } catch {
-    const down = policy2.failure.counterStoreDown;
-    if (down.budgets === "closed" || down.rateLimits === "closed") return { ok: false, reason: "counter store unreachable and the policy fails closed" };
-    return { ok: true, reason: "counter store unreachable, the policy fails open" };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function serveOps(d, kind, req, res) {
-  req.resume();
-  const send = (status, type, body) => {
-    res.writeHead(status, { "content-type": type, "content-length": String(Buffer.byteLength(body)), "cache-control": "no-store" });
-    res.end(req.method === "HEAD" ? void 0 : body);
-  };
-  if (kind === "healthz") return send(200, "application/json", '{"status":"ok"}');
-  if (kind === "readyz") {
-    const r = await readiness(d);
-    return send(r.ok ? 200 : 503, "application/json", JSON.stringify({ status: r.ok ? "ready" : "not ready", reason: r.reason }));
-  }
-  if (!d.metrics) return send(404, "application/json", '{"error":"metrics are not enabled"}');
-  send(200, "text/plain; version=0.0.4; charset=utf-8", d.metrics.render());
-}
-var PROBE_KEY;
-var init_ops = __esm({
-  "src/edge/ops.ts"() {
-    "use strict";
-    PROBE_KEY = "ty:{tokenyard-health}:probe";
   }
 });
 
@@ -58207,7 +58232,7 @@ function emitTelemetry(deps, policy2, rec, attempts) {
       if (!record2) recorders.set(deps.metrics, record2 = createRequestRecorder(deps.metrics));
       record2(rec, policy2.prices);
     }
-    deps.spans?.requestSpan(rec, attempts);
+    deps.spans?.requestSpan(rec, attempts, modelLabel(policy2.prices, rec.features.model));
   } catch {
   }
 }
@@ -58643,7 +58668,7 @@ function createHandler(deps) {
   };
   return (req, res) => {
     const ops = matchOps(req.method ?? "GET", req.url ?? "/", deps.basePath);
-    if (ops !== null && !(ops === "metrics" && deps.metricsOnOtherPort)) {
+    if (ops !== null && ops !== "metrics") {
       serveOps({ ...deps, admitTimeoutMs }, ops, req, res).catch(() => res.destroy());
       return;
     }
@@ -59295,7 +59320,7 @@ __export(bundle_exports, {
   serializeBundle: () => serializeBundle,
   sha256Hex: () => sha256Hex
 });
-import { createHash as createHash8 } from "node:crypto";
+import { createHash as createHash9 } from "node:crypto";
 function canonicalJson(v) {
   if (Array.isArray(v)) return `[${v.map((x) => x === void 0 ? "null" : canonicalJson(x)).join(",")}]`;
   if (typeof v === "object" && v !== null) {
@@ -59367,7 +59392,7 @@ var init_bundle = __esm({
     init_load_dir();
     init_schema();
     MAX_BUNDLE_BYTES = 8 * 1024 * 1024;
-    sha256Hex = (text2) => createHash8("sha256").update(text2).digest("hex");
+    sha256Hex = (text2) => createHash9("sha256").update(text2).digest("hex");
     sortedKeys = (keys2) => [...keys2].sort((a, b) => a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0);
     serializeBundle = (b) => `${JSON.stringify(b, null, 2)}
 `;
@@ -59521,7 +59546,7 @@ var init_load_dir2 = __esm({
 });
 
 // src/policy-loader/lkg.ts
-import { createHash as createHash9 } from "node:crypto";
+import { createHash as createHash10 } from "node:crypto";
 import { rename, unlink as unlink2 } from "node:fs/promises";
 import { join as join5 } from "node:path";
 async function writeLkg(stateDir, bundleText) {
@@ -59562,7 +59587,7 @@ var init_lkg = __esm({
     init_safe_path();
     init_bundle();
     LKG_FILE = "last-known-good.json";
-    sha = (text2) => createHash9("sha256").update(text2).digest("hex");
+    sha = (text2) => createHash10("sha256").update(text2).digest("hex");
   }
 });
 
@@ -60865,13 +60890,13 @@ var require_digest = __commonJS({
       }
       return xxh3Cache;
     }
-    async function digest(value) {
+    async function digest2(value) {
       const xxh3 = await getXxh3();
       const data = typeof value === "string" ? value : new Uint8Array(value);
       const hash2 = xxh3.xxh64(data);
       return hash2.toString(16).padStart(16, "0");
     }
-    exports.digest = digest;
+    exports.digest = digest2;
   }
 });
 
@@ -105152,7 +105177,7 @@ __export(redis_store_exports, {
   createRedisStore: () => createRedisStore,
   redisSweepLock: () => redisSweepLock
 });
-import { createHash as createHash10 } from "node:crypto";
+import { createHash as createHash11 } from "node:crypto";
 function createRedisStore(client, o) {
   const open5 = /* @__PURE__ */ new Map();
   let loaded = null;
@@ -105273,7 +105298,7 @@ var init_redis_store = __esm({
     init_keys();
     init_lua();
     init_store();
-    script = (source) => ({ source, sha: createHash10("sha1").update(source).digest("hex") });
+    script = (source) => ({ source, sha: createHash11("sha1").update(source).digest("hex") });
     ADMIT = script(ADMIT_LUA);
     SETTLE = script(SETTLE_LUA);
     SWEEP = script(SWEEP_LUA);
@@ -119974,7 +119999,7 @@ async function createTracer(endpoint, opts = {}) {
   const tracer = provider2.getTracer("tokenyard");
   const { SpanKind: SpanKind2, SpanStatusCode: SpanStatusCode2, trace: trace2, ROOT_CONTEXT: ROOT_CONTEXT2 } = api;
   return {
-    requestSpan(r, attempts) {
+    requestSpan(r, attempts, pricedModel = "other") {
       const start = Date.parse(r.ts);
       const end = start + r.outcome.totalMs;
       const server = tracer.startSpan(`tokenyard ${r.surface}`, { kind: SpanKind2.SERVER, startTime: start, attributes: serverAttributes(r) }, ROOT_CONTEXT2);
@@ -119982,7 +120007,7 @@ async function createTracer(endpoint, opts = {}) {
       const ctx = trace2.setSpan(ROOT_CONTEXT2, server);
       const list3 = attempts && attempts.length > 0 ? [...attempts] : r.outcome.provider !== null ? [null] : [];
       const op = operationOf(r.surface);
-      const name2 = `${op} ${label(r.features.model)}`.trim();
+      const name2 = `${op} ${label(pricedModel)}`;
       list3.forEach((attempt, i) => {
         const answered = attempt === null ? true : i === list3.length - 1 && r.outcome.provider === attempt.provider;
         const s2 = tracer.startSpan(
@@ -125510,7 +125535,7 @@ program2.command("mock").description("run the deterministic mock Anthropic provi
 program2.command("serve").description("run the gateway").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--host <host>", "address to bind", "127.0.0.1").option("--base-path <path>", "mount prefix stripped before path matching").option(
   "--dev-upstream <url>",
   "development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)"
-).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs --trace-salt").option("--metrics-port <n>", "serve /metrics, /healthz and /readyz on this port only; /metrics is then a 404 on --port (default: /metrics on --port)").option("--metrics-host <host>", "address to bind for --metrics-port", "127.0.0.1").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)").action(async (o) => {
+).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs --trace-salt").option("--metrics-port <n>", "ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it", "9464").option("--metrics-host <host>", "address the ops listener binds; a non-loopback address needs --metrics-token", "127.0.0.1").option("--metrics-token <token>", "bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback").option("--no-metrics", "do not start the ops listener").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)").action(async (o) => {
   if (!o.devUpstream && !o.policy && !o.policyUrl) {
     console.error("tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)");
     process.exit(1);
@@ -125554,8 +125579,15 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     console.error("tokenyard serve: --otlp-endpoint needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids on spans are HMAC pseudonyms)");
     process.exit(1);
   }
-  if (o.metricsPort !== void 0 && !/^\d+$/.test(o.metricsPort)) {
+  if (!/^\d+$/.test(o.metricsPort)) {
     console.error("tokenyard serve: --metrics-port must be a port number");
+    process.exit(1);
+  }
+  const opsOn = o.metrics && Number(o.metricsPort) !== 0;
+  const metricsToken = o.metricsToken ?? process.env.TOKENYARD_METRICS_TOKEN;
+  const { isLoopbackHost: isLoopbackHost2 } = await Promise.resolve().then(() => (init_ops(), ops_exports));
+  if (opsOn && !isLoopbackHost2(o.metricsHost) && !metricsToken) {
+    console.error("tokenyard serve: --metrics-host is not a loopback address, so --metrics-token or TOKENYARD_METRICS_TOKEN is required (or use --no-metrics)");
     process.exit(1);
   }
   const { hostname: hostname4 } = await import("node:os");
@@ -125600,6 +125632,7 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   const spans = await createTracer2(otlpEndpoint);
   registerCollectors2(metrics2, {
     revision: () => activePolicy().revision,
+    candidateRevision: () => activePolicy().candidate?.revision ?? null,
     ...loader ? { loadErrors: () => loader.loadErrors } : {},
     ...writer ? { traceDrops: () => writer.dropped } : {}
   });
@@ -125642,10 +125675,18 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     experimentalSubscription: o.experimentalSubscription === true,
     metrics: metrics2,
     ...otlpEndpoint !== null ? { spans } : {},
-    ...o.metricsPort !== void 0 ? { metricsOnOtherPort: true } : {}
+    ...metricsToken ? { metricsToken } : {}
   });
-  console.log(await gw.listen(Number(o.port), o.host));
-  if (o.metricsPort !== void 0) console.error(`tokenyard: metrics on ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)}/metrics`);
+  const apiUrl = await gw.listen(Number(o.port), o.host);
+  if (opsOn) {
+    try {
+      console.error(`tokenyard: ops listener ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)} (/metrics${metricsToken ? ", bearer token required" : ""}, /healthz, /readyz)`);
+    } catch (e2) {
+      console.error(`tokenyard serve: ops listener on ${o.metricsHost}:${o.metricsPort}: ${e2 instanceof Error ? e2.message : String(e2)} (use --metrics-port or --no-metrics)`);
+      process.exit(1);
+    }
+  }
+  console.log(apiUrl);
   const stop = () => {
     stopSweeper();
     void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => void 0)).then(() => counters.close()).then(() => process.exit(0));

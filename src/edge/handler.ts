@@ -32,7 +32,7 @@ import { extractCredentials, hashKey } from './auth.js';
 import { BodyTooLargeError, readBody } from './body.js';
 import { anthropicError, type ErrorEnvelope, type ErrorReply, ownError, retryable } from './errors.js';
 import { clientHeaders, upstreamHeaders } from './headers.js';
-import { createRequestRecorder, type Metrics } from '../telemetry/metrics.js';
+import { createRequestRecorder, type Metrics, modelLabel } from '../telemetry/metrics.js';
 import type { SpanSink } from '../telemetry/otel.js';
 import { matchOps, serveOps } from './ops.js';
 import { matchRoute } from './paths.js';
@@ -78,8 +78,8 @@ export interface GatewayDeps {
   metrics?: Metrics;
   /** OTel span sink (spec 12.2); like traces it needs a `traceSalt`, since spans carry the pseudonyms. */
   spans?: SpanSink;
-  /** /metrics is answered by the separate ops listener only (`serve --metrics-port`); on this port it is a 404 like any other path. */
-  metricsOnOtherPort?: boolean;
+  /** Bearer token for /metrics on the ops listener (`createGateway().listenOps`). /metrics is never served on this API port. */
+  metricsToken?: string;
 }
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
@@ -96,7 +96,7 @@ function emitTelemetry(deps: GatewayDeps, policy: CompiledPolicy, rec: Omit<Trac
       if (!record) recorders.set(deps.metrics, (record = createRequestRecorder(deps.metrics)));
       record(rec, policy.prices);
     }
-    deps.spans?.requestSpan(rec, attempts);
+    deps.spans?.requestSpan(rec, attempts, modelLabel(policy.prices, rec.features.model));
   } catch {
     // dropped on purpose
   }
@@ -759,9 +759,9 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
     return state.failure;
   };
   return (req, res) => {
-    // Ops endpoints come first and need no policy: /readyz must answer (503) before one has loaded.
+    // Health endpoints come first and need no policy: /readyz must answer (503) before one has loaded.
     const ops = matchOps(req.method ?? 'GET', req.url ?? '/', deps.basePath);
-    if (ops !== null && !(ops === 'metrics' && deps.metricsOnOtherPort)) {
+    if (ops !== null && ops !== 'metrics') {
       serveOps({ ...deps, admitTimeoutMs }, ops, req, res).catch(() => res.destroy());
       return;
     }

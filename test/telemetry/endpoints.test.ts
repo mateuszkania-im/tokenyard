@@ -28,14 +28,14 @@ const down = (over: Partial<CounterStore> = {}): CounterStore => ({
   ...over,
 });
 
-async function stack(o: { store?: CounterStore | null; edit?: Parameters<typeof testPolicy>[0]['edit']; opsListener?: boolean } = {}) {
+async function stack(o: { store?: CounterStore | null; edit?: Parameters<typeof testPolicy>[0]['edit']; token?: string } = {}) {
   process.env[PROVIDER_KEY_ENV] = 'sk-provider-test-value';
   const mock = await startAnthropicMock();
   closers.push(mock.close);
   const metrics = createMetrics();
   const policy = testPolicy({ upstream: mock.url, models: ['claude-haiku-*'], ...(o.edit ? { edit: o.edit } : {}) });
   registerCollectors(metrics, { revision: () => policy.revision, loadErrors: () => 0 });
-  const gw = await startGateway({ policy, store: o.store === undefined ? createMemoryStore({ clock: Date.now }) : o.store, metrics, ...(o.opsListener ? { opsListener: true } : {}) });
+  const gw = await startGateway({ policy, store: o.store === undefined ? createMemoryStore({ clock: Date.now }) : o.store, metrics, opsListener: true, ...(o.token ? { metricsToken: o.token } : {}) });
   closers.push(gw.close);
   return { gw, mock, metrics };
 }
@@ -48,16 +48,16 @@ test('/metrics serves tokenyard_* counters with no session, prompt or key labels
     body: msgBody({ model: 'claude-haiku-5-5' }),
   });
   expect(ok.status).toBe(200);
-  const r = await get(gw.url, '/metrics');
+  const r = await get(gw.opsUrl as string, '/metrics');
   expect(r.status).toBe(200);
   expect(r.headers['content-type']).toMatch(/^text\/plain; version=0\.0\.4/);
   const text = r.body.toString();
   await new Promise((res) => setTimeout(res, 20));
-  const text2 = (await get(gw.url, '/metrics')).body.toString();
+  const text2 = (await get(gw.opsUrl as string, '/metrics')).body.toString();
   expect(text2).toMatch(/^tokenyard_requests_total\{route="claude-code",decision="forward",status_class="2xx"\} 1$/m);
   expect(text2).toMatch(/^tokenyard_cost_usd_total\{tenant="acme",team="platform",route="claude-code",request_class="[^"]*"\} \d/m);
   expect(text2).toMatch(/^tokenyard_tokens_total\{type="input",model="claude-haiku-5-5"\} \d+/m);
-  expect(text2).toMatch(/^tokenyard_policy_revision_info\{revision="[^"]+"\} 1$/m);
+  expect(text2).toMatch(/^tokenyard_policy_revision_info\{revision="[^"]+",role="active"\} 1$/m);
   expect(text2).toMatch(/^tokenyard_policy_load_errors_total 0$/m);
   expect(text2).toMatch(/^tokenyard_reservations_open 0$/m);
   for (const t of [text, text2]) {
@@ -103,8 +103,8 @@ test('store-down events, x-should-retry refusals and open reservations are count
   const refused = await stack({ store: slow });
   const r = await send(refused.gw.url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'not-allowed-model-x' }) });
   expect(r.headers['x-should-retry']).toBe('false');
-  await expect.poll(async () => (await get(s.gw.url, '/metrics')).body.toString()).toMatch(/^tokenyard_store_down_total\{op="admit"\} 1$/m);
-  const t = (await get(refused.gw.url, '/metrics')).body.toString();
+  await expect.poll(async () => (await get(s.gw.opsUrl as string, '/metrics')).body.toString()).toMatch(/^tokenyard_store_down_total\{op="admit"\} 1$/m);
+  const t = (await get(refused.gw.opsUrl as string, '/metrics')).body.toString();
   expect(t).toMatch(/^tokenyard_should_retry_refusals_total\{reason="[a-z-]+"\} 1$/m);
   expect(t).toMatch(/^tokenyard_requests_total\{route="[^"]*",decision="block",status_class="4xx"\} 1$/m);
 });
@@ -121,15 +121,26 @@ test('breaker openings are counted by scope, never by credential', () => {
   expect(text).not.toMatch(/ANTHROPIC_KEY|api\.anthropic/);
 });
 
-test('with an ops listener /metrics is served there only; health stays on both', async () => {
-  const { gw } = await stack({ opsListener: true });
+test('/metrics is never served on the API port; the ops listener serves it, health on both', async () => {
+  const { gw } = await stack();
   expect((await get(gw.url, '/metrics')).status).toBe(404);
   expect((await get(gw.url, '/healthz')).status).toBe(200);
   const ops = gw.opsUrl as string;
-  const m = await get(ops, '/metrics');
-  expect(m.status).toBe(200);
+  expect((await get(ops, '/metrics')).status).toBe(200);
   expect((await get(ops, '/readyz')).status).toBe(200);
   expect((await get(ops, '/v1/messages')).status).toBe(404);
+});
+
+test('with a metrics token /metrics needs the bearer token; a missing or wrong token is 401, health stays open', async () => {
+  const { gw } = await stack({ token: 's3cret-token' });
+  const ops = gw.opsUrl as string;
+  const none = await get(ops, '/metrics');
+  expect(none.status).toBe(401);
+  expect(none.body.toString()).not.toMatch(/tokenyard_/);
+  expect((await send(ops, { method: 'GET', path: '/metrics', headers: { authorization: 'Bearer wrong' } })).status).toBe(401);
+  expect((await send(ops, { method: 'GET', path: '/metrics', headers: { authorization: 'Basic s3cret-token' } })).status).toBe(401);
+  expect((await send(ops, { method: 'GET', path: '/metrics', headers: { authorization: 'Bearer s3cret-token' } })).status).toBe(200);
+  expect((await get(ops, '/healthz')).status).toBe(200);
 });
 
 test('the gateway hands the span sink the record and one entry per upstream attempt', async () => {

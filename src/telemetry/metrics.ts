@@ -24,7 +24,7 @@ export const METRIC_DEFS = {
   tokenyard_inference_duration_seconds: { kind: 'histogram', help: 'Request duration by provider and priced model.', labels: ['provider', 'model'], buckets: SECONDS },
   tokenyard_time_to_first_chunk_seconds: { kind: 'histogram', help: 'Time to the first response byte by provider and priced model.', labels: ['provider', 'model'], buckets: SECONDS },
   tokenyard_cache_hit_ratio: { kind: 'gauge', help: 'Cache read tokens over all input tokens since start.', labels: [] },
-  tokenyard_policy_revision_info: { kind: 'gauge', help: 'The active policy revision (value 1).', labels: ['revision'] },
+  tokenyard_policy_revision_info: { kind: 'gauge', help: 'The active and candidate policy revisions (value 1).', labels: ['revision', 'role'] },
   tokenyard_policy_load_errors_total: { kind: 'counter', help: 'Policy bundles that failed to load.', labels: [] },
   tokenyard_traces_dropped_total: { kind: 'counter', help: 'Trace records dropped (queue full or write failed).', labels: [] },
   tokenyard_reservations_open: { kind: 'gauge', help: 'Admitted requests of this process not yet settled.', labels: [] },
@@ -39,8 +39,11 @@ export const METRIC_DEFS = {
 export type MetricName = keyof typeof METRIC_DEFS;
 export type Labels = Record<string, string>;
 
-/** How many distinct values one label name keeps; later values are counted as "other". */
-export const MAX_VALUES_PER_LABEL = 100;
+/**
+ * Backstop: series one metric may hold. Every label value is bounded at its source (keys, policy, enums, priced models),
+ * so this is never reached by honest traffic; past it a new series is dropped instead of growing memory.
+ */
+export const MAX_SERIES_PER_METRIC = 2_000;
 
 interface Series {
   values: string[];
@@ -69,26 +72,20 @@ const num = (v: number): string => (Number.isInteger(v) ? String(v) : String(Num
 
 export function createMetrics(): Metrics {
   const series = new Map<string, Map<string, Series>>();
-  const seen = new Map<string, Set<string>>(); // label name -> values kept
   const collectors: Array<() => void> = [];
 
-  const seriesFor = (name: MetricName, labels: Labels | undefined): Series => {
+  const seriesFor = (name: MetricName, labels: Labels | undefined): Series | null => {
     const def: Def = METRIC_DEFS[name];
     if (!Object.hasOwn(METRIC_DEFS, name)) throw new Error(`unknown metric ${String(name)}`);
     const values = def.labels.map((l) => {
       const raw = labels && Object.hasOwn(labels, l) ? String(labels[l]) : '';
-      const v = sanitizeHeaderValue(raw).value;
-      let kept = seen.get(l);
-      if (!kept) seen.set(l, (kept = new Set()));
-      if (kept.has(v)) return v;
-      if (kept.size >= MAX_VALUES_PER_LABEL) return 'other';
-      kept.add(v);
-      return v;
+      return sanitizeHeaderValue(raw).value;
     });
     let byKey = series.get(name);
     if (!byKey) series.set(name, (byKey = new Map()));
     const k = JSON.stringify(values);
     let s = byKey.get(k);
+    if (!s && byKey.size >= MAX_SERIES_PER_METRIC) return null;
     if (!s) {
       s = { values, value: 0, ...(def.kind === 'histogram' ? { buckets: Array.from({ length: (def.buckets ?? []).length }, () => 0), sum: 0, count: 0 } : {}) };
       byKey.set(k, s);
@@ -100,12 +97,14 @@ export function createMetrics(): Metrics {
     inc(name, labels, v = 1) {
       if (!Number.isFinite(v)) return;
       if (METRIC_DEFS[name].kind === 'counter' && v < 0) return;
-      seriesFor(name, labels).value += v;
+      const s = seriesFor(name, labels);
+      if (s) s.value += v;
     },
     observe(name, v, labels) {
       if (!Number.isFinite(v) || v < 0) return;
       const def: Def = METRIC_DEFS[name];
       const s = seriesFor(name, labels);
+      if (!s) return;
       def.buckets?.forEach((b, i) => {
         if (v <= b && s.buckets) s.buckets[i] = (s.buckets[i] ?? 0) + 1;
       });
@@ -114,7 +113,8 @@ export function createMetrics(): Metrics {
     },
     set(name, v, labels) {
       if (!Number.isFinite(v)) return;
-      seriesFor(name, labels).value = v;
+      const s = seriesFor(name, labels);
+      if (s) s.value = v;
     },
     reset(name) {
       series.delete(name);
@@ -151,6 +151,16 @@ export function createMetrics(): Metrics {
   };
 }
 
+/** Fixed values Claude Code sends as request class (spec 5.4); anything else is "other". */
+const REQUEST_CLASSES: ReadonlySet<string> = new Set(['main', 'subagent', 'compaction', 'auxiliary']);
+/** Built-in Claude Code agent types; a custom name is "other". */
+const AGENT_TYPES: ReadonlySet<string> = new Set(['general-purpose', 'Explore', 'Plan', 'statusline-setup', 'claude-code-guide']);
+
+/** A client-chosen request class as a metric label: one of the known values, else "other" ("none" when absent). */
+export const requestClassLabel = (v: string | null): string => (v === null ? 'none' : REQUEST_CLASSES.has(v) ? v : 'other');
+/** A client-chosen agent type as a metric label: one of the built-in types, else "other" ("none" when absent). */
+export const agentTypeLabel = (v: string | null): string => (v === null ? 'none' : AGENT_TYPES.has(v) ? v : 'other');
+
 /** The priced model id a model name resolves to, else "other": the model label cannot grow with client input. */
 export const modelLabel = (prices: PriceTable, model: string | null | undefined): string => (model ? (lookupModel(prices, model)?.id ?? 'other') : 'other');
 
@@ -167,7 +177,7 @@ export function createRequestRecorder(metrics: Metrics): (r: Omit<TraceRecord, '
     metrics.inc('tokenyard_requests_total', { route, decision: r.decision.action, status_class: `${Math.floor(o.status / 100)}xx` });
     if (o.addedTtfbMs !== null) metrics.observe('tokenyard_added_ttfb_seconds', o.addedTtfbMs / 1000);
     if (o.costMicroUsd !== null && o.costMicroUsd > 0) {
-      metrics.inc('tokenyard_cost_usd_total', { tenant: r.tenant, team: r.team ?? '', route, request_class: r.attribution.requestClass ?? '' }, o.costMicroUsd / 1e6);
+      metrics.inc('tokenyard_cost_usd_total', { tenant: r.tenant, team: r.team ?? '', route, request_class: requestClassLabel(r.attribution.requestClass) }, o.costMicroUsd / 1e6);
     }
     if (o.provider === null) return;
     const model = modelLabel(prices, o.upstreamModel ?? r.features.model);
@@ -190,11 +200,13 @@ export function createRequestRecorder(metrics: Metrics): (r: Omit<TraceRecord, '
 /** Values that live outside the request path: refreshed at every scrape. */
 export function registerCollectors(
   metrics: Metrics,
-  src: { revision(): string; loadErrors?: () => number; traceDrops?: () => number },
+  src: { revision(): string; candidateRevision?: () => string | null; loadErrors?: () => number; traceDrops?: () => number },
 ): void {
   metrics.addCollector(() => {
     metrics.reset('tokenyard_policy_revision_info');
-    metrics.set('tokenyard_policy_revision_info', 1, { revision: src.revision() });
+    metrics.set('tokenyard_policy_revision_info', 1, { revision: src.revision(), role: 'active' });
+    const candidate = src.candidateRevision?.() ?? null;
+    if (candidate !== null) metrics.set('tokenyard_policy_revision_info', 1, { revision: candidate, role: 'candidate' });
   });
   metrics.addCollector(() => metrics.set('tokenyard_policy_load_errors_total', src.loadErrors?.() ?? 0));
   if (src.traceDrops) metrics.addCollector(() => metrics.set('tokenyard_traces_dropped_total', (src.traceDrops as () => number)()));

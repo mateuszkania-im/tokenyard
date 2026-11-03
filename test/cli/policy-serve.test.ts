@@ -29,7 +29,7 @@ test('serve --policy loads a directory and forwards; without a source it refuses
   const mock = await startAnthropicMock();
   const dir = tempDir();
   writePolicyDir(dir, mock.url, 'one');
-  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-')], { env: { ...process.env, [PROVIDER_KEY_ENV]: 'k' } });
+  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--no-metrics'], { env: { ...process.env, [PROVIDER_KEY_ENV]: 'k' } });
   try {
     const url = await new Promise<string>((resolve, reject) => {
       child.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()));

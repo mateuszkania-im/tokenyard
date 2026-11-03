@@ -1,5 +1,6 @@
 // Operations endpoints (spec 12.2): /healthz (process up), /readyz (policy loaded, store reachable or the failure mode
 // allows traffic) and /metrics (Prometheus text). No authentication and no content: counts, names from the policy, status.
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CounterStore } from '../limits/store.js';
 import type { CompiledPolicy } from '../policy/types.js';
@@ -11,6 +12,8 @@ export interface OpsDeps {
   policy(): CompiledPolicy;
   store: CounterStore | null;
   metrics?: Metrics;
+  /** When set, /metrics needs `Authorization: Bearer <token>`. */
+  metricsToken?: string;
   basePath: string | null;
   /** How long the store probe may take (default 1 s). */
   admitTimeoutMs?: number;
@@ -29,6 +32,19 @@ export function matchOps(method: string, rawUrl: string, basePath: string | null
     path = path.slice(base.length);
   }
   return path === '/metrics' ? 'metrics' : path === '/healthz' ? 'healthz' : path === '/readyz' ? 'readyz' : null;
+}
+
+/** Loopback addresses: the ops listener may run without a token only here. */
+export function isLoopbackHost(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
+}
+
+const digest = (s: string): Buffer => createHash('sha256').update(s).digest();
+
+function bearerOk(req: IncomingMessage, token: string): boolean {
+  const m = /^Bearer (.+)$/.exec(String(req.headers.authorization ?? ''));
+  return timingSafeEqual(digest(m?.[1] ?? ''), digest(token)) && m !== null;
 }
 
 async function readiness(d: OpsDeps): Promise<{ ok: boolean; reason: string }> {
@@ -68,6 +84,10 @@ export async function serveOps(d: OpsDeps, kind: OpsKind, req: IncomingMessage, 
   if (kind === 'readyz') {
     const r = await readiness(d);
     return send(r.ok ? 200 : 503, 'application/json', JSON.stringify({ status: r.ok ? 'ready' : 'not ready', reason: r.reason }));
+  }
+  if (d.metricsToken !== undefined && !bearerOk(req, d.metricsToken)) {
+    res.setHeader('www-authenticate', 'Bearer');
+    return send(401, 'application/json', '{"error":"unauthorized"}');
   }
   if (!d.metrics) return send(404, 'application/json', '{"error":"metrics are not enabled"}');
   send(200, 'text/plain; version=0.0.4; charset=utf-8', d.metrics.render());

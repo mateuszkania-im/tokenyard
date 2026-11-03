@@ -44,7 +44,7 @@ test('serve --store memory warms up from --trace-dir: spend recorded before the 
   writePolicyDir(dir, mock.url, 'one');
   const traces = tempDir('ty-traces-');
   writeTraces(traces, 300_000_000); // team-day is $300: already spent
-  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--store', 'memory', '--trace-dir', traces, '--trace-salt', 's'], {
+  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--policy', dir, '--state-dir', tempDir('ty-state-'), '--store', 'memory', '--trace-dir', traces, '--trace-salt', 's', '--no-metrics'], {
     env: { ...process.env, [PROVIDER_KEY_ENV]: 'k' },
   });
   try {

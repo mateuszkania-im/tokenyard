@@ -38,10 +38,14 @@ test('one SERVER span per request and one CLIENT span per upstream attempt named
   const sink = await createTracer(null, { exporter });
   const rec = buildTraceRecord(outcome(), 'salt');
   const t0 = Date.UTC(2026, 10, 2);
-  sink.requestSpan(rec, [
-    { provider: 'anthropic', startMs: t0 + 1, endMs: t0 + 20, status: 529 },
-    { provider: 'anthropic-backup', startMs: t0 + 21, endMs: t0 + 50, status: 200 },
-  ]);
+  sink.requestSpan(
+    rec,
+    [
+      { provider: 'anthropic', startMs: t0 + 1, endMs: t0 + 20, status: 529 },
+      { provider: 'anthropic-backup', startMs: t0 + 21, endMs: t0 + 50, status: 200 },
+    ],
+    'claude-sonnet-5-5',
+  );
   const spans = exporter.getFinishedSpans(); // shutdown() clears the in-memory exporter
   await sink.shutdown();
   const server = spans.filter((s) => s.kind === 1);
@@ -101,4 +105,18 @@ test('a request that never reached a provider gets a SERVER span only', async ()
   await sink.shutdown();
   expect(spans.map((s) => s.kind)).toEqual([1]);
   expect(spans[0]?.attributes[TOKENYARD.decision]).toBe('block');
+});
+
+test('span names use the priced model or "other"; the request model attribute keeps the sanitised client value', async () => {
+  const exporter = new InMemorySpanExporter();
+  const sink = await createTracer(null, { exporter });
+  const rec = buildTraceRecord(outcome({ features: { ...outcome().features, model: 'evil\nmodel-' + 'x'.repeat(300) } }), 'salt');
+  sink.requestSpan(rec, undefined, 'other');
+  sink.requestSpan(buildTraceRecord(outcome(), 'salt'));
+  const clients = exporter.getFinishedSpans().filter((s) => s.kind === 2);
+  expect(clients.map((c) => c.name)).toEqual(['chat other', 'chat other']);
+  const attr = String(clients[0]?.attributes[GEN_AI.requestModel]);
+  expect(attr).toMatch(/^evilmodel-x+$/);
+  expect(attr.length).toBeLessThanOrEqual(128);
+  await sink.shutdown();
 });

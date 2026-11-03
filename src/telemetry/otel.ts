@@ -11,7 +11,8 @@ export type { AttemptInfo };
 type Rec = Omit<TraceRecord, 'instance' | 'seq'>;
 
 export interface SpanSink {
-  requestSpan(r: Rec, attempts?: readonly AttemptInfo[]): void;
+  /** `model` is the priced model id or "other" (the span name); the client's model string only goes in an attribute. */
+  requestSpan(r: Rec, attempts?: readonly AttemptInfo[], model?: string): void;
   shutdown(): Promise<void>;
 }
 
@@ -119,7 +120,7 @@ export async function createTracer(endpoint: string | null, opts: TracerOptions 
   const tracer = provider.getTracer('tokenyard');
   const { SpanKind, SpanStatusCode, trace, ROOT_CONTEXT } = api;
   return {
-    requestSpan(r, attempts) {
+    requestSpan(r, attempts, pricedModel = 'other') {
       const start = Date.parse(r.ts);
       const end = start + r.outcome.totalMs;
       const server = tracer.startSpan(`tokenyard ${r.surface}`, { kind: SpanKind.SERVER, startTime: start, attributes: serverAttributes(r) }, ROOT_CONTEXT);
@@ -127,7 +128,7 @@ export async function createTracer(endpoint: string | null, opts: TracerOptions 
       const ctx = trace.setSpan(ROOT_CONTEXT, server);
       const list: Array<AttemptInfo | null> = attempts && attempts.length > 0 ? [...attempts] : r.outcome.provider !== null ? [null] : [];
       const op = operationOf(r.surface);
-      const name = `${op} ${label(r.features.model)}`.trim();
+      const name = `${op} ${label(pricedModel)}`;
       list.forEach((attempt, i) => {
         const answered = attempt === null ? true : i === list.length - 1 && r.outcome.provider === attempt.provider;
         const s = tracer.startSpan(
