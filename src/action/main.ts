@@ -1,16 +1,17 @@
 // Spec 9.5 and 11: the GitHub Action (`tokenyard action`, started as the node24 `main` of action.yml). It reads policy
 // files as data through the safe loader and git refs through the hardened replay-input path, and never executes
 // anything that comes from the pull request. Fork PRs get the job summary only: no comment, no trace token, no API token.
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { appendFile, readFile } from 'node:fs/promises';
-import { createWriteStreamUnder, isUnder, writeFileUnder } from '../fsutil/safe-path.js';
-import { join } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { checkPath, cliRoot, createWriteStreamUnder, isUnder, writeFileUnder } from '../fsutil/safe-path.js';
+import { join, relative, resolve, sep } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseDuration } from '../ledger/export.js';
 import { loadPolicyDir } from '../policy-loader/load-dir.js';
-import { loadPolicyAtCommit, loadReplayPolicy, locateRepoDir, openReplayTraces, resolveGitCommit } from '../policy-loader/replay-input.js';
-import { PolicyLoadError } from '../policy/load-dir.js';
+import { compileReplaySource, copyFileAtCommit, loadPolicyAtCommit, locateRepoDir, openReplayTraces, resolveGitCommit } from '../policy-loader/replay-input.js';
+import { PolicyLoadError, type PolicySource } from '../policy/load-dir.js';
 import { validatePolicy } from '../policy/validate.js';
 import { replay } from '../replay/engine.js';
 import { renderJson } from '../replay/render-json.js';
@@ -77,6 +78,13 @@ async function download(url: string, token: string | null, root: string, dest: s
 const logLine = (s: string): string => stripControls(s.replace(/[\r\n\t\u2028\u2029]/g, ' '));
 const logError = (s: string): void => console.error(logLine(s));
 
+/** sha256 of a file the replay reads, for the comment (C2). The caller has checked the path. */
+async function fileSha256(path: string): Promise<string> {
+  const hash = createHash('sha256');
+  await pipeline(createReadStream(path), hash);
+  return hash.digest('hex');
+}
+
 function clip(body: string): string {
   if (body.length <= MAX_COMMENT) return body;
   return `${body.slice(0, MAX_COMMENT)}\n\n</details>\n\n(comment cut at ${MAX_COMMENT} characters; the full result is in replay.json)\n`;
@@ -127,54 +135,74 @@ async function run(env: NodeJS.ProcessEnv, gh: Gh): Promise<number> {
     const tracesToken = fork ? '' : input(env, 'traces-token');
     const headRev = (event?.headSha ?? env.GITHUB_SHA ?? 'head').slice(0, 7);
 
-    // 1. policy check on the head, data only
+    // 1. policy check on the head, data only. The files are read and parsed once, for the check and for the replay.
     let errors: Array<{ code: string; path: string; message: string }> = [];
     let warnings: Array<{ code: string; path: string; message: string }> = [];
+    let headSrc: PolicySource | null = null;
     try {
-      ({ errors, warnings } = validatePolicy(await loadPolicyDir(headDir, inWorkspace), { experimentalSubscription: false }));
+      headSrc = await loadPolicyDir(headDir, inWorkspace);
+      ({ errors, warnings } = validatePolicy(headSrc, { experimentalSubscription: false }));
     } catch (e) {
       if (!(e instanceof PolicyLoadError)) throw e;
       errors = e.issues.map((i) => ({ code: e.code, path: i.path, message: i.message }));
     }
-    if (errors.length > 0) {
+    if (errors.length > 0 || headSrc === null) {
       for (const i of errors) logError(`error ${i.code} ${i.path}: ${i.message}`);
       const body = [COMMENT_MARKER, '### tokenyard policy replay', '', `Policy check failed: ${errors.length} error${errors.length === 1 ? '' : 's'}. Replay did not run.`, '', ...errors.slice(0, 20).map((i) => `- ${escapeMarkdown(i.code)} ${escapeMarkdown(i.path)}: ${escapeMarkdown(i.message, 400)}`), ''].join('\n');
       await publish(env, gh, body, wantComment, fork);
       return 1;
     }
 
-    // 2. traces: a local path, or a URL fetched with the traces token (never in a fork PR)
-    const work = env.RUNNER_TEMP || process.cwd();
-    let tracesPath = tracesInput;
-    let tracesRoot: { root?: string } = inWorkspace;
-    if (/^https?:\/\//i.test(tracesInput)) {
-      tracesPath = join(work, new URL(tracesInput).pathname.endsWith('.gz') ? 'traces.ndjson.gz' : 'traces.ndjson');
-      tracesRoot = { root: work };
-      await download(tracesInput, tracesToken === '' ? null : tracesToken, work, tracesPath);
-    } else if (env.GITHUB_WORKSPACE && !isUnder(env.GITHUB_WORKSPACE, tracesPath)) {
-      tracesRoot = {};
-    }
-
-    // 3. replay
-    const sinceInput = input(env, 'since');
-    const sinceMs = sinceInput === '' ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
-    if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error('the since input must be a duration such as 7d, or an ISO time');
-    const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false, ...inWorkspace });
-    // The base is a git object read from the explicit repository at the workspace. In a pull request it is the event's
-    // base commit and nothing else; the base-ref input is resolved as a git ref only for other events.
+    // 2. the base: a git object read from the explicit repository at the workspace. In a pull request it is the
+    // event's base commit and nothing else; the base-ref input is resolved as a git ref only for other events.
     const isPr = (env.GITHUB_EVENT_NAME ?? '').startsWith('pull_request');
     const candidates = isPr ? [event?.baseSha ?? ''] : [baseRef, `origin/${baseRef}`];
     const commit = candidates.map((c) => resolveGitCommit(c, repo)).find((c) => c !== null);
     if (!commit) throw new Error(isPr ? 'the pull request base commit is missing from the event or from the checkout (use actions/checkout with fetch-depth: 0)' : `base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch)`);
+
+    // 3. traces: a URL fetched with the traces token (never in a fork PR); in a pull request, a path in the workspace
+    // as committed at the base commit (C2: the PR cannot rewrite the traces that judge it); otherwise the path as given.
+    const work = env.RUNNER_TEMP || process.cwd();
+    let tracesPath = tracesInput;
+    let tracesRoot: { root?: string } = inWorkspace;
+    let tracesSha256: string;
+    let tracesSource: string | undefined;
+    const gz = (p: string): string => (p.endsWith('.gz') ? 'traces.ndjson.gz' : 'traces.ndjson');
+    if (/^https?:\/\//i.test(tracesInput)) {
+      tracesPath = join(work, gz(new URL(tracesInput).pathname));
+      tracesRoot = { root: work };
+      await download(tracesInput, tracesToken === '' ? null : tracesToken, work, tracesPath);
+      tracesSha256 = await fileSha256(tracesPath);
+    } else if (env.GITHUB_WORKSPACE && isUnder(env.GITHUB_WORKSPACE, tracesPath) && isPr) {
+      // No symbolic link on the way in the checkout either (S-FS-1), although the working-tree file is never read.
+      await checkPath(env.GITHUB_WORKSPACE, tracesPath).catch((e: unknown) => {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      });
+      const rel = relative(resolve(env.GITHUB_WORKSPACE), resolve(tracesPath)).split(sep).join('/');
+      tracesPath = join(work, `base-${gz(tracesInput)}`);
+      tracesRoot = { root: work };
+      tracesSha256 = await copyFileAtCommit({ commit, path: rel, repo, root: work, dest: tracesPath, maxBytes: MAX_TRACES_BYTES });
+      tracesSource = `${rel} at the base commit`;
+    } else {
+      if (env.GITHUB_WORKSPACE && !isUnder(env.GITHUB_WORKSPACE, tracesPath)) tracesRoot = {};
+      await checkPath(tracesRoot.root ?? cliRoot(tracesPath), tracesPath);
+      tracesSha256 = await fileSha256(tracesPath);
+    }
+
+    // 4. replay
+    const sinceInput = input(env, 'since');
+    const sinceMs = sinceInput === '' ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
+    if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error('the since input must be a duration such as 7d, or an ISO time');
+    const head = compileReplaySource(headSrc, { experimentalSubscription: false });
     const base = loadPolicyAtCommit({ commit, repo, experimentalSubscription: false });
     const result = await replay({ base, head, traces: await openReplayTraces([tracesPath], tracesRoot), sinceMs, tenant: null });
 
-    // 4. outputs: replay.json for the artifact step, the sticky comment, the job summary
+    // 5. outputs: replay.json for the artifact step, the sticky comment, the job summary
     const jsonPath = join(work, 'replay.json');
     await writeFileUnder(work, jsonPath, renderJson(result));
     if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, `replay-json=${jsonPath}\n`);
     const baseRev = event?.baseSha?.slice(0, 7) ?? baseRef;
-    const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length } });
+    const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length }, tracesSha256, ...(tracesSource === undefined ? {} : { tracesSource }) });
     await publish(env, gh, body, wantComment, fork);
     return result.gates.failed.length > 0 ? 1 : 0;
   } catch (e) {

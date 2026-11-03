@@ -331,8 +331,9 @@ test('a traces file in the workspace reached through a symbolic link is refused 
   symlinkSync(join(tmp, 'elsewhere-traces'), join(repo, 'traces-link'));
   expect(await runAction(envFor({ traces: join(repo, 'traces-link', 'demo.ndjson.gz') }), fakeGh().gh)).toBe(1);
   expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('symbolic link');
-  // The same file copied into the workspace is read.
+  // The same file copied into the workspace is read (outside a pull request: in one, a workspace path is read at the
+  // base commit, C2).
   cpSync(TRACES, join(repo, 'demo.ndjson.gz'));
-  expect(await runAction(envFor({ traces: join(repo, 'demo.ndjson.gz') }), fakeGh().gh)).toBe(1);
+  expect(await runAction(envFor({ traces: join(repo, 'demo.ndjson.gz'), extra: { GITHUB_EVENT_NAME: 'push' } }), fakeGh().gh)).toBe(1);
   expect(replayJson().base.costMicroUsd).toBeGreaterThan(0);
 });

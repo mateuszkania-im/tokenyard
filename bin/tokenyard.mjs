@@ -538,8 +538,28 @@ var init_anonymize = __esm({
 import { constants as constants2 } from "node:fs";
 import { open as open2 } from "node:fs/promises";
 import { createInterface } from "node:readline";
+import { Transform } from "node:stream";
 import { createGunzip } from "node:zlib";
-async function* readLedger(paths) {
+function capped(path3, maxBytes, maxLineBytes) {
+  let total = 0;
+  let line = 0;
+  return new Transform({
+    transform(chunk, _enc, cb) {
+      total += chunk.length;
+      if (total > maxBytes) return cb(new Error(`${path3} holds more than ${maxBytes} bytes after decompression`));
+      let start = 0;
+      for (let nl = chunk.indexOf(10, start); nl !== -1; nl = chunk.indexOf(10, start)) {
+        if (line + nl - start > maxLineBytes) break;
+        line = 0;
+        start = nl + 1;
+      }
+      line += chunk.length - start;
+      if (line > maxLineBytes) return cb(new Error(`${path3} has a line longer than ${maxLineBytes} bytes`));
+      cb(null, chunk);
+    }
+  });
+}
+async function* readLedger(paths, limits = {}) {
   for (const path3 of paths) {
     const fh = await open2(path3, constants2.O_RDONLY | (constants2.O_NOFOLLOW ?? 0) | (constants2.O_NONBLOCK ?? 0));
     if (!(await fh.stat()).isFile()) {
@@ -547,8 +567,10 @@ async function* readLedger(paths) {
       throw new Error(`${path3} is not a regular file`);
     }
     const file2 = fh.createReadStream();
-    const input3 = path3.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
-    file2.on("error", (e2) => input3.destroy(e2));
+    const plain = path3.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
+    file2.on("error", (e2) => plain.destroy(e2));
+    const input3 = limits.maxBytes === void 0 && limits.maxLineBytes === void 0 ? plain : plain.pipe(capped(path3, limits.maxBytes ?? Number.POSITIVE_INFINITY, limits.maxLineBytes ?? Number.POSITIVE_INFINITY));
+    if (input3 !== plain) plain.on("error", (e2) => input3.destroy(e2));
     for await (const text2 of createInterface({ input: input3, crlfDelay: Infinity })) {
       if (text2 === "") continue;
       try {
@@ -1030,9 +1052,9 @@ async function startAnthropicMock(opts = {}) {
     }
     let closed = false;
     res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve5) => {
-      if (closed || res.destroyed) return resolve5();
-      res.write(chunk, () => resolve5());
+    const write = (chunk) => new Promise((resolve6) => {
+      if (closed || res.destroyed) return resolve6();
+      res.write(chunk, () => resolve6());
     });
     const { head, deltas, tail } = scriptedEvents(id, model, usage);
     const all = [...head, ...deltas, ...tail];
@@ -1081,7 +1103,7 @@ async function startAnthropicMock(opts = {}) {
       respond(rec, res, receivedAt).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve5) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve5));
+  await new Promise((resolve6) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve6));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -1090,8 +1112,8 @@ async function startAnthropicMock(opts = {}) {
       scenario = s2;
     },
     close() {
-      return new Promise((resolve5) => {
-        server.close(() => resolve5());
+      return new Promise((resolve6) => {
+        server.close(() => resolve6());
         server.closeAllConnections();
       });
     }
@@ -1195,9 +1217,9 @@ async function startOpenAIMock(opts = {}) {
     else events.push(ev("response.completed", { response: response("completed", true) }));
     let closed = false;
     res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve5) => {
-      if (closed || res.destroyed) return resolve5();
-      res.write(chunk, () => resolve5());
+    const write = (chunk) => new Promise((resolve6) => {
+      if (closed || res.destroyed) return resolve6();
+      res.write(chunk, () => resolve6());
     });
     if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
     if (closed) return;
@@ -1229,7 +1251,7 @@ async function startOpenAIMock(opts = {}) {
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve5) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve5));
+  await new Promise((resolve6) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve6));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -1238,8 +1260,8 @@ async function startOpenAIMock(opts = {}) {
       scenario = s2;
     },
     close() {
-      return new Promise((resolve5) => {
-        server.close(() => resolve5());
+      return new Promise((resolve6) => {
+        server.close(() => resolve6());
         server.closeAllConnections();
       });
     }
@@ -6091,10 +6113,10 @@ var require_resolve_block_map = __commonJS({
       let offset = bm.offset;
       let commentEnd = null;
       for (const collItem of bm.items) {
-        const { start, key, sep: sep3, value } = collItem;
+        const { start, key, sep: sep4, value } = collItem;
         const keyProps = resolveProps.resolveProps(start, {
           indicator: "explicit-key-ind",
-          next: key ?? sep3?.[0],
+          next: key ?? sep4?.[0],
           offset,
           onError,
           parentIndent: bm.indent,
@@ -6108,7 +6130,7 @@ var require_resolve_block_map = __commonJS({
             else if ("indent" in key && key.indent !== bm.indent)
               onError(offset, "BAD_INDENT", startColMsg);
           }
-          if (!keyProps.anchor && !keyProps.tag && !sep3) {
+          if (!keyProps.anchor && !keyProps.tag && !sep4) {
             commentEnd = keyProps.end;
             if (keyProps.comment) {
               if (map2.comment)
@@ -6132,7 +6154,7 @@ var require_resolve_block_map = __commonJS({
         ctx.atKey = false;
         if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
           onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
-        const valueProps = resolveProps.resolveProps(sep3 ?? [], {
+        const valueProps = resolveProps.resolveProps(sep4 ?? [], {
           indicator: "map-value-ind",
           next: value,
           offset: keyNode.range[2],
@@ -6148,7 +6170,7 @@ var require_resolve_block_map = __commonJS({
             if (ctx.options.strict && keyProps.start < valueProps.found.offset - 1024)
               onError(keyNode.range, "KEY_OVER_1024_CHARS", "The : indicator must be at most 1024 chars after the start of an implicit block mapping key");
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep3, null, valueProps, onError);
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : composeEmptyNode(ctx, offset, sep4, null, valueProps, onError);
           if (ctx.schema.compat)
             utilFlowIndentCheck.flowIndentCheck(bm.indent, value, onError);
           offset = valueNode.range[2];
@@ -6239,7 +6261,7 @@ var require_resolve_end = __commonJS({
       let comment = "";
       if (end) {
         let hasSpace = false;
-        let sep3 = "";
+        let sep4 = "";
         for (const token of end) {
           const { source, type } = token;
           switch (type) {
@@ -6253,13 +6275,13 @@ var require_resolve_end = __commonJS({
               if (!comment)
                 comment = cb;
               else
-                comment += sep3 + cb;
-              sep3 = "";
+                comment += sep4 + cb;
+              sep4 = "";
               break;
             }
             case "newline":
               if (comment)
-                sep3 += source;
+                sep4 += source;
               hasSpace = true;
               break;
             default:
@@ -6302,18 +6324,18 @@ var require_resolve_flow_collection = __commonJS({
       let offset = fc.offset + fc.start.source.length;
       for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
-        const { start, key, sep: sep3, value } = collItem;
+        const { start, key, sep: sep4, value } = collItem;
         const props = resolveProps.resolveProps(start, {
           flow: fcName,
           indicator: "explicit-key-ind",
-          next: key ?? sep3?.[0],
+          next: key ?? sep4?.[0],
           offset,
           onError,
           parentIndent: fc.indent,
           startOnNewline: false
         });
         if (!props.found) {
-          if (!props.anchor && !props.tag && !sep3 && !value) {
+          if (!props.anchor && !props.tag && !sep4 && !value) {
             if (i === 0 && props.comma)
               onError(props.comma, "UNEXPECTED_TOKEN", `Unexpected , in ${fcName}`);
             else if (i < fc.items.length - 1)
@@ -6367,8 +6389,8 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap2 && !sep3 && !props.found) {
-          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep3, null, props, onError);
+        if (!isMap2 && !sep4 && !props.found) {
+          const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep4, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
           if (isBlock(value))
@@ -6380,7 +6402,7 @@ var require_resolve_flow_collection = __commonJS({
           if (isBlock(key))
             onError(keyNode.range, "BLOCK_IN_FLOW", blockMsg);
           ctx.atKey = false;
-          const valueProps = resolveProps.resolveProps(sep3 ?? [], {
+          const valueProps = resolveProps.resolveProps(sep4 ?? [], {
             flow: fcName,
             indicator: "map-value-ind",
             next: value,
@@ -6391,8 +6413,8 @@ var require_resolve_flow_collection = __commonJS({
           });
           if (valueProps.found) {
             if (!isMap2 && !props.found && ctx.options.strict) {
-              if (sep3)
-                for (const st of sep3) {
+              if (sep4)
+                for (const st of sep4) {
                   if (st === valueProps.found)
                     break;
                   if (st.type === "newline") {
@@ -6409,7 +6431,7 @@ var require_resolve_flow_collection = __commonJS({
             else
               onError(valueProps.start, "MISSING_CHAR", `Missing , or : between ${fcName} items`);
           }
-          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep3, null, valueProps, onError) : null;
+          const valueNode = value ? composeNode(ctx, value, valueProps, onError) : valueProps.found ? composeEmptyNode(ctx, valueProps.end, sep4, null, valueProps, onError) : null;
           if (valueNode) {
             if (isBlock(value))
               onError(valueNode.range, "BLOCK_IN_FLOW", blockMsg);
@@ -6589,7 +6611,7 @@ var require_resolve_block_scalar = __commonJS({
           chompStart = i + 1;
       }
       let value = "";
-      let sep3 = "";
+      let sep4 = "";
       let prevMoreIndented = false;
       for (let i = 0; i < contentStart; ++i)
         value += lines[i][0].slice(trimIndent) + "\n";
@@ -6606,24 +6628,24 @@ var require_resolve_block_scalar = __commonJS({
           indent = "";
         }
         if (type === Scalar.Scalar.BLOCK_LITERAL) {
-          value += sep3 + indent.slice(trimIndent) + content;
-          sep3 = "\n";
+          value += sep4 + indent.slice(trimIndent) + content;
+          sep4 = "\n";
         } else if (indent.length > trimIndent || content[0] === "	") {
-          if (sep3 === " ")
-            sep3 = "\n";
-          else if (!prevMoreIndented && sep3 === "\n")
-            sep3 = "\n\n";
-          value += sep3 + indent.slice(trimIndent) + content;
-          sep3 = "\n";
+          if (sep4 === " ")
+            sep4 = "\n";
+          else if (!prevMoreIndented && sep4 === "\n")
+            sep4 = "\n\n";
+          value += sep4 + indent.slice(trimIndent) + content;
+          sep4 = "\n";
           prevMoreIndented = true;
         } else if (content === "") {
-          if (sep3 === "\n")
+          if (sep4 === "\n")
             value += "\n";
           else
-            sep3 = "\n";
+            sep4 = "\n";
         } else {
-          value += sep3 + content;
-          sep3 = " ";
+          value += sep4 + content;
+          sep4 = " ";
           prevMoreIndented = false;
         }
       }
@@ -6806,25 +6828,25 @@ var require_resolve_flow_scalar = __commonJS({
         trimBoth = /^[ \t]+|[ \t]+$/g;
       }
       let res = match[1].replace(trimEnd, "");
-      let sep3 = " ";
+      let sep4 = " ";
       let pos = line.lastIndex;
       while (match = line.exec(source)) {
         const lm = match[1].replace(trimBoth, "");
         if (lm === "") {
-          if (sep3 === "\n")
-            res += sep3;
+          if (sep4 === "\n")
+            res += sep4;
           else
-            sep3 = "\n";
+            sep4 = "\n";
         } else {
-          res += sep3 + lm;
-          sep3 = " ";
+          res += sep4 + lm;
+          sep4 = " ";
         }
         pos = line.lastIndex;
       }
       const last = /[ \t]*(.*)/sy;
       last.lastIndex = pos;
       match = last.exec(source);
-      return res + sep3 + (match?.[1] ?? "");
+      return res + sep4 + (match?.[1] ?? "");
     }
     function doubleQuotedValue(source, onError) {
       let res = "";
@@ -7634,14 +7656,14 @@ var require_cst_stringify = __commonJS({
         }
       }
     }
-    function stringifyItem({ start, key, sep: sep3, value }) {
+    function stringifyItem({ start, key, sep: sep4, value }) {
       let res = "";
       for (const st of start)
         res += st.source;
       if (key)
         res += stringifyToken(key);
-      if (sep3)
-        for (const st of sep3)
+      if (sep4)
+        for (const st of sep4)
           res += st.source;
       if (value)
         res += stringifyToken(value);
@@ -8808,18 +8830,18 @@ var require_parser = __commonJS({
         if (this.type === "map-value-ind") {
           const prev = getPrevProps(this.peek(2));
           const start = getFirstKeyStartProps(prev);
-          let sep3;
+          let sep4;
           if (scalar.end) {
-            sep3 = scalar.end;
-            sep3.push(this.sourceToken);
+            sep4 = scalar.end;
+            sep4.push(this.sourceToken);
             delete scalar.end;
           } else
-            sep3 = [this.sourceToken];
+            sep4 = [this.sourceToken];
           const map2 = {
             type: "block-map",
             offset: scalar.offset,
             indent: scalar.indent,
-            items: [{ start, key: scalar, sep: sep3 }]
+            items: [{ start, key: scalar, sep: sep4 }]
           };
           this.onKeyLine = true;
           this.stack[this.stack.length - 1] = map2;
@@ -8972,15 +8994,15 @@ var require_parser = __commonJS({
                 } else if (isFlowToken(it.key) && !includesToken(it.sep, "newline")) {
                   const start2 = getFirstKeyStartProps(it.start);
                   const key = it.key;
-                  const sep3 = it.sep;
-                  sep3.push(this.sourceToken);
+                  const sep4 = it.sep;
+                  sep4.push(this.sourceToken);
                   delete it.key;
                   delete it.sep;
                   this.stack.push({
                     type: "block-map",
                     offset: this.offset,
                     indent: this.indent,
-                    items: [{ start: start2, key, sep: sep3 }]
+                    items: [{ start: start2, key, sep: sep4 }]
                   });
                 } else if (start.length > 0) {
                   it.sep = it.sep.concat(start, this.sourceToken);
@@ -9174,13 +9196,13 @@ var require_parser = __commonJS({
             const prev = getPrevProps(parent);
             const start = getFirstKeyStartProps(prev);
             fixFlowSeqItems(fc);
-            const sep3 = fc.end.splice(1, fc.end.length);
-            sep3.push(this.sourceToken);
+            const sep4 = fc.end.splice(1, fc.end.length);
+            sep4.push(this.sourceToken);
             const map2 = {
               type: "block-map",
               offset: fc.offset,
               indent: fc.indent,
-              items: [{ start, key: fc, sep: sep3 }]
+              items: [{ start, key: fc, sep: sep4 }]
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map2;
@@ -14054,7 +14076,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve5) {
+function isRecursive(inst, stack, resolve6) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE2;
@@ -14064,7 +14086,7 @@ function isRecursive(inst, stack, resolve5) {
   let result = NONE2;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve5);
+      const answer = isRecursive(child, stack, resolve6);
       if (answer > result)
         result = answer;
     }
@@ -14075,7 +14097,7 @@ function isRecursive(inst, stack, resolve5) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve5) : NONE2;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve6) : NONE2;
       if (child > answer)
         answer = child;
     }
@@ -14139,7 +14161,7 @@ function isRecursive(inst, stack, resolve5) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve5 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve6 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -31166,10 +31188,10 @@ var init_sse = __esm({
 });
 
 // src/stream/tee.ts
-import { Transform } from "node:stream";
+import { Transform as Transform2 } from "node:stream";
 function createTee(onChunk) {
   let errors = 0;
-  const t = new Transform({
+  const t = new Transform2({
     transform(chunk, _enc, cb) {
       this.push(chunk);
       try {
@@ -31458,8 +31480,8 @@ function capTopLevelInteger(b, key, value) {
     if (Object.hasOwn(parsed, key)) return null;
     const open5 = b.indexOf(123);
     if (open5 < 0) return null;
-    const sep3 = Object.keys(parsed).length > 0 ? "," : "";
-    out = Buffer.concat([b.subarray(0, open5 + 1), Buffer.from(`${JSON.stringify(key)}:${value}${sep3}`, "utf8"), b.subarray(open5 + 1)]);
+    const sep4 = Object.keys(parsed).length > 0 ? "," : "";
+    out = Buffer.concat([b.subarray(0, open5 + 1), Buffer.from(`${JSON.stringify(key)}:${value}${sep4}`, "utf8"), b.subarray(open5 + 1)]);
   }
   try {
     const back = JSON.parse(out.toString("utf8"));
@@ -34494,9 +34516,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve5, reject) => {
+          return new Promise((resolve6, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve5(data);
+              return err ? reject(err) : resolve6(data);
             });
           });
         }
@@ -34534,9 +34556,9 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve5, reject) => {
+          return new Promise((resolve6, reject) => {
             this.destroy(err, (err2, data) => {
-              return err2 ? reject(err2) : resolve5(data);
+              return err2 ? reject(err2) : resolve6(data);
             });
           });
         }
@@ -36780,7 +36802,7 @@ var require_webidl = __commonJS({
 var require_util2 = __commonJS({
   "node_modules/undici/lib/web/fetch/util.js"(exports, module) {
     "use strict";
-    var { Transform: Transform3 } = __require("node:stream");
+    var { Transform: Transform5 } = __require("node:stream");
     var zlib2 = __require("node:zlib");
     var { redirectStatusSet, referrerPolicyTokens, badPortsSet } = require_constants3();
     var { getGlobalOrigin } = require_global();
@@ -37371,7 +37393,7 @@ var require_util2 = __commonJS({
       contentRange += isomorphicEncode(`${fullLength}`);
       return contentRange;
     }
-    var InflateStream = class extends Transform3 {
+    var InflateStream = class extends Transform5 {
       #zlibOptions;
       /** @param {zlib.ZlibOptions} [zlibOptions] */
       constructor(zlibOptions) {
@@ -38042,8 +38064,8 @@ var require_promise = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise2 = new Promise((resolve5, reject) => {
-        res = resolve5;
+      const promise2 = new Promise((resolve6, reject) => {
+        res = resolve6;
         rej = reject;
       });
       return { promise: promise2, resolve: res, reject: rej };
@@ -39452,12 +39474,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve5, reject) => {
+      const waitForDrain = () => new Promise((resolve6, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve5;
+          callback = resolve6;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -39616,7 +39638,7 @@ var require_client_h2 = __commonJS({
   "node_modules/undici/lib/dispatcher/client-h2.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { pipeline: pipeline3 } = __require("node:stream");
+    var { pipeline: pipeline4 } = __require("node:stream");
     var util = require_util();
     var {
       RequestContentLengthMismatchError,
@@ -40288,7 +40310,7 @@ var require_client_h2 = __commonJS({
     }
     function writeStream(abort, socket, expectsPayload, h2stream, body, client, request2, contentLength) {
       assert2(contentLength !== 0 || client[kRunning] === 0, "stream body cannot be pipelined");
-      const pipe2 = pipeline3(
+      const pipe2 = pipeline4(
         body,
         h2stream,
         (err) => {
@@ -40341,12 +40363,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve5, reject) => {
+      const waitForDrain = () => new Promise((resolve6, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve5;
+          callback = resolve6;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -40663,16 +40685,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       [kClose]() {
-        return new Promise((resolve5) => {
+        return new Promise((resolve6) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve5;
+            this[kClosedResolve] = resolve6;
           } else {
-            resolve5(null);
+            resolve6(null);
           }
         });
       }
       [kDestroy](err) {
-        return new Promise((resolve5) => {
+        return new Promise((resolve6) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request2 = requests[i];
@@ -40685,7 +40707,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve5(null);
+            resolve6(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -41092,8 +41114,8 @@ var require_pool_base = __commonJS({
           }
           return Promise.all(closeAll);
         } else {
-          return new Promise((resolve5) => {
-            this[kClosedResolve] = resolve5;
+          return new Promise((resolve6) => {
+            this[kClosedResolve] = resolve6;
           });
         }
       }
@@ -42215,7 +42237,7 @@ var require_socks5_proxy_agent = __commonJS({
         const proxyHost = this[kProxyUrl].hostname;
         const proxyPort = parseInt(this[kProxyUrl].port) || 1080;
         debug("creating SOCKS5 connection to", proxyHost, proxyPort);
-        const socket = await new Promise((resolve5, reject) => {
+        const socket = await new Promise((resolve6, reject) => {
           this[kConnector]({
             hostname: proxyHost,
             host: proxyHost,
@@ -42225,7 +42247,7 @@ var require_socks5_proxy_agent = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve5(socket2);
+              resolve6(socket2);
             }
           });
         });
@@ -42235,14 +42257,14 @@ var require_socks5_proxy_agent = __commonJS({
           socket.destroy();
         });
         await socks5Client.handshake();
-        await new Promise((resolve5, reject) => {
+        await new Promise((resolve6, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 authentication timeout"));
           }, 5e3);
           const onAuthenticated = () => {
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve5();
+            resolve6();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -42251,14 +42273,14 @@ var require_socks5_proxy_agent = __commonJS({
           };
           if (socks5Client.state === STATES.AUTHENTICATED) {
             clearTimeout(timeout);
-            resolve5();
+            resolve6();
           } else {
             socks5Client.once("authenticated", onAuthenticated);
             socks5Client.once("error", onError);
           }
         });
         await socks5Client.connect(targetHost, targetPort);
-        await new Promise((resolve5, reject) => {
+        await new Promise((resolve6, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 connection timeout"));
           }, 5e3);
@@ -42266,7 +42288,7 @@ var require_socks5_proxy_agent = __commonJS({
             debug("SOCKS5 tunnel established to", targetHost, targetPort, "via", info);
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve5();
+            resolve6();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -42309,8 +42331,8 @@ var require_socks5_proxy_agent = __commonJS({
                       socket,
                       servername: this[kRequestTls]?.servername || targetHost
                     });
-                    await new Promise((resolve5, reject) => {
-                      finalSocket.once("secureConnect", resolve5);
+                    await new Promise((resolve6, reject) => {
+                      finalSocket.once("secureConnect", resolve6);
                       finalSocket.once("error", reject);
                     });
                   }
@@ -43443,7 +43465,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return Promise.resolve(null);
         }
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           if (this[kContentLength] && this[kContentLength] > limit || this[kBytesRead] > limit) {
             this.destroy(new AbortError());
           }
@@ -43457,11 +43479,11 @@ var require_readable = __commonJS({
               if (signal.aborted) {
                 reject(signal.reason ?? new AbortError());
               } else {
-                resolve5(null);
+                resolve6(null);
               }
             });
           } else {
-            this.on("close", resolve5);
+            this.on("close", resolve6);
           }
           this.on("error", noop).on("data", () => {
             if (this[kBytesRead] > limit) {
@@ -43489,7 +43511,7 @@ var require_readable = __commonJS({
     }
     function consume(stream, type) {
       assert2(!stream[kConsume]);
-      return new Promise((resolve5, reject) => {
+      return new Promise((resolve6, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -43504,7 +43526,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve: resolve5,
+              resolve: resolve6,
               reject,
               length: 0,
               body: []
@@ -43578,18 +43600,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2, encoding) {
-      const { type, body, resolve: resolve5, stream, length } = consume2;
+      const { type, body, resolve: resolve6, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve5(chunksDecode(body, length, encoding));
+          resolve6(chunksDecode(body, length, encoding));
         } else if (type === "json") {
-          resolve5(JSON.parse(chunksDecode(body, length, encoding)));
+          resolve6(JSON.parse(chunksDecode(body, length, encoding)));
         } else if (type === "arrayBuffer") {
-          resolve5(chunksConcat(body, length).buffer);
+          resolve6(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve5(new Blob(body, { type: stream[kContentType] }));
+          resolve6(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve5(chunksConcat(body, length));
+          resolve6(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -43779,9 +43801,9 @@ var require_api_request = __commonJS({
     };
     function request2(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           request2.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve5(data);
+            return err ? reject(err) : resolve6(data);
           });
         });
       }
@@ -43993,9 +44015,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve5(data);
+            return err ? reject(err) : resolve6(data);
           });
         });
       }
@@ -44202,7 +44224,7 @@ var require_api_pipeline = __commonJS({
         util.destroy(ret, err);
       }
     };
-    function pipeline3(opts, handler) {
+    function pipeline4(opts, handler) {
       try {
         const pipelineHandler = new PipelineHandler(opts, handler);
         this.dispatch({ ...opts, body: pipelineHandler.req }, pipelineHandler);
@@ -44211,7 +44233,7 @@ var require_api_pipeline = __commonJS({
         return new PassThrough().destroy(err);
       }
     }
-    module.exports = pipeline3;
+    module.exports = pipeline4;
   }
 });
 
@@ -44283,9 +44305,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve5(data);
+            return err ? reject(err) : resolve6(data);
           });
         });
       }
@@ -44378,9 +44400,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve5(data);
+            return err ? reject(err) : resolve6(data);
           });
         });
       }
@@ -45342,13 +45364,13 @@ var require_mock_pool = __commonJS({
 var require_pending_interceptors_formatter = __commonJS({
   "node_modules/undici/lib/mock/pending-interceptors-formatter.js"(exports, module) {
     "use strict";
-    var { Transform: Transform3 } = __require("node:stream");
+    var { Transform: Transform5 } = __require("node:stream");
     var { Console } = __require("node:console");
     var PERSISTENT = process.versions.icu ? "\u2705" : "Y ";
     var NOT_PERSISTENT = process.versions.icu ? "\u274C" : "N ";
     module.exports = class PendingInterceptorsFormatter {
       constructor({ disableColors } = {}) {
-        this.transform = new Transform3({
+        this.transform = new Transform5({
           transform(chunk, _enc, cb) {
             cb(null, chunk);
           }
@@ -45654,7 +45676,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile, readFile: readFile3, mkdir: mkdir2 } = __require("node:fs/promises");
-    var { dirname: dirname4, resolve: resolve5 } = __require("node:path");
+    var { dirname: dirname4, resolve: resolve6 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -45855,7 +45877,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile3(resolve5(path3), "utf8");
+          const data = await readFile3(resolve6(path3), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -45884,7 +45906,7 @@ var require_snapshot_recorder = __commonJS({
         if (!path3) {
           throw new InvalidArgumentError2("Snapshot path is required");
         }
-        const resolvedPath = resolve5(path3);
+        const resolvedPath = resolve6(path3);
         await mkdir2(dirname4(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
@@ -49488,7 +49510,7 @@ var require_decompress = __commonJS({
   "node_modules/undici/lib/interceptor/decompress.js"(exports, module) {
     "use strict";
     var { createInflate, createGunzip: createGunzip2, createBrotliDecompress, createZstdDecompress } = __require("node:zlib");
-    var { pipeline: pipeline3, Transform: TransformStream2 } = __require("node:stream");
+    var { pipeline: pipeline4, Transform: TransformStream2 } = __require("node:stream");
     var { InvalidArgumentError: InvalidArgumentError2, ResponseExceededMaxSizeError } = require_errors2();
     var DecoratorHandler = require_decorator_handler();
     var { runtimeFeatures } = require_runtime_features();
@@ -49805,7 +49827,7 @@ var require_decompress = __commonJS({
       #setupMultipleDecompressors() {
         const lastDecompressor = this.#decompressors[this.#decompressors.length - 1];
         this.#setupDecompressorEvents(lastDecompressor);
-        pipeline3(this.#decompressors, (err) => {
+        pipeline4(this.#decompressors, (err) => {
           if (this.#terminated) {
             return;
           }
@@ -52635,7 +52657,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants3();
     var EE = __require("node:events");
-    var { Readable: Readable5, pipeline: pipeline3, finished, isErrored, isReadable } = __require("node:stream");
+    var { Readable: Readable5, pipeline: pipeline4, finished, isErrored, isReadable } = __require("node:stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
@@ -53534,7 +53556,7 @@ var require_fetch = __commonJS({
         const agent2 = fetchParams.controller.dispatcher;
         const path3 = url2.pathname + url2.search;
         const hasTrailingQuestionMark = url2.search.length === 0 && url2.href[url2.href.length - url2.hash.length - 1] === "?";
-        return new Promise((resolve5, reject) => agent2.dispatch(
+        return new Promise((resolve6, reject) => agent2.dispatch(
           {
             path: hasTrailingQuestionMark ? `${path3}?` : path3,
             origin: url2.origin,
@@ -53622,11 +53644,11 @@ var require_fetch = __commonJS({
               }
               this.body = new Readable5({ read: resume });
               const onError = this.onError.bind(this);
-              resolve5({
+              resolve6({
                 status,
                 statusText,
                 headersList,
-                body: decoders.length ? pipeline3(this.body, ...decoders, (err) => {
+                body: decoders.length ? pipeline4(this.body, ...decoders, (err) => {
                   if (err) {
                     this.onError(err);
                   }
@@ -53675,7 +53697,7 @@ var require_fetch = __commonJS({
                   headersList.append(headerName, String(value), true);
                 }
               }
-              resolve5({
+              resolve6({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -53699,7 +53721,7 @@ var require_fetch = __commonJS({
                   headersList.append(nameStr, value.toString("latin1"), true);
                 }
               }
-              resolve5({
+              resolve6({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -57118,7 +57140,7 @@ var require_eventsource_stream = __commonJS({
   "node_modules/undici/lib/web/eventsource/eventsource-stream.js"(exports, module) {
     "use strict";
     var buffer = __require("node:buffer");
-    var { Transform: Transform3 } = __require("node:stream");
+    var { Transform: Transform5 } = __require("node:stream");
     var { isASCIINumber, isValidLastEventId } = require_util6();
     var BOM = [239, 187, 191];
     var LF = 10;
@@ -57168,7 +57190,7 @@ var require_eventsource_stream = __commonJS({
       error62.aborted = false;
       return error62;
     }
-    var EventSourceStream = class extends Transform3 {
+    var EventSourceStream = class extends Transform5 {
       /**
        * @type {eventSourceSettings}
        */
@@ -57523,7 +57545,7 @@ ${value}`;
 var require_eventsource = __commonJS({
   "node_modules/undici/lib/web/eventsource/eventsource.js"(exports, module) {
     "use strict";
-    var { pipeline: pipeline3 } = __require("node:stream");
+    var { pipeline: pipeline4 } = __require("node:stream");
     var { fetching } = require_fetch();
     var { makeRequest } = require_request2();
     var { webidl } = require_webidl();
@@ -57683,7 +57705,7 @@ var require_eventsource = __commonJS({
               ));
             }
           });
-          pipeline3(
+          pipeline4(
             response.body.stream,
             eventSourceStream,
             (error62) => {
@@ -58319,7 +58341,7 @@ var init_auth = __esm({
 
 // src/edge/body.ts
 function readBody(req, capBytes) {
-  return new Promise((resolve5, reject) => {
+  return new Promise((resolve6, reject) => {
     const declared = Number(req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > capBytes) {
       req.resume();
@@ -58336,7 +58358,7 @@ function readBody(req, capBytes) {
       if (err) {
         req.resume();
         reject(err);
-      } else resolve5(Buffer.concat(chunks, size));
+      } else resolve6(Buffer.concat(chunks, size));
     };
     const onData = (c) => {
       size += c.length;
@@ -58924,14 +58946,14 @@ function providerCredential(p, env) {
   return p.format === "anthropic" ? { header: "x-api-key", value } : { header: "authorization", value: `Bearer ${value}` };
 }
 function readUpTo(s2, cap2) {
-  return new Promise((resolve5) => {
+  return new Promise((resolve6) => {
     const chunks = [];
     let n2 = 0;
     const done = (ended) => {
       s2.off("data", onData);
       s2.off("end", onEnd);
       s2.off("error", onEnd);
-      resolve5({ bytes: Buffer.concat(chunks), ended });
+      resolve6({ bytes: Buffer.concat(chunks), ended });
     };
     const onData = (c) => {
       chunks.push(c);
@@ -59243,13 +59265,13 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   }
   if (plan.preBlock === null && plan.outputCap !== void 0) {
     const field = surface === "openai-responses" ? "max_output_tokens" : "max_tokens";
-    const capped = capTopLevelInteger(upstreamBody, field, plan.outputCap);
-    if (!capped) {
+    const capped2 = capTopLevelInteger(upstreamBody, field, plan.outputCap);
+    if (!capped2) {
       const msg = `route "${plan.route ?? ""}" caps ${field} at ${plan.outputCap}, but the request's top-level ${field} could not be set exactly (send one JSON object with at most one numeric "${field}")`;
       sendError(req, res, own2(400, "invalid_request_error", "output-cap-failed", msg, null, { shouldRetry: false }));
       return early({ ...decided, status: 400, decision: { action: "block", reason: "output-cap-failed" }, errorClass: "invalid_request_error" });
     }
-    upstreamBody = capped;
+    upstreamBody = capped2;
   }
   const { pre, callsAdmit } = planAdmission(policy2, plan);
   let admission = null;
@@ -59544,13 +59566,13 @@ __export(server_exports, {
 });
 import { createServer as createServer3 } from "node:http";
 function listenOn(server, port, host) {
-  return new Promise((resolve5, reject) => {
+  return new Promise((resolve6, reject) => {
     server.once("error", reject);
     server.listen(port, host, () => {
       server.off("error", reject);
       const a = server.address();
       const h = a.family === "IPv6" ? `[${a.address}]` : a.address;
-      resolve5(`http://${h}:${a.port}`);
+      resolve6(`http://${h}:${a.port}`);
     });
   });
 }
@@ -59572,8 +59594,8 @@ function createGateway(deps) {
       return listenOn(ops, port, host);
     },
     close() {
-      const closing = (s2) => new Promise((resolve5) => {
-        s2.close(() => resolve5());
+      const closing = (s2) => new Promise((resolve6) => {
+        s2.close(() => resolve6());
         s2.closeAllConnections();
       });
       return Promise.all([closing(server), ops ? closing(ops) : Promise.resolve()]).then(() => void 0);
@@ -60182,7 +60204,7 @@ function fetchBundle(rawUrl, o) {
   const url2 = checkPolicyUrl(rawUrl);
   const maxBytes = o.maxBytes ?? MAX_BUNDLE_BYTES;
   const send = url2.protocol === "https:" ? httpsRequest : httpRequest;
-  return new Promise((resolve5, reject) => {
+  return new Promise((resolve6, reject) => {
     let settled = false;
     const done = (fn) => {
       if (settled) return;
@@ -60194,7 +60216,7 @@ function fetchBundle(rawUrl, o) {
       const status = res.statusCode ?? 0;
       if (status === 304) {
         res.resume();
-        return done(() => resolve5({ status: "not-modified" }));
+        return done(() => resolve6({ status: "not-modified" }));
       }
       if (status >= 300 && status < 400) {
         res.resume();
@@ -60227,7 +60249,7 @@ function fetchBundle(rawUrl, o) {
       });
       res.on("end", () => {
         const etag = res.headers.etag;
-        done(() => resolve5({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
+        done(() => resolve6({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
       });
       res.on("error", (e2) => done(() => reject(e2)));
       res.on("aborted", () => done(() => reject(new Error("policy response was cut off"))));
@@ -80428,11 +80450,11 @@ var require_commands_queue = __commonJS({
         if (this.#waitingForReply.length === 0) {
           return;
         }
-        return new Promise((resolve5) => {
+        return new Promise((resolve6) => {
           const onEmpty = () => {
             if (timeoutId)
               clearTimeout(timeoutId);
-            resolve5();
+            resolve6();
           };
           let timeoutId;
           const timeoutMs = options?.timeoutMs;
@@ -80445,7 +80467,7 @@ var require_commands_queue = __commonJS({
                 (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Flushing ${pendingCount} commands that timed out waiting for reply`);
                 this.#flushWaitingForReply(new errors_1.TimeoutError());
               }
-              resolve5();
+              resolve6();
             }, timeoutMs);
           }
           this.#waitingForReply.events.once("empty", onEmpty);
@@ -80475,13 +80497,13 @@ var require_commands_queue = __commonJS({
         } else if (options?.abortSignal?.aborted) {
           return Promise.reject(new errors_1.AbortError());
         }
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           const value = {
             args,
             chainId: options?.chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve5,
+            resolve: resolve6,
             reject,
             channelsCounter: void 0,
             typeMapping: options?.typeMapping
@@ -80520,7 +80542,7 @@ var require_commands_queue = __commonJS({
         });
       }
       #addPubSubCommand(command, asap = false, chainId) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           this.#toWrite.add({
             args: command.args,
             chainId,
@@ -80528,7 +80550,7 @@ var require_commands_queue = __commonJS({
             timeout: void 0,
             resolve() {
               command.resolve();
-              resolve5();
+              resolve6();
             },
             reject(err) {
               command.reject?.();
@@ -80548,8 +80570,8 @@ var require_commands_queue = __commonJS({
               return;
             const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
             if (PONG.equals(firstElement)) {
-              const { resolve: resolve5, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
-              resolve5(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
+              const { resolve: resolve6, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
+              resolve6(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
               return;
             }
           }
@@ -80573,12 +80595,12 @@ var require_commands_queue = __commonJS({
         if (!command)
           return;
         if (command && this.#respVersion === 2) {
-          const { resolve: resolve5 } = command;
+          const { resolve: resolve6 } = command;
           command.resolve = () => {
             if (!this.#pubSub.isActive) {
               this.#resetDecoderCallbacks();
             }
-            resolve5();
+            resolve6();
           };
         }
         return this.#addPubSubCommand(command);
@@ -80614,7 +80636,7 @@ var require_commands_queue = __commonJS({
         return this.#pubSub.listeners[type];
       }
       monitor(callback, options) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           const typeMapping = options?.typeMapping ?? {};
           this.#toWrite.add({
             args: ["MONITOR"],
@@ -80629,7 +80651,7 @@ var require_commands_queue = __commonJS({
                 this.decoder.onReply = callback;
               }
               this.decoder.getTypeMapping = () => typeMapping;
-              resolve5();
+              resolve6();
             },
             reject,
             channelsCounter: void 0,
@@ -80643,7 +80665,7 @@ var require_commands_queue = __commonJS({
       }
       #resetFallbackOnReply;
       async reset(chainId, typeMapping) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           this.#resetFallbackOnReply = this.decoder.onReply;
           this.decoder.onReply = ((reply) => {
             if (typeof reply === "string" && reply === "RESET" || reply instanceof Buffer && RESET.equals(reply)) {
@@ -80660,7 +80682,7 @@ var require_commands_queue = __commonJS({
             chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve5,
+            resolve: resolve6,
             reject,
             channelsCounter: void 0,
             typeMapping
@@ -88504,7 +88526,7 @@ var require_pool2 = __commonJS({
         this._self.#returnClient(node2);
       }
       execute(fn) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           if (this._self.isClosing || !this._self.#isOpen) {
             return reject(new errors_1.ClientClosedError());
           }
@@ -88521,7 +88543,7 @@ var require_pool2 = __commonJS({
             const task = this._self.#tasksQueue.push({
               timeout,
               // @ts-expect-error -- resolve generic variance
-              resolve: resolve5,
+              resolve: resolve6,
               reject,
               fn,
               waitStartTimestamp
@@ -88537,10 +88559,10 @@ var require_pool2 = __commonJS({
           }
           const node2 = this._self.#clientsInUse.push(client);
           (0, tracing_1.publish)(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, () => ({ clientId: client._clientId, waitStartTimestamp }));
-          this._self.#executeTask(node2, resolve5, reject, fn);
+          this._self.#executeTask(node2, resolve6, reject, fn);
         });
       }
-      #executeTask(node2, resolve5, reject, fn) {
+      #executeTask(node2, resolve6, reject, fn) {
         let result;
         try {
           result = fn(node2.value);
@@ -88550,11 +88572,11 @@ var require_pool2 = __commonJS({
           return;
         }
         if (result instanceof Promise) {
-          result.then(resolve5, reject).finally(() => {
+          result.then(resolve6, reject).finally(() => {
             this.#returnClient(node2);
           });
         } else {
-          resolve5(result);
+          resolve6(result);
           this.#returnClient(node2);
         }
       }
@@ -88608,8 +88630,8 @@ var require_pool2 = __commonJS({
       async #doClose() {
         try {
           if (this._self.#clientsInUse.length > 0) {
-            await new Promise((resolve5) => {
-              this._self.#drainResolve = resolve5;
+            await new Promise((resolve6) => {
+              this._self.#drainResolve = resolve6;
             });
           }
           const promises = [];
@@ -92659,7 +92681,7 @@ var require_client2 = __commonJS({
        * Close the client. Wait for pending commands.
        */
       close() {
-        return new Promise((resolve5) => {
+        return new Promise((resolve6) => {
           clearTimeout(this._self.#pingTimer);
           this._self.#socket.close();
           if (this._self.#socket.socketEpoch > 0) {
@@ -92670,12 +92692,12 @@ var require_client2 = __commonJS({
           if (this._self.#queue.isEmpty()) {
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            return resolve5();
+            return resolve6();
           }
           const onEnd = () => {
             this._self.#socket.off("data", maybeClose);
             this._self.#unregisterFromMetrics();
-            resolve5();
+            resolve6();
           };
           const maybeClose = () => {
             if (!this._self.#queue.isEmpty())
@@ -92684,7 +92706,7 @@ var require_client2 = __commonJS({
             this._self.#socket.off("end", onEnd);
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            resolve5();
+            resolve6();
           };
           this._self.#socket.on("data", maybeClose);
           this._self.#socket.once("end", onEnd);
@@ -95647,9 +95669,9 @@ var require_wait_queue = __commonJS({
       #list = new linked_list_1.SinglyLinkedList();
       #queue = new linked_list_1.SinglyLinkedList();
       push(value) {
-        const resolve5 = this.#queue.shift();
-        if (resolve5 !== void 0) {
-          resolve5(value);
+        const resolve6 = this.#queue.shift();
+        if (resolve6 !== void 0) {
+          resolve6(value);
           return;
         }
         this.#list.push(value);
@@ -95658,7 +95680,7 @@ var require_wait_queue = __commonJS({
         return this.#list.shift();
       }
       wait() {
-        return new Promise((resolve5) => this.#queue.push(resolve5));
+        return new Promise((resolve6) => this.#queue.push(resolve6));
       }
     };
     exports.WaitQueue = WaitQueue;
@@ -96316,10 +96338,10 @@ var require_sentinel = __commonJS({
        * `passthroughClientErrorEvents`), unchanged.
        */
       #connectOrFail(client) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           const onError = (err) => reject(err);
           client.once("error", onError);
-          client.connect().then(resolve5, reject).finally(() => client.off("error", onError));
+          client.connect().then(resolve6, reject).finally(() => client.off("error", onError));
         });
       }
       /**
@@ -96574,7 +96596,7 @@ var require_sentinel = __commonJS({
           }
         }
         this.#replicaClients = [];
-        await new Promise((resolve5) => {
+        await new Promise((resolve6) => {
           let settled = false;
           const forceDestroy = () => {
             if (settled)
@@ -96587,7 +96609,7 @@ var require_sentinel = __commonJS({
               } catch {
               }
             }
-            resolve5();
+            resolve6();
           };
           if (this.#teardownKind === "destroy") {
             forceDestroy();
@@ -96599,7 +96621,7 @@ var require_sentinel = __commonJS({
               return;
             settled = true;
             this.#escalateToDestroy = void 0;
-            resolve5();
+            resolve6();
           });
         });
         this.#pubSubProxy.destroy();
@@ -110276,8 +110298,8 @@ var require_promise2 = __commonJS({
       _resolve;
       _reject;
       constructor() {
-        this._promise = new Promise((resolve5, reject) => {
-          this._resolve = resolve5;
+        this._promise = new Promise((resolve6, reject) => {
+          this._resolve = resolve6;
           this._reject = reject;
         });
       }
@@ -110373,9 +110395,9 @@ var require_exporter = __commonJS({
     var api_1 = (init_esm(), __toCommonJS(esm_exports));
     var suppress_tracing_1 = require_suppress_tracing();
     function _export(exporter, arg) {
-      return new Promise((resolve5) => {
+      return new Promise((resolve6) => {
         api_1.context.with((0, suppress_tracing_1.suppressTracing)(api_1.context.active()), () => {
-          exporter.export(arg, resolve5);
+          exporter.export(arg, resolve6);
         });
       });
     }
@@ -112151,12 +112173,12 @@ var require_MultiSpanProcessor = __commonJS({
         for (const spanProcessor of this._spanProcessors) {
           promises.push(spanProcessor.forceFlush());
         }
-        return new Promise((resolve5) => {
+        return new Promise((resolve6) => {
           Promise.all(promises).then(() => {
-            resolve5();
+            resolve6();
           }).catch((error62) => {
             (0, core_1.globalErrorHandler)(error62 || new Error("MultiSpanProcessor: forceFlush failed"));
-            resolve5();
+            resolve6();
           });
         });
       }
@@ -112182,9 +112204,9 @@ var require_MultiSpanProcessor = __commonJS({
         for (const spanProcessor of this._spanProcessors) {
           promises.push(spanProcessor.shutdown());
         }
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           Promise.all(promises).then(() => {
-            resolve5();
+            resolve6();
           }, reject);
         });
       }
@@ -112448,14 +112470,14 @@ var require_BatchSpanProcessorBase = __commonJS({
        * for all other cases _flush should be used
        * */
       _flushAll() {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           const promises = [];
           const count = Math.ceil(this._finishedSpans.length / this._maxExportBatchSize);
           for (let i = 0, j = count; i < j; i++) {
             promises.push(this._flushOneBatch());
           }
           Promise.all(promises).then(() => {
-            resolve5();
+            resolve6();
           }).catch(reject);
         });
       }
@@ -112464,7 +112486,7 @@ var require_BatchSpanProcessorBase = __commonJS({
         if (this._finishedSpans.length === 0) {
           return Promise.resolve();
         }
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           const timer = setTimeout(() => {
             reject(new Error("Timeout"));
           }, this._exportTimeoutMillis);
@@ -112480,7 +112502,7 @@ var require_BatchSpanProcessorBase = __commonJS({
               clearTimeout(timer);
               this._metrics.finishSpans(spans.length, result.error);
               if (result.code === core_1.ExportResultCode.SUCCESS) {
-                resolve5();
+                resolve6();
               } else {
                 reject(result.error ?? new Error("BatchSpanProcessor: span export failed"));
               }
@@ -112693,32 +112715,32 @@ var require_TracerProvider = __commonJS({
       forceFlush(options) {
         const timeout = options?.timeoutMillis ?? this._forceFlushTimeoutMillis;
         const promises = this._activeSpanProcessor["_spanProcessors"].map((spanProcessor) => {
-          return new Promise((resolve5) => {
+          return new Promise((resolve6) => {
             let state;
             const timeoutInterval = setTimeout(() => {
-              resolve5(new Error(`Span processor did not completed within timeout period of ${timeout} ms`));
+              resolve6(new Error(`Span processor did not completed within timeout period of ${timeout} ms`));
               state = ForceFlushState.timeout;
             }, timeout);
             spanProcessor.forceFlush().then(() => {
               clearTimeout(timeoutInterval);
               if (state !== ForceFlushState.timeout) {
                 state = ForceFlushState.resolved;
-                resolve5(state);
+                resolve6(state);
               }
             }).catch((error62) => {
               clearTimeout(timeoutInterval);
               state = ForceFlushState.error;
-              resolve5(error62);
+              resolve6(error62);
             });
           });
         });
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           Promise.all(promises).then((results) => {
             const errors = results.filter((result) => result !== ForceFlushState.resolved);
             if (errors.length > 0) {
               reject(errors);
             } else {
-              resolve5();
+              resolve6();
             }
           }).catch((error62) => reject([error62]));
         });
@@ -120133,7 +120155,7 @@ var init_is_export_retryable = __esm({
 import * as zlib from "zlib";
 import { Readable as Readable3 } from "stream";
 function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, data, timeoutMillis) {
-  return new Promise((resolve5) => {
+  return new Promise((resolve6) => {
     const parsedUrl = new URL(url2);
     if (userAgent) {
       headers["User-Agent"] = `${userAgent} ${DEFAULT_USER_AGENT}`;
@@ -120152,7 +120174,7 @@ function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, d
         responseSize += chunk.length;
         if (responseSize > MAX_RESPONSE_BODY_SIZE) {
           const sizeError = new Error(`OTLP export response body exceeded size limit of ${MAX_RESPONSE_BODY_SIZE} bytes`);
-          resolve5({ status: "failure", error: sizeError });
+          resolve6({ status: "failure", error: sizeError });
           res.destroy();
           return;
         }
@@ -120160,18 +120182,18 @@ function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, d
       });
       res.on("end", () => {
         if (res.statusCode && res.statusCode <= 299) {
-          resolve5({
+          resolve6({
             status: "success",
             data: Buffer.concat(responseData)
           });
         } else if (res.statusCode && isExportHTTPErrorRetryable(res.statusCode)) {
-          resolve5({
+          resolve6({
             status: "retryable",
             retryInMillis: parseRetryAfterToMills(res.headers["retry-after"])
           });
         } else {
           const error62 = new OTLPExporterError(res.statusMessage, res.statusCode, Buffer.concat(responseData).toString());
-          resolve5({
+          resolve6({
             status: "failure",
             error: error62
           });
@@ -120179,17 +120201,17 @@ function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, d
       });
       res.on("error", (error62) => {
         if (res.statusCode && res.statusCode <= 299) {
-          resolve5({
+          resolve6({
             status: "success"
           });
         } else if (res.statusCode && isExportHTTPErrorRetryable(res.statusCode)) {
-          resolve5({
+          resolve6({
             status: "retryable",
             error: error62,
             retryInMillis: parseRetryAfterToMills(res.headers["retry-after"])
           });
         } else {
-          resolve5({
+          resolve6({
             status: "failure",
             error: error62
           });
@@ -120198,26 +120220,26 @@ function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, d
     });
     req.setTimeout(timeoutMillis, () => {
       req.destroy();
-      resolve5({
+      resolve6({
         status: "retryable",
         error: new Error("Request timed out")
       });
     });
     req.on("error", (error62) => {
       if (isHttpTransportNetworkErrorRetryable(error62)) {
-        resolve5({
+        resolve6({
           status: "retryable",
           error: error62
         });
       } else {
-        resolve5({
+        resolve6({
           status: "failure",
           error: error62
         });
       }
     });
     compressAndSend(req, compression, data, (error62) => {
-      resolve5({
+      resolve6({
         status: "failure",
         error: error62
       });
@@ -120329,9 +120351,9 @@ var init_retrying_transport = __esm({
         this._transport = transport;
       }
       retry(data, timeoutMillis, inMillis) {
-        return new Promise((resolve5, reject) => {
+        return new Promise((resolve6, reject) => {
           setTimeout(() => {
-            this._transport.send(data, timeoutMillis).then(resolve5, reject);
+            this._transport.send(data, timeoutMillis).then(resolve6, reject);
           }, inMillis);
         });
       }
@@ -122286,13 +122308,19 @@ var init_json_schema2 = __esm({
 // src/policy-loader/replay-input.ts
 var replay_input_exports = {};
 __export(replay_input_exports, {
+  REPLAY_TRACE_LIMITS: () => REPLAY_TRACE_LIMITS,
+  compileReplaySource: () => compileReplaySource,
+  copyFileAtCommit: () => copyFileAtCommit,
   loadPolicyAtCommit: () => loadPolicyAtCommit,
   loadReplayPolicy: () => loadReplayPolicy,
   locateRepoDir: () => locateRepoDir,
   openReplayTraces: () => openReplayTraces,
   resolveGitCommit: () => resolveGitCommit
 });
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { createHash as createHash12 } from "node:crypto";
+import { Transform as Transform3 } from "node:stream";
+import { pipeline as pipeline2 } from "node:stream/promises";
 import { lstat as lstat4, stat as stat2 } from "node:fs/promises";
 import { lstatSync as lstatSync2, mkdtempSync, realpathSync as realpathSync2, writeFileSync } from "node:fs";
 import { tmpdir as tmpdir2 } from "node:os";
@@ -122302,7 +122330,7 @@ async function openReplayTraces(paths, o = {}) {
     await checkPath(o.root ?? cliRoot(p), p);
     if ((await lstat4(p)).isDirectory()) throw new RawTraceDirError(p);
   }
-  return readLedger(paths);
+  return readLedger(paths, { ...REPLAY_TRACE_LIMITS, ...o.limits });
 }
 function locateRepoDir(dir, workspace) {
   if (workspace !== null) {
@@ -122348,7 +122376,7 @@ function gitEnv(repo) {
   };
 }
 function gitIn(repo, args) {
-  return execFileSync("git", ["--no-replace-objects", "-c", "safe.bareRepository=explicit", "--git-dir", join9(repo.top, ".git"), "--work-tree", repo.top, ...args], {
+  return execFileSync("git", gitArgs(repo, args), {
     cwd: repo.top,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -122364,6 +122392,39 @@ function resolveGitCommit(ref, repo) {
   } catch {
     return null;
   }
+}
+async function copyFileAtCommit(o) {
+  const what = `${JSON.stringify(o.path)} at the base commit ${o.commit.slice(0, 12)}`;
+  if (o.path === "" || o.path.split("/").some((p) => p === "" || p === "." || p === "..")) throw new Error(`traces path ${JSON.stringify(o.path)} is not a plain path in the repository`);
+  let entry = "";
+  try {
+    entry = gitIn(o.repo, ["ls-tree", "-z", "--full-tree", o.commit, "--", o.path]);
+  } catch {
+  }
+  const m = /^(\d{6}) (\w+) ([0-9a-f]{40,64})\t([^\0]*)\0$/.exec(entry);
+  if (!m || m[4] !== o.path) throw new Error(`traces file ${what} does not exist in the base commit (in a pull request the traces are read from the base commit, never from the pull request)`);
+  if (m[2] !== "blob" || m[1] !== "100644" && m[1] !== "100755") throw new Error(`traces file ${what} must be a regular file`);
+  const oid = m[3] ?? "";
+  const size = Number(gitIn(o.repo, ["cat-file", "-s", oid]).trim());
+  if (!Number.isSafeInteger(size) || size > o.maxBytes) throw new Error(`traces file ${what} is larger than ${o.maxBytes} bytes`);
+  const out = await createWriteStreamUnder(o.root, o.dest);
+  const hash2 = createHash12("sha256");
+  const child = spawn("git", gitArgs(o.repo, ["cat-file", "blob", oid]), { cwd: o.repo.top, env: gitEnv(o.repo), stdio: ["ignore", "pipe", "ignore"] });
+  const exited = new Promise((done, fail) => {
+    child.on("error", fail);
+    child.on("close", done);
+  });
+  let seen = 0;
+  const count = new Transform3({
+    transform(chunk, _enc, cb) {
+      seen += chunk.length;
+      hash2.update(chunk);
+      cb(seen > o.maxBytes ? new Error(`traces file ${what} is larger than ${o.maxBytes} bytes`) : null, chunk);
+    }
+  });
+  await pipeline2(child.stdout, count, out);
+  if (await exited !== 0 || seen !== size) throw new Error(`could not read traces file ${what}`);
+  return hash2.digest("hex");
 }
 function filesAtRef(ref, repo) {
   const commit = resolveGitCommit(ref, repo);
@@ -122391,17 +122452,18 @@ function sourceAtRef(dirLabel, ref, repo) {
   return parsePolicyFiles(dirLabel, files, parsed);
 }
 function loadPolicyAtCommit(o) {
-  const src = sourceAtRef(join9(o.repo.top, o.repo.rel, `@${o.commit}`), o.commit, o.repo);
-  const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
+  return compileReplaySource(sourceAtRef(join9(o.repo.top, o.repo.rel, `@${o.commit}`), o.commit, o.repo), { experimentalSubscription: o.experimentalSubscription });
+}
+function compileReplaySource(src, o) {
+  const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 async function loadReplayPolicy(o) {
   const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
   const src = isDir ? await loadPolicyDir(o.source, o.root === void 0 ? {} : { root: o.root }) : sourceAtRef(join9(o.headDir, `@${o.source}`), o.source, locateRepoDir(o.headDir, null));
-  const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
-  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+  return compileReplaySource(src, { ...o.revision === void 0 ? {} : { revision: o.revision }, experimentalSubscription: o.experimentalSubscription });
 }
-var emptyConfig;
+var REPLAY_TRACE_LIMITS, emptyConfig, gitArgs;
 var init_replay_input = __esm({
   "src/policy-loader/replay-input.ts"() {
     "use strict";
@@ -122412,7 +122474,9 @@ var init_replay_input = __esm({
     init_load_dir();
     init_engine();
     init_load_dir2();
+    REPLAY_TRACE_LIMITS = { maxBytes: 4 * 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 };
     emptyConfig = null;
+    gitArgs = (repo, args) => ["--no-replace-objects", "--literal-pathspecs", "-c", "safe.bareRepository=explicit", "--git-dir", join9(repo.top, ".git"), "--work-tree", repo.top, ...args];
   }
 });
 
@@ -122652,11 +122716,12 @@ __export(main_exports, {
   githubClient: () => githubClient,
   runAction: () => runAction
 });
-import { randomBytes as randomBytes6 } from "node:crypto";
+import { createHash as createHash13, randomBytes as randomBytes6 } from "node:crypto";
 import { appendFile, readFile as readFile2 } from "node:fs/promises";
-import { join as join10 } from "node:path";
-import { Readable as Readable4, Transform as Transform2 } from "node:stream";
-import { pipeline as pipeline2 } from "node:stream/promises";
+import { createReadStream } from "node:fs";
+import { join as join10, relative as relative3, resolve as resolve5, sep as sep3 } from "node:path";
+import { Readable as Readable4, Transform as Transform4 } from "node:stream";
+import { pipeline as pipeline3 } from "node:stream/promises";
 async function readEvent(env) {
   const path3 = env.GITHUB_EVENT_PATH;
   if (!path3) return null;
@@ -122678,13 +122743,18 @@ async function download(url2, token, root, dest) {
   const res = await fetch(u, { redirect: "error", headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok || !res.body) throw new Error(`traces download failed with HTTP ${res.status}`);
   let seen = 0;
-  const cap2 = new Transform2({
+  const cap2 = new Transform4({
     transform(chunk, _enc, cb) {
       seen += chunk.length;
       cb(seen > MAX_TRACES_BYTES ? new Error("traces download is larger than 512 MiB") : null, chunk);
     }
   });
-  await pipeline2(Readable4.fromWeb(res.body), cap2, await createWriteStreamUnder(root, dest));
+  await pipeline3(Readable4.fromWeb(res.body), cap2, await createWriteStreamUnder(root, dest));
+}
+async function fileSha256(path3) {
+  const hash2 = createHash13("sha256");
+  await pipeline3(createReadStream(path3), hash2);
+  return hash2.digest("hex");
 }
 function clip(body) {
   if (body.length <= MAX_COMMENT) return body;
@@ -122732,36 +122802,53 @@ async function run(env, gh) {
     const headRev = (event?.headSha ?? env.GITHUB_SHA ?? "head").slice(0, 7);
     let errors = [];
     let warnings = [];
+    let headSrc = null;
     try {
-      ({ errors, warnings } = validatePolicy(await loadPolicyDir(headDir, inWorkspace), { experimentalSubscription: false }));
+      headSrc = await loadPolicyDir(headDir, inWorkspace);
+      ({ errors, warnings } = validatePolicy(headSrc, { experimentalSubscription: false }));
     } catch (e2) {
       if (!(e2 instanceof PolicyLoadError)) throw e2;
       errors = e2.issues.map((i) => ({ code: e2.code, path: i.path, message: i.message }));
     }
-    if (errors.length > 0) {
+    if (errors.length > 0 || headSrc === null) {
       for (const i of errors) logError(`error ${i.code} ${i.path}: ${i.message}`);
       const body2 = [COMMENT_MARKER, "### tokenyard policy replay", "", `Policy check failed: ${errors.length} error${errors.length === 1 ? "" : "s"}. Replay did not run.`, "", ...errors.slice(0, 20).map((i) => `- ${escapeMarkdown(i.code)} ${escapeMarkdown(i.path)}: ${escapeMarkdown(i.message, 400)}`), ""].join("\n");
       await publish(env, gh, body2, wantComment, fork);
       return 1;
     }
-    const work = env.RUNNER_TEMP || process.cwd();
-    let tracesPath = tracesInput;
-    let tracesRoot = inWorkspace;
-    if (/^https?:\/\//i.test(tracesInput)) {
-      tracesPath = join10(work, new URL(tracesInput).pathname.endsWith(".gz") ? "traces.ndjson.gz" : "traces.ndjson");
-      tracesRoot = { root: work };
-      await download(tracesInput, tracesToken === "" ? null : tracesToken, work, tracesPath);
-    } else if (env.GITHUB_WORKSPACE && !isUnder(env.GITHUB_WORKSPACE, tracesPath)) {
-      tracesRoot = {};
-    }
-    const sinceInput = input2(env, "since");
-    const sinceMs = sinceInput === "" ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
-    if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error("the since input must be a duration such as 7d, or an ISO time");
-    const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false, ...inWorkspace });
     const isPr = (env.GITHUB_EVENT_NAME ?? "").startsWith("pull_request");
     const candidates = isPr ? [event?.baseSha ?? ""] : [baseRef, `origin/${baseRef}`];
     const commit = candidates.map((c) => resolveGitCommit(c, repo)).find((c) => c !== null);
     if (!commit) throw new Error(isPr ? "the pull request base commit is missing from the event or from the checkout (use actions/checkout with fetch-depth: 0)" : `base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch)`);
+    const work = env.RUNNER_TEMP || process.cwd();
+    let tracesPath = tracesInput;
+    let tracesRoot = inWorkspace;
+    let tracesSha256;
+    let tracesSource;
+    const gz = (p) => p.endsWith(".gz") ? "traces.ndjson.gz" : "traces.ndjson";
+    if (/^https?:\/\//i.test(tracesInput)) {
+      tracesPath = join10(work, gz(new URL(tracesInput).pathname));
+      tracesRoot = { root: work };
+      await download(tracesInput, tracesToken === "" ? null : tracesToken, work, tracesPath);
+      tracesSha256 = await fileSha256(tracesPath);
+    } else if (env.GITHUB_WORKSPACE && isUnder(env.GITHUB_WORKSPACE, tracesPath) && isPr) {
+      await checkPath(env.GITHUB_WORKSPACE, tracesPath).catch((e2) => {
+        if (e2.code !== "ENOENT") throw e2;
+      });
+      const rel = relative3(resolve5(env.GITHUB_WORKSPACE), resolve5(tracesPath)).split(sep3).join("/");
+      tracesPath = join10(work, `base-${gz(tracesInput)}`);
+      tracesRoot = { root: work };
+      tracesSha256 = await copyFileAtCommit({ commit, path: rel, repo, root: work, dest: tracesPath, maxBytes: MAX_TRACES_BYTES });
+      tracesSource = `${rel} at the base commit`;
+    } else {
+      if (env.GITHUB_WORKSPACE && !isUnder(env.GITHUB_WORKSPACE, tracesPath)) tracesRoot = {};
+      await checkPath(tracesRoot.root ?? cliRoot(tracesPath), tracesPath);
+      tracesSha256 = await fileSha256(tracesPath);
+    }
+    const sinceInput = input2(env, "since");
+    const sinceMs = sinceInput === "" ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
+    if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error("the since input must be a duration such as 7d, or an ISO time");
+    const head = compileReplaySource(headSrc, { experimentalSubscription: false });
     const base = loadPolicyAtCommit({ commit, repo, experimentalSubscription: false });
     const result = await replay({ base, head, traces: await openReplayTraces([tracesPath], tracesRoot), sinceMs, tenant: null });
     const jsonPath = join10(work, "replay.json");
@@ -122769,7 +122856,7 @@ async function run(env, gh) {
     if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, `replay-json=${jsonPath}
 `);
     const baseRev = event?.baseSha?.slice(0, 7) ?? baseRef;
-    const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length } });
+    const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length }, tracesSha256, ...tracesSource === void 0 ? {} : { tracesSource } });
     await publish(env, gh, body, wantComment, fork);
     return result.gates.failed.length > 0 ? 1 : 0;
   } catch (e2) {

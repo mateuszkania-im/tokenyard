@@ -20,7 +20,7 @@ export interface ActionRepo {
   stderr: string[];
   git(...args: string[]): string;
   env(o?: { fork?: boolean; traces?: string }): NodeJS.ProcessEnv;
-  replayJson(): { requests: number; gates: { failed: string[] }; traces?: { sha256: string } };
+  replayJson(): { requests: number; gates: { failed: string[] } };
   close(): void;
 }
 

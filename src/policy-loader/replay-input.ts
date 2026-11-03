@@ -1,11 +1,14 @@
 // The file side of `tokenyard policy replay` (R-P2): reads trace files and policy sources, hands data to src/replay.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { lstat, stat } from 'node:fs/promises';
-import { checkPath, cliRoot } from '../fsutil/safe-path.js';
+import { checkPath, cliRoot, createWriteStreamUnder } from '../fsutil/safe-path.js';
 import { lstatSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { readLedger } from '../ledger/reader.js';
+import { readLedger, type LedgerLimits } from '../ledger/reader.js';
 import type { LedgerLine } from '../ledger/record.js';
 import { buildBundle } from '../policy/bundle.js';
 import { compilePolicy } from '../policy/compile.js';
@@ -14,16 +17,20 @@ import type { CompiledPolicy } from '../policy/types.js';
 import { RawTraceDirError } from '../replay/engine.js';
 import { loadPolicyDir } from './load-dir.js';
 
+/** Caps on one trace export after decompression (C2): a gzip bomb or a file without line breaks stops the read. */
+export const REPLAY_TRACE_LIMITS = { maxBytes: 4 * 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 } as const;
+
 /**
  * Lines of one or more export files (plain or .gz). A directory is refused before anything is read: replay needs the
- * merged set `tokenyard traces export` writes, never raw per-instance files (spec 9.2 step 1).
+ * merged set `tokenyard traces export` writes, never raw per-instance files (spec 9.2 step 1). Each file is held to
+ * REPLAY_TRACE_LIMITS (or `limits`) after decompression.
  */
-export async function openReplayTraces(paths: string[], o: { root?: string } = {}): Promise<AsyncIterable<LedgerLine>> {
+export async function openReplayTraces(paths: string[], o: { root?: string; limits?: LedgerLimits } = {}): Promise<AsyncIterable<LedgerLine>> {
   for (const p of paths) {
     await checkPath(o.root ?? cliRoot(p), p);
     if ((await lstat(p)).isDirectory()) throw new RawTraceDirError(p);
   }
-  return readLedger(paths);
+  return readLedger(paths, { ...REPLAY_TRACE_LIMITS, ...o.limits });
 }
 
 /** A policy directory inside a repository: the repository top level (real path) and the directory relative to it. */
@@ -97,8 +104,10 @@ function gitEnv(repo: RepoDir | null): NodeJS.ProcessEnv {
  * found in the tree are off (`safe.bareRepository=explicit`, a ceiling at the parent of `top`), replace refs are
  * ignored and the environment is gitEnv's.
  */
+const gitArgs = (repo: RepoDir, args: string[]): string[] => ['--no-replace-objects', '--literal-pathspecs', '-c', 'safe.bareRepository=explicit', '--git-dir', join(repo.top, '.git'), '--work-tree', repo.top, ...args];
+
 function gitIn(repo: RepoDir, args: string[]): string {
-  return execFileSync('git', ['--no-replace-objects', '-c', 'safe.bareRepository=explicit', '--git-dir', join(repo.top, '.git'), '--work-tree', repo.top, ...args], {
+  return execFileSync('git', gitArgs(repo, args), {
     cwd: repo.top,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -116,6 +125,47 @@ export function resolveGitCommit(ref: string, repo: RepoDir): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Copies the file at repository path `path` (slash-separated, relative to the top level) as committed at `commit` to
+ * `dest` below `root`, through the same hardened git (C2: the Action reads a workspace traces path at the PR's base
+ * commit, never from the PR's working tree). Only a regular file is copied (a symbolic link or submodule is refused),
+ * and only up to `maxBytes`. Returns the sha256 of the bytes written.
+ */
+export async function copyFileAtCommit(o: { commit: string; path: string; repo: RepoDir; root: string; dest: string; maxBytes: number }): Promise<string> {
+  const what = `${JSON.stringify(o.path)} at the base commit ${o.commit.slice(0, 12)}`;
+  if (o.path === '' || o.path.split('/').some((p) => p === '' || p === '.' || p === '..')) throw new Error(`traces path ${JSON.stringify(o.path)} is not a plain path in the repository`);
+  let entry = '';
+  try {
+    entry = gitIn(o.repo, ['ls-tree', '-z', '--full-tree', o.commit, '--', o.path]);
+  } catch {
+    // reported below
+  }
+  const m = /^(\d{6}) (\w+) ([0-9a-f]{40,64})\t([^\0]*)\0$/.exec(entry);
+  if (!m || m[4] !== o.path) throw new Error(`traces file ${what} does not exist in the base commit (in a pull request the traces are read from the base commit, never from the pull request)`);
+  if (m[2] !== 'blob' || (m[1] !== '100644' && m[1] !== '100755')) throw new Error(`traces file ${what} must be a regular file`);
+  const oid = m[3] ?? '';
+  const size = Number(gitIn(o.repo, ['cat-file', '-s', oid]).trim());
+  if (!Number.isSafeInteger(size) || size > o.maxBytes) throw new Error(`traces file ${what} is larger than ${o.maxBytes} bytes`);
+  const out = await createWriteStreamUnder(o.root, o.dest);
+  const hash = createHash('sha256');
+  const child = spawn('git', gitArgs(o.repo, ['cat-file', 'blob', oid]), { cwd: o.repo.top, env: gitEnv(o.repo), stdio: ['ignore', 'pipe', 'ignore'] });
+  const exited = new Promise<number | null>((done, fail) => {
+    child.on('error', fail);
+    child.on('close', done);
+  });
+  let seen = 0;
+  const count = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      seen += chunk.length;
+      hash.update(chunk);
+      cb(seen > o.maxBytes ? new Error(`traces file ${what} is larger than ${o.maxBytes} bytes`) : null, chunk);
+    },
+  });
+  await pipeline(child.stdout, count, out);
+  if ((await exited) !== 0 || seen !== size) throw new Error(`could not read traces file ${what}`);
+  return hash.digest('hex');
 }
 
 /** Policy files of the directory at git ref `ref` (`git show <commit>:<path>`); the ref is resolved to a commit id first. */
@@ -152,19 +202,21 @@ function sourceAtRef(dirLabel: string, ref: string, repo: RepoDir): PolicySource
  * tree that happens to be named like the commit or its branch is never consulted (the Action uses this for the base).
  */
 export function loadPolicyAtCommit(o: { commit: string; repo: RepoDir; experimentalSubscription: boolean }): CompiledPolicy {
-  const src = sourceAtRef(join(o.repo.top, o.repo.rel, `@${o.commit}`), o.commit, o.repo);
-  const revision = buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
-  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+  return compileReplaySource(sourceAtRef(join(o.repo.top, o.repo.rel, `@${o.commit}`), o.commit, o.repo), { experimentalSubscription: o.experimentalSubscription });
 }
 
 /**
- * A policy for replay from a directory, or from a git ref (the head directory's files at that ref). The revision is
- * the one `serve --policy <dir>` records (the first 12 hex of the content sha256), unless `revision` is given (a bundle
- * built in CI records GITHUB_SHA).
+ * A loaded policy source compiled for replay. The revision is the one `serve --policy <dir>` records (the first 12 hex
+ * of the content sha256), unless `revision` is given (a bundle built in CI records GITHUB_SHA).
  */
+export function compileReplaySource(src: PolicySource, o: { revision?: string; experimentalSubscription: boolean }): CompiledPolicy {
+  const revision = o.revision ?? buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
+  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+}
+
+/** A policy for replay from a directory, or from a git ref (the head directory's files at that ref). */
 export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean; root?: string }): Promise<CompiledPolicy> {
   const isDir = await stat(o.source).then((s) => s.isDirectory(), () => false);
   const src = isDir ? await loadPolicyDir(o.source, o.root === undefined ? {} : { root: o.root }) : sourceAtRef(join(o.headDir, `@${o.source}`), o.source, locateRepoDir(o.headDir, null));
-  const revision = o.revision ?? buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
-  return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
+  return compileReplaySource(src, { ...(o.revision === undefined ? {} : { revision: o.revision }), experimentalSubscription: o.experimentalSubscription });
 }
