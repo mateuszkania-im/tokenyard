@@ -100,18 +100,19 @@ test('broken file keeps the old revision and increments loadErrors', async () =>
 test('the same broken file found again by the watcher is still one failure (a loaded machine spreads one write over two events)', async () => {
   const dir = tempDir();
   writePolicyDir(dir, UP, 'one');
-  const l = await started({ dir, pollMs: 60_000 });
+  // The poll (every 500 ms) is the fallback when a loaded machine delivers a watcher event late; both dedupe now.
+  const l = await started({ dir, pollMs: 500 });
   const rev = l.active().revision;
   writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: [unclosed');
-  await expect.poll(() => l.loadErrors).toBe(1);
-  // The same content written again: the watcher fires, the reload finds the same failure.
+  await expect.poll(() => l.loadErrors, { timeout: 10_000 }).toBe(1);
+  // The same content written again: the watcher fires, the reload finds the same failure; so does the next poll.
   writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: [unclosed');
-  await sleep(300);
+  await sleep(1_200);
   expect(l.loadErrors).toBe(1);
   expect(l.active().revision).toBe(rev);
   // A different failure counts again.
   writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: {unclosed');
-  await expect.poll(() => l.loadErrors).toBe(2);
+  await expect.poll(() => l.loadErrors, { timeout: 10_000 }).toBe(2);
 });
 
 test('truncated mid-write then complete write: old revision serves, then the new one activates', async () => {

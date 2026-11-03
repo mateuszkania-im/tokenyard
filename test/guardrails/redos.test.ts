@@ -10,10 +10,10 @@ import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
 import { findSpans, ScanBudget, scanBody } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
-import { cpuMs } from '../helpers/timing.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 const MIB = 1024 * 1024;
-const BOUND_MS = 1_000;
+const BOUND_MS = cpuBoundMs(1_000);
 /** No work budget (S-V3-3): a budget stop would hide a slow rule; this test is about the rules, the budget has its own. */
 const unbounded = (): ScanBudget => new ScanBudget(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
 const fill = (unit: string): string => unit.repeat(Math.ceil(MIB / unit.length)).slice(0, MIB);

@@ -7,6 +7,7 @@ import { bodyShapeRefusal, MAX_BODY_DEPTH } from '../../src/surfaces/body-shape.
 import { authHeaders, codexHeaders, send } from '../helpers/conformance.js';
 import { testPolicy } from '../helpers/policy.js';
 import { closeAll, gw, raw, readJson } from './common.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 afterEach(closeAll);
 
@@ -60,12 +61,9 @@ test('S25-2 the scan is linear: 8 MiB of small objects in well under a second', 
   const n = Math.floor((8 * 1024 * 1024) / item.length);
   const body = Buffer.from(`{"model":"m","messages":[{"role":"user","content":[${item.repeat(n).slice(0, -1)}]}]}`);
   expect(body.length).toBeGreaterThan(7 * 1024 * 1024);
-  const t0 = performance.now();
-  expect(bodyShapeRefusal(body, true)).toBeNull();
-  expect(performance.now() - t0).toBeLessThan(1000);
+  // CPU time: a loaded machine stretches the wall clock, not the work (V5)
+  expect(cpuMs(() => expect(bodyShapeRefusal(body, true)).toBeNull())).toBeLessThan(cpuBoundMs(1000));
   // One object with many keys stays linear too (a Set per object, not pairwise compares).
   const wide = Buffer.from('{' + Array.from({ length: 200_000 }, (_, i) => `"k${i}":${i}`).join(',') + '}');
-  const t1 = performance.now();
-  expect(bodyShapeRefusal(wide, true)).toBeNull();
-  expect(performance.now() - t1).toBeLessThan(1000);
+  expect(cpuMs(() => expect(bodyShapeRefusal(wide, true)).toBeNull())).toBeLessThan(cpuBoundMs(1000));
 });

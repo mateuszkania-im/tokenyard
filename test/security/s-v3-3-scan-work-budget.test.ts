@@ -14,6 +14,7 @@ import { authHeaders, send } from '../helpers/conformance.js';
 import { testPolicy } from '../helpers/policy.js';
 import { closeAll, gw, raw, readJson, serviceKey } from './common.js';
 import { KEY_SHAPED, MODEL } from './scan-budget-bodies.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 afterEach(closeAll);
 
@@ -75,10 +76,9 @@ test('S-V3-3 the scan stops with ScanBudgetError at its match budget, counted be
 
 test('S-V3-3 keywordsIn stops at one hit per keyword: 32 MiB of one keyword is one hit, as String.includes finds it', () => {
   const text = '@'.repeat(32 * 1024 * 1024);
-  const started = performance.now();
-  expect(keywordsIn(text, ['@', 'AKIA', 'secret'])).toEqual(new Set(['@']));
-  // Every 32 Mi positions was a hit before (0.85 s); now the first hit ends the search for that keyword.
-  expect(performance.now() - started).toBeLessThan(400);
+  // Every 32 Mi positions was a hit before (0.85 s); now the first hit ends the search for that keyword. CPU time: a
+  // loaded machine stretches the wall clock, not the work (V5).
+  expect(cpuMs(() => expect(keywordsIn(text, ['@', 'AKIA', 'secret'])).toEqual(new Set(['@'])))).toBeLessThan(cpuBoundMs(400));
 });
 
 // The 32 MiB bodies (short strings, bare tokens, dense matches; last turn and history; coding-agent and product

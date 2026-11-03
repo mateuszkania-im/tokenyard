@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import fc from 'fast-check';
 import { Breaker } from '../../src/upstream/breaker.js';
 import { RetryBudget } from '../../src/upstream/retry-budget.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 const opts = { minRequests: 4, failureRatio: 0.5, windowSeconds: 30, openSeconds: 10 };
 
@@ -145,12 +146,14 @@ test('breaker decisions match the whole-window reference for any outcome sequenc
 test('recording an outcome does not scan the whole window: 30,000 outcomes inside one 30 s window in well under 250 ms (V1)', () => {
   let t = 0;
   const b = new Breaker({ minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }, () => t);
-  const t0 = performance.now();
-  for (let i = 0; i < 30_000; i++) {
-    t += 0.5; // 2,000 outcomes per second (500 streams at 4 requests a second): the whole run stays inside the window
-    b.record('p', i % 4 !== 0);
-  }
-  expect(performance.now() - t0).toBeLessThan(250);
+  // CPU time: a loaded machine stretches the wall clock, not the work (V5)
+  const ms = cpuMs(() => {
+    for (let i = 0; i < 30_000; i++) {
+      t += 0.5; // 2,000 outcomes per second (500 streams at 4 requests a second): the whole run stays inside the window
+      b.record('p', i % 4 !== 0);
+    }
+  });
+  expect(ms).toBeLessThan(cpuBoundMs(250));
   expect(b.allow('p')).toBe(true);
 });
 

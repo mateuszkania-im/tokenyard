@@ -16,3 +16,10 @@ export function minCpuMs(fn: () => void, runs = 3): number {
   for (let i = 0; i < runs; i++) best = Math.min(best, cpuMs(fn));
   return best;
 }
+
+/**
+ * A CPU-time bound for this run: `ms` as measured uninstrumented, ten times that under `npm run test:coverage`, whose
+ * per-block counters made the byte loops of the scanner up to about 8 times slower (vitest.config.ts sets
+ * TOKENYARD_COVERAGE). Still far below the quadratic or unbounded behaviour each bound rules out.
+ */
+export const cpuBoundMs = (ms: number): number => (process.env.TOKENYARD_COVERAGE === '1' ? ms * 10 : ms);

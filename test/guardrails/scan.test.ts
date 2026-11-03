@@ -6,6 +6,7 @@ import { DEFAULT_RULES, type SecretRule } from '../../src/guardrails/rules.js';
 import { findSpans, keywordsIn, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 const AWS = RULE_FIXTURES['aws-access-key-id']?.positive as string;
 const GH = RULE_FIXTURES['github-pat']?.positive as string;
@@ -155,13 +156,15 @@ test('many messages with one hit each: linear, not hits times messages', () => {
   messages.push({ role: 'user', content: 'end' });
   const b = Buffer.from(JSON.stringify({ model: 'm', messages }));
   const f = extractAnthropicFeatures(b);
-  const t0 = performance.now();
-  const hits = scanBody(b, f.lastTurn, PII_RULES, block, 's', { messages: f.messages });
-  const ms = performance.now() - t0;
+  let hits: ReturnType<typeof scanBody> = [];
+  // CPU time: a loaded machine stretches the wall clock, not the work (V5)
+  const ms = cpuMs(() => {
+    hits = scanBody(b, f.lastTurn, PII_RULES, block, 's', { messages: f.messages });
+  });
   expect(hits.length).toBe(messages.length - 1);
   expect(hits[hits.length - 1]?.message).toBe(messages.length - 2);
   console.log(`many messages: ${messages.length} messages, ${hits.length} hits, ${ms.toFixed(0)} ms`);
-  expect(ms).toBeLessThan(1_000);
+  expect(ms).toBeLessThan(cpuBoundMs(1_000));
 }, 60_000);
 
 // Fix round 3: a malformed body is scanned both raw and best-effort decoded.

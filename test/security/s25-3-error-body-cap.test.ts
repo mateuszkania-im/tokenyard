@@ -10,6 +10,7 @@ import { send } from '../helpers/conformance.js';
 import { startGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV, TEST_KEY, testPolicy } from '../helpers/policy.js';
 import { closeAll, closers, raw, readJson } from './common.js';
+import { cpuBoundMs, minCpuMs } from '../helpers/timing.js';
 
 afterEach(async () => {
   await closeAll();
@@ -70,11 +71,10 @@ test('S25-4 masked-form matching is linear: 1 MB of adversarial input takes well
   // and many suffix occurrences without a mask.
   const inputs = ['sk-'.repeat(333_333), `sk-${'a'.repeat(1_000_000)}`, `sk-${'a'.repeat(500_000)}***WXY`.repeat(2), '***WXYZ'.repeat(150_000), 'WXYZ'.repeat(250_000), `${'*'.repeat(1_000_000)}WXYZ`];
   for (const input of inputs) {
-    const t0 = performance.now();
-    redactCredentialEcho(Buffer.from(input), k);
-    // A linear pass over 1 MB takes a few ms; 100 ms leaves room for a slow shared CI runner while an unbounded
-    // quantifier on these inputs takes seconds.
-    expect(performance.now() - t0, input.slice(0, 12)).toBeLessThan(100);
+    // A linear pass over 1 MB takes a few ms; 100 ms of CPU leaves room for a slow shared CI runner and coverage
+    // instrumentation (115 ms of wall clock once under coverage, V5) while an unbounded quantifier on these inputs takes
+    // seconds. CPU time, least of three: a loaded machine stretches the wall clock, not the work.
+    expect(minCpuMs(() => redactCredentialEcho(Buffer.from(input), k)), input.slice(0, 12)).toBeLessThan(cpuBoundMs(100));
   }
 });
 

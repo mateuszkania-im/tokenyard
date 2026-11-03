@@ -14,6 +14,7 @@ import { bodyShapeRefusal } from '../../src/surfaces/body-shape.js';
 import { BODY_VALUE_BUDGET, countJsonValuesUpTo } from '../../src/surfaces/json-ranges.js';
 import { RULE_FIXTURES } from '../guardrails/fixtures.js';
 import { fuzz, fuzzTimeout } from '../helpers/fuzz.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 const BLOCKING = DEFAULT_RULES.filter((r) => !r.entropyOnly).map((r) => r.id);
 const SECRETS = Object.entries(RULE_FIXTURES).filter(([id]) => BLOCKING.includes(id)).map(([id, f]) => ({ id, value: f.positive }));
@@ -141,10 +142,9 @@ test('S-V3-1 bound: a body holding the budget of mixed escapes in every turn sca
   expect(n).toBeLessThanOrEqual(SCAN_ESCAPE_BUDGET);
   expect(n).toBeGreaterThan(SCAN_ESCAPE_BUDGET * 0.7);
   const f = extractAnthropicFeatures(b);
-  const started = performance.now();
-  scanBody(b, f.lastTurn, DEFAULT_RULES, () => 'redact', 'salt', f.messages ? { messages: f.messages } : {});
-  // S-V3-1 measured at most 0.75 s for a 32 MiB product body at the budget; slack for loaded CI machines.
-  expect(performance.now() - started).toBeLessThan(2_500);
+  // S-V3-1 measured at most 0.75 s for a 32 MiB product body at the budget; slack for slow CI runners. CPU time: a
+  // loaded machine stretches the wall clock, not the work (V5).
+  expect(cpuMs(() => scanBody(b, f.lastTurn, DEFAULT_RULES, () => 'redact', 'salt', f.messages ? { messages: f.messages } : {}))).toBeLessThan(cpuBoundMs(2_500));
 }, 20_000);
 
 /** JSON values of a parsed value as countJsonValuesUpTo counts them: every node, object keys included. */
@@ -205,11 +205,12 @@ test('S-V3-3 bound: a body just under the value, escape and run budgets scans on
   expect(countEscapesUpTo(b, { start: 0, end: b.length }, SCAN_ESCAPE_BUDGET)).toBeLessThanOrEqual(SCAN_ESCAPE_BUDGET);
   const f = extractAnthropicFeatures(b);
   const opts = f.messages ? { messages: f.messages } : {};
-  const started = performance.now();
   // The three scans of a product route: secrets, PII, and the redaction spans over the whole body.
-  scanBody(b, f.lastTurn, DEFAULT_RULES, () => 'redact', 'salt', opts);
-  scanBody(b, f.lastTurn, PII_RULES, () => 'redact', 'salt', { ...opts, valueHmac: false });
-  findSpans(b, [...DEFAULT_RULES.filter((r) => !r.entropyOnly), ...PII_RULES], opts);
-  // Measured about 0.35 s for the three; slack for loaded CI machines.
-  expect(performance.now() - started).toBeLessThan(2_500);
+  const ms = cpuMs(() => {
+    scanBody(b, f.lastTurn, DEFAULT_RULES, () => 'redact', 'salt', opts);
+    scanBody(b, f.lastTurn, PII_RULES, () => 'redact', 'salt', { ...opts, valueHmac: false });
+    findSpans(b, [...DEFAULT_RULES.filter((r) => !r.entropyOnly), ...PII_RULES], opts);
+  });
+  // Measured about 0.35 s for the three; slack for slow CI runners. CPU time (V5), as above.
+  expect(ms).toBeLessThan(cpuBoundMs(2_500));
 }, 20_000);

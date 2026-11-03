@@ -7,6 +7,7 @@ import { loadPolicyDir } from '../../src/policy-loader/load-dir.js';
 import { parsePolicyFiles, PolicyLoadError } from '../../src/policy/load-dir.js';
 import { policyJsonSchema } from '../../src/policy/json-schema.js';
 import { policySchema } from '../../src/policy/schema.js';
+import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 
 const EXAMPLE = 'examples/policy';
 const dirs: string[] = [];
@@ -83,11 +84,13 @@ test('an empty keys file means no keys', () => {
 
 test('a nested alias bomb fails fast with E_YAML_UNSAFE, in policy, prices and keys', () => {
   const bomb = 'a: &a [x, x, x, x, x, x, x, x, x, x]\nb: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]\nc: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]\nd: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]\ne: [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]\n';
-  const t0 = Date.now();
-  for (const f of ['policy.yaml', 'prices.yaml', 'keys.yaml']) {
-    expect(loadCode({ ...base(), [f]: f === 'keys.yaml' ? `- &k {x: 1}\n- *k\n` : bomb })).toBe('E_YAML_UNSAFE');
-  }
-  expect(Date.now() - t0).toBeLessThan(2000);
+  // CPU time: a loaded machine stretches the wall clock, not the work (V5)
+  const ms = cpuMs(() => {
+    for (const f of ['policy.yaml', 'prices.yaml', 'keys.yaml']) {
+      expect(loadCode({ ...base(), [f]: f === 'keys.yaml' ? `- &k {x: 1}\n- *k\n` : bomb })).toBe('E_YAML_UNSAFE');
+    }
+  });
+  expect(ms).toBeLessThan(cpuBoundMs(2000));
 });
 
 test('merge keys and __proto__ keys are rejected at parse time and nothing is polluted', () => {
