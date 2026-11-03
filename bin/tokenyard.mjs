@@ -504,8 +504,8 @@ function anonymizeRecord(r, p) {
       ...r.policy.candidateRevision !== void 0 ? { candidateRevision: r.policy.candidateRevision } : {},
       ...r.policy.candidateError !== void 0 ? { candidateError: r.policy.candidateError } : {}
     },
-    decision: decisionOf(r.decision),
-    ...r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision) } : {},
+    decision: decisionOf(r.decision, p),
+    ...r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision, p) } : {},
     outcome: {
       provider: o.provider,
       upstreamModel: o.upstreamModel === null ? null : exportedModel(o.upstreamModel, p),
@@ -538,7 +538,7 @@ function anonymizeRecord(r, p) {
     }
   };
 }
-function decisionOf(d) {
+function decisionOf(d, p) {
   return {
     route: d.route,
     action: d.action,
@@ -552,8 +552,9 @@ function decisionOf(d) {
     ...d.preDecision ? { preDecision: true } : {},
     ...d.admitOffsetMs !== void 0 ? { admitOffsetMs: d.admitOffsetMs } : {},
     ...d.admitSeq !== void 0 ? { admitSeq: d.admitSeq } : {},
-    // A random process id the gateway writes (16 hex); anything else is dropped, and replay then uses the time rule.
-    ...d.seqEpoch !== void 0 && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: d.seqEpoch } : {}
+    // A random process id the gateway writes (16 hex), re-keyed like every linkable id (S-V4-4); any other value is
+    // dropped, and replay then uses the time rule.
+    ...d.seqEpoch !== void 0 && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: p("epoch", d.seqEpoch) } : {}
   };
 }
 function saltedPseudonyms(salt) {
@@ -570,7 +571,7 @@ var init_anonymize = __esm({
     "use strict";
     init_hmac();
     init_labels();
-    HEX_KINDS = /* @__PURE__ */ new Set(["prefix", "session", "agent", "promptId", "valueHmac"]);
+    HEX_KINDS = /* @__PURE__ */ new Set(["prefix", "session", "agent", "promptId", "valueHmac", "epoch"]);
     REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
     AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
     MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;

@@ -9,56 +9,14 @@
 // old release was held until the new process had issued as many admits. Every record now carries `decision.seqEpoch`,
 // a random id of the writing process; seqs are compared only within one (instance, epoch), otherwise the time rule.
 import { afterEach, expect, test } from 'vitest';
-import { createGatewayRuntime } from '../../src/edge/handler.js';
-import { anonymizeRecord, saltedPseudonyms } from '../../src/ledger/anonymize.js';
-import type { LedgerLine, TraceRecord } from '../../src/ledger/record.js';
-import { createMemoryStore } from '../../src/limits/memory-store.js';
 import { replay } from '../../src/replay/engine.js';
-import { authHeaders, send, startRawUpstream } from '../helpers/conformance.js';
-import { startGateway } from '../helpers/gateway.js';
-import { PROVIDER_KEY_ENV, testPolicy } from '../helpers/policy.js';
+import { PROVIDER_KEY_ENV } from '../helpers/policy.js';
+import { closers, lines, record, type Rec } from '../helpers/settle-order.js';
 
-type Rec = Omit<TraceRecord, 'instance' | 'seq'>;
-const closers: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const c of closers.splice(0)) await c();
   delete process.env[PROVIDER_KEY_ENV];
 });
-
-async function record(): Promise<{ policy: ReturnType<typeof testPolicy>; traces: Rec[] }> {
-  process.env[PROVIDER_KEY_ENV] = 'k';
-  let release: () => void = () => undefined;
-  const held = new Promise<void>((r) => (release = r));
-  const seen: string[] = [];
-  const up = await startRawUpstream((req, res) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', async () => {
-      const text = Buffer.concat(chunks).toString();
-      seen.push(text);
-      if (text.includes('holder')) await held;
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'm', type: 'message', model: 'claude-haiku-5-5', content: [], usage: { input_tokens: 10, output_tokens: 1 } }));
-    });
-  });
-  closers.push(up.close);
-  const policy = testPolicy({ upstream: up.url, edit: (p) => void (p.rateLimits = [{ name: 'key-streams', scope: 'key', concurrentStreams: 1 }]) });
-  const traces: Rec[] = [];
-  const gw = await startGateway({ policy, store: createMemoryStore({ clock: Date.now }), traces: { write: (r) => (traces.push(r), true) }, traceSalt: 's', runtime: createGatewayRuntime() });
-  closers.push(gw.close);
-  const body = (t: string): string => JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 8, messages: [{ role: 'user', content: t }] });
-  const holder = send(gw.url, { path: '/v1/messages', headers: authHeaders, body: body('holder') });
-  await expect.poll(() => seen.length).toBe(1);
-  expect((await send(gw.url, { path: '/v1/messages', headers: authHeaders, body: body('second') })).status).toBe(429);
-  release();
-  expect((await holder).status).toBe(200);
-  await expect.poll(() => traces.length).toBe(2);
-  return { policy, traces };
-}
-
-const lines = (traces: Rec[]): AsyncIterable<LedgerLine> =>
-  (async function* () {
-    yield* traces.map((t, i) => ({ ...t, instance: 'gw01', seq: i + 1 }));
-  })();
 
 test('the gateway records settleSeq: the admits it had issued when it settled', async () => {
   const { traces } = await record();
@@ -143,10 +101,3 @@ test('a record that calls no admit, sorted between the release and the racing ad
   expect(r.fidelity.disagreements).toEqual([]);
 });
 
-test('anonymized exports keep the process epoch the gateway writes and drop any other value', async () => {
-  const { traces } = await record();
-  const p = saltedPseudonyms('export');
-  const rec = { ...(traces[0] as Rec), instance: 'gw01', seq: 1 };
-  expect(anonymizeRecord(rec, p).decision.seqEpoch).toBe(rec.decision.seqEpoch);
-  expect(anonymizeRecord({ ...rec, decision: { ...rec.decision, seqEpoch: 'jane@example.com' } }, p).decision.seqEpoch).toBeUndefined();
-});

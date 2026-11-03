@@ -7,13 +7,15 @@ export type PseudonymKind =
   // Linkable ids: already hashes or HMACs in the raw traces, but stable across exports and, for prefixHash, an unsalted
   // SHA-256 of the tools and system bytes that anyone holding those bytes can confirm. Re-keyed with the export salt.
   | 'prefix' | 'session' | 'agent' | 'promptId' | 'valueHmac' | 'instance'
+  // The gateway's random process id (decision.seqEpoch, S-V4-4): it links every record of one process.
+  | 'epoch'
   // A model name the gateway pseudonymised (B1), or a name a trace written before that holds in an unexpected shape.
   | 'model'
   // A server tool type no provider documents (S-V4-2, S-V4-3): client text in `tools[].type`.
   | 'toolType';
 
 /** Kinds whose pseudonym keeps the hex shape of the value it replaces (reports and replay treat them as opaque ids). */
-const HEX_KINDS: ReadonlySet<PseudonymKind> = new Set(['prefix', 'session', 'agent', 'promptId', 'valueHmac']);
+const HEX_KINDS: ReadonlySet<PseudonymKind> = new Set(['prefix', 'session', 'agent', 'promptId', 'valueHmac', 'epoch']);
 
 /** Fixed values Claude Code sends as request class (spec 5.4); anything else is free text from a header. */
 const REQUEST_CLASSES: ReadonlySet<string> = new Set(['main', 'subagent', 'compaction', 'auxiliary']);
@@ -24,13 +26,13 @@ const AGENT_TYPES: ReadonlySet<string> = new Set(['general-purpose', 'Explore', 
  * Deny by default (spec 9.5): tenant, team, key id, repo, branch, ticket, feature and every attribution label that is
  * not a fixed enum value are replaced by the pseudonyms `p` returns; `client.version` is dropped. The attribution
  * object is rebuilt field by field, so an unknown key never survives. Every linkable id is re-keyed too: session,
- * agent, parent agent and prompt id HMACs, the prefix hash, guardrail value HMACs and the instance id, each through
- * `p`, so equality within one export (sessions, subagent joins, cache breakers, taint) survives while nothing links
- * back to the raw traces or across exports with different salts. Agent and parent agent share one kind, so a
+ * agent, parent agent and prompt id HMACs, the prefix hash, guardrail value HMACs, the instance id and the process
+ * epoch, each through `p`, so equality within one export (sessions, subagent joins, cache breakers, taint, settle
+ * order) survives while nothing links back to the raw traces or across exports with different salts. Agent and parent agent share one kind, so a
  * subagent still joins its parent. The record id is the caller's (export numbers records in export order).
  */
 const MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
-/** `decision.seqEpoch` as the gateway writes it: random hex, linking records of one process only. */
+/** `decision.seqEpoch` as the gateway writes it (random hex) or an export re-keys it (32 hex). */
 const SEQ_EPOCH = /^[0-9a-f]{1,32}$/;
 /** `client.agent` values the gateway writes; anything else in a trace becomes `other`. */
 const CLIENT_AGENTS: ReadonlySet<string> = new Set(['claude-code', 'codex', 'other']);
@@ -119,8 +121,8 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
       ...(r.policy.candidateRevision !== undefined ? { candidateRevision: r.policy.candidateRevision } : {}),
       ...(r.policy.candidateError !== undefined ? { candidateError: r.policy.candidateError } : {}),
     },
-    decision: decisionOf(r.decision),
-    ...(r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision) } : {}),
+    decision: decisionOf(r.decision, p),
+    ...(r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision, p) } : {}),
     outcome: {
       provider: o.provider,
       upstreamModel: o.upstreamModel === null ? null : exportedModel(o.upstreamModel, p),
@@ -154,7 +156,7 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
   };
 }
 
-function decisionOf(d: TraceRecord['decision']): TraceRecord['decision'] {
+function decisionOf(d: TraceRecord['decision'], p: (kind: PseudonymKind, v: string) => string): TraceRecord['decision'] {
   return {
     route: d.route,
     action: d.action,
@@ -168,8 +170,9 @@ function decisionOf(d: TraceRecord['decision']): TraceRecord['decision'] {
     ...(d.preDecision ? { preDecision: true as const } : {}),
     ...(d.admitOffsetMs !== undefined ? { admitOffsetMs: d.admitOffsetMs } : {}),
     ...(d.admitSeq !== undefined ? { admitSeq: d.admitSeq } : {}),
-    // A random process id the gateway writes (16 hex); anything else is dropped, and replay then uses the time rule.
-    ...(d.seqEpoch !== undefined && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: d.seqEpoch } : {}),
+    // A random process id the gateway writes (16 hex), re-keyed like every linkable id (S-V4-4); any other value is
+    // dropped, and replay then uses the time rule.
+    ...(d.seqEpoch !== undefined && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: p('epoch', d.seqEpoch) } : {}),
   };
 }
 
