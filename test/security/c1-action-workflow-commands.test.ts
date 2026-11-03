@@ -15,7 +15,7 @@ beforeEach(() => {
 });
 afterEach(() => r.close());
 
-const EVIL = ['x\\n::set-output name=replay-json::/home/runner/work/_temp\\n::notice title=tokenyard::replay passed', 'y\\r::add-mask::abc\\u2028::error::z', '\\u001b]8;;x\\u0007'];
+const EVIL = ['x\\n::set-output name=replay-json::/home/runner/work/_temp\\n::notice title=tokenyard::replay passed', 'y\\r::add-mask::abc\\u2028::error::z', '\\u001b]8;;x\\u0007', 'z ##[set-output name=replay-json;]/etc/passwd', '##[error]legacy'];
 
 /** Lines the runner would read as workflow commands: every line of every write that starts with `::`. */
 function commandLines(r: ActionRepo): string[] {
@@ -26,6 +26,9 @@ function commandLines(r: ActionRepo): string[] {
 function expectOnlyStopPair(r: ActionRepo): void {
   const lines = commandLines(r);
   expect(lines, lines.join('\n')).toHaveLength(2);
+  // the legacy `##[command]` form, which the runner also honours, appears nowhere
+  const legacy = [...r.stdout, ...r.stderr].filter((l) => l.includes('##['));
+  expect(legacy, legacy.join('\n')).toEqual([]);
   const m = /^::stop-commands::([0-9a-f]{32})$/.exec(lines[0] ?? '');
   expect(m, lines[0]).not.toBeNull();
   expect(lines[1]).toBe(`::${m?.[1]}::`);
@@ -38,6 +41,7 @@ test('C1 policy errors quoting hostile keys never start a workflow command line'
   writeFileSync(join(r.repo, 'policy/policy.yaml'), HEAD_POLICY.replace(/^providers:\n/m, `providers:\n${keys}`));
   expect(await runAction(r.env({ fork: true }), fakeGh().gh)).toBe(1);
   expect(r.stderr.some((l) => l.includes('set-output'))).toBe(true);
+  expect(r.stderr.some((l) => l.includes('## [set-output'))).toBe(true);
   const control = (c: number): boolean => c <= 0x1f || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029;
   for (const l of r.stderr) expect([...l].filter((ch) => control(ch.codePointAt(0) ?? 0))).toEqual([]);
   expectOnlyStopPair(r);

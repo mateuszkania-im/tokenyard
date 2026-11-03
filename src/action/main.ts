@@ -72,10 +72,10 @@ async function download(url: string, token: string | null, root: string, dest: s
 
 /**
  * One log line from text that may come from the pull request: line breaks, tabs and line or paragraph separators become
- * spaces and other control characters are dropped, so nothing PR-controlled starts a line the runner reads as a
- * workflow command (C1). Every console write of the Action goes through this.
+ * spaces and other control characters are dropped, and the legacy `##[command]` form gets a space (`## [`), so nothing
+ * PR-controlled is a line the runner reads as a workflow command (C1). Every console write of the Action goes through this.
  */
-const logLine = (s: string): string => stripControls(s.replace(/[\r\n\t\u2028\u2029]/g, ' '));
+const logLine = (s: string): string => stripControls(s.replace(/[\r\n\t\u2028\u2029]/g, ' ')).replace(/##\[/g, '## [');
 const logError = (s: string): void => console.error(logLine(s));
 
 /** sha256 of a file the replay reads, for the comment (C2). The caller has checked the path. */

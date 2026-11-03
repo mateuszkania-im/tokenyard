@@ -122962,7 +122962,7 @@ var init_main = __esm({
     MAX_COMMENT = 6e4;
     MAX_TRACES_BYTES = 512 * 1024 * 1024;
     input2 = (env, name2) => (env[`INPUT_${name2.toUpperCase().replace(/ /g, "_")}`] ?? "").trim();
-    logLine = (s2) => stripControls(s2.replace(/[\r\n\t\u2028\u2029]/g, " "));
+    logLine = (s2) => stripControls(s2.replace(/[\r\n\t\u2028\u2029]/g, " ")).replace(/##\[/g, "## [");
     logError = (s2) => console.error(logLine(s2));
   }
 });
