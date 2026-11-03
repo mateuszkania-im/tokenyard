@@ -140,3 +140,21 @@ test('FR-I1 serve: a second signal closes at once, and a bad --shutdown-grace-ms
   expect(await new Promise((r) => bad.once('exit', r))).toBe(1);
   expect(err).toContain('--shutdown-grace-ms must be a whole number');
 }, 30_000);
+
+// Final fix re-review residual: Node timers cap at 2^31-1 ms and fire after 1 ms above it, so a larger grace would cut
+// every connection at once instead of waiting. Such values are refused at startup.
+test('serve refuses a --shutdown-grace-ms above the Node timer maximum (2^31-1 ms) and accepts the maximum itself', async () => {
+  for (const v of ['2147483648', '99999999999999999999']) {
+    const bad = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', 'http://127.0.0.1:1', '--no-metrics', '--shutdown-grace-ms', v]);
+    closers.push(() => void bad.kill('SIGKILL'));
+    let err = '';
+    bad.stderr.on('data', (d: Buffer) => (err += d.toString()));
+    expect(await new Promise((r) => bad.once('exit', r))).toBe(1);
+    expect(err).toContain('--shutdown-grace-ms must be at most 2147483647');
+  }
+  const up = await heldStream();
+  const s = await serve(up.url, ['--shutdown-grace-ms', '2147483647']); // starts: the maximum is a valid timer delay
+  s.child.kill('SIGKILL');
+  await s.exited;
+  expect(s.stderr()).not.toContain('--shutdown-grace-ms');
+}, 30_000);

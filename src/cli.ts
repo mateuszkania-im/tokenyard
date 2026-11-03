@@ -43,6 +43,9 @@ const hasPassword = (url: string): boolean => {
   }
 };
 
+/** The largest delay a Node timer honours (2^31-1 ms); above it setTimeout fires after 1 ms. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
 const program = new Command();
 program.name('tokenyard').description(description).version(version);
 program
@@ -142,6 +145,11 @@ program
       process.exit(1);
     }
     const graceMs = Number(o.shutdownGraceMs);
+    // Node timers cap at 2^31-1 ms; a larger delay fires after 1 ms, which would cut every connection at once.
+    if (graceMs > MAX_TIMER_MS) {
+      console.error(`tokenyard serve: --shutdown-grace-ms must be at most ${MAX_TIMER_MS} (about 24.8 days, the Node timer maximum)`);
+      process.exit(1);
+    }
     if (!/^\d+$/.test(o.metricsPort)) {
       console.error('tokenyard serve: --metrics-port must be a port number');
       process.exit(1);

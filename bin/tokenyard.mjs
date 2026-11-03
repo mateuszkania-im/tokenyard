@@ -127212,6 +127212,7 @@ var hasPassword = (url2) => {
     return true;
   }
 };
+var MAX_TIMER_MS = 2 ** 31 - 1;
 var program2 = new Command();
 program2.name("tokenyard").description(description).version(version);
 program2.command("mock").description("run the deterministic mock Anthropic provider (and with --openai-port the OpenAI one)").option("--port <n>", "port to listen on (0 picks a free one)", "0").option("--host <host>", "address to bind (the compose demo uses 0.0.0.0 inside its container)", "127.0.0.1").option("--openai-port <n>", "also run the mock OpenAI provider on this port").action(async (o) => {
@@ -127277,6 +127278,10 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     process.exit(1);
   }
   const graceMs = Number(o.shutdownGraceMs);
+  if (graceMs > MAX_TIMER_MS) {
+    console.error(`tokenyard serve: --shutdown-grace-ms must be at most ${MAX_TIMER_MS} (about 24.8 days, the Node timer maximum)`);
+    process.exit(1);
+  }
   if (!/^\d+$/.test(o.metricsPort)) {
     console.error("tokenyard serve: --metrics-port must be a port number");
     process.exit(1);
