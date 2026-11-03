@@ -30,7 +30,7 @@ function change(base: Totals, head: Totals): string {
   return `**${sign}${formatUsd(Math.abs(d))}${rel}**${base.estimated || head.estimated ? ', estimated (model change)' : ''}`;
 }
 
-export function renderMarkdown(r: ReplayResult, o: { baseRev: string; headRev: string; checkSummary: { errors: number; warnings: number } }): string {
+export function renderMarkdown(r: ReplayResult, o: { baseRev: string; headRev: string; checkSummary: { errors: number; warnings: number }; tracesSha256?: string; tracesSource?: string }): string {
   const basis = r.base.costBasis === r.head.costBasis ? r.base.costBasis : 'mixed';
   const headCuts = r.cutSessions.filter((c) => c.policy === 'head');
   const baseCuts = r.cutSessions.filter((c) => c.policy === 'base');
@@ -82,6 +82,10 @@ export function renderMarkdown(r: ReplayResult, o: { baseRev: string; headRev: s
   const applied = rows.filter((_, i) => r.exactness[i]?.applied === true);
   out.push(`<details><summary>How exact is this</summary>\n\n| Output | Exactness | Why |\n|---|---|---|\n${applied.length === 0 ? '| none of the rows applied | | |' : applied.join('\n')}\n\n</details>`, '');
   const failed = r.gates.failed;
+  if (r.gates.headChangesFailOn) {
+    out.push(`This pull request changes ci.failOn; the check uses the stricter of base and head: cutSessions ${r.gates.failOn.cutSessions}, costIncreasePct ${r.gates.failOn.costIncreasePct}.`, '');
+  }
+  if (o.tracesSha256 !== undefined) out.push(`Traces: ${o.tracesSource === undefined ? '' : `${e(o.tracesSource)}, `}sha256 ${code(o.tracesSha256)}.`, '');
   out.push(`Check: ${failed.length === 0 ? '**passed**' : `**failed** (${failed.map((g) => e(g)).join(', ')})`}. Policy check: ${o.checkSummary.errors} error${o.checkSummary.errors === 1 ? '' : 's'}, ${o.checkSummary.warnings} warning${o.checkSummary.warnings === 1 ? '' : 's'}.`);
   return `${out.join('\n')}\n`;
 }

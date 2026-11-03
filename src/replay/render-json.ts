@@ -33,7 +33,7 @@ export function renderJson(r: ReplayResult): string {
     })),
     budgetHits: r.budgetHits.map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: h.firstHitTs, days: h.days })),
     exactness: r.exactness.map((e) => ({ output: e.output, exactness: e.exactness, applied: e.applied })),
-    gates: { failed: [...r.gates.failed] },
+    gates: { failed: [...r.gates.failed], failOn: { cutSessions: r.gates.failOn.cutSessions, costIncreasePct: r.gates.failOn.costIncreasePct }, headChangesFailOn: r.gates.headChangesFailOn },
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;
 }

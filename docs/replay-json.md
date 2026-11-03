@@ -30,7 +30,7 @@ exits 1 when a `ci.failOn` gate of the head policy fails.
 | `cutSessions` | array | Sessions a policy cut mid-task. |
 | `budgetHits` | array | Budget levels that blocked at least once. |
 | `exactness` | array | The rows of the exactness table and whether each applied to this run. |
-| `gates` | `{ failed: string[] }` | The head's `ci.failOn` gates that failed, for example `ci.failOn.cutSessions: 0`. Empty when the check passes. |
+| `gates` | `{ failed: string[], failOn: { cutSessions, costIncreasePct }, headChangesFailOn: boolean }` | `failed`: the `ci.failOn` gates that failed, for example `ci.failOn.cutSessions: 0`, empty when the check passes. `failOn`: the thresholds the check used, for each one the stricter of the base and the head policy, so a pull request cannot loosen its own gate. `headChangesFailOn`: the head's `ci.failOn` differs from the base's. |
 
 ## `fidelity`
 

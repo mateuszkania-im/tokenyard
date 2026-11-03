@@ -47,7 +47,7 @@ test('hostile labels cannot add a column, a link, a tag or a mention', () => {
     blocked: evil.map((e) => ({ policy: 'head' as const, reason: 'budget' as const, name: e, count: 1 })),
     cutSessions: evil.map((e, i) => ({ policy: 'head' as const, session: e, team: lab(i + 1), repo: lab(i + 2), requestClass: lab(i + 3), requestIndex: 1, cause: e, droppedRequests: 1, droppedCostMicroUsd: 5 })),
     budgetHits: evil.map((e, i) => ({ policy: 'head' as const, budget: e, scopeValue: lab(i + 1), firstHitTs: '2026-11-02T10:00:00.000Z', days: 1 })),
-    gates: { failed: evil },
+    gates: { failed: evil, failOn: { cutSessions: 0, costIncreasePct: 10 }, headChangesFailOn: false },
     fidelity: { agreement: 1, disagreements: evil.map((reason) => ({ reason, count: 1 })), missingInstances: evil.map((instance) => ({ instance, hours: [lab(1)], kind: 'no-file' as const })) },
   };
   const md = renderMarkdown(r, { baseRev: evil[3] ?? '', headRev: evil[5] ?? '', checkSummary: { errors: 0, warnings: 0 } });

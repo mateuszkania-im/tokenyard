@@ -66,11 +66,27 @@ export function countBy<T>(items: readonly T[], parts: (x: T) => readonly string
   return [...groups.values()];
 }
 
+export interface FailOn {
+  cutSessions: number;
+  costIncreasePct: number;
+}
+
 /**
- * CI gates of the head policy (spec 9.5): more cut sessions than `ci.failOn.cutSessions`, or a cost increase above
+ * The thresholds the gate uses (C3): for each one the stricter of the base and the head policy, so the pull request
+ * under test cannot loosen its own gate. `changed` says whether the head's ci.failOn differs from the base's.
+ */
+export function gateThresholds(base: FailOn, head: FailOn): { failOn: FailOn; changed: boolean } {
+  return {
+    failOn: { cutSessions: Math.min(base.cutSessions, head.cutSessions), costIncreasePct: Math.min(base.costIncreasePct, head.costIncreasePct) },
+    changed: base.cutSessions !== head.cutSessions || base.costIncreasePct !== head.costIncreasePct,
+  };
+}
+
+/**
+ * CI gates (spec 9.5): more cut sessions than `ci.failOn.cutSessions`, or a cost increase above
  * `ci.failOn.costIncreasePct` percent (any increase from a zero base counts).
  */
-export function failedGates(failOn: { cutSessions: number; costIncreasePct: number }, o: { headCuts: number; baseCost: number; headCost: number }): string[] {
+export function failedGates(failOn: FailOn, o: { headCuts: number; baseCost: number; headCost: number }): string[] {
   const failed: string[] = [];
   if (o.headCuts > failOn.cutSessions) failed.push(`ci.failOn.cutSessions: ${failOn.cutSessions}`);
   const increase = o.baseCost === 0 ? (o.headCost > 0 ? Number.POSITIVE_INFINITY : 0) : ((o.headCost - o.baseCost) / o.baseCost) * 100;

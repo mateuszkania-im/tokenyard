@@ -136,7 +136,12 @@ exports[`same inputs give byte-identical JSON and terminal output 1`] = `
   "gates": {
     "failed": [
       "ci.failOn.cutSessions: 0"
-    ]
+    ],
+    "failOn": {
+      "cutSessions": 0,
+      "costIncreasePct": 10
+    },
+    "headChangesFailOn": false
   }
 }
 "

@@ -121220,6 +121220,12 @@ function countBy(items, parts) {
   }
   return [...groups.values()];
 }
+function gateThresholds(base, head) {
+  return {
+    failOn: { cutSessions: Math.min(base.cutSessions, head.cutSessions), costIncreasePct: Math.min(base.costIncreasePct, head.costIncreasePct) },
+    changed: base.cutSessions !== head.cutSessions || base.costIncreasePct !== head.costIncreasePct
+  };
+}
 function failedGates(failOn, o) {
   const failed = [];
   if (o.headCuts > failOn.cutSessions) failed.push(`ci.failOn.cutSessions: ${failOn.cutSessions}`);
@@ -121596,6 +121602,7 @@ async function replay(o) {
     guardrailChange: JSON.stringify(o.base.guardrails) !== JSON.stringify(o.head.guardrails),
     switched: switchedModel
   });
+  const gate = gateThresholds(o.base.ci.failOn, o.head.ci.failOn);
   return {
     schemaVersion: 1,
     window: { sinceMs, untilMs },
@@ -121610,7 +121617,7 @@ async function replay(o) {
     cutSessions: [...base.cuts, ...head.cuts],
     budgetHits,
     exactness,
-    gates: { failed: failedGates(o.head.ci.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }) }
+    gates: { failed: failedGates(gate.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }), failOn: gate.failOn, headChangesFailOn: gate.changed }
   };
 }
 var RawTraceDirError, CLASSES2, STORE_DOWN, NOTHING3, BODY_EXITS, uniqSorted, recordedDecision;
@@ -122443,7 +122450,7 @@ function renderJson(r) {
     })),
     budgetHits: r.budgetHits.map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: h.firstHitTs, days: h.days })),
     exactness: r.exactness.map((e2) => ({ output: e2.output, exactness: e2.exactness, applied: e2.applied })),
-    gates: { failed: [...r.gates.failed] }
+    gates: { failed: [...r.gates.failed], failOn: { cutSessions: r.gates.failOn.cutSessions, costIncreasePct: r.gates.failOn.costIncreasePct }, headChangesFailOn: r.gates.headChangesFailOn }
   };
   return `${JSON.stringify(ordered, null, 2)}
 `;
@@ -122612,6 +122619,10 @@ ${applied.length === 0 ? "| none of the rows applied | | |" : applied.join("\n")
 
 </details>`, "");
   const failed = r.gates.failed;
+  if (r.gates.headChangesFailOn) {
+    out.push(`This pull request changes ci.failOn; the check uses the stricter of base and head: cutSessions ${r.gates.failOn.cutSessions}, costIncreasePct ${r.gates.failOn.costIncreasePct}.`, "");
+  }
+  if (o.tracesSha256 !== void 0) out.push(`Traces: ${o.tracesSource === void 0 ? "" : `${e(o.tracesSource)}, `}sha256 ${code(o.tracesSha256)}.`, "");
   out.push(`Check: ${failed.length === 0 ? "**passed**" : `**failed** (${failed.map((g) => e(g)).join(", ")})`}. Policy check: ${o.checkSummary.errors} error${o.checkSummary.errors === 1 ? "" : "s"}, ${o.checkSummary.warnings} warning${o.checkSummary.warnings === 1 ? "" : "s"}.`);
   return `${out.join("\n")}
 `;

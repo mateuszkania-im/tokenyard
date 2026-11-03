@@ -8,7 +8,7 @@ import { oversizedReservation, resolve } from '../policy/resolve.js';
 import { REQUEST_CLASSES } from '../policy/schema.js';
 import type { Admission, BlockReason, CompiledPolicy, Plan, RequestFeatures, Surface } from '../policy/types.js';
 import { modelId, OutputRatios, replayedCost, type ReplayedCost } from './cost-model.js';
-import { cmp, countBy, type Exactness, exactnessRows, failedGates } from './diff.js';
+import { cmp, countBy, type Exactness, exactnessRows, failedGates, type FailOn, gateThresholds } from './diff.js';
 import { type ComparedDecision, disagreement, type MissingInstance, missingInstances } from './fidelity.js';
 import { createSimStore } from './sim-store.js';
 
@@ -57,7 +57,8 @@ export interface ReplayResult {
   cutSessions: CutSession[];
   budgetHits: Array<{ policy: 'base' | 'head'; budget: string; scopeValue: string; firstHitTs: string; days: number }>;
   exactness: Array<{ output: string; exactness: Exactness; applied: boolean }>;
-  gates: { failed: string[] };
+  /** `failOn` is what the gate used: the stricter of base and head (C3); `headChangesFailOn` when the head's differs. */
+  gates: { failed: string[]; failOn: FailOn; headChangesFailOn: boolean };
 }
 
 /** One record under one policy. */
@@ -408,6 +409,7 @@ export async function replay(o: { base: CompiledPolicy; head: CompiledPolicy; tr
     switched: switchedModel,
   });
 
+  const gate = gateThresholds(o.base.ci.failOn, o.head.ci.failOn);
   return {
     schemaVersion: 1,
     window: { sinceMs, untilMs },
@@ -424,6 +426,6 @@ export async function replay(o: { base: CompiledPolicy; head: CompiledPolicy; tr
     cutSessions: [...base.cuts, ...head.cuts],
     budgetHits,
     exactness,
-    gates: { failed: failedGates(o.head.ci.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }) },
+    gates: { failed: failedGates(gate.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }), failOn: gate.failOn, headChangesFailOn: gate.changed },
   };
 }
