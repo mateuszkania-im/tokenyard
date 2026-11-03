@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd, worstCaseMicroUsd } from '../limits/estimator.js';
 import { budgetKey, gcraKey, keyTaintKey, streamKey, taintKey } from '../limits/keys.js';
-import { lookupModel, type ModelPrice, type PriceTable, serviceTierPrice } from '../pricing/prices.js';
+import { lookupModel, type ModelPrice, type PriceTable, serverToolFormat, serverToolPrice, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { findAuthzRoute, findRoute, modelMatches } from './match.js';
 import { REQUEST_CLASSES } from './schema.js';
@@ -287,10 +287,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     }
     // Spec 7.3: a priced server tool with a per-use fee and no max_uses has no fee bound; refuse it when the request
     // would touch an enforced budget. A tool without a fee (tool search) is bounded by its loop alone.
-    const feeWithoutMaxUses = f.serverTools.some((tool) => {
-      const key = serverToolKey(tool.type);
-      return tool.maxUses === null && Object.hasOwn(t.serverTools, key) && (t.serverTools[key]?.perUseUsd ?? 0) > 0;
-    });
+    const feeWithoutMaxUses = f.serverTools.some((tool) => tool.maxUses === null && (serverToolPrice(t, serverToolFormat(f.surface), serverToolKey(tool.type))?.perUseUsd ?? 0) > 0);
     if (feeWithoutMaxUses) {
       if (r.serverToolsWithoutMaxUses === 'block' && enforced) return { ...plan, preBlock: 'server-tool-no-max-uses' };
       warnings.push({ kind: 'bound-assumed', reason: 'server-tool-no-max-uses' });

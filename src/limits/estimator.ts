@@ -1,6 +1,6 @@
 // Reservation estimates (spec 7.3). Pure: no I/O. Prices are USD per million tokens, so tokens times price is micro-USD.
 import type { RequestFeatures } from '../policy/types.js';
-import { lookupModel, type ModelPrice, type PriceTable, serviceTierPrice } from '../pricing/prices.js';
+import { lookupModel, type ModelPrice, type PriceTable, serverToolFormat, serverToolPrice, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 
 /** Tokens the provider may add for the tool-use system prompt and message framing (286 to 406 on 5.5 models, pricing page). */
@@ -119,13 +119,19 @@ function outputTokenBound(f: RequestFeatures, m: ModelPrice, reserveOutputTokens
   return Math.min(asked, reserveOutputTokens ?? Number.POSITIVE_INFINITY, m.maxOutputTokens);
 }
 
-/** Sampling iterations the request may run: the highest `maxIterations` among its priced server tools, else 1. */
-function loopIterations(f: RequestFeatures, t: PriceTable): number {
+/**
+ * Sampling iterations the request may run: the highest `maxIterations` among its priced server tools, else 1. On the
+ * Responses surface `max_tool_calls` caps the built-in tool calls of the response and each call may be followed by
+ * one more sampling, so an OpenAI tool also counts `max_tool_calls + 1` (OpenAI documents no loop limit of its own).
+ */
+function loopIterations(f: RequestFeatures, t: PriceTable, assumedMaxUses: number): number {
   let iterations = 1;
+  const format = serverToolFormat(f.surface);
   for (const tool of f.serverTools) {
-    const key = serverToolKey(tool.type);
-    const price = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : undefined;
-    if (price) iterations = Math.max(iterations, price.maxIterations);
+    const price = serverToolPrice(t, format, serverToolKey(tool.type));
+    if (!price) continue;
+    iterations = Math.max(iterations, price.maxIterations);
+    if (format === 'openai') iterations = Math.max(iterations, Math.ceil(tool.maxUses ?? assumedMaxUses) + 1);
   }
   return iterations;
 }
@@ -134,8 +140,8 @@ function loopIterations(f: RequestFeatures, t: PriceTable): number {
  * Output tokens the worst-case reservation covers: one iteration's bound, or `maxIterations * maxOutputTokens` with
  * server tools, plus one model-max summary per iteration under threshold compaction.
  */
-function reservedOutputTokens(f: RequestFeatures, m: ModelPrice, t: PriceTable, reserveOutputTokens: number | null): number {
-  const iterations = loopIterations(f, t);
+function reservedOutputTokens(f: RequestFeatures, m: ModelPrice, t: PriceTable, reserveOutputTokens: number | null, assumedMaxUses: number): number {
+  const iterations = loopIterations(f, t, assumedMaxUses);
   let out = f.serverTools.length > 0 ? iterations * m.maxOutputTokens : outputTokenBound(f, m, reserveOutputTokens);
   if (f.compaction === true) out += iterations * m.maxOutputTokens;
   return out;
@@ -173,15 +179,16 @@ export function worstCaseMicroUsd(
 ): { micro: number; boundAssumed: boolean; block: 'server-tool-no-max-uses' | 'unpriced-server-tool' | null } {
   const fast = f.fastMode && m.fast !== undefined;
   let inputTokens = f.inputTokensBound;
-  const outputTokens = reservedOutputTokens(f, m, t, o.reserveOutputTokens);
+  const outputTokens = reservedOutputTokens(f, m, t, o.reserveOutputTokens, o.assumedMaxUses);
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
-  const iterations = loopIterations(f, t);
+  const iterations = loopIterations(f, t, o.assumedMaxUses);
+  const format = serverToolFormat(f.surface);
   if (f.serverTools.length > 0) {
     for (const tool of f.serverTools) {
-      const key = serverToolKey(tool.type);
-      const price = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : undefined;
+      // Priced per provider (A2-3): an OpenAI tool is never priced with an Anthropic entry of the same name.
+      const price = serverToolPrice(t, format, serverToolKey(tool.type));
       if (!price) {
         unpriced = true;
         continue;

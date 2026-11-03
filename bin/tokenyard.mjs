@@ -29996,11 +29996,15 @@ function lookupModel(t, model) {
   const price2 = best === null ? void 0 : t.models[best];
   return best !== null && price2 ? { id: best, price: price2 } : null;
 }
+function serverToolPrice(t, format, name2) {
+  const key = serverToolPriceKey(format, name2);
+  return Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
+}
 function serviceTierPrice(m, tier) {
   const tiers = m.serviceTiers;
   return tiers !== void 0 && Object.hasOwn(tiers, tier) ? tiers[tier] ?? null : null;
 }
-var rate, tokens, provenance, tierSchema, fastSchema, serviceTierSchema, modelSchema, tableSchema, DATE_SUFFIX;
+var rate, tokens, provenance, tierSchema, fastSchema, serviceTierSchema, modelSchema, tableSchema, DATE_SUFFIX, serverToolFormat, serverToolPriceKey;
 var init_prices = __esm({
   "src/pricing/prices.ts"() {
     "use strict";
@@ -30054,6 +30058,8 @@ var init_prices = __esm({
       serverTools: external_exports.record(external_exports.string(), external_exports.strictObject({ perUseUsd: rate, maxIterations: external_exports.number().int().positive(), ...provenance })).default({})
     });
     DATE_SUFFIX = /^-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
+    serverToolFormat = (surface) => surface === "openai-responses" ? "openai" : "anthropic";
+    serverToolPriceKey = (format, name2) => format === "openai" ? `openai/${name2}` : name2;
   }
 });
 
@@ -30113,17 +30119,19 @@ function outputTokenBound(f, m, reserveOutputTokens) {
   const asked = f.maxOutputTokens !== null && Number.isFinite(f.maxOutputTokens) && f.maxOutputTokens > 0 ? Math.ceil(f.maxOutputTokens) : m.maxOutputTokens;
   return Math.min(asked, reserveOutputTokens ?? Number.POSITIVE_INFINITY, m.maxOutputTokens);
 }
-function loopIterations(f, t) {
+function loopIterations(f, t, assumedMaxUses) {
   let iterations = 1;
+  const format = serverToolFormat(f.surface);
   for (const tool of f.serverTools) {
-    const key = serverToolKey(tool.type);
-    const price2 = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
-    if (price2) iterations = Math.max(iterations, price2.maxIterations);
+    const price2 = serverToolPrice(t, format, serverToolKey(tool.type));
+    if (!price2) continue;
+    iterations = Math.max(iterations, price2.maxIterations);
+    if (format === "openai") iterations = Math.max(iterations, Math.ceil(tool.maxUses ?? assumedMaxUses) + 1);
   }
   return iterations;
 }
-function reservedOutputTokens(f, m, t, reserveOutputTokens) {
-  const iterations = loopIterations(f, t);
+function reservedOutputTokens(f, m, t, reserveOutputTokens, assumedMaxUses) {
+  const iterations = loopIterations(f, t, assumedMaxUses);
   let out = f.serverTools.length > 0 ? iterations * m.maxOutputTokens : outputTokenBound(f, m, reserveOutputTokens);
   if (f.compaction === true) out += iterations * m.maxOutputTokens;
   return out;
@@ -30140,15 +30148,15 @@ function roundUp(micro, what) {
 function worstCaseMicroUsd(f, m, t, o) {
   const fast = f.fastMode && m.fast !== void 0;
   let inputTokens2 = f.inputTokensBound;
-  const outputTokens2 = reservedOutputTokens(f, m, t, o.reserveOutputTokens);
+  const outputTokens2 = reservedOutputTokens(f, m, t, o.reserveOutputTokens, o.assumedMaxUses);
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
-  const iterations = loopIterations(f, t);
+  const iterations = loopIterations(f, t, o.assumedMaxUses);
+  const format = serverToolFormat(f.surface);
   if (f.serverTools.length > 0) {
     for (const tool of f.serverTools) {
-      const key = serverToolKey(tool.type);
-      const price2 = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
+      const price2 = serverToolPrice(t, format, serverToolKey(tool.type));
       if (!price2) {
         unpriced = true;
         continue;
@@ -30618,10 +30626,7 @@ function decide(policy2, f) {
       if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
       warnings.push({ kind: "bound-assumed", reason: "unpriced-server-tool" });
     }
-    const feeWithoutMaxUses = f.serverTools.some((tool) => {
-      const key = serverToolKey(tool.type);
-      return tool.maxUses === null && Object.hasOwn(t.serverTools, key) && (t.serverTools[key]?.perUseUsd ?? 0) > 0;
-    });
+    const feeWithoutMaxUses = f.serverTools.some((tool) => tool.maxUses === null && (serverToolPrice(t, serverToolFormat(f.surface), serverToolKey(tool.type))?.perUseUsd ?? 0) > 0);
     if (feeWithoutMaxUses) {
       if (r.serverToolsWithoutMaxUses === "block" && enforced) return { ...plan, preBlock: "server-tool-no-max-uses" };
       warnings.push({ kind: "bound-assumed", reason: "server-tool-no-max-uses" });
@@ -30875,7 +30880,7 @@ function costMicroUsd(t, modelId2, u, o = {}) {
   }
   let toolCost = 0;
   for (const [name2, uses] of Object.entries(o.serverToolUses ?? {})) {
-    const tool = Object.hasOwn(t.serverTools, name2) ? t.serverTools[name2] : void 0;
+    const tool = serverToolPrice(t, o.serverToolFormat ?? "anthropic", name2);
     if (!tool) throw new Error(`unpriced server tool: ${name2}`);
     toolCost += uses * tool.perUseUsd * 1e6;
   }
@@ -31047,6 +31052,14 @@ var init_anthropic_usage = __esm({
 });
 
 // src/stream/responses-usage.ts
+function countCalls(output2, into) {
+  if (!Array.isArray(output2)) return;
+  for (const item of output2) {
+    const type = isObj3(item) && typeof item.type === "string" ? item.type : null;
+    const name2 = type !== null && Object.hasOwn(COUNTED_RESPONSES_CALLS, type) ? COUNTED_RESPONSES_CALLS[type] : void 0;
+    if (name2 !== void 0) into.set(name2, (into.get(name2) ?? 0) + 1);
+  }
+}
 function toUsage(raw) {
   if (!isObj3(raw)) return null;
   const input3 = num2(raw.input_tokens);
@@ -31067,14 +31080,18 @@ function parseResponsesJsonUsage(body) {
   const responseModel = typeof d.model === "string" ? d.model : null;
   const tier = typeof d.service_tier === "string" ? { serviceTier: d.service_tier } : {};
   const usage = toUsage(d.usage);
-  return usage ? { ...none, usage, source: "final", sawStop: true, responseModel, ...tier } : { ...none, responseModel, ...tier };
+  const calls = /* @__PURE__ */ new Map();
+  countCalls(d.output, calls);
+  return usage ? { ...none, usage, source: "final", sawStop: true, responseModel, ...tier, ...toRecord(calls) } : { ...none, responseModel, ...tier };
 }
-var isObj3, num2, TERMINAL, ResponsesUsageAccumulator;
+var isObj3, num2, COUNTED_RESPONSES_CALLS, toRecord, TERMINAL, ResponsesUsageAccumulator;
 var init_responses_usage = __esm({
   "src/stream/responses-usage.ts"() {
     "use strict";
     isObj3 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     num2 = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : void 0;
+    COUNTED_RESPONSES_CALLS = { web_search_call: "web_search" };
+    toRecord = (m) => m.size > 0 ? { serverToolUses: Object.fromEntries(m) } : {};
     TERMINAL = /* @__PURE__ */ new Set(["response.completed", "response.incomplete", "response.failed"]);
     ResponsesUsageAccumulator = class {
       started = false;
@@ -31084,6 +31101,9 @@ var init_responses_usage = __esm({
       error = null;
       model = null;
       tier = null;
+      /** Priced calls seen in `response.output_item.done` events, and in the terminal response's `output`. */
+      doneCalls = /* @__PURE__ */ new Map();
+      terminalCalls = /* @__PURE__ */ new Map();
       onEvent(e2) {
         let d;
         try {
@@ -31100,9 +31120,15 @@ var init_responses_usage = __esm({
           this.started = true;
           return;
         }
+        if (type === "response.output_item.done") {
+          countCalls([d.item], this.doneCalls);
+          return;
+        }
         if (TERMINAL.has(type)) {
           this.started = true;
           this.sawStop = true;
+          this.terminalCalls.clear();
+          countCalls(response?.output, this.terminalCalls);
           const u = toUsage(response?.usage);
           if (u) this.usage = u;
           if (type === "response.failed") {
@@ -31119,7 +31145,9 @@ var init_responses_usage = __esm({
       }
       result() {
         const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model, ...this.tier !== null ? { serviceTier: this.tier } : {} };
-        if (this.usage) return { ...base, usage: { ...this.usage }, source: "final" };
+        const calls = new Map(this.doneCalls);
+        for (const [name2, n2] of this.terminalCalls) calls.set(name2, Math.max(n2, calls.get(name2) ?? 0));
+        if (this.usage) return { ...base, usage: { ...this.usage }, source: "final", ...toRecord(calls) };
         return { ...base, usage: null, source: this.started ? "partial" : "none" };
       }
     };
@@ -59045,13 +59073,21 @@ function requestModifiers(policy2, x, r) {
   const name2 = `inferenceGeo${geo.charAt(0).toUpperCase()}${geo.slice(1)}`;
   return Object.hasOwn(policy2.prices.modifiers, name2) ? [name2] : [];
 }
-function actualCost(policy2, model, r, x) {
+function actualCost(policy2, model, r, x, surface) {
   return costMicroUsd(policy2.prices, model, r.usage, {
     fast: r.fast === true || x.fastMode,
     // The tier the response reports it was served on, else the one asked for (`auto` with no answer throws: estimate).
     serviceTier: billedServiceTier(r, x) ?? null,
     modifiers: requestModifiers(policy2, x, r),
-    ...r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}
+    ...r.serverToolUses ? { serverToolUses: r.serverToolUses, serverToolFormat: serverToolFormat(surface) } : {}
+  });
+}
+function uncountedToolFees(policy2, surface, f) {
+  if (surface !== "openai-responses" || f === null) return false;
+  const counted = new Set(Object.values(COUNTED_RESPONSES_CALLS));
+  return f.serverTools.some((tool) => {
+    const name2 = serverToolKey(tool.type);
+    return !counted.has(name2) && (serverToolPrice(policy2.prices, "openai", name2)?.perUseUsd ?? 0) > 0;
   });
 }
 async function settleAndTrace(deps, runtime, policy2, held, outcome) {
@@ -59062,11 +59098,12 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   let cost = null;
   let costFailed = false;
   if (held.chargeReservation) costFailed = true;
+  if (uncountedToolFees(policy2, o.surface, held.features)) costFailed = true;
   if (r?.usage && o.surface === "anthropic-messages" && (r.source === "estimated" || r.outputEstimated === true)) costFailed = true;
   if (costFailed) {
   } else if (r?.usage && model) {
     try {
-      cost = actualCost(policy2, model, { ...r, usage: r.usage }, o.features);
+      cost = actualCost(policy2, model, { ...r, usage: r.usage }, o.features, o.surface);
     } catch {
       costFailed = true;
     }
@@ -59528,6 +59565,8 @@ var init_handler = __esm({
     init_cost();
     init_anthropic_usage();
     init_responses_usage();
+    init_estimator();
+    init_prices();
     init_sse();
     init_tee();
     init_anthropic_count_tokens();
@@ -59702,6 +59741,12 @@ function validatePolicy(src, o) {
   keys2.forEach((k, i) => {
     if (k.billing === "subscription" && !flag) err("E_SUBSCRIPTION_FLAG", `keys[${i}].billing`, `key ${k.keyId} has billing: subscription, which needs --experimental-subscription`);
   });
+  const toolPriced = (r, tool) => {
+    const s2 = r.match.surface;
+    if (s2 === "openai-responses") return serverToolPrice(prices, "openai", tool) !== void 0;
+    if (s2 !== void 0 && s2 !== null) return serverToolPrice(prices, "anthropic", tool) !== void 0;
+    return serverToolPrice(prices, "anthropic", tool) !== void 0 || serverToolPrice(prices, "openai", tool) !== void 0;
+  };
   const priced = (pattern) => pattern.includes("*") ? Object.keys(prices.models).some((id) => globMatch(pattern, id)) : lookupModel(prices, pattern) !== null;
   policy2.routes.forEach((r, i) => {
     const at = `routes[${i}]`;
@@ -59731,7 +59776,7 @@ function validatePolicy(src, o) {
     });
     if (r.rewriteModel !== void 0 && lookupModel(prices, r.rewriteModel) === null) err("E_UNPRICED_MODEL", `${at}.rewriteModel`, `"${r.rewriteModel}" has no entry in the price table`);
     r.serverTools?.forEach((t, j) => {
-      if (!Object.hasOwn(prices.serverTools, t) && policy2.failure.unpricedModel === void 0) {
+      if (!toolPriced(r, t) && policy2.failure.unpricedModel === void 0) {
         err("E_UNPRICED_SERVER_TOOL", `${at}.serverTools[${j}]`, `server tool "${t}" has no price and failure.unpricedModel is not stated`);
       }
     });
@@ -59793,7 +59838,7 @@ function validatePolicy(src, o) {
   });
   if (policy2.failure.unpricedModel === "allow-and-flag" && enforced.length > 0) {
     policy2.routes.forEach((r, j) => {
-      const unpriced = (r.serverTools ?? []).filter((t) => !Object.hasOwn(prices.serverTools, t));
+      const unpriced = (r.serverTools ?? []).filter((t) => !toolPriced(r, t));
       if (unpriced.length > 0) warn("W_UNPRICED_TOOL_ENFORCED", `routes[${j}].serverTools`, `server tools ${unpriced.join(", ")} have no price; with enforced budgets they are refused despite failure.unpricedModel: allow-and-flag`);
     });
   }
@@ -121182,7 +121227,7 @@ var init_traffic = __esm({
 function price(t, model, u, r) {
   try {
     const fast = r.outcome.fast === true && lookupModel(t, model)?.price.fast !== void 0;
-    return costMicroUsd(t, model, u, { fast, serviceTier: r.outcome.serviceTier ?? null, modifiers: r.outcome.modifiers ?? [], ...r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {} });
+    return costMicroUsd(t, model, u, { fast, serviceTier: r.outcome.serviceTier ?? null, modifiers: r.outcome.modifiers ?? [], ...r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses, serverToolFormat: serverToolFormat(r.surface) } : {} });
   } catch {
     return null;
   }
@@ -121797,12 +121842,12 @@ var init_example_files = __esm({
     "use strict";
     EXAMPLE_BASE = {
       "policy.yaml": 'apiVersion: tokenyard/v1\nkind: Policy\nmetadata:\n  name: acme-coding-agents\n  owners: ["@acme/platform"]          # informational\n\npricing: ./prices.yaml                # versioned price table; part of the bundle\nkeys: ./keys.yaml                     # key hash, tenant, team, name, kind (developer|service), billing (api)\n\nproviders:\n  anthropic:\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY }\n  anthropic-backup:                   # second workspace; a fallback here starts a cold cache\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY_BACKUP }\n  openai:\n    format: openai\n    baseUrl: https://api.openai.com/v1\n    credential: { env: OPENAI_API_KEY }\n\ntenants:\n  acme: { teams: [platform, web, data] }\n\nroutes:                               # first match wins\n  - name: claude-code\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;\n    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).\n    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]\n  - name: codex\n    match: { surface: openai-responses, traffic: coding-agent }\n    chain: [openai]\n    allowModels: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex"]   # unpriced models are refused\n  - name: support-summaries\n    match: { traffic: product, feature: support-summary }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5    # product traffic only\n    criticality: sheddable\n  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too\n    match: { traffic: product }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5\n    criticality: sheddable\n\nbudgets:\n  - { name: org-month,  scope: tenant,  window: month, usd: 6000, onExceed: block }\n  - { name: team-day,   scope: team,    window: day,   usd: 300,  onExceed: block }\n  - { name: dev-day,    scope: key,     window: day,   usd: 40,   onExceed: block, mode: audit }\n  - { name: session,    scope: session,                usd: 25,   onExceed: block, mode: audit }\n\nreservation:\n  estimator: worst-case               # worst-case | session-aware\n  onOverrun: allow-and-debit\n  serverToolsWithoutMaxUses: block    # block | assume (assume prices assumedMaxUses and voids the bound, 7.4)\n\nrateLimits:\n  - { name: dev-rpm, scope: key, rpm: 120, burst: 30 }\n  - { name: dev-streams, scope: key, concurrentStreams: 8 }   # checked inside admit, released at settle\n\nguardrails:\n  secrets:\n    rules: default                    # curated prefix rules, section 6.6\n    codingAgent: block                # block | warn\n    product: redact                   # block | warn | redact\n    entropyOnly: warn                 # entropy-only hits never block\n    taintTtlHours: 24                 # how long a session stays tainted after a block\n  pii:\n    product: redact                   # email, PESEL, IBAN, card numbers with Luhn\n\nfailure:\n  counterStoreDown: { rateLimits: open, budgets: closed }\n  unpricedModel: allow-and-flag       # block | allow-and-flag\n  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }\n  retryBudgetRatio: 0.1\n\nci:\n  failOn:\n    cutSessions: 0                    # fail the check if any recorded session would be cut mid-task\n    costIncreasePct: 10\n',
-      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-03\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  # OpenAI models for Codex (Responses API). The pricing page lists no separate cache write price for these models, so\n  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page\'s cached input price. Models with distinct cache\n  # write prices (gpt-6.x, gpt-5.6.x) are left out until the usage fields for those writes are confirmed. Long-context\n  # rows apply above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing\n  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>\n  gpt-5.5:\n    input: 5\n    output: 30\n    cacheWrite5m: 5\n    cacheWrite1h: 5\n    cacheRead: 0.5\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 10\n        output: 45\n        cacheWrite5m: 10\n        cacheWrite1h: 10\n        cacheRead: 1\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5\n    retrieved: 2026-11-03\n  gpt-5.4:\n    input: 2.5\n    output: 15\n    cacheWrite5m: 2.5\n    cacheWrite1h: 2.5\n    cacheRead: 0.25\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 5\n        output: 22.5\n        cacheWrite5m: 5\n        cacheWrite1h: 5\n        cacheRead: 0.5\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4\n    retrieved: 2026-11-03\n  gpt-5.4-mini:\n    input: 0.75\n    output: 4.5\n    cacheWrite5m: 0.75\n    cacheWrite1h: 0.75\n    cacheRead: 0.075\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini\n    retrieved: 2026-11-03\n  gpt-5.4-nano:\n    input: 0.2\n    output: 1.25\n    cacheWrite5m: 0.2\n    cacheWrite1h: 0.2\n    cacheRead: 0.02\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano\n    retrieved: 2026-11-03\n  gpt-5.3-codex:\n    input: 1.75\n    output: 14\n    cacheWrite5m: 1.75\n    cacheWrite1h: 1.75\n    cacheRead: 0.175\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex\n    retrieved: 2026-11-03\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
+      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-03\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  # OpenAI models for Codex (Responses API). The pricing page lists no separate cache write price for these models, so\n  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page\'s cached input price. Models with distinct cache\n  # write prices (gpt-6.x, gpt-5.6.x) are left out until the usage fields for those writes are confirmed. Long-context\n  # rows apply above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing\n  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>\n  gpt-5.5:\n    input: 5\n    output: 30\n    cacheWrite5m: 5\n    cacheWrite1h: 5\n    cacheRead: 0.5\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 10\n        output: 45\n        cacheWrite5m: 10\n        cacheWrite1h: 10\n        cacheRead: 1\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5\n    retrieved: 2026-11-03\n  gpt-5.4:\n    input: 2.5\n    output: 15\n    cacheWrite5m: 2.5\n    cacheWrite1h: 2.5\n    cacheRead: 0.25\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 5\n        output: 22.5\n        cacheWrite5m: 5\n        cacheWrite1h: 5\n        cacheRead: 0.5\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4\n    retrieved: 2026-11-03\n  gpt-5.4-mini:\n    input: 0.75\n    output: 4.5\n    cacheWrite5m: 0.75\n    cacheWrite1h: 0.75\n    cacheRead: 0.075\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini\n    retrieved: 2026-11-03\n  gpt-5.4-nano:\n    input: 0.2\n    output: 1.25\n    cacheWrite5m: 0.2\n    cacheWrite1h: 0.2\n    cacheRead: 0.02\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano\n    retrieved: 2026-11-03\n  gpt-5.3-codex:\n    input: 1.75\n    output: 14\n    cacheWrite5m: 1.75\n    cacheWrite1h: 1.75\n    cacheRead: 0.175\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex\n    retrieved: 2026-11-03\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\n# OpenAI tools (the Responses surface) are keyed openai/<type>: the same name is another tool with its own fee there.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # OpenAI web search on the Responses surface: "$10.00 / 1k calls + Search content tokens billed at model rates"\n  # (the content tokens arrive in usage as input tokens). Each call is a web_search_call output item, counted at\n  # settlement. OpenAI documents no loop limit; max_tool_calls caps the calls, so the reservation covers\n  # max_tool_calls + 1 sampling iterations (maxIterations 1 is the floor).\n  openai/web_search:\n    perUseUsd: 0.01 # $10 per 1,000 calls\n    maxIterations: 1\n    source: https://developers.openai.com/api/docs/pricing (Built-in tools, Web search)\n    retrieved: 2026-11-03\n',
       "keys.yaml": '- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}\n- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}\n'
     };
     EXAMPLE_HEAD = {
       "policy.yaml": 'apiVersion: tokenyard/v1\nkind: Policy\nmetadata:\n  name: acme-coding-agents\n  owners: ["@acme/platform"]          # informational\n\npricing: ./prices.yaml                # versioned price table; part of the bundle\nkeys: ./keys.yaml                     # key hash, tenant, team, name, kind (developer|service), billing (api)\n\nproviders:\n  anthropic:\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY }\n  anthropic-backup:                   # second workspace; a fallback here starts a cold cache\n    format: anthropic\n    baseUrl: https://api.anthropic.com\n    credential: { env: ANTHROPIC_API_KEY_BACKUP }\n  openai:\n    format: openai\n    baseUrl: https://api.openai.com/v1\n    credential: { env: OPENAI_API_KEY }\n\ntenants:\n  acme: { teams: [platform, web, data] }\n\nroutes:                               # first match wins\n  # The demo PR (spec 13): compaction and auxiliary requests run on a cheaper Claude model. This rewrites the model on\n  # coding-agent traffic, so each route needs allowBodyRewrite: true and a because: line. Requests are still authorised\n  # by the claude-code route below (same allowModels), which header-selected routes cannot widen.\n  - name: claude-code-compaction\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: compaction }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    rewriteModel: claude-haiku-5-5\n    allowBodyRewrite: true\n    because: "compaction summaries do not need the main model; Haiku is priced far below Opus"\n  - name: claude-code-auxiliary\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: auxiliary }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    rewriteModel: claude-haiku-5-5\n    allowBodyRewrite: true\n    because: "titles and command-prefix checks are small tasks; Haiku is priced far below Sonnet"\n  - name: claude-code\n    match: { surface: anthropic-messages, traffic: coding-agent, billing: api }\n    chain: [anthropic, anthropic-backup]\n    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]\n    # Server tools are denied unless listed. Claude Code uses web search, and tool search when it defers MCP tools;\n    # both are priced in prices.yaml (tool search: no fee, a 10-iteration loop).\n    serverTools: [web_search, tool_search_tool_regex, tool_search_tool_bm25]\n  - name: codex\n    match: { surface: openai-responses, traffic: coding-agent }\n    chain: [openai]\n    allowModels: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex"]   # unpriced models are refused\n  - name: support-summaries\n    match: { traffic: product, feature: support-summary }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5    # product traffic only\n    criticality: sheddable\n  - name: product-default             # feature comes from a client header, so a header-free route must allow the model too\n    match: { traffic: product }\n    chain: [anthropic]\n    rewriteModel: claude-haiku-5-5\n    criticality: sheddable\n\nbudgets:\n  - { name: org-month,  scope: tenant,  window: month, usd: 6000, onExceed: block }\n  - { name: team-day,   scope: team,    window: day,   usd: 6,    onExceed: block }   # was 300; sized for the demo traffic, where only web spends this much\n  - { name: dev-day,    scope: key,     window: day,   usd: 40,   onExceed: block, mode: audit }\n  - { name: session,    scope: session,                usd: 25,   onExceed: block, mode: audit }\n\nreservation:\n  estimator: worst-case               # worst-case | session-aware\n  onOverrun: allow-and-debit\n  serverToolsWithoutMaxUses: block    # block | assume (assume prices assumedMaxUses and voids the bound, 7.4)\n\nrateLimits:\n  - { name: dev-rpm, scope: key, rpm: 120, burst: 30 }\n  - { name: dev-streams, scope: key, concurrentStreams: 8 }   # checked inside admit, released at settle\n\nguardrails:\n  secrets:\n    rules: default                    # curated prefix rules, section 6.6\n    codingAgent: block                # block | warn\n    product: redact                   # block | warn | redact\n    entropyOnly: warn                 # entropy-only hits never block\n    taintTtlHours: 24                 # how long a session stays tainted after a block\n  pii:\n    product: redact                   # email, PESEL, IBAN, card numbers with Luhn\n\nfailure:\n  counterStoreDown: { rateLimits: open, budgets: closed }\n  unpricedModel: allow-and-flag       # block | allow-and-flag\n  breaker: { minRequests: 20, failureRatio: 0.5, windowSeconds: 30, openSeconds: 30 }\n  retryBudgetRatio: 0.1\n\nci:\n  failOn:\n    cutSessions: 0                    # fail the check if any recorded session would be cut mid-task\n    costIncreasePct: 10\n',
-      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-03\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  # OpenAI models for Codex (Responses API). The pricing page lists no separate cache write price for these models, so\n  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page\'s cached input price. Models with distinct cache\n  # write prices (gpt-6.x, gpt-5.6.x) are left out until the usage fields for those writes are confirmed. Long-context\n  # rows apply above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing\n  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>\n  gpt-5.5:\n    input: 5\n    output: 30\n    cacheWrite5m: 5\n    cacheWrite1h: 5\n    cacheRead: 0.5\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 10\n        output: 45\n        cacheWrite5m: 10\n        cacheWrite1h: 10\n        cacheRead: 1\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5\n    retrieved: 2026-11-03\n  gpt-5.4:\n    input: 2.5\n    output: 15\n    cacheWrite5m: 2.5\n    cacheWrite1h: 2.5\n    cacheRead: 0.25\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 5\n        output: 22.5\n        cacheWrite5m: 5\n        cacheWrite1h: 5\n        cacheRead: 0.5\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4\n    retrieved: 2026-11-03\n  gpt-5.4-mini:\n    input: 0.75\n    output: 4.5\n    cacheWrite5m: 0.75\n    cacheWrite1h: 0.75\n    cacheRead: 0.075\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini\n    retrieved: 2026-11-03\n  gpt-5.4-nano:\n    input: 0.2\n    output: 1.25\n    cacheWrite5m: 0.2\n    cacheWrite1h: 0.2\n    cacheRead: 0.02\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano\n    retrieved: 2026-11-03\n  gpt-5.3-codex:\n    input: 1.75\n    output: 14\n    cacheWrite5m: 1.75\n    cacheWrite1h: 1.75\n    cacheRead: 0.175\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex\n    retrieved: 2026-11-03\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n',
+      "prices.yaml": '# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.\n# Pricing: https://platform.claude.com/docs/en/about-claude/pricing\n# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview\nversion: 2026-11-03\nmodels:\n  claude-fable-5-1:\n    input: 10\n    output: 50\n    cacheWrite5m: 12.5\n    cacheWrite1h: 20\n    cacheRead: 0.25\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-opus-5-5:\n    input: 4\n    output: 20\n    cacheWrite5m: 5\n    cacheWrite1h: 8\n    cacheRead: 0.2\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.\n    # Cache prices are the page\'s prompt caching multipliers on top of the fast input price, as the page states:\n    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.\n    fast:\n      input: 8\n      output: 40\n      cacheWrite5m: 10\n      cacheWrite1h: 16\n      cacheRead: 0.4\n      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode\n      retrieved: 2026-11-02\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-sonnet-5-5:\n    input: 2\n    output: 10\n    cacheWrite5m: 2.5\n    cacheWrite1h: 4\n    cacheRead: 0.1\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  claude-haiku-5-5:\n    input: 0.1\n    output: 0.5\n    cacheWrite5m: 0.125\n    cacheWrite1h: 0.2\n    cacheRead: 0.01\n    maxContextTokens: 1000000\n    maxOutputTokens: 128000\n    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.\n    tiers:\n      - aboveInputTokens: 100000\n        input: 0.5\n        output: 2.5\n        cacheWrite5m: 0.625\n        cacheWrite1h: 1\n        cacheRead: 0.05\n    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview\n    retrieved: 2026-11-02\n  # OpenAI models for Codex (Responses API). The pricing page lists no separate cache write price for these models, so\n  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page\'s cached input price. Models with distinct cache\n  # write prices (gpt-6.x, gpt-5.6.x) are left out until the usage fields for those writes are confirmed. Long-context\n  # rows apply above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing\n  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>\n  gpt-5.5:\n    input: 5\n    output: 30\n    cacheWrite5m: 5\n    cacheWrite1h: 5\n    cacheRead: 0.5\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 10\n        output: 45\n        cacheWrite5m: 10\n        cacheWrite1h: 10\n        cacheRead: 1\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5\n    retrieved: 2026-11-03\n  gpt-5.4:\n    input: 2.5\n    output: 15\n    cacheWrite5m: 2.5\n    cacheWrite1h: 2.5\n    cacheRead: 0.25\n    maxContextTokens: 1050000\n    maxOutputTokens: 128000\n    tiers:\n      - aboveInputTokens: 272000\n        input: 5\n        output: 22.5\n        cacheWrite5m: 5\n        cacheWrite1h: 5\n        cacheRead: 0.5\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4\n    retrieved: 2026-11-03\n  gpt-5.4-mini:\n    input: 0.75\n    output: 4.5\n    cacheWrite5m: 0.75\n    cacheWrite1h: 0.75\n    cacheRead: 0.075\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini\n    retrieved: 2026-11-03\n  gpt-5.4-nano:\n    input: 0.2\n    output: 1.25\n    cacheWrite5m: 0.2\n    cacheWrite1h: 0.2\n    cacheRead: 0.02\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano\n    retrieved: 2026-11-03\n  gpt-5.3-codex:\n    input: 1.75\n    output: 14\n    cacheWrite5m: 1.75\n    cacheWrite1h: 1.75\n    cacheRead: 0.175\n    maxContextTokens: 400000\n    maxOutputTokens: 128000\n    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex\n    retrieved: 2026-11-03\nmodifiers:\n  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).\n  inferenceGeoUs: 1.1\n# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).\n# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10\n# iterations for each request"). Other server tools are unpriced until added here.\n# OpenAI tools (the Responses surface) are keyed openai/<type>: the same name is another tool with its own fee there.\nserverTools:\n  web_search:\n    perUseUsd: 0.01 # $10 per 1,000 searches\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # Tool search runs on Anthropic\'s servers in the same sampling loop; "Tool search isn\'t metered as a separate server\n  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same\n  # 10 iterations as above, so the reservation covers 10 sampling iterations.\n  tool_search_tool_regex:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  tool_search_tool_bm25:\n    perUseUsd: 0\n    maxIterations: 10\n    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)\n    retrieved: 2026-11-02\n  # OpenAI web search on the Responses surface: "$10.00 / 1k calls + Search content tokens billed at model rates"\n  # (the content tokens arrive in usage as input tokens). Each call is a web_search_call output item, counted at\n  # settlement. OpenAI documents no loop limit; max_tool_calls caps the calls, so the reservation covers\n  # max_tool_calls + 1 sampling iterations (maxIterations 1 is the floor).\n  openai/web_search:\n    perUseUsd: 0.01 # $10 per 1,000 calls\n    maxIterations: 1\n    source: https://developers.openai.com/api/docs/pricing (Built-in tools, Web search)\n    retrieved: 2026-11-03\n',
       "keys.yaml": '- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}\n- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}\n'
     };
   }

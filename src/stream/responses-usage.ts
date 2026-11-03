@@ -6,6 +6,25 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
 
+/**
+ * Output item types of priced OpenAI server tool calls, by price table tool name: OpenAI reports each call as an output
+ * item, not in `usage` (A2-3). A Responses request with a priced server tool outside this map settles at its
+ * reservation (handler), because its calls are not counted.
+ */
+export const COUNTED_RESPONSES_CALLS: Readonly<Record<string, string>> = { web_search_call: 'web_search' };
+
+/** Priced call items in a response's `output` array, by tool name. */
+function countCalls(output: unknown, into: Map<string, number>): void {
+  if (!Array.isArray(output)) return;
+  for (const item of output) {
+    const type = isObj(item) && typeof item.type === 'string' ? item.type : null;
+    const name = type !== null && Object.hasOwn(COUNTED_RESPONSES_CALLS, type) ? COUNTED_RESPONSES_CALLS[type] : undefined;
+    if (name !== undefined) into.set(name, (into.get(name) ?? 0) + 1);
+  }
+}
+
+const toRecord = (m: Map<string, number>): Pick<UsageResult, 'serverToolUses'> => (m.size > 0 ? { serverToolUses: Object.fromEntries(m) } : {});
+
 /** Terminal events: each carries the whole response object, with `usage` when the provider reported one. */
 const TERMINAL = new Set(['response.completed', 'response.incomplete', 'response.failed']);
 
@@ -39,6 +58,9 @@ export class ResponsesUsageAccumulator {
   private error: string | null = null;
   private model: string | null = null;
   private tier: string | null = null;
+  /** Priced calls seen in `response.output_item.done` events, and in the terminal response's `output`. */
+  private doneCalls = new Map<string, number>();
+  private terminalCalls = new Map<string, number>();
 
   onEvent(e: SseEvent): void {
     let d: unknown;
@@ -56,9 +78,15 @@ export class ResponsesUsageAccumulator {
       this.started = true;
       return;
     }
+    if (type === 'response.output_item.done') {
+      countCalls([d.item], this.doneCalls);
+      return;
+    }
     if (TERMINAL.has(type)) {
       this.started = true;
       this.sawStop = true;
+      this.terminalCalls.clear();
+      countCalls(response?.output, this.terminalCalls);
       const u = toUsage(response?.usage);
       if (u) this.usage = u;
       if (type === 'response.failed') {
@@ -77,7 +105,10 @@ export class ResponsesUsageAccumulator {
 
   result(): UsageResult {
     const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model, ...(this.tier !== null ? { serviceTier: this.tier } : {}) };
-    if (this.usage) return { ...base, usage: { ...this.usage }, source: 'final' };
+    // The terminal output lists every item and each item is done once: the higher count of the two never undercounts.
+    const calls = new Map(this.doneCalls);
+    for (const [name, n] of this.terminalCalls) calls.set(name, Math.max(n, calls.get(name) ?? 0));
+    if (this.usage) return { ...base, usage: { ...this.usage }, source: 'final', ...toRecord(calls) };
     return { ...base, usage: null, source: this.started ? 'partial' : 'none' };
   }
 }
@@ -95,5 +126,7 @@ export function parseResponsesJsonUsage(body: Buffer): UsageResult {
   const responseModel = typeof d.model === 'string' ? d.model : null;
   const tier = typeof d.service_tier === 'string' ? { serviceTier: d.service_tier } : {};
   const usage = toUsage(d.usage);
-  return usage ? { ...none, usage, source: 'final', sawStop: true, responseModel, ...tier } : { ...none, responseModel, ...tier };
+  const calls = new Map<string, number>();
+  countCalls(d.output, calls);
+  return usage ? { ...none, usage, source: 'final', sawStop: true, responseModel, ...tier, ...toRecord(calls) } : { ...none, responseModel, ...tier };
 }

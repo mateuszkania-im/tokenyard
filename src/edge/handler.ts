@@ -18,7 +18,9 @@ import { resolve } from '../policy/resolve.js';
 import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
 import { billedServiceTier, costMicroUsd } from '../pricing/cost.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
-import { parseResponsesJsonUsage, ResponsesUsageAccumulator } from '../stream/responses-usage.js';
+import { COUNTED_RESPONSES_CALLS, parseResponsesJsonUsage, ResponsesUsageAccumulator } from '../stream/responses-usage.js';
+import { serverToolKey } from '../limits/estimator.js';
+import { serverToolFormat, serverToolPrice } from '../pricing/prices.js';
 import { SseParser } from '../stream/sse.js';
 import { createTee } from '../stream/tee.js';
 import { extractCountTokensFeatures } from '../surfaces/anthropic-count-tokens.js';
@@ -457,13 +459,26 @@ function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures, r: Usage
  * Actual cost from the usage (spec 7.6): fast mode from the response or the request, the request's modifiers, server
  * tool uses. Throws when it cannot be priced.
  */
-function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { usage: NonNullable<UsageResult['usage']> }, x: ExtractedFeatures): number {
+function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { usage: NonNullable<UsageResult['usage']> }, x: ExtractedFeatures, surface: Surface): number {
   return costMicroUsd(policy.prices, model, r.usage, {
     fast: r.fast === true || x.fastMode,
     // The tier the response reports it was served on, else the one asked for (`auto` with no answer throws: estimate).
     serviceTier: billedServiceTier(r, x) ?? null,
     modifiers: requestModifiers(policy, x, r),
-    ...(r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}),
+    ...(r.serverToolUses ? { serverToolUses: r.serverToolUses, serverToolFormat: serverToolFormat(surface) } : {}),
+  });
+}
+
+/**
+ * A Responses request with a priced server tool whose calls the usage parser does not count (only the types in
+ * COUNTED_RESPONSES_CALLS are): its per-call fees would go uncharged, so it settles at the reservation (A2-3).
+ */
+function uncountedToolFees(policy: CompiledPolicy, surface: Surface, f: RequestFeatures | null): boolean {
+  if (surface !== 'openai-responses' || f === null) return false;
+  const counted = new Set(Object.values(COUNTED_RESPONSES_CALLS));
+  return f.serverTools.some((tool) => {
+    const name = serverToolKey(tool.type);
+    return !counted.has(name) && (serverToolPrice(policy.prices, 'openai', name)?.perUseUsd ?? 0) > 0;
   });
 }
 
@@ -483,12 +498,13 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   // output (summarized or redacted thinking, CJK), and with compaction or a server-tool loop most billed input arrives
   // only in the final message_delta (usage.iterations), so message_start's input bounds nothing either (A3).
   if (held.chargeReservation) costFailed = true;
+  if (uncountedToolFees(policy, o.surface, held.features)) costFailed = true;
   if (r?.usage && o.surface === 'anthropic-messages' && (r.source === 'estimated' || r.outputEstimated === true)) costFailed = true;
   if (costFailed) {
     // the estimate stands (below)
   } else if (r?.usage && model) {
     try {
-      cost = actualCost(policy, model, { ...r, usage: r.usage }, o.features);
+      cost = actualCost(policy, model, { ...r, usage: r.usage }, o.features, o.surface);
     } catch {
       costFailed = true; // unpriced model or fast mode, an invalid cost: fail closed below
     }

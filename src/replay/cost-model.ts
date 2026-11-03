@@ -2,7 +2,7 @@
 // recorded (the recorded cost, or the same tokens at the policy's prices); estimated when they change. Pure.
 import type { TraceRecord } from '../ledger/record.js';
 import { costMicroUsd } from '../pricing/cost.js';
-import { lookupModel, type PriceTable } from '../pricing/prices.js';
+import { lookupModel, type PriceTable, serverToolFormat } from '../pricing/prices.js';
 import type { CompiledPolicy } from '../policy/types.js';
 
 type Usage = NonNullable<TraceRecord['outcome']['usage']>;
@@ -80,7 +80,7 @@ export interface CostInput {
 function price(t: PriceTable, model: string, u: Usage, r: TraceRecord): number | null {
   try {
     const fast = r.outcome.fast === true && lookupModel(t, model)?.price.fast !== undefined;
-    return costMicroUsd(t, model, u, { fast, serviceTier: r.outcome.serviceTier ?? null, modifiers: r.outcome.modifiers ?? [], ...(r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {}) });
+    return costMicroUsd(t, model, u, { fast, serviceTier: r.outcome.serviceTier ?? null, modifiers: r.outcome.modifiers ?? [], ...(r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses, serverToolFormat: serverToolFormat(r.surface) } : {}) });
   } catch {
     return null; // unpriced model, modifier or tool under this table
   }

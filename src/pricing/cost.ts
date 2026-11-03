@@ -1,12 +1,14 @@
 // Cost of one request (spec 7.6). Prices are USD per million tokens, so tokens times price is micro-USD.
 import type { Usage } from '../stream/anthropic-usage.js';
-import { lookupModel, type PriceTable, serviceTierPrice } from './prices.js';
+import { lookupModel, type PriceTable, type ServerToolFormat, serverToolPrice, serviceTierPrice } from './prices.js';
 
 export interface CostOptions {
   /** Names from the table's `modifiers`, each multiplying every token bucket (for example `inferenceGeoUs`). */
   modifiers?: string[];
   /** Server tool uses by tool name, charged at `perUseUsd` each and not touched by modifiers. */
   serverToolUses?: Record<string, number>;
+  /** Whose tools `serverToolUses` names (default `anthropic`): each provider's tools have their own prices (A2-3). */
+  serverToolFormat?: ServerToolFormat;
   /** The response reported `usage.speed: "fast"`: the model's `fast` prices apply instead of the base prices and tiers. */
   fast?: boolean;
   /**
@@ -60,7 +62,7 @@ export function costMicroUsd(t: PriceTable, modelId: string, u: Usage, o: CostOp
   }
   let toolCost = 0;
   for (const [name, uses] of Object.entries(o.serverToolUses ?? {})) {
-    const tool = Object.hasOwn(t.serverTools, name) ? t.serverTools[name] : undefined;
+    const tool = serverToolPrice(t, o.serverToolFormat ?? 'anthropic', name);
     if (!tool) throw new Error(`unpriced server tool: ${name}`);
     toolCost += uses * tool.perUseUsd * 1_000_000;
   }

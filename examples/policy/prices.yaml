@@ -137,6 +137,7 @@ modifiers:
 # Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).
 # maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10
 # iterations for each request"). Other server tools are unpriced until added here.
+# OpenAI tools (the Responses surface) are keyed openai/<type>: the same name is another tool with its own fee there.
 serverTools:
   web_search:
     perUseUsd: 0.01 # $10 per 1,000 searches
@@ -156,3 +157,12 @@ serverTools:
     maxIterations: 10
     source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
     retrieved: 2026-11-02
+  # OpenAI web search on the Responses surface: "$10.00 / 1k calls + Search content tokens billed at model rates"
+  # (the content tokens arrive in usage as input tokens). Each call is a web_search_call output item, counted at
+  # settlement. OpenAI documents no loop limit; max_tool_calls caps the calls, so the reservation covers
+  # max_tool_calls + 1 sampling iterations (maxIterations 1 is the floor).
+  openai/web_search:
+    perUseUsd: 0.01 # $10 per 1,000 calls
+    maxIterations: 1
+    source: https://developers.openai.com/api/docs/pricing (Built-in tools, Web search)
+    retrieved: 2026-11-03

@@ -1,5 +1,5 @@
 // Semantic validation of a loaded policy (spec 6.4). Pure: reads no environment, so whether a credential env var is set stays a runtime concern.
-import { lookupModel } from '../pricing/prices.js';
+import { lookupModel, serverToolPrice } from '../pricing/prices.js';
 import type { PolicySource } from './load-dir.js';
 import type { ProviderSpec } from './types.js';
 import { chainProvider, SURFACE_LIST, type RouteSpec } from './schema.js';
@@ -104,6 +104,14 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
     if (k.billing === 'subscription' && !flag) err('E_SUBSCRIPTION_FLAG', `keys[${i}].billing`, `key ${k.keyId} has billing: subscription, which needs --experimental-subscription`);
   });
 
+  // A route's server tool is priced for the provider format of the surface it matches (A2-3): Anthropic's entry for the
+  // Messages surfaces, `openai/<name>` for the Responses surface, either when the route matches any surface.
+  const toolPriced = (r: RouteSpec, tool: string): boolean => {
+    const s = r.match.surface;
+    if (s === 'openai-responses') return serverToolPrice(prices, 'openai', tool) !== undefined;
+    if (s !== undefined && s !== null) return serverToolPrice(prices, 'anthropic', tool) !== undefined;
+    return serverToolPrice(prices, 'anthropic', tool) !== undefined || serverToolPrice(prices, 'openai', tool) !== undefined;
+  };
   const priced = (pattern: string): boolean => (pattern.includes('*') ? Object.keys(prices.models).some((id) => globMatch(pattern, id)) : lookupModel(prices, pattern) !== null);
 
   policy.routes.forEach((r, i) => {
@@ -140,7 +148,7 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
     if (r.rewriteModel !== undefined && lookupModel(prices, r.rewriteModel) === null) err('E_UNPRICED_MODEL', `${at}.rewriteModel`, `"${r.rewriteModel}" has no entry in the price table`);
 
     r.serverTools?.forEach((t, j) => {
-      if (!Object.hasOwn(prices.serverTools, t) && policy.failure.unpricedModel === undefined) {
+      if (!toolPriced(r, t) && policy.failure.unpricedModel === undefined) {
         err('E_UNPRICED_SERVER_TOOL', `${at}.serverTools[${j}]`, `server tool "${t}" has no price and failure.unpricedModel is not stated`);
       }
     });
@@ -217,7 +225,7 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
   // cannot admit it there.
   if (policy.failure.unpricedModel === 'allow-and-flag' && enforced.length > 0) {
     policy.routes.forEach((r, j) => {
-      const unpriced = (r.serverTools ?? []).filter((t) => !Object.hasOwn(prices.serverTools, t));
+      const unpriced = (r.serverTools ?? []).filter((t) => !toolPriced(r, t));
       if (unpriced.length > 0) warn('W_UNPRICED_TOOL_ENFORCED', `routes[${j}].serverTools`, `server tools ${unpriced.join(', ')} have no price; with enforced budgets they are refused despite failure.unpricedModel: allow-and-flag`);
     });
   }

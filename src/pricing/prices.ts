@@ -116,6 +116,22 @@ export function lookupModel(t: PriceTable, model: string): { id: string; price: 
   return best !== null && price ? { id: best, price } : null;
 }
 
+/**
+ * Whose server tool a request names: the same tool name means another tool, with its own fee, on each provider (an
+ * OpenAI `web_search` is not Anthropic's). The Responses surface is OpenAI's; every other surface is Anthropic's.
+ */
+export type ServerToolFormat = 'anthropic' | 'openai';
+export const serverToolFormat = (surface: string): ServerToolFormat => (surface === 'openai-responses' ? 'openai' : 'anthropic');
+
+/** Price table key of a server tool: the name for Anthropic tools, `openai/<name>` for OpenAI tools (A2-3). */
+export const serverToolPriceKey = (format: ServerToolFormat, name: string): string => (format === 'openai' ? `openai/${name}` : name);
+
+/** The price of server tool `name` (date suffix already dropped) for `format`, own entries only; undefined when unpriced. */
+export function serverToolPrice(t: PriceTable, format: ServerToolFormat, name: string): PriceTable['serverTools'][string] | undefined {
+  const key = serverToolPriceKey(format, name);
+  return Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : undefined;
+}
+
 /** The model's prices for service tier `tier`, or null when the table lists none (own entries only). */
 export function serviceTierPrice(m: ModelPrice, tier: string): ServiceTierPrice | null {
   const tiers = m.serviceTiers;
