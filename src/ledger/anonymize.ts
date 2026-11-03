@@ -1,5 +1,5 @@
 import { pseudonym } from '../guardrails/hmac.js';
-import { errorCodeLabel, INVALID_TOOL_TYPE, modelShapeLabel, rateLimitHeadersLabel, serviceTierLabel, toolTypeLabel } from '../surfaces/labels.js';
+import { errorCodeLabel, isKnownToolType, modelShapeLabel, rateLimitHeadersLabel, serviceTierLabel, toolTypeLabel } from '../surfaces/labels.js';
 import type { TraceRecord } from './record.js';
 
 export type PseudonymKind =
@@ -9,7 +9,7 @@ export type PseudonymKind =
   | 'prefix' | 'session' | 'agent' | 'promptId' | 'valueHmac' | 'instance'
   // A model name the gateway pseudonymised (B1), or a name a trace written before that holds in an unexpected shape.
   | 'model'
-  // A server tool type not shaped like one (S-V4-2): a token or hex string a client put in `tools[].type`.
+  // A server tool type no provider documents (S-V4-2, S-V4-3): client text in `tools[].type`.
   | 'toolType';
 
 /** Kinds whose pseudonym keeps the hex shape of the value it replaces (reports and replay treat them as opaque ids). */
@@ -36,15 +36,13 @@ const SEQ_EPOCH = /^[0-9a-f]{1,32}$/;
 const CLIENT_AGENTS: ReadonlySet<string> = new Set(['claude-code', 'codex', 'other']);
 
 /**
- * The shape of real server tool types: lowercase words joined by `_`, optionally ending in a date (`web_search_20250305`,
- * `file_search`, `mcp`). The ingest bound (`[a-z0-9_]`) also lets lowercase tokens and hex secrets through (S-V4-2).
+ * A tool type as exported (S-V4-2, S-V4-3): kept only when a provider documents it (any date suffix; `(invalid)` too);
+ * any other type, whatever its shape (a token, a hex secret, a letters-only name, a type the recording policy listed,
+ * the gateway's `tool_<hex>` placeholder), is pseudonymised. An unknown type stays unpriced in replay either way.
  */
-const TOOL_TYPE_WORDS = /^[a-z]+(?:_[a-z]+)*(?:_\d{8})?$/;
-
-/** A tool type as exported: kept when shaped like one, else pseudonymised; an unknown type stays unpriced in replay. */
 function exportedToolType(type: string, p: (kind: PseudonymKind, v: string) => string): string {
   const t = toolTypeLabel(type);
-  return t === INVALID_TOOL_TYPE || TOOL_TYPE_WORDS.test(t) ? t : p('toolType', t);
+  return isKnownToolType(t) ? t : p('toolType', t);
 }
 
 /**

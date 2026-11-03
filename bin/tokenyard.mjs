@@ -383,7 +383,7 @@ function rateLimitHeadersLabel(h) {
   for (const [k, v] of Object.entries(h)) if (RATE_LIMIT_HEADER.test(k)) out[k] = sanitizeHeaderValue(String(v)).value;
   return out;
 }
-var TOOL_TYPE, SERVICE_TIERS, ERROR_CODE, MODEL_ID, RATE_LIMIT_HEADER, INVALID_TOOL_TYPE, OTHER, toolTypeLabel, serviceTierLabel, errorCodeLabel, modelShapeLabel;
+var TOOL_TYPE, SERVICE_TIERS, ERROR_CODE, MODEL_ID, RATE_LIMIT_HEADER, INVALID_TOOL_TYPE, KNOWN_SERVER_TOOLS, toolTypeBase, isKnownToolType, OTHER, toolTypeLabel, serviceTierLabel, errorCodeLabel, modelShapeLabel;
 var init_labels = __esm({
   "src/surfaces/labels.ts"() {
     "use strict";
@@ -394,6 +394,39 @@ var init_labels = __esm({
     MODEL_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
     RATE_LIMIT_HEADER = /^anthropic-ratelimit-unified-[a-z0-9-]{1,64}$/;
     INVALID_TOOL_TYPE = "(invalid)";
+    KNOWN_SERVER_TOOLS = /* @__PURE__ */ new Set([
+      // Anthropic: server tools, MCP connector, client tools with provider-side definitions
+      "web_search",
+      "web_fetch",
+      "code_execution",
+      "tool_search_tool_regex",
+      "tool_search_tool_bm25",
+      "advisor",
+      "mcp_toolset",
+      "mcp_servers",
+      "memory",
+      "bash",
+      "text_editor",
+      "str_replace_editor",
+      "str_replace_based_edit_tool",
+      "computer",
+      "browser_toolset",
+      // OpenAI Responses built-in tools
+      "web_search_preview",
+      "web_search_preview_2025_03_11",
+      "file_search",
+      "code_interpreter",
+      "mcp",
+      "image_generation",
+      "computer_use_preview",
+      "computer_use",
+      "local_shell",
+      "shell",
+      "apply_patch",
+      INVALID_TOOL_TYPE
+    ]);
+    toolTypeBase = (type) => type.replace(/_\d{8}$/, "");
+    isKnownToolType = (type) => KNOWN_SERVER_TOOLS.has(type) || KNOWN_SERVER_TOOLS.has(toolTypeBase(type));
     OTHER = "other";
     toolTypeLabel = (type) => TOOL_TYPE.test(type) ? type : INVALID_TOOL_TYPE;
     serviceTierLabel = (tier) => SERVICE_TIERS.has(tier) ? tier : OTHER;
@@ -405,7 +438,7 @@ var init_labels = __esm({
 // src/ledger/anonymize.ts
 function exportedToolType(type, p) {
   const t = toolTypeLabel(type);
-  return t === INVALID_TOOL_TYPE || TOOL_TYPE_WORDS.test(t) ? t : p("toolType", t);
+  return isKnownToolType(t) ? t : p("toolType", t);
 }
 function exportedModel(m, p) {
   if (m === "" || m === "other") return m;
@@ -531,7 +564,7 @@ function saltedPseudonyms(salt) {
     return `${kind}-${h.slice(0, 8)}`;
   };
 }
-var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM, SEQ_EPOCH, CLIENT_AGENTS, TOOL_TYPE_WORDS;
+var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM, SEQ_EPOCH, CLIENT_AGENTS;
 var init_anonymize = __esm({
   "src/ledger/anonymize.ts"() {
     "use strict";
@@ -543,7 +576,6 @@ var init_anonymize = __esm({
     MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
     SEQ_EPOCH = /^[0-9a-f]{1,32}$/;
     CLIENT_AGENTS = /* @__PURE__ */ new Set(["claude-code", "codex", "other"]);
-    TOOL_TYPE_WORDS = /^[a-z]+(?:_[a-z]+)*(?:_\d{8})?$/;
   }
 });
 
@@ -59132,6 +59164,14 @@ function tracedModelGlobs(p, model, traced) {
   if (!model || traced === model) return void 0;
   return [...new Set(modelPatterns(p).filter((re2) => globTest(re2, model)).map((re2) => re2.source))].sort();
 }
+function tracedToolType(p, type, salt = "") {
+  const t = toolTypeLabel(type);
+  if (isKnownToolType(t)) return t;
+  const base = toolTypeBase(t);
+  if (Object.hasOwn(p.prices.serverTools, base) || Object.hasOwn(p.prices.serverTools, `openai/${base}`)) return t;
+  if (p.routes.some((r) => (r.serverTools ?? []).includes(base))) return t;
+  return `tool_${pseudonym(salt, `tool:${t}`).slice(0, 16)}`;
+}
 function buildTraceRecord(o, salt, names) {
   const hmac = (v) => v === null ? null : pseudonym(salt, v);
   const u = o.usage;
@@ -59173,7 +59213,7 @@ function buildTraceRecord(o, salt, names) {
       inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
       boundKind: o.inputBound?.kind ?? "bytes",
       maxOutputTokens: o.features.maxOutputTokens,
-      serverTools: o.features.serverTools,
+      serverTools: o.features.serverTools.map((t) => ({ type: tracedToolType(names, t.type, salt), maxUses: t.maxUses })),
       toolCount: o.features.toolCount,
       thinking: o.features.thinking,
       bodyBytes: o.features.bodyBytes,

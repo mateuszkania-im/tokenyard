@@ -1,8 +1,8 @@
 // S-V4-2 (V4 anonymizer fuzz, LOW): `traces export --anonymize` kept every server tool type shaped like an identifier
 // (`[a-z0-9_]{1,64}`, the ingest bound of B1), so a lowercase token or hex secret a client put in `tools[].type`
-// (`ghp_0000a0aa0a000aa0`, a 32-hex API key) reached the export in clear. Exports keep only the shape real tool types
-// have (underscore-joined lowercase words, optionally a date: `web_search_20250305`, `file_search`, `mcp`) and
-// pseudonymise the rest; replay is unchanged, as an unknown type is unpriced under either name.
+// (`ghp_0000a0aa0a000aa0`, a 32-hex API key) reached the export in clear. Exports pseudonymise them; since S-V4-3 they
+// keep only the server tool types a provider documents (`web_search_20250305`, `file_search`, `mcp`), whatever shape
+// the rest has. Replay is unchanged, as an unknown type is unpriced under either name.
 import { expect, test } from 'vitest';
 import { anonymizeRecord, saltedPseudonyms } from '../../src/ledger/anonymize.js';
 import { baseRecord } from '../helpers/trace.js';

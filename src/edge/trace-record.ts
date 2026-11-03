@@ -6,7 +6,7 @@ import { globTest } from '../policy/match.js';
 import type { CompiledPolicy } from '../policy/types.js';
 import type { TraceRecord } from '../ledger/record.js';
 import { sanitizeHeaderValue } from '../report/sanitize.js';
-import { errorCodeLabel, rateLimitHeadersLabel, serviceTierLabel } from '../surfaces/labels.js';
+import { errorCodeLabel, isKnownToolType, rateLimitHeadersLabel, serviceTierLabel, toolTypeBase, toolTypeLabel } from '../surfaces/labels.js';
 import type { RequestOutcome } from './handler.js';
 
 /** Client agent and version from the User-Agent header, best effort (spec 9.1). */
@@ -51,10 +51,25 @@ export function tracedModelGlobs(p: ModelNames, model: string | null | undefined
 
 
 /**
+ * A server tool type as traced (S-V4-3): the type is client text, so it stays in clear only when a provider documents
+ * it (any date suffix) or the recording policy names it (a price table entry or a route's `serverTools`), which is
+ * what replay needs to allow and price it. Any other type is the placeholder `tool_<16 hex>` of HMAC(salt, type):
+ * equal types stay equal, and replay treats it as the unknown, unpriced type it was.
+ */
+export function tracedToolType(p: ModelNames, type: string, salt = ''): string {
+  const t = toolTypeLabel(type);
+  if (isKnownToolType(t)) return t;
+  const base = toolTypeBase(t);
+  if (Object.hasOwn(p.prices.serverTools, base) || Object.hasOwn(p.prices.serverTools, `openai/${base}`)) return t;
+  if (p.routes.some((r) => (r.serverTools ?? []).includes(base))) return t;
+  return `tool_${pseudonym(salt, `tool:${t}`).slice(0, 16)}`;
+}
+
+/**
  * Pseudonymises session, agent, parent agent and prompt id with `salt`; request class, agent type, repo, branch,
  * ticket and feature are short labels chosen by tooling, not content, and stay in clear (they are what reports group by).
  * Nothing from the request body is copied: only counts, sizes, the model name as `tracedModel` bounds it,
- * server tool types and the service tier, both bounded at extraction.
+ * server tool types as `tracedToolType` bounds them, and the service tier, bounded at extraction.
  */
 export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNames): Omit<TraceRecord, 'instance' | 'seq'> {
   const hmac = (v: string | null): string | null => (v === null ? null : pseudonym(salt, v));
@@ -97,7 +112,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
       inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
       boundKind: o.inputBound?.kind ?? 'bytes',
       maxOutputTokens: o.features.maxOutputTokens,
-      serverTools: o.features.serverTools,
+      serverTools: o.features.serverTools.map((t) => ({ type: tracedToolType(names, t.type, salt), maxUses: t.maxUses })),
       toolCount: o.features.toolCount,
       thinking: o.features.thinking,
       bodyBytes: o.features.bodyBytes,

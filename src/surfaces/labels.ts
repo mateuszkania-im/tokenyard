@@ -14,6 +14,24 @@ const MODEL_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const RATE_LIMIT_HEADER = /^anthropic-ratelimit-unified-[a-z0-9-]{1,64}$/;
 
 export const INVALID_TOOL_TYPE = '(invalid)';
+
+/**
+ * Server tool types the providers document (S-V4-3), without a date suffix: Anthropic server tools and the
+ * Anthropic-defined client tools, the gateway's own `mcp_servers`, and OpenAI built-in tools. Traces and exports keep
+ * these in clear; any other type is client text.
+ */
+const KNOWN_SERVER_TOOLS: ReadonlySet<string> = new Set([
+  // Anthropic: server tools, MCP connector, client tools with provider-side definitions
+  'web_search', 'web_fetch', 'code_execution', 'tool_search_tool_regex', 'tool_search_tool_bm25', 'advisor', 'mcp_toolset', 'mcp_servers',
+  'memory', 'bash', 'text_editor', 'str_replace_editor', 'str_replace_based_edit_tool', 'computer', 'browser_toolset',
+  // OpenAI Responses built-in tools
+  'web_search_preview', 'web_search_preview_2025_03_11', 'file_search', 'code_interpreter', 'mcp', 'image_generation', 'computer_use_preview', 'computer_use', 'local_shell', 'shell', 'apply_patch',
+  INVALID_TOOL_TYPE,
+]);
+/** A tool type's name without its date suffix (`web_search_20250305` is `web_search`). */
+export const toolTypeBase = (type: string): string => type.replace(/_\d{8}$/, '');
+/** Whether `type` (after the ingest bound) is a server tool type a provider documents, with any date suffix. */
+export const isKnownToolType = (type: string): boolean => KNOWN_SERVER_TOOLS.has(type) || KNOWN_SERVER_TOOLS.has(toolTypeBase(type));
 export const OTHER = 'other';
 
 export const toolTypeLabel = (type: string): string => (TOOL_TYPE.test(type) ? type : INVALID_TOOL_TYPE);
