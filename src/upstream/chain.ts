@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { CompiledPolicy, Plan, ProviderSpec } from '../policy/types.js';
 import type { Breaker } from './breaker.js';
-import { forward, type ForwardRequest, type UpstreamResponse } from './forward.js';
+import { forward, type ForwardRequest, SentRequestError, type UpstreamResponse } from './forward.js';
 import type { RetryBudget } from './retry-budget.js';
 
 export const MAX_ATTEMPTS = 3;
@@ -38,12 +38,16 @@ export interface ChainResult {
   response: UpstreamResponse;
 }
 
-/** Every attempt failed before any response, or no provider could be tried. */
+/**
+ * Every attempt failed before any response, or no provider could be tried. `bodySent`: the last attempt failed after
+ * its request body was written upstream, so the provider may bill it (the chain stops there, A6).
+ */
 export class ChainError extends Error {
   constructor(
     readonly attempts: number,
     readonly provider: string | null,
     readonly cause: unknown,
+    readonly bodySent = false,
   ) {
     super(cause instanceof Error ? cause.message : 'no provider available');
   }
@@ -141,12 +145,19 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
     try {
       res = await forward(provider, { ...req, headers }, signal);
     } catch (err) {
+      const sent = err instanceof SentRequestError;
       note({ provider: provider.name, startMs, endMs: Date.now(), status: null, errorType: signal.aborted ? 'client_abort' : 'upstream_unreachable' });
       if (signal.aborted) {
         if (held) discard(held.response);
-        throw new ChainError(attempts, provider.name, err);
+        throw new ChainError(attempts, provider.name, err, sent);
       }
       breaker.record(provider.name, false);
+      // The provider had the whole request and may be billing it: another provider would bill it again under the
+      // same reservation, so the chain ends here (only connect-phase failures fall back, A6).
+      if (sent) {
+        if (held) discard(held.response);
+        throw new ChainError(attempts, provider.name, err, true);
+      }
       lastError = err;
       continue;
     }

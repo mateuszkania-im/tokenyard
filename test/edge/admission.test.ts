@@ -74,7 +74,7 @@ test('aborted stream after message_start settles input from message_start and ou
   expect(t.decision.reservedMicroUsd).toBe(spy.admits[0]?.plan.reservations[0]?.estMicroUsd);
 });
 
-test('client abort before upstream headers: upstream aborted, settled 0, slot freed, aborted true', async () => {
+test('client abort before upstream headers, after the body reached upstream: upstream aborted, settled at the reservation (A6), slot freed, aborted true', async () => {
   const rejections: unknown[] = [];
   const onRejection = (e: unknown): void => void rejections.push(e);
   process.on('unhandledRejection', onRejection);
@@ -105,8 +105,11 @@ test('client abort before upstream headers: upstream aborted, settled 0, slot fr
   req.destroy();
   await closed;
   await expect.poll(() => g.traces.length).toBe(1);
-  expect(spy.settles).toEqual([{ id: g.traces[0]?.id, actual: 0, result: 'settled' }]);
-  expect(g.traces[0]?.outcome).toMatchObject({ aborted: true, status: 499, costMicroUsd: 0, settledBy: 'request' });
+  // The provider had the whole request and may be generating it: the reservation is charged, never 0 (A6).
+  const est = spy.admits[0]?.plan.reservations[0]?.estMicroUsd as number;
+  expect(est).toBeGreaterThan(0);
+  expect(spy.settles).toEqual([{ id: g.traces[0]?.id, actual: est, result: 'settled' }]);
+  expect(g.traces[0]?.outcome).toMatchObject({ aborted: true, status: 499, costMicroUsd: est, settledAtEstimate: true, settledBy: 'request' });
   // The only stream slot is free again.
   hang = false;
   const next = await send(g.url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-haiku-5-5' }) });

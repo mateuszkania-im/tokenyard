@@ -54946,7 +54946,7 @@ var require_constants5 = __commonJS({
       writable: false,
       configurable: false
     };
-    var states = {
+    var states2 = {
       CONNECTING: 0,
       OPEN: 1,
       CLOSING: 2,
@@ -54982,7 +54982,7 @@ var require_constants5 = __commonJS({
       uid,
       sentCloseFrameState,
       staticPropertyDescriptors,
-      states,
+      states: states2,
       opcodes,
       maxUnsigned16Bit,
       parserStates,
@@ -54996,21 +54996,21 @@ var require_constants5 = __commonJS({
 var require_util5 = __commonJS({
   "node_modules/undici/lib/web/websocket/util.js"(exports, module) {
     "use strict";
-    var { states, opcodes } = require_constants5();
+    var { states: states2, opcodes } = require_constants5();
     var { isUtf8 } = __require("node:buffer");
     var { removeHTTPWhitespace } = require_data_url();
     var { collectASequenceOfCodePointsFast } = require_infra();
     function isConnecting(readyState) {
-      return readyState === states.CONNECTING;
+      return readyState === states2.CONNECTING;
     }
     function isEstablished(readyState) {
-      return readyState === states.OPEN;
+      return readyState === states2.OPEN;
     }
     function isClosing(readyState) {
-      return readyState === states.CLOSING;
+      return readyState === states2.CLOSING;
     }
     function isClosed(readyState) {
-      return readyState === states.CLOSED;
+      return readyState === states2.CLOSED;
     }
     function fireEvent(e2, target, eventFactory = (type, init) => new Event(type, init), eventInitDict = {}) {
       const event = eventFactory(e2, eventInitDict);
@@ -55278,7 +55278,7 @@ var require_frame = __commonJS({
 var require_connection = __commonJS({
   "node_modules/undici/lib/web/websocket/connection.js"(exports, module) {
     "use strict";
-    var { uid, states, sentCloseFrameState, emptyBuffer, opcodes } = require_constants5();
+    var { uid, states: states2, sentCloseFrameState, emptyBuffer, opcodes } = require_constants5();
     var { parseExtensions, isClosed, isClosing, isEstablished, isConnecting, validateCloseCodeAndReason } = require_util5();
     var { makeRequest } = require_request2();
     var { fetching } = require_fetch();
@@ -55385,7 +55385,7 @@ var require_connection = __commonJS({
       if (isClosed(object2.readyState) || isClosing(object2.readyState)) {
       } else if (!isEstablished(object2.readyState)) {
         failWebsocketConnection(object2);
-        object2.readyState = states.CLOSING;
+        object2.readyState = states2.CLOSING;
       } else if (!object2.closeState.has(sentCloseFrameState.SENT) && !object2.closeState.has(sentCloseFrameState.RECEIVED)) {
         const frame3 = new WebsocketFrameSend();
         if (reason.length !== 0 && code2 === null) {
@@ -55406,9 +55406,9 @@ var require_connection = __commonJS({
         }
         object2.socket.write(frame3.createFrame(opcodes.CLOSE));
         object2.closeState.add(sentCloseFrameState.SENT);
-        object2.readyState = states.CLOSING;
+        object2.readyState = states2.CLOSING;
       } else {
-        object2.readyState = states.CLOSING;
+        object2.readyState = states2.CLOSING;
       }
     }
     function failHandshake(handler, response, code2, reason, cause) {
@@ -55524,7 +55524,7 @@ var require_receiver = __commonJS({
     "use strict";
     var { Writable } = __require("node:stream");
     var assert2 = __require("node:assert");
-    var { parserStates, opcodes, states, emptyBuffer, sentCloseFrameState } = require_constants5();
+    var { parserStates, opcodes, states: states2, emptyBuffer, sentCloseFrameState } = require_constants5();
     var {
       isValidStatusCode,
       isValidOpcode,
@@ -55862,7 +55862,7 @@ var require_receiver = __commonJS({
             this.#handler.socket.write(closeFrame.createFrame(opcodes.CLOSE));
             this.#handler.closeState.add(sentCloseFrameState.SENT);
           }
-          this.#handler.readyState = states.CLOSING;
+          this.#handler.readyState = states2.CLOSING;
           this.#handler.closeState.add(sentCloseFrameState.RECEIVED);
           return false;
         } else if (opcode === opcodes.PING) {
@@ -55981,7 +55981,7 @@ var require_websocket = __commonJS({
     var { webidl } = require_webidl();
     var { URLSerializer } = require_data_url();
     var { environmentSettingsObject } = require_util2();
-    var { staticPropertyDescriptors, states, sentCloseFrameState, sendHints, opcodes } = require_constants5();
+    var { staticPropertyDescriptors, states: states2, sentCloseFrameState, sendHints, opcodes } = require_constants5();
     var {
       isConnecting,
       isEstablished,
@@ -56034,7 +56034,7 @@ var require_websocket = __commonJS({
           }
         },
         onSocketError: (err) => {
-          this.#handler.readyState = states.CLOSING;
+          this.#handler.readyState = states2.CLOSING;
           if (channels.socketError.hasSubscribers) {
             channels.socketError.publish(err);
           }
@@ -56057,7 +56057,7 @@ var require_websocket = __commonJS({
             });
           }
         },
-        readyState: states.CONNECTING,
+        readyState: states2.CONNECTING,
         socket: null,
         closeState: /* @__PURE__ */ new Set(),
         controller: null,
@@ -56274,7 +56274,7 @@ var require_websocket = __commonJS({
         parser.on("error", (err) => this.#handler.onParserError(err));
         this.#parser = parser;
         this.#sendQueue = new SendQueue(response.socket);
-        this.#handler.readyState = states.OPEN;
+        this.#handler.readyState = states2.OPEN;
         const extensions = response.headersList.get("sec-websocket-extensions");
         if (extensions !== null) {
           this.#extensions = extensions;
@@ -56300,7 +56300,7 @@ var require_websocket = __commonJS({
         }
       }
       #onMessage(type, data) {
-        if (this.#handler.readyState !== states.OPEN) {
+        if (this.#handler.readyState !== states2.OPEN) {
           return;
         }
         let dataForEvent;
@@ -56339,7 +56339,7 @@ var require_websocket = __commonJS({
           code2 = result.code ?? 1005;
           reason = result.reason;
         }
-        this.#handler.readyState = states.CLOSED;
+        this.#handler.readyState = states2.CLOSED;
         if (!this.#handler.closeState.has(sentCloseFrameState.RECEIVED)) {
           code2 = 1006;
           fireEvent("error", this, (type, init) => new ErrorEvent(type, init), {
@@ -56380,10 +56380,10 @@ var require_websocket = __commonJS({
     };
     var { ping } = WebSocket;
     Reflect.deleteProperty(WebSocket, "ping");
-    WebSocket.CONNECTING = WebSocket.prototype.CONNECTING = states.CONNECTING;
-    WebSocket.OPEN = WebSocket.prototype.OPEN = states.OPEN;
-    WebSocket.CLOSING = WebSocket.prototype.CLOSING = states.CLOSING;
-    WebSocket.CLOSED = WebSocket.prototype.CLOSED = states.CLOSED;
+    WebSocket.CONNECTING = WebSocket.prototype.CONNECTING = states2.CONNECTING;
+    WebSocket.OPEN = WebSocket.prototype.OPEN = states2.OPEN;
+    WebSocket.CLOSING = WebSocket.prototype.CLOSING = states2.CLOSING;
+    WebSocket.CLOSED = WebSocket.prototype.CLOSED = states2.CLOSED;
     Object.defineProperties(WebSocket.prototype, {
       CONNECTING: staticPropertyDescriptors,
       OPEN: staticPropertyDescriptors,
@@ -56549,7 +56549,7 @@ var require_websocketstream = __commonJS({
     "use strict";
     var { createDeferredPromise } = require_promise();
     var { environmentSettingsObject } = require_util2();
-    var { states, opcodes, sentCloseFrameState } = require_constants5();
+    var { states: states2, opcodes, sentCloseFrameState } = require_constants5();
     var { webidl } = require_webidl();
     var { getURLRecord, isValidSubprotocol, isEstablished, utf8Decode } = require_util5();
     var { establishWebSocketConnection, failWebsocketConnection, closeWebSocketConnection } = require_connection();
@@ -56593,7 +56593,7 @@ var require_websocketstream = __commonJS({
           }
         },
         onSocketError: (err) => {
-          this.#handler.readyState = states.CLOSING;
+          this.#handler.readyState = states2.CLOSING;
           if (channels.socketError.hasSubscribers) {
             channels.socketError.publish(err);
           }
@@ -56604,7 +56604,7 @@ var require_websocketstream = __commonJS({
         },
         onPong: () => {
         },
-        readyState: states.CONNECTING,
+        readyState: states2.CONNECTING,
         socket: null,
         closeState: /* @__PURE__ */ new Set(),
         controller: null,
@@ -56646,7 +56646,7 @@ var require_websocketstream = __commonJS({
           signal.addEventListener("abort", () => {
             if (!isEstablished(this.#handler.readyState)) {
               failWebsocketConnection(this.#handler);
-              this.#handler.readyState = states.CLOSING;
+              this.#handler.readyState = states2.CLOSING;
               this.#openedPromise.reject(signal.reason);
               this.#closedPromise.reject(signal.reason);
               this.#handshakeAborted = true;
@@ -56722,7 +56722,7 @@ var require_websocketstream = __commonJS({
         parser.on("drain", () => this.#handler.onParserDrain());
         parser.on("error", (err) => this.#handler.onParserError(err));
         this.#parser = parser;
-        this.#handler.readyState = states.OPEN;
+        this.#handler.readyState = states2.OPEN;
         const extensions = parsedExtensions ?? "";
         const protocol = response.headersList.get("sec-websocket-protocol") ?? "";
         const readable = new ReadableStream({
@@ -56749,7 +56749,7 @@ var require_websocketstream = __commonJS({
       }
       /** @type {import('../websocket').Handler['onMessage']} */
       #onMessage(type, data) {
-        if (this.#handler.readyState !== states.OPEN) {
+        if (this.#handler.readyState !== states2.OPEN) {
           return;
         }
         let chunk;
@@ -56768,7 +56768,7 @@ var require_websocketstream = __commonJS({
       /** @type {import('../websocket').Handler['onSocketClose']} */
       #onSocketClose() {
         const wasClean = this.#handler.closeState.has(sentCloseFrameState.SENT) && this.#handler.closeState.has(sentCloseFrameState.RECEIVED);
-        this.#handler.readyState = states.CLOSED;
+        this.#handler.readyState = states2.CLOSED;
         if (this.#handshakeAborted) {
           return;
         }
@@ -57797,26 +57797,62 @@ ${captureLines}` : capture.stack;
 });
 
 // src/upstream/forward.ts
+import { subscribe } from "node:diagnostics_channel";
 function targetUrl(p, pathAndQuery) {
   const base = new URL(p.baseUrl);
   return base.origin + base.pathname.replace(/\/+$/, "") + pathAndQuery;
 }
 async function forward(p, r, signal) {
-  const res = await (0, import_undici.request)(targetUrl(p, r.pathAndQuery), {
-    method: r.method,
-    headers: r.headers,
-    body: r.method === "GET" || r.method === "HEAD" ? void 0 : r.body,
-    signal,
-    dispatcher: agent
-  });
-  return { status: res.statusCode, headers: res.headers, body: res.body };
+  const state = { created: false, sent: false };
+  let pending;
+  creating = state;
+  try {
+    pending = (0, import_undici.request)(targetUrl(p, r.pathAndQuery), {
+      method: r.method,
+      headers: r.headers,
+      body: r.method === "GET" || r.method === "HEAD" ? void 0 : r.body,
+      signal,
+      dispatcher: agent
+    });
+  } finally {
+    creating = null;
+  }
+  try {
+    const res = await pending;
+    return { status: res.statusCode, headers: res.headers, body: res.body };
+  } catch (err) {
+    throw state.sent || !state.created ? new SentRequestError(err) : err;
+  }
 }
-var import_undici, agent;
+var import_undici, agent, SentRequestError, creating, states, markSent;
 var init_forward = __esm({
   "src/upstream/forward.ts"() {
     "use strict";
     import_undici = __toESM(require_undici(), 1);
     agent = new import_undici.Agent({ headersTimeout: 6e5, bodyTimeout: 6e5 });
+    SentRequestError = class extends Error {
+      constructor(cause) {
+        super(cause instanceof Error ? cause.message : "upstream request failed after the body was sent");
+        this.cause = cause;
+      }
+      cause;
+    };
+    creating = null;
+    states = /* @__PURE__ */ new WeakMap();
+    subscribe("undici:request:create", (m) => {
+      const r = m.request;
+      if (creating !== null && r !== void 0) {
+        creating.created = true;
+        states.set(r, creating);
+      }
+    });
+    markSent = (m) => {
+      const r = m.request;
+      const st = r === void 0 ? void 0 : states.get(r);
+      if (st) st.sent = true;
+    };
+    subscribe("undici:request:bodyChunkSent", markSent);
+    subscribe("undici:request:bodySent", markSent);
   }
 });
 
@@ -57886,12 +57922,17 @@ async function runChain(plan, policy2, req, signal, deps) {
     try {
       res = await forward(provider2, { ...req, headers }, signal);
     } catch (err) {
+      const sent = err instanceof SentRequestError;
       note({ provider: provider2.name, startMs, endMs: Date.now(), status: null, errorType: signal.aborted ? "client_abort" : "upstream_unreachable" });
       if (signal.aborted) {
         if (held) discard(held.response);
-        throw new ChainError(attempts, provider2.name, err);
+        throw new ChainError(attempts, provider2.name, err, sent);
       }
       breaker2.record(provider2.name, false);
+      if (sent) {
+        if (held) discard(held.response);
+        throw new ChainError(attempts, provider2.name, err, true);
+      }
       lastError = err;
       continue;
     }
@@ -57926,15 +57967,17 @@ var init_chain = __esm({
     RETRYABLE = /* @__PURE__ */ new Set([500, 502, 503, 504, 529]);
     SPEND_CAP_PROBE_BYTES = 64 * 1024;
     ChainError = class extends Error {
-      constructor(attempts, provider2, cause) {
+      constructor(attempts, provider2, cause, bodySent = false) {
         super(cause instanceof Error ? cause.message : "no provider available");
         this.attempts = attempts;
         this.provider = provider2;
         this.cause = cause;
+        this.bodySent = bodySent;
       }
       attempts;
       provider;
       cause;
+      bodySent;
     };
     CREDENTIAL_SALT = randomBytes2(16);
   }
@@ -58654,7 +58697,8 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost = null;
   let costFailed = false;
-  if (r?.usage && o.surface === "anthropic-messages" && (r.source === "estimated" || r.outputEstimated === true)) {
+  if (held.chargeReservation) costFailed = true;
+  if (!costFailed && r?.usage && o.surface === "anthropic-messages" && (r.source === "estimated" || r.outputEstimated === true)) {
     const bound = held.plan?.outputTokensBound;
     if (bound === void 0) costFailed = true;
     else o.usage = r = { ...r, usage: { ...r.usage, output: Math.max(r.usage.output, bound) }, outputEstimated: true };
@@ -58942,6 +58986,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     answered = policy2.providers.get(r.provider) ?? provider2;
   } catch (err) {
     const n2 = err instanceof ChainError ? err.attempts : 1;
+    if (!(err instanceof ChainError) || err.bodySent) held.chargeReservation = true;
     const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n2, attemptLog };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
     sendError(req, res, own2(502, "api_error", "upstream-unreachable", `upstream ${common.provider} is unreachable`));
@@ -58949,6 +58994,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   }
   const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider2), attemptLog };
   if (ac.signal.aborted) {
+    held.chargeReservation = true;
     up.body.on("error", () => void 0);
     up.body.destroy();
     return early({ ...decided, ...admitted, ...answer, status: 499, aborted: true, errorClass: "client_abort" });
@@ -59013,7 +59059,7 @@ function createHandler(deps) {
       return;
     }
     const id = deps.newId();
-    const held = { plan: null, features: null, admitted: false, est: 0, settled: false, envelope: "anthropic", known: null };
+    const held = { plan: null, features: null, admitted: false, est: 0, settled: false, chargeReservation: false, envelope: "anthropic", known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;

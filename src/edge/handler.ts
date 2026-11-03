@@ -309,6 +309,9 @@ interface Held {
   est: number;
   /** Settlement has started; the fault path in `createHandler` settles an admitted request that never got here. */
   settled: boolean;
+  /** The upstream may have billed without any usage coming back (the body was sent, then the attempt failed or the
+   * client left): settle at the reservation, never at 0 (A6). */
+  chargeReservation: boolean;
   /** The surface's error envelope for own errors, the fault path's included. */
   envelope: ErrorEnvelope;
   /** What the request knew once admitted, so the fault path can still queue its trace line (warm-up reads the charge). */
@@ -363,7 +366,8 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   // A Messages stream that ended without its final output count (no message_delta usage: aborted, cut, or a
   // message_stop without it): streamed characters bound nothing (summarized or redacted thinking, CJK, server tool
   // blocks), so output is settled at the reservation's output bound; the input count from message_start stands (A3).
-  if (r?.usage && o.surface === 'anthropic-messages' && (r.source === 'estimated' || r.outputEstimated === true)) {
+  if (held.chargeReservation) costFailed = true;
+  if (!costFailed && r?.usage && o.surface === 'anthropic-messages' && (r.source === 'estimated' || r.outputEstimated === true)) {
     const bound = held.plan?.outputTokensBound;
     if (bound === undefined) costFailed = true;
     else o.usage = r = { ...r, usage: { ...r.usage, output: Math.max(r.usage.output, bound) }, outputEstimated: true };
@@ -731,8 +735,10 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     attempts = r.attempt;
     answered = policy.providers.get(r.provider) ?? provider;
   } catch (err) {
-    // Nothing came back, so nothing was billed: the reservation settles at 0 and the slot is freed.
+    // A connect-phase failure wrote nothing upstream, so nothing was billed: the reservation settles at 0. Once the body
+    // was written the provider may be generating (and billing): settled at the reservation (A6).
     const n = err instanceof ChainError ? err.attempts : 1;
+    if (!(err instanceof ChainError) || err.bodySent) held.chargeReservation = true;
     const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider.name, attempts: n, attemptLog };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
     sendError(req, res, own(502, 'api_error', 'upstream-unreachable', `upstream ${common.provider} is unreachable`));
@@ -740,6 +746,8 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   }
   const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider), attemptLog };
   if (ac.signal.aborted) {
+    // The provider answered, so it may have billed; no usage will be read: settled at the reservation (A6).
+    held.chargeReservation = true;
     up.body.on('error', () => undefined);
     up.body.destroy();
     return early({ ...decided, ...admitted, ...answer, status: 499, aborted: true, errorClass: 'client_abort' });
@@ -814,7 +822,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
       return;
     }
     const id = deps.newId();
-    const held: Held = { plan: null, features: null, admitted: false, est: 0, settled: false, envelope: 'anthropic', known: null };
+    const held: Held = { plan: null, features: null, admitted: false, est: 0, settled: false, chargeReservation: false, envelope: 'anthropic', known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
       // (whether upstream billed is unknown, so fail closed), and queue the trace line with that charge so warm-up
