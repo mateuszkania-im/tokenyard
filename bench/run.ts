@@ -1,14 +1,14 @@
 // `npm run bench` (spec 12.3): the six benchmarks against the mock provider only, results in bench/results.json with the
-// hardware, OS, Node and tool versions. Redis runs use REDIS_URL when set, else a throwaway local container
-// (`docker run -d --rm --name ty-redis-bench -p 6379:6379 redis:7`, stopped at the end); without either, Redis is
+// hardware, OS, Node and tool versions. Redis runs use REDIS_URL when set, else a throwaway local container from
+// scripts/local-redis.mjs (random 127.0.0.1 port, random password, removed at the end); without either, Redis is
 // recorded as not measured. BENCH_QUICK=1 shortens the overhead runs for development; never commit its results.
 // Exits 1 when calibration finds a request billed above its input bound (R11), after writing the results.
-import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createClient } from 'redis';
 import { createRedisStore } from '../src/limits/redis-store.js';
 import type { CounterStore } from '../src/limits/store.js';
+import { startLocalRedis } from '../scripts/local-redis.mjs';
 import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
@@ -18,25 +18,17 @@ import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
 
 const log = (s: string): void => console.error(`bench: ${s}`);
-const CONTAINER = 'ty-redis-bench';
 
-/** A Redis to bench against: REDIS_URL, else a local container. `stop` removes the container when this run started it. */
+/** A Redis to bench against: REDIS_URL, else a throwaway local container (scripts/local-redis.mjs). */
 async function redis(): Promise<{ url: string; version: string; stop(): void } | { notMeasured: string }> {
-  let url = process.env.REDIS_URL ?? null;
-  let started = false;
-  if (!url) {
-    try {
-      execFileSync('docker', ['run', '-d', '--rm', '--name', CONTAINER, '-p', '6379:6379', 'redis:7'], { stdio: ['ignore', 'ignore', 'pipe'] });
-      started = true;
-      url = 'redis://127.0.0.1:6379';
-    } catch (e) {
-      const why = e instanceof Error && 'stderr' in e ? String((e as { stderr: Buffer }).stderr).trim().split('\n')[0] : String(e);
-      return { notMeasured: `not measured: no REDIS_URL and the local Redis container did not start (${why || 'Docker unavailable'})` };
-    }
+  let url: string;
+  let stop: () => void;
+  try {
+    ({ url, stop } = startLocalRedis());
+  } catch (e) {
+    const why = e instanceof Error && 'stderr' in e ? String((e as { stderr: Buffer }).stderr).trim().split('\n')[0] : e instanceof Error ? e.message.split('\n')[0] : String(e);
+    return { notMeasured: `not measured: no REDIS_URL and the local Redis container did not start (${why || 'Docker unavailable'})` };
   }
-  const stop = (): void => {
-    if (started) execFileSync('docker', ['stop', CONTAINER], { stdio: 'ignore' });
-  };
   for (let i = 0; i < 50; i++) {
     const c = createClient({ url });
     c.on('error', () => undefined);
@@ -50,7 +42,7 @@ async function redis(): Promise<{ url: string; version: string; stop(): void } |
     }
   }
   stop();
-  return { notMeasured: `not measured: Redis at ${url} did not answer` };
+  return { notMeasured: 'not measured: Redis did not answer' };
 }
 
 type Slo = { sli: string; target: string; measured: string; met: boolean | null };

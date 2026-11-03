@@ -2,7 +2,7 @@
 // gateway; added TTFB and added total time are the gateway's percentiles minus the direct ones. The mock and the gateway
 // each run in their own child process, so the gateway's CPU and RSS are its own.
 //   npx tsx bench/overhead.ts mock                          (child: the mock provider)
-//   npx tsx bench/overhead.ts gateway <memory|redis> <mockUrl> [redisUrl]   (child: the gateway)
+//   npx tsx bench/overhead.ts gateway <memory|redis> <mockUrl>   (child: the gateway; Redis URL in BENCH_REDIS_URL)
 import { type ChildProcess, fork } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -149,8 +149,8 @@ interface Child {
   close(): Promise<void>;
 }
 
-function spawn(args: string[]): Promise<Child> {
-  const child: ChildProcess = fork(join(import.meta.dirname, 'overhead.ts'), args, { execArgv: ['--import', 'tsx'], stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+function spawn(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<Child> {
+  const child: ChildProcess = fork(join(import.meta.dirname, 'overhead.ts'), args, { execArgv: ['--import', 'tsx'], env, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
   return new Promise((resolve, reject) => {
     child.once('error', reject);
     child.once('exit', (code) => reject(new Error(`bench child ${args[0]} exited with ${code}`)));
@@ -206,7 +206,9 @@ async function childMain(role: string, args: string[]): Promise<void> {
     serveStats(mock.url);
     return;
   }
-  const [store, mockUrl, redisUrl] = args as ['memory' | 'redis', string, string | undefined];
+  const [store, mockUrl] = args as ['memory' | 'redis', string];
+  // The Redis URL carries its password, so it comes through the environment, not the command line.
+  const redisUrl = process.env.BENCH_REDIS_URL;
   process.env[PROVIDER_KEY_ENV] = BENCH_PROVIDER_KEY;
   const { createGateway } = await import('../src/edge/server.js');
   const { createGatewayRuntime } = await import('../src/edge/handler.js');
@@ -258,7 +260,7 @@ export async function benchOverhead(o: {
 }): Promise<OverheadRow[]> {
   const mock = await spawn(['mock']);
   const gateways: Array<{ store: 'memory' | 'redis'; child: Child }> = [{ store: 'memory', child: await spawn(['gateway', 'memory', mock.url]) }];
-  if (o.redisUrl) gateways.push({ store: 'redis', child: await spawn(['gateway', 'redis', mock.url, o.redisUrl]) });
+  if (o.redisUrl) gateways.push({ store: 'redis', child: await spawn(['gateway', 'redis', mock.url], { ...process.env, BENCH_REDIS_URL: o.redisUrl }) });
   const rows: OverheadRow[] = [];
   try {
     for (const s of o.scenarios ?? SCENARIOS) {

@@ -8,7 +8,7 @@ import { runStoreContract } from './store-contract.js';
 const url = process.env.REDIS_URL;
 const plan = (over: Partial<Plan>): Plan => ({ id: `req_${Math.random()}`, policyRevision: 'r1', route: 'r', chain: [], reservations: [], rateChecks: [], streamSlots: [], taint: null, preBlock: null, warnings: [], ...over });
 
-// Skipped, visibly, without REDIS_URL. `npm run test:redis` runs it against a real Redis (docker run -p 6379:6379 redis:7).
+// Skipped, visibly, without REDIS_URL. `npm run test:redis` runs it against REDIS_URL or a throwaway loopback-only Redis (scripts/local-redis.mjs).
 describe.skipIf(!url)('redis store (REDIS_URL)', () => {
   const client = createClient({ url });
   beforeAll(async () => {
