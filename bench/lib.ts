@@ -66,11 +66,22 @@ export function throughput(o: { answered: number; outputTokens: number; firstSch
 }
 
 /**
+ * A run in which the gateway could not keep up: a full core (the gateway is single-threaded), or, when throughput was
+ * measured, fewer than 90% of the offered requests answered per second, or a drain more than 20% past the window.
+ */
+export function rowSaturated(r: { concurrency: number; ratePerConnection?: number; durationS?: number; gatewayCpuPct: number; throughput?: { gateway: Throughput } }): boolean {
+  if (r.gatewayCpuPct >= 95) return true;
+  const t = r.throughput?.gateway;
+  if (!t || r.ratePerConnection === undefined || r.durationS === undefined) return false;
+  return t.requestsPerS < 0.9 * r.concurrency * r.ratePerConnection || t.elapsedS > 1.2 * r.durationS;
+}
+
+/**
  * Gateway CPU and RSS growth per 100 streams as the slope between two concurrency levels of the same store and
  * scenario, so the fixed cost of an idle process does not scale with the stream count.
  */
 export function cpuRssSlopes(
-  rows: ReadonlyArray<{ store: string; scenario: string; concurrency: number; gatewayCpuPct: number; rssGrowthMb: number }>,
+  rows: ReadonlyArray<{ store: string; scenario: string; concurrency: number; gatewayCpuPct: number; rssGrowthMb: number } & Parameters<typeof rowSaturated>[0]>,
   from: number,
   to: number,
 ): Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number; saturated: boolean }> {
@@ -86,8 +97,8 @@ export function cpuRssSlopes(
       to,
       cpuPctPer100Streams: round((hi.gatewayCpuPct - lo.gatewayCpuPct) * per100, 1),
       rssMbPer100Streams: round((hi.rssGrowthMb - lo.rssGrowthMb) * per100, 1),
-      // A single-threaded gateway at a full core or more cannot spend more CPU: the slope then understates the cost.
-      saturated: hi.gatewayCpuPct >= 95,
+      // A gateway that could not keep up at the upper level cannot spend more CPU: the slope then understates the cost.
+      saturated: rowSaturated(hi),
     });
   }
   return out;

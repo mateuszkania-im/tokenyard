@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mulberry32 } from '../src/mock/scenarios.js';
 import { PROVIDER_KEY_ENV, TEST_KEY } from '../test/helpers/policy.js';
-import { BENCH_PROVIDER_KEY, benchPolicy, intendedStarts, type Percentiles, percentiles, preconnect, round, type Throughput, throughput, ttfbVerdict } from './lib.js';
+import { BENCH_PROVIDER_KEY, benchPolicy, intendedStarts, type Percentiles, percentiles, preconnect, round, rowSaturated, type Throughput, throughput, ttfbVerdict } from './lib.js';
 
 export type Scenario = 'non-streaming' | 'streaming-500' | 'body-150kb';
 export const SCENARIOS: readonly Scenario[] = ['non-streaming', 'streaming-500', 'body-150kb'];
@@ -92,6 +92,8 @@ export interface OverheadRow {
   throughput: { direct: Throughput; gateway: Throughput };
   /** The spec 12.1 added TTFB targets, met on both the gateway measure and the client-side bound (ttfbVerdict). */
   addedTtfbMet: boolean | null;
+  /** The gateway could not keep up with the offered load in this run (rowSaturated). */
+  saturated: boolean;
   gatewayCpuPct: number;
   gatewayRssMb: number;
   /** Peak RSS during the run minus RSS just before it. */
@@ -366,11 +368,13 @@ export async function benchOverhead(o: {
             direct: dp,
             gateway: { ttfb: percentiles(via.ttfb), outsideProvider: percentiles(via.outside), total: percentiles(via.total) },
             addedTtfbMet: null,
+            saturated: false,
             gatewayCpuPct: round(st.cpuPct, 1),
             gatewayRssMb: round(st.peakRssMb, 1),
             rssGrowthMb: round(Math.max(0, st.peakRssMb - st.startRssMb), 1),
           };
           row.addedTtfbMet = ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider);
+          row.saturated = rowSaturated(row);
           rows.push(row);
           o.log(
             `overhead ${s} ${g.store} c=${c} ${d}s: added TTFB p50 ${row.addedTtfb.p50} p99 ${row.addedTtfb.p99} ms (n ${row.addedTtfb.n}), outside provider p50/p99 direct ${dp.outsideProvider.p50}/${dp.outsideProvider.p99} gateway ${row.gateway.outsideProvider.p50}/${row.gateway.outsideProvider.p99} ms, throughput ${row.throughput.direct.requestsPerS}/${row.throughput.gateway.requestsPerS} req/s ${row.throughput.direct.outputTokensPerS}/${row.throughput.gateway.outputTokensPerS} tok/s, cpu ${row.gatewayCpuPct}%, errors ${JSON.stringify(direct.errorKinds)} / ${JSON.stringify(via.errorKinds)}, dropped ${direct.dropped} / ${via.dropped}`,

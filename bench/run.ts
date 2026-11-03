@@ -12,7 +12,7 @@ import { isLoopbackRedisUrl, startLocalRedis } from '../scripts/local-redis.mjs'
 import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
-import { cpuRssSlopes, environment, keptSoak, type Percentiles, ROOT, ttfbVerdict } from './lib.js';
+import { cpuRssSlopes, environment, keptSoak, type Percentiles, ROOT, rowSaturated, ttfbVerdict } from './lib.js';
 import { benchOverhead, CONCURRENCY, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
 import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
@@ -114,7 +114,7 @@ function overheadMethod(): string {
           'An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target.',
           `Each scenario runs at ${CONCURRENCY.join(', ')} streams; ${SLO_LEVELS.join(', ')} back the SLO rows (about 2,200 scheduled requests each), the other levels about 300.`,
           'Throughput is answered (2xx) requests and output tokens per second of each run, from its first scheduled send to its last answer (direct: the mock\'s fixed output per answer; through the gateway: the output tokens its traces settled); at a fixed open-loop rate it follows the offered load until a path saturates, then falls below it.',
-          'n is the number of samples behind each percentile. CPU is the gateway process\'s user plus system time over the run\'s wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams.',
+          'n is the number of samples behind each percentile. CPU is the gateway process\'s user plus system time over the run\'s wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams, flagged as an understatement when the gateway could not keep up at 500 (a full core, fewer than 90% of the offered requests answered per second, or a drain more than 20% past the window).',
           'The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.',
         ].join(' ');
 }
@@ -134,7 +134,10 @@ function recomputeSlo(): void {
     sloDerivedAt?: string;
   };
   r.overhead.method = overheadMethod();
-  for (const row of r.overhead.rows) row.addedTtfbMet = ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider);
+  for (const row of r.overhead.rows) {
+    row.addedTtfbMet = ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider);
+    row.saturated = rowSaturated(row);
+  }
   r.overhead.slopes = cpuRssSlopes(r.overhead.rows, 100, 500);
   r.slo = slos({ overhead: r.overhead.rows, budget: r.budget.runs, cache: r.cache.rows, replay: r.replay, redis: r.overhead.redis });
   writeFileSync(file, `${JSON.stringify(r, null, 2)}\n`);

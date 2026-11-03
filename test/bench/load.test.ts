@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { cpuRssSlopes, intendedStarts, percentiles, throughput, ttfbVerdict } from '../../bench/lib.js';
+import { cpuRssSlopes, intendedStarts, percentiles, rowSaturated, throughput, ttfbVerdict } from '../../bench/lib.js';
 import { profileArgs } from '../../bench/overhead.js';
 
 test('intended send times are evenly spaced per connection from a phase inside the first interval, within the run', () => {
@@ -64,4 +64,18 @@ test('a full bench run keeps the soak section that npm run soak wrote (V2)', asy
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('a row is saturated at a full core, or when the gateway answered clearly less than offered, or drained well past its window (V1 fix round)', () => {
+  const row = { concurrency: 500, ratePerConnection: 1.25, durationS: 10, gatewayCpuPct: 50, throughput: { gateway: { requestsPerS: 620, outputTokensPerS: 0, elapsedS: 10.1 } } };
+  expect(rowSaturated(row)).toBe(false);
+  expect(rowSaturated({ ...row, gatewayCpuPct: 95 })).toBe(true);
+  // The Redis 150 KB row at 500 streams: 94.1% CPU, 322.9 of 625 offered requests a second, 19.36 s for a 10 s window.
+  expect(rowSaturated({ ...row, gatewayCpuPct: 94.1, throughput: { gateway: { requestsPerS: 322.9, outputTokensPerS: 0, elapsedS: 19.36 } } })).toBe(true);
+  expect(rowSaturated({ ...row, throughput: { gateway: { requestsPerS: 600, outputTokensPerS: 0, elapsedS: 12.5 } } })).toBe(true);
+  // Rows measured before throughput existed fall back to the CPU rule.
+  expect(rowSaturated({ concurrency: 500, ratePerConnection: 1.25, durationS: 10, gatewayCpuPct: 94 })).toBe(false);
+  const lo = { store: 'redis', scenario: 'body-150kb', concurrency: 100, ratePerConnection: 1.25, durationS: 18, gatewayCpuPct: 60, rssGrowthMb: 10 };
+  const hi = { ...row, store: 'redis', scenario: 'body-150kb', gatewayCpuPct: 94.1, rssGrowthMb: 30, throughput: { gateway: { requestsPerS: 322.9, outputTokensPerS: 0, elapsedS: 19.36 } } };
+  expect(cpuRssSlopes([lo, hi], 100, 500)[0]?.saturated).toBe(true);
 });
