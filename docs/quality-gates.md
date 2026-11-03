@@ -107,10 +107,24 @@ So CI runs the Vitest suite on Node 22 and 24, and on Node 20.19 the check and t
 when its test file ends fails that file and is killed; a child the test already signalled gets 5 s to exit. Node
 children get `test/setup/child-listen-guard.mjs` preloaded, which records any listener bound to `0.0.0.0` or `::`;
 in-process servers are checked the same way. The global teardown (`test/setup/global-guard.ts`) fails the run on any
-record and on any recorded child that is still alive, for example one left by a worker that died before its file
-ended. A test that needs a listener that is not loopback by name binds `::ffff:127.0.0.1`, reachable only through
-loopback. `scripts/local-redis.mjs` forwards SIGINT and SIGTERM to its command before removing the container, so an
-interrupted `npm run test:redis` leaves neither the container nor an orphaned Vitest behind.
+record and on any recorded child that was not seen exiting and is still alive, for example one left by a worker that
+died before its file ended. A pid the worker saw exit is skipped (another process may have it by then); on POSIX a
+child still alive is killed, on Windows it is reported only, and only when its `tasklist` image matches the recorded
+command. A test that needs a listener that is not loopback by name binds `::ffff:127.0.0.1`, reachable only through
+loopback (this relies on `isLoopbackHost` not recognising IPv4-mapped loopback; see `src/edge/ops.ts`).
+`scripts/local-redis.mjs` forwards SIGINT and SIGTERM to its command before removing the container, so on Linux and
+macOS an interrupted `npm run test:redis` leaves neither the container nor an orphaned Vitest behind (Windows: see
+Limitations).
+
+What the guard covers, precisely:
+
+- Children are the processes a test starts directly through `node:child_process` in the test worker. A grandchild
+  (for example a server that `sh -c`, `npx`, `npm` or `tsx` starts) is not tracked: killing a leaked shell child
+  leaves its own children running, and an orphaned grandchild is not detected at the end.
+- The listen guard runs in node children, recognised by command (`process.execPath` or a path ending in `node`, and
+  every `fork`), and in their descendants that inherit `NODE_OPTIONS`. Children started through a shell (`exec`, or
+  `shell: true`) or under another command name (`npx`, `npm`, `tsx`, `sh`) do not get it, so a wildcard listener
+  there is not recorded. In-process servers in the worker are always checked.
 
 ## Tests on a loaded machine
 
@@ -122,7 +136,10 @@ A test that bounds time must hold when other processes compete for the cores. Th
 - A test waits for the event it needs (a request id handed out by the handler, a counter reaching a value), never for
   a fixed pause that stands for it.
 - A test whose only time dependency is the hang guard (it runs git and the bundle in subprocesses and asserts nothing
-  about time) gets a timeout sized to its work.
+  about time) relies on the global 30 s hang guard timeout (`vitest.config.ts`), far above the 1 to 1.5 s such a test
+  takes with every core busy; only tests that do more work set a longer timeout of their own.
+- A test that waits for a file watcher gives it a backup poll unless the watcher is what it tests: one loader test
+  keeps the poll a minute away, so it fails when the watcher alone does not reload (`test/policy-loader/loader.test.ts`).
 
 Each flake on the V5 list, reproduced with a CPU burner (one busy thread on every core but one, load average 32 to
 37 on a 12-core M2 Pro) or under coverage instrumentation, and how it was fixed:
@@ -131,11 +148,23 @@ Each flake on the V5 list, reproduced with a CPU burner (one busy thread on ever
 |---|---|---|
 | C8c duplicate-key check is linear | 1.7 s against a 1 s wall-clock ceiling; later a 5 s timeout | CPU time, least of three runs per size; ratio under 6 |
 | ReDoS bodies (1 MiB per rule) | over the 1 s bound at load average 20 | CPU-time bound |
-| 32 MiB scan budget bodies (S-V3-3) | event loop stall over 1 s under load | CPU-time bound of 1.5 s (measured at most 0.22 s); the stall keeps a 10 s hang ceiling |
+| 32 MiB scan budget bodies (S-V3-3) | event loop stall over 1 s under load | CPU-time bound of 1 s (measured at most 0.22 s); the stall keeps a 10 s hang ceiling |
 | S25-4 masked-key matching, S-V3-1 and S-V3-3 scanner bounds, keyword prefilter, body shape, alias bomb, breaker | wall clock past the bound under coverage (115 ms against 100 ms; 2.7 s against 2.5 s) | CPU time, ten times the bound under coverage (`cpuBoundMs`) |
 | loader "broken file keeps the old revision" | two load errors for one write | product fix: a repeated failure found by the watcher counts once, as one found by the poll did; one write reaches the watcher as several events |
 | burst fidelity (Task 17) | a fixed 200 ms pause stood for "the gateway registered the request" | waits for the request id the handler hands out |
 | chaos client leaves before the body | the trace line count was compared with a request count read once, before late requests reached the handler | both counts read on every poll |
 | S19-1, C11, C12, the Action's base policy case | 5 s default timeout on 1 to 1.5 s of git and bundle subprocesses | 30 s hang guard timeout (`vitest.config.ts`) |
+| chaos reload, empty policy file | no load error within 10 s: with a 60 s poll the case relied on the watcher alone, whose event a loaded machine delivered late or not at all (one failed full run in V5, one in four in V4) | the chaos reload helper polls every second behind the watcher (`test/chaos/reload.test.ts`); the watcher alone is tested by one loader case with the poll a minute away (above) |
 
 Proof: `npx vitest run` three times in a row with the burner running, zero failures (V5 report).
+
+## Limitations
+
+- **The process guard sees direct children only** (above): grandchildren started through a shell or a package runner
+  are neither tracked nor given the listen guard. The suite's children under other commands are mostly `git`,
+  `bash` and `docker` invocations.
+- **`scripts/local-redis.mjs` on Windows** starts its command through a shell (`shell: true`, which is how `npx` and
+  `vitest` resolve there), so the child it forwards SIGINT and SIGTERM to is `cmd.exe`, not Vitest: an interrupted run
+  can leave Vitest running after the container is removed. CI runs the Redis suite on Linux only.
+- **The Windows leg of CI has not run on GitHub yet** (see CI), so the Windows paths of the guard (`tasklist`, report
+  without killing) are tested with a substituted image lookup only (`test/arch/process-guard.test.ts`).
