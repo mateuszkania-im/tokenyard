@@ -19,8 +19,10 @@ export interface ExtractedFeatures {
   /** `speed` is present and not `"standard"`: priced at the model's fast mode rates. */
   fastMode: boolean;
   /**
-   * OpenAI `service_tier` when it asks for a tier other than the standard one (`auto`, `priority`, `flex`, `scale`, or
-   * `other` for any value outside the known tiers, which is never priced); absent for no tier, null or `default`. A named tier is priced only from the model's `serviceTiers` (spec 7.3).
+   * OpenAI Responses `service_tier` unless it is `default` (standard pricing, then absent): `auto`, `priority`, `flex`,
+   * `scale`, or `other` for any value outside the known tiers, which is never priced. An absent or null `service_tier`
+   * is OpenAI's `auto` and is recorded as `auto` (FR-M2). Absent on the Anthropic surfaces. A named tier is priced only
+   * from the model's `serviceTiers` (spec 7.3).
    */
   serviceTier?: string;
   /** `inference_geo` when it is a string (for example "us"); it selects a price modifier (`inferenceGeoUs`). Absent otherwise. */
