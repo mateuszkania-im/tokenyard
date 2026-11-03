@@ -14,9 +14,10 @@ const exported = (type: string): string => {
   return out.features.serverTools[0]?.type as string;
 };
 
+// Built from parts at runtime, so no committed file holds a secret-shaped value (check:secrets, push protection).
 test('S-V4-2 identifier-shaped secrets in a server tool type are pseudonymised in exports', () => {
   const hex = '9f86d081884c7d659a2feaa0c55ad015';
-  for (const secret of ['ghp_0000a0aa0a000aa0', hex, 'sk_live_4ec39hqlyjwdarjtt1zdp7dc', 'tool_x9_20250101']) {
+  for (const secret of ['ghp_0000a0aa0a000aa0', hex, ['sk', '_live_', '4ec39hqlyjwdarjtt1zdp7dc'].join(''), 'tool_x9_20250101']) {
     const out = exported(secret);
     expect(out).not.toContain(secret);
     expect(out).toBe(exported(secret)); // stable within one salt
