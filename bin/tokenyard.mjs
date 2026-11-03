@@ -31423,65 +31423,107 @@ var init_responses_usage = __esm({
 });
 
 // src/stream/sse.ts
-var SseParser;
+var MAX_SSE_LINE_BYTES, SseParser;
 var init_sse = __esm({
   "src/stream/sse.ts"() {
     "use strict";
+    MAX_SSE_LINE_BYTES = 16 * 1024 * 1024;
     SseParser = class {
-      rest = Buffer.alloc(0);
+      maxLineBytes;
+      /** Pieces of the unfinished line, and their total length. */
+      parts = [];
+      partBytes = 0;
+      /** The unfinished line passed the cap: its bytes are dropped, and so is the event it belongs to. */
+      overflow = false;
       event = null;
       data = [];
       hasData = false;
+      /** Characters in `data`: an event's data is held to the same cap as one line. */
+      dataChars = 0;
+      /** The current event lost a line to the cap; it is not dispatched. */
+      broken = false;
       skipLf = false;
+      constructor(o = {}) {
+        this.maxLineBytes = o.maxLineBytes ?? MAX_SSE_LINE_BYTES;
+      }
+      /** Bytes held for the unfinished line (never more than the cap). */
+      pendingBytes() {
+        return this.partBytes;
+      }
       push(chunk) {
         const out = [];
-        let buf = this.rest.length > 0 ? Buffer.concat([this.rest, chunk]) : chunk;
-        let start = 0;
         let i = 0;
-        if (this.skipLf) {
-          if (buf.length > 0) {
-            if (buf[0] === 10) start = i = 1;
-            this.skipLf = false;
-          }
+        if (this.skipLf && chunk.length > 0) {
+          if (chunk[0] === 10) i = 1;
+          this.skipLf = false;
         }
-        while (i < buf.length) {
-          const b = buf[i];
-          if (b === 10 || b === 13) {
-            if (b === 13 && i + 1 >= buf.length) {
-              this.line(buf.toString("utf8", start, i), out);
-              this.skipLf = true;
-              start = i + 1;
-              i = start;
-              break;
-            }
-            this.line(buf.toString("utf8", start, i), out);
-            if (b === 13 && buf[i + 1] === 10) i++;
+        let start = i;
+        while (i < chunk.length) {
+          const b = chunk[i];
+          if (b !== 10 && b !== 13) {
             i++;
-            start = i;
-          } else {
-            i++;
+            continue;
           }
+          this.finishLine(chunk, start, i, out);
+          if (b === 13) {
+            if (i + 1 >= chunk.length) this.skipLf = true;
+            else if (chunk[i + 1] === 10) i++;
+          }
+          i++;
+          start = i;
         }
-        this.rest = Buffer.from(buf.subarray(start));
+        if (start < chunk.length) this.hold(chunk.subarray(start));
         return out;
       }
       end() {
         const out = [];
-        if (this.rest.length > 0) {
-          this.line(this.rest.toString("utf8"), out);
-          this.rest = Buffer.alloc(0);
+        if (this.partBytes > 0 || this.overflow) this.finishLine(Buffer.alloc(0), 0, 0, out);
+        this.reset();
+        return out;
+      }
+      /** Keeps a piece of the unfinished line (copied: the caller may reuse its buffer), up to the cap. */
+      hold(piece) {
+        if (this.overflow) return;
+        if (this.partBytes + piece.length > this.maxLineBytes) {
+          this.parts = [];
+          this.partBytes = 0;
+          this.overflow = true;
+          return;
         }
+        this.parts.push(Buffer.from(piece));
+        this.partBytes += piece.length;
+      }
+      /** The line made of the held pieces and `chunk[start, end)` is complete. */
+      finishLine(chunk, start, end, out) {
+        if (!this.overflow && this.partBytes + (end - start) > this.maxLineBytes) this.overflow = true;
+        if (this.overflow) {
+          this.parts = [];
+          this.partBytes = 0;
+          this.overflow = false;
+          this.broken = true;
+          return;
+        }
+        let text2;
+        if (this.parts.length === 0) text2 = chunk.toString("utf8", start, end);
+        else {
+          this.parts.push(chunk.subarray(start, end));
+          text2 = Buffer.concat(this.parts).toString("utf8");
+          this.parts = [];
+          this.partBytes = 0;
+        }
+        this.line(text2, out);
+      }
+      reset() {
         this.event = null;
         this.data = [];
         this.hasData = false;
-        return out;
+        this.dataChars = 0;
+        this.broken = false;
       }
       line(line, out) {
         if (line === "") {
-          if (this.hasData) out.push({ event: this.event, data: this.data.join("\n") });
-          this.event = null;
-          this.data = [];
-          this.hasData = false;
+          if (this.hasData && !this.broken) out.push({ event: this.event, data: this.data.join("\n") });
+          this.reset();
           return;
         }
         if (line.startsWith(":")) return;
@@ -31491,8 +31533,15 @@ var init_sse = __esm({
         if (value.startsWith(" ")) value = value.slice(1);
         if (field === "event") this.event = value;
         else if (field === "data") {
-          this.data.push(value);
           this.hasData = true;
+          if (this.broken) return;
+          this.dataChars += value.length + 1;
+          if (this.dataChars > this.maxLineBytes) {
+            this.data = [];
+            this.broken = true;
+            return;
+          }
+          this.data.push(value);
         }
       }
     };
