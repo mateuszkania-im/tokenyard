@@ -176,10 +176,14 @@ function rawViews(body: Buffer, start: number, end: number): { all: View; joined
 
 function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined, raw: boolean): { all: View; joined: View | null; decoded?: View } {
   if (raw) return rawViews(body, start, end);
+  // One latin1 copy of the range; runs are slices of it (V1: a Buffer.toString per run cost more than the walk itself).
+  const src = body.toString('latin1', start, end);
+  const latin1 = (from: number, to: number): string => src.slice(from - start, to - start);
   const all = new View();
   const joined = messages && messages.length > 0 ? new View() : null;
   let lastKey: string | null = null;
   let group = -1;
+  let pending: { first: number; last: number; at: number } | null = null;
   let m = 0;
   /** The previous item was an object key: the next value is shown as `key: value`. */
   let member = false;
@@ -214,7 +218,7 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
         let j = i + 1;
         while (j < q && !isWs(body[j]) && !isStructural(body[j])) j++;
         opening(i);
-        all.push(body.toString('latin1', i, j), i, j, BARE);
+        all.push(latin1(i, j), i, j, BARE);
         afterColon = false;
         i = j;
       }
@@ -230,13 +234,13 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
       const quote = nextQuote(p);
       const esc = nextBs(p);
       if (esc >= 0 && esc < quote) {
-        if (esc > p) all.push(body.toString('latin1', p, esc), p, esc, PLAIN);
+        if (esc > p) all.push(latin1(p, esc), p, esc, PLAIN);
         const d = decodeEscape(body, esc, end);
         all.push(d.text, esc, d.next, ESCAPE);
         p = d.next;
         continue;
       }
-      if (quote > p) all.push(body.toString('latin1', p, quote), p, quote, PLAIN);
+      if (quote > p) all.push(latin1(p, quote), p, quote, PLAIN);
       close = quote;
       break;
     }
@@ -250,14 +254,58 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
       while (m < messages.length && (messages[m] as Range).end <= q) m++;
       const msg = messages[m];
       if (msg !== undefined && q >= msg.start) {
-        if (m !== group) joined.separate(q);
-        group = m;
-        all.copyRuns(first, last, joined);
+        // A message's first piece waits until a second one arrives: a message with one piece has nothing to join, and
+        // `joined` only reports matches that cross pieces, which no message with one piece can hold (V1).
+        if (m !== group) {
+          group = m;
+          pending = { first, last, at: q };
+        } else {
+          if (pending !== null) {
+            joined.separate(pending.at);
+            all.copyRuns(pending.first, pending.last, joined);
+            pending = null;
+          }
+          all.copyRuns(first, last, joined);
+        }
       }
     }
     i = close + 1;
   }
-  return { all, joined };
+  return { all, joined: joined && joined.length > 0 ? joined : null };
+}
+
+const keywordRegex = new Map<string, RegExp>();
+/** One alternation of the literal keywords, longest first, compiled once per keyword list. */
+function keywordAlternation(keywords: readonly string[]): RegExp {
+  const sorted = [...keywords].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  const id = sorted.join('\0');
+  let re = keywordRegex.get(id);
+  if (re === undefined) {
+    if (keywordRegex.size >= 64) keywordRegex.clear(); // a handful of rule lists exist; never grows without bound
+    re = new RegExp(sorted.map((k) => k.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&')).join('|'), 'g');
+    keywordRegex.set(id, re);
+  }
+  return re;
+}
+
+/**
+ * The keywords that occur in `text`, as `keywords.filter((k) => text.includes(k))` would find them, in one pass
+ * (V1: about 40 `includes` calls over a 150 KB view cost more than every regex the prefilter then lets through).
+ * Every start position is tried; where two keywords start at the same position the longer is reported, so the
+ * keywords that are a prefix of a found one are added after the pass.
+ */
+export function keywordsIn(text: string, keywords: readonly string[]): Set<string> {
+  const found = new Set<string>();
+  const list = keywords.filter((k) => k.length > 0);
+  if (list.length === 0) return found;
+  const re = keywordAlternation(list);
+  re.lastIndex = 0;
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    found.add(m[0]);
+    re.lastIndex = m.index + 1;
+  }
+  for (const k of list) if (!found.has(k) && [...found].some((f) => f.startsWith(k))) found.add(k);
+  return found;
 }
 
 const globalRegex = new WeakMap<SecretRule, RegExp>();
@@ -280,9 +328,9 @@ function bareNumberOk(body: Buffer, rule: SecretRule, value: string, segments: S
   return isDelimiter(g.start > 0 ? body[g.start - 1] : undefined) && isDelimiter(body[g.end]) && rule.bareNumber(value);
 }
 
-function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[], body: Buffer, quotedOnly: boolean): void {
+function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[], body: Buffer, quotedOnly: boolean, present: ReadonlySet<string>): void {
+  if (rule.keywords.length > 0 && !rule.keywords.some((k) => present.has(k))) return;
   const text = view.text;
-  if (rule.keywords.length > 0 && !rule.keywords.some((k) => text.includes(k))) return;
   const re = globalOf(rule);
   re.lastIndex = 0;
   for (let m = re.exec(text); m !== null; m = re.exec(text)) {
@@ -315,15 +363,23 @@ export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { ra
   const out: Span[] = [];
   if (rules.length === 0 || range.end <= range.start) return out;
   const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
+  const keywords = [...new Set(rules.flatMap((r) => r.keywords))];
+  const lazy = (v: View): (() => ReadonlySet<string>) => {
+    let set: Set<string> | null = null;
+    return () => (set ??= keywordsIn(v.text, keywords));
+  };
+  const inAll = lazy(all);
+  const inJoined = joined ? lazy(joined) : null;
+  const inDecoded = decoded ? lazy(decoded) : null;
   for (const rule of rules) {
     const start = out.length;
-    matchView(all, rule, false, out, body, q);
-    if (joined) matchView(joined, rule, true, out, body, q);
+    matchView(all, rule, false, out, body, q, inAll());
+    if (joined && inJoined) matchView(joined, rule, true, out, body, q, inJoined());
     // The decoded copy of a raw body: a value it shares with the raw view is reported once (same rule and bytes).
-    if (decoded) {
+    if (decoded && inDecoded) {
       const before = out.length;
       const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
-      matchView(decoded, rule, false, out, body, q);
+      matchView(decoded, rule, false, out, body, q, inDecoded());
       const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
       out.push(...fresh);
     }

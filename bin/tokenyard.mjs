@@ -1904,10 +1904,13 @@ function rawViews(body, start, end) {
 }
 function buildViews(body, start, end, messages, raw) {
   if (raw) return rawViews(body, start, end);
+  const src = body.toString("latin1", start, end);
+  const latin1 = (from, to) => src.slice(from - start, to - start);
   const all = new View();
   const joined = messages && messages.length > 0 ? new View() : null;
   let lastKey = null;
   let group = -1;
+  let pending = null;
   let m = 0;
   let member = false;
   let afterColon = false;
@@ -1938,7 +1941,7 @@ function buildViews(body, start, end, messages, raw) {
         let j = i + 1;
         while (j < q && !isWs(body[j]) && !isStructural(body[j])) j++;
         opening(i);
-        all.push(body.toString("latin1", i, j), i, j, BARE);
+        all.push(latin1(i, j), i, j, BARE);
         afterColon = false;
         i = j;
       }
@@ -1954,13 +1957,13 @@ function buildViews(body, start, end, messages, raw) {
       const quote = nextQuote(p);
       const esc2 = nextBs(p);
       if (esc2 >= 0 && esc2 < quote) {
-        if (esc2 > p) all.push(body.toString("latin1", p, esc2), p, esc2, PLAIN);
+        if (esc2 > p) all.push(latin1(p, esc2), p, esc2, PLAIN);
         const d = decodeEscape(body, esc2, end);
         all.push(d.text, esc2, d.next, ESCAPE);
         p = d.next;
         continue;
       }
-      if (quote > p) all.push(body.toString("latin1", p, quote), p, quote, PLAIN);
+      if (quote > p) all.push(latin1(p, quote), p, quote, PLAIN);
       close = quote;
       break;
     }
@@ -1974,14 +1977,46 @@ function buildViews(body, start, end, messages, raw) {
       while (m < messages.length && messages[m].end <= q) m++;
       const msg = messages[m];
       if (msg !== void 0 && q >= msg.start) {
-        if (m !== group) joined.separate(q);
-        group = m;
-        all.copyRuns(first2, last, joined);
+        if (m !== group) {
+          group = m;
+          pending = { first: first2, last, at: q };
+        } else {
+          if (pending !== null) {
+            joined.separate(pending.at);
+            all.copyRuns(pending.first, pending.last, joined);
+            pending = null;
+          }
+          all.copyRuns(first2, last, joined);
+        }
       }
     }
     i = close + 1;
   }
-  return { all, joined };
+  return { all, joined: joined && joined.length > 0 ? joined : null };
+}
+function keywordAlternation(keywords) {
+  const sorted = [...keywords].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
+  const id = sorted.join("\0");
+  let re2 = keywordRegex.get(id);
+  if (re2 === void 0) {
+    if (keywordRegex.size >= 64) keywordRegex.clear();
+    re2 = new RegExp(sorted.map((k) => k.replace(/[.*+?^${}()|[\]\\/-]/g, "\\$&")).join("|"), "g");
+    keywordRegex.set(id, re2);
+  }
+  return re2;
+}
+function keywordsIn(text2, keywords) {
+  const found = /* @__PURE__ */ new Set();
+  const list3 = keywords.filter((k) => k.length > 0);
+  if (list3.length === 0) return found;
+  const re2 = keywordAlternation(list3);
+  re2.lastIndex = 0;
+  for (let m = re2.exec(text2); m !== null; m = re2.exec(text2)) {
+    found.add(m[0]);
+    re2.lastIndex = m.index + 1;
+  }
+  for (const k of list3) if (!found.has(k) && [...found].some((f) => f.startsWith(k))) found.add(k);
+  return found;
 }
 function globalOf(rule) {
   let re2 = globalRegex.get(rule);
@@ -1996,9 +2031,9 @@ function bareNumberOk(body, rule, value, segments, quotedOnly) {
   const g = segments[0];
   return isDelimiter(g.start > 0 ? body[g.start - 1] : void 0) && isDelimiter(body[g.end]) && rule.bareNumber(value);
 }
-function matchView(view, rule, crossingOnly, out, body, quotedOnly) {
+function matchView(view, rule, crossingOnly, out, body, quotedOnly, present) {
+  if (rule.keywords.length > 0 && !rule.keywords.some((k) => present.has(k))) return;
   const text2 = view.text;
-  if (rule.keywords.length > 0 && !rule.keywords.some((k) => text2.includes(k))) return;
   const re2 = globalOf(rule);
   re2.lastIndex = 0;
   for (let m = re2.exec(text2); m !== null; m = re2.exec(text2)) {
@@ -2025,14 +2060,22 @@ function findSpans(body, rules, opts = {}) {
   const out = [];
   if (rules.length === 0 || range.end <= range.start) return out;
   const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
+  const keywords = [...new Set(rules.flatMap((r) => r.keywords))];
+  const lazy2 = (v) => {
+    let set2 = null;
+    return () => set2 ??= keywordsIn(v.text, keywords);
+  };
+  const inAll = lazy2(all);
+  const inJoined = joined ? lazy2(joined) : null;
+  const inDecoded = decoded ? lazy2(decoded) : null;
   for (const rule of rules) {
     const start = out.length;
-    matchView(all, rule, false, out, body, q);
-    if (joined) matchView(joined, rule, true, out, body, q);
-    if (decoded) {
+    matchView(all, rule, false, out, body, q, inAll());
+    if (joined && inJoined) matchView(joined, rule, true, out, body, q, inJoined());
+    if (decoded && inDecoded) {
       const before = out.length;
       const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
-      matchView(decoded, rule, false, out, body, q);
+      matchView(decoded, rule, false, out, body, q, inDecoded());
       const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
       out.push(...fresh);
     }
@@ -2074,7 +2117,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, globalRegex, isDelimiter;
+var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
@@ -2148,6 +2191,7 @@ var init_scan = __esm({
     };
     isWs = (c) => c === 32 || c === 9 || c === 10 || c === 13;
     isStructural = (c) => c === 123 || c === 125 || c === 91 || c === 93 || c === 44 || c === 58;
+    keywordRegex = /* @__PURE__ */ new Map();
     globalRegex = /* @__PURE__ */ new WeakMap();
     isDelimiter = (c) => c === void 0 || isWs(c) || isStructural(c);
   }

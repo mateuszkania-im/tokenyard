@@ -1,8 +1,9 @@
+import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { pseudonym } from '../../src/guardrails/hmac.js';
 import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES, type SecretRule } from '../../src/guardrails/rules.js';
-import { scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
+import { keywordsIn, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
 
@@ -172,4 +173,20 @@ test('malformed body: a \\u-escaped key is found by the decoded copy, also right
       { rule: 'aws-access-key-id', action: 'block', valueHmac: pseudonym('s', AWS), where: 'last-turn' },
     ]);
   }
+});
+
+test('keywordsIn finds exactly the keywords String.includes finds, prefixes and overlaps included (V1: one pass per view)', () => {
+  const alphabet = fc.constantFrom('a', 'b', 'k', '-', '_', 'A', 'K', 'I', 'S', '\0', 'x');
+  const word = fc.string({ unit: alphabet, minLength: 1, maxLength: 5 });
+  fc.assert(
+    fc.property(fc.uniqueArray(word, { maxLength: 8 }), fc.string({ unit: alphabet, maxLength: 200 }), (keywords, text) => {
+      const want = new Set(keywords.filter((k) => text.includes(k)));
+      expect(keywordsIn(text, keywords)).toEqual(want);
+    }),
+    { numRuns: 2_000 },
+  );
+  const all = [...new Set([...DEFAULT_RULES, ...PII_RULES].flatMap((r) => r.keywords))];
+  const text = `x ${all.join(' y ')} z api_key apiKey sk-ant- sk-proj-`;
+  expect(keywordsIn(text, all)).toEqual(new Set(all));
+  expect(keywordsIn('nothing here', all)).toEqual(new Set());
 });
