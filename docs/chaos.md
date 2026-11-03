@@ -67,6 +67,8 @@ section.
 | 5 | Request on an idle keep-alive socket while the gateway is blocked across the idle close | keep-alive.test.ts | answered (finding 1) |
 | 5 | Under load: 1.1 MB requests keep the gateway busy, 16 probe connections reuse sockets around the idle close (`test:chaos`, 40 s) | keep-alive.test.ts | separate client workers: 982 requests, 0 resets; one busy client worker (as the V2 soak client): 983 requests, 1 reset on a reused socket (see finding 1) |
 | 6 | Body cap vs scan time | s-v3-1-scan-budget.test.ts | escape budget (finding 3) |
+| 6 | 32 MiB of short strings, bare tokens or dense key matches; last turn and history; both routes | s-v3-3-scan-memory.test.ts | 413 `scan-budget`, nothing sent, loop held under 1 s, peak RSS under 400 MB (finding 4) |
+| 6 | Bodies at and just over the value, run and match budgets | s-v3-3-scan-work-budget.test.ts | refused over, served at (finding 4) |
 
 ### Redis outage numbers in detail
 
@@ -111,10 +113,39 @@ the sweeper settles it at its estimate, and the store and the trace lines agree 
    cap stays at 32 MiB, Anthropic's documented request limit: lowering it would refuse large but ordinary requests
    (images). Instead a body with more than 1,048,576 escapes (counted over the whole body, as the scanner decodes it
    whole whenever a rule blocks) is refused with 413 `scan-budget`, `x-should-retry: false`, before the scan; counting
-   stops one past the budget (15 ms on 32 MiB of escapes). At the budget a 32 MiB body scans in at most 0.26 s
-   (coding agent) and 0.74 s (product), wherever the escapes sit (last turn, history, or spread over 2,000 turns).
-   JSON-encoded source code holds one escape per 16 to 30 bytes, so the budget allows 16 to 30 MiB of it, more than
-   any context window. A `\u` escape is now decoded without a Buffer allocation.
+   stops one past the budget (15 ms on 32 MiB of escapes). JSON-encoded source code holds one escape per 16 to 30
+   bytes, so the budget allows 16 to 30 MiB of it, more than any context window. A `\u` escape is now decoded without
+   a Buffer allocation. The bound first stated here (at the budget 0.26 s on a coding-agent route, 0.74 s on a product
+   route) was wrong: it held for escapes, not for the scan (finding 4).
+4. **Scan work budget (S-V3-3, V3 review).** Escapes were one cost driver of several: parsing and the scan cost per
+   JSON value and per regex match, not per byte. Without a single escape, 32 MiB of short strings (`"a",`) held the
+   event loop for 2.1 to 5.4 s and 32 MiB of AWS-key-shaped values 2.9 to 4.9 s, both answered 200; 32 MiB of bare
+   tokens (`1,`) grew the scanner's arrays past V8's limit, a 500 after 1.6 to 2.2 s with RSS 1.5 to 2.0 GB above
+   the level before the request; JSON.parse alone took 2.5 s and 1.2 GB on 32 MiB of `{},`. Three budgets now hold,
+   each refused with 413 `scan-budget`, `x-should-retry: false`, before any upstream byte:
+   - **JSON values** (strings, keys, numbers, literals, objects, arrays): at most 1,048,576 per body, counted before
+     JSON.parse, so the parser never allocates more. The bench's 31 MiB coding-agent body holds 76,000.
+   - **Decoded runs** (the pieces the scanner joins: one or two per string, token and escape): at most 3,145,728 per
+     scan, counted as each run is made. The bench body makes 1.8 Mi, a 1 M token context (about 4 MiB) under 0.6 Mi.
+   - **Regex matches**, counted before entropy and checksum checks: at most 65,536 per scan. The false-positive
+     corpus matches at most 108 times per file.
+
+   The scanner's views keep their decoded text in one buffer and their runs in a typed array (16 bytes per run, about
+   100 before), and the keyword prefilter stops at one hit per keyword (32 MiB of `@` was 32 Mi hits, 0.85 s per
+   pass). Measured on 32 MiB minus 4 KiB (Apple silicon, Node 22, gateway and client in one process):
+
+   | Body | Coding agent | Product |
+   |---|---|---|
+   | short strings, bare tokens (last turn or history) | 413, loop held at most 33 ms | 413, at most 24 ms |
+   | AWS-key-shaped values (last turn or history) | 413, at most 0.18 s | 413, at most 0.18 s |
+   | 1,048,000 strings `"\na"` (at the value, escape and run budgets) | 200, 0.33 s | 200, 0.57 s |
+   | 64,000 distinct AWS keys, or 64,000 emails, in 32 MiB | 400 (secret), 0.36 s | 200, 0.55 to 0.60 s |
+   | 1 Mi escapes in 32 MiB of text | 200, 0.23 s | 200, 0.48 s |
+   | 32 MiB of whitespace between values | 200, 0.39 s | 200, 0.54 s |
+   | 32 MiB of plain text | 200, 0.14 s | 200, 0.26 s |
+
+   Peak RSS above the level before the request: at most 75 MB for every refused body (receiving it: chunks, then one
+   Buffer) and at most 190 MB for any body within the budgets, against 1.5 to 2.2 GB before (short strings, bare tokens).
 
 No other scenario found a fault: settlement, fallback, breaker scope, backpressure and fail-closed store handling held
 under every case above.
