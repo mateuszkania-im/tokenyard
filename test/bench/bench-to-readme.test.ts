@@ -168,3 +168,19 @@ test('soak rows judged with the V2 follow-up criteria render the RSS beyond the 
   };
   expect(renderBenchBlock({ ...results(), soak })).toContain('| memory | 1 | 45 | 1 (1.0) | 30.0% | 14.2 to -3.1, -2.5% | 40.5 to 41, 1.2% |');
 });
+
+test('the misses are listed from the results, at the SLO levels and at the other levels, and low-n rows are labelled (V1 fix round)', () => {
+  const r = results();
+  const [m10, m100, m64, r10] = r.overhead.rows as Array<Record<string, unknown>>;
+  Object.assign(m100 as object, { addedTtfbMet: false, gateway: { ...(m100 as { gateway: object }).gateway, outsideProvider: { p50: 6.1, p95: 9, p99: 30, n: 2000 } } });
+  Object.assign(m64 as object, { addedTtfbMet: false, saturated: true, addedTtfb: { p50: 7, p95: 8, p99: 9, n: 25 } });
+  Object.assign(m10 as object, { addedTtfbMet: true });
+  Object.assign(r10 as object, { addedTtfbMet: true });
+  const block = renderBenchBlock(r);
+  expect(block).toContain('Rows that miss the added TTFB targets at the SLO levels (10, 100 and 500 streams): Streaming, 500 tokens, memory store, 100 streams (client-side p50 and p99).');
+  expect(block).toContain('At the other levels: Streaming, 500 tokens, memory store, 64 streams (gateway-measured p50; gateway saturated; n = 25).');
+  expect(block).toMatch(/\| memory \| Streaming, 500 tokens \| 64 \(low n\) \|/);
+  const none = results();
+  for (const x of none.overhead.rows as Array<Record<string, unknown>>) x.addedTtfbMet = true;
+  expect(renderBenchBlock(none)).toContain('Rows that miss the added TTFB targets at the SLO levels (10, 100 and 500 streams): none.');
+});

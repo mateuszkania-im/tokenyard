@@ -22,7 +22,7 @@
   },
   "quick": false,
   "overhead": {
-    "method": "An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed 100 ms time to first token and streams 500 tokens at 2000 tokens/s. Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (5 requests/s non-streaming, 1.25 requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included). Added TTFB is the gateway's own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path. The client-side columns are absolute percentiles of each path, never subtracted from each other; \"outside the provider\" is each request's TTFB minus the mock's own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock's timer jitter drops out. An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target. Each scenario runs at 1, 10, 16, 64, 100, 256, 500 streams; 10, 100, 500 back the SLO rows (about 2,200 scheduled requests each), the other levels about 300. Throughput is answered (2xx) requests and output tokens per second of each run, from its first scheduled send to its last answer (direct: the mock's fixed output per answer; through the gateway: the output tokens its traces settled); at a fixed open-loop rate it follows the offered load until a path saturates, then falls below it. n is the number of samples behind each percentile. CPU is the gateway process's user plus system time over the run's wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.",
+    "method": "An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed 100 ms time to first token and streams 500 tokens at 2000 tokens/s. Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (5 requests/s non-streaming, 1.25 requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included). Added TTFB is the gateway's own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path. The client-side columns are absolute percentiles of each path, never subtracted from each other; \"outside the provider\" is each request's TTFB minus the mock's own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock's timer jitter drops out. An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target. Each scenario runs at 1, 10, 16, 64, 100, 256, 500 streams; 10, 100, 500 back the SLO rows (about 2,200 scheduled requests each), the other levels about 300. Throughput is answered (2xx) requests and output tokens per second of each run, from its first scheduled send to its last answer (direct: the mock's fixed output per answer; through the gateway: the output tokens its traces settled); at a fixed open-loop rate it follows the offered load until a path saturates, then falls below it. n is the number of samples behind each percentile. CPU is the gateway process's user plus system time over the run's wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams, flagged as an understatement when the gateway could not keep up at 500 (a full core, fewer than 90% of the offered requests answered per second, or a drain more than 20% past the window). The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.",
     "mock": {
       "ttftMs": 100,
       "tokensPerSec": 2000,
@@ -117,7 +117,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 3.7,
         "gatewayRssMb": 111.2,
-        "rssGrowthMb": 2.2
+        "rssGrowthMb": 2.2,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -206,7 +207,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 4.9,
         "gatewayRssMb": 129.2,
-        "rssGrowthMb": 3.7
+        "rssGrowthMb": 3.7,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -295,7 +297,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 25.3,
         "gatewayRssMb": 142.6,
-        "rssGrowthMb": 31.4
+        "rssGrowthMb": 31.4,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -384,7 +387,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 26.7,
         "gatewayRssMb": 160.8,
-        "rssGrowthMb": 31.6
+        "rssGrowthMb": 31.6,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -473,7 +477,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 27.6,
         "gatewayRssMb": 142.8,
-        "rssGrowthMb": 0.2
+        "rssGrowthMb": 0.2,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -562,7 +567,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 31.6,
         "gatewayRssMb": 162.1,
-        "rssGrowthMb": 1.3
+        "rssGrowthMb": 1.3,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -651,7 +657,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 60.2,
         "gatewayRssMb": 151.7,
-        "rssGrowthMb": 9
+        "rssGrowthMb": 9,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -740,7 +747,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 59,
         "gatewayRssMb": 167.2,
-        "rssGrowthMb": 5.5
+        "rssGrowthMb": 5.5,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -829,7 +837,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 61.5,
         "gatewayRssMb": 155.7,
-        "rssGrowthMb": 5.7
+        "rssGrowthMb": 5.7,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -918,7 +927,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 63.6,
         "gatewayRssMb": 171.2,
-        "rssGrowthMb": 16.9
+        "rssGrowthMb": 16.9,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -1007,7 +1017,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 80.7,
         "gatewayRssMb": 228,
-        "rssGrowthMb": 74
+        "rssGrowthMb": 74,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -1096,7 +1107,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 78.3,
         "gatewayRssMb": 280.9,
-        "rssGrowthMb": 109.7
+        "rssGrowthMb": 109.7,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -1185,7 +1197,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 94,
         "gatewayRssMb": 254.3,
-        "rssGrowthMb": 125.6
+        "rssGrowthMb": 125.6,
+        "saturated": false
       },
       {
         "scenario": "non-streaming",
@@ -1274,7 +1287,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 106.9,
         "gatewayRssMb": 316.3,
-        "rssGrowthMb": 166.6
+        "rssGrowthMb": 166.6,
+        "saturated": true
       },
       {
         "scenario": "streaming-500",
@@ -1363,7 +1377,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 4.6,
         "gatewayRssMb": 138.2,
-        "rssGrowthMb": 0.1
+        "rssGrowthMb": 0.1,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1452,7 +1467,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 5.4,
         "gatewayRssMb": 122.3,
-        "rssGrowthMb": 1.8
+        "rssGrowthMb": 1.8,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1541,7 +1557,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 15.9,
         "gatewayRssMb": 117,
-        "rssGrowthMb": 47.8
+        "rssGrowthMb": 47.8,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1630,7 +1647,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 17.5,
         "gatewayRssMb": 119.5,
-        "rssGrowthMb": 74.4
+        "rssGrowthMb": 74.4,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1719,7 +1737,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 21.9,
         "gatewayRssMb": 111.4,
-        "rssGrowthMb": 11.9
+        "rssGrowthMb": 11.9,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1808,7 +1827,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 23.4,
         "gatewayRssMb": 119.2,
-        "rssGrowthMb": 0.7
+        "rssGrowthMb": 0.7,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1897,7 +1917,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 52.4,
         "gatewayRssMb": 115.7,
-        "rssGrowthMb": 4.7
+        "rssGrowthMb": 4.7,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -1986,7 +2007,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 57.6,
         "gatewayRssMb": 122.6,
-        "rssGrowthMb": 3.4
+        "rssGrowthMb": 3.4,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -2075,7 +2097,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 64.2,
         "gatewayRssMb": 120,
-        "rssGrowthMb": 4.3
+        "rssGrowthMb": 4.3,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -2164,7 +2187,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 63.6,
         "gatewayRssMb": 139.3,
-        "rssGrowthMb": 17
+        "rssGrowthMb": 17,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -2253,7 +2277,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 77.1,
         "gatewayRssMb": 134.6,
-        "rssGrowthMb": 17.4
+        "rssGrowthMb": 17.4,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -2342,7 +2367,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 80,
         "gatewayRssMb": 153.3,
-        "rssGrowthMb": 13.9
+        "rssGrowthMb": 13.9,
+        "saturated": false
       },
       {
         "scenario": "streaming-500",
@@ -2431,7 +2457,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 109.3,
         "gatewayRssMb": 238.5,
-        "rssGrowthMb": 160
+        "rssGrowthMb": 160,
+        "saturated": true
       },
       {
         "scenario": "streaming-500",
@@ -2520,7 +2547,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 109.7,
         "gatewayRssMb": 236.6,
-        "rssGrowthMb": 145.2
+        "rssGrowthMb": 145.2,
+        "saturated": true
       },
       {
         "scenario": "body-150kb",
@@ -2609,7 +2637,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 5,
         "gatewayRssMb": 106.3,
-        "rssGrowthMb": 13
+        "rssGrowthMb": 13,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -2698,7 +2727,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 5,
         "gatewayRssMb": 114.7,
-        "rssGrowthMb": 13
+        "rssGrowthMb": 13,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -2787,7 +2817,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 20.2,
         "gatewayRssMb": 139.4,
-        "rssGrowthMb": 61
+        "rssGrowthMb": 61,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -2876,7 +2907,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 21.4,
         "gatewayRssMb": 149,
-        "rssGrowthMb": 104.1
+        "rssGrowthMb": 104.1,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -2965,7 +2997,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 29.4,
         "gatewayRssMb": 113.8,
-        "rssGrowthMb": 89.8
+        "rssGrowthMb": 89.8,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -3054,7 +3087,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 30.2,
         "gatewayRssMb": 123.9,
-        "rssGrowthMb": 43.4
+        "rssGrowthMb": 43.4,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -3143,7 +3177,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 57,
         "gatewayRssMb": 141.6,
-        "rssGrowthMb": 43.8
+        "rssGrowthMb": 43.8,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -3232,7 +3267,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 54,
         "gatewayRssMb": 145.3,
-        "rssGrowthMb": 36.3
+        "rssGrowthMb": 36.3,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -3321,7 +3357,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 63.8,
         "gatewayRssMb": 178.1,
-        "rssGrowthMb": 53
+        "rssGrowthMb": 53,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -3410,7 +3447,8 @@
         "addedTtfbMet": true,
         "gatewayCpuPct": 63.8,
         "gatewayRssMb": 183.5,
-        "rssGrowthMb": 90.3
+        "rssGrowthMb": 90.3,
+        "saturated": false
       },
       {
         "scenario": "body-150kb",
@@ -3499,7 +3537,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 116.9,
         "gatewayRssMb": 299.3,
-        "rssGrowthMb": 186.1
+        "rssGrowthMb": 186.1,
+        "saturated": true
       },
       {
         "scenario": "body-150kb",
@@ -3588,7 +3627,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 107.4,
         "gatewayRssMb": 267.4,
-        "rssGrowthMb": 116.8
+        "rssGrowthMb": 116.8,
+        "saturated": true
       },
       {
         "scenario": "body-150kb",
@@ -3677,7 +3717,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 110.6,
         "gatewayRssMb": 515.5,
-        "rssGrowthMb": 314.3
+        "rssGrowthMb": 314.3,
+        "saturated": true
       },
       {
         "scenario": "body-150kb",
@@ -3766,7 +3807,8 @@
         "addedTtfbMet": false,
         "gatewayCpuPct": 94.1,
         "gatewayRssMb": 562,
-        "rssGrowthMb": 410.1
+        "rssGrowthMb": 410.1,
+        "saturated": true
       }
     ],
     "slopes": [
@@ -3822,7 +3864,7 @@
         "to": 500,
         "cpuPctPer100Streams": 7.6,
         "rssMbPer100Streams": 80,
-        "saturated": false
+        "saturated": true
       }
     ]
   },

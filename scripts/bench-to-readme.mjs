@@ -39,6 +39,31 @@ function overheadTable(rows) {
   return out.join('\n');
 }
 
+const LOW_N = 200;
+const SLO_LEVELS = [10, 100, 500];
+
+/** Which of the four values of a row miss the added TTFB targets (under 5 ms p50, under 25 ms p99). */
+function missedMeasures(r) {
+  const which = (label, p) => {
+    const m = [p.p50 !== null && p.p50 >= 5 ? 'p50' : null, p.p99 !== null && p.p99 >= 25 ? 'p99' : null].filter(Boolean);
+    return m.length > 0 ? `${label} ${m.join(' and ')}` : null;
+  };
+  return [which('gateway-measured', r.addedTtfb), which('client-side', r.gateway.outsideProvider)].filter(Boolean).join(', ');
+}
+
+/** The rows that miss the added TTFB targets, generated from the results so the text cannot drift from them. */
+function missesNote(rows) {
+  const item = (r) => {
+    const why = [missedMeasures(r), r.saturated ? 'gateway saturated' : null, r.addedTtfb.n < LOW_N ? `n = ${num(r.addedTtfb.n)}` : null].filter(Boolean).join('; ');
+    return `${SCENARIOS[r.scenario] ?? r.scenario}, ${r.store} store, ${num(r.concurrency)} ${r.concurrency === 1 ? 'stream' : 'streams'} (${why})`;
+  };
+  const missed = rows.filter((r) => r.addedTtfbMet === false);
+  const list = (xs) => (xs.length > 0 ? xs.map(item).join('; ') : 'none');
+  const atSlo = missed.filter((r) => SLO_LEVELS.includes(r.concurrency));
+  const other = missed.filter((r) => !SLO_LEVELS.includes(r.concurrency));
+  return [`Rows that miss the added TTFB targets at the SLO levels (10, 100 and 500 streams): ${list(atSlo)}.`, ...(rows.some((r) => !SLO_LEVELS.includes(r.concurrency)) ? [`At the other levels: ${list(other)}.`] : [])].join(' ');
+}
+
 function overheadSection(o) {
   const main = [10, 100, 500];
   const lines = [
@@ -72,10 +97,13 @@ function overheadSection(o) {
     );
     for (const r of o.rows) {
       lines.push(
-        `| ${r.store} | ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${num(r.ratePerConnection, 2)} | ${num(r.durationS)} | ${num(r.requests.direct)} / ${num(r.requests.gateway)} | ${r.throughput ? `${num(r.throughput.direct.requestsPerS, 1)} / ${num(r.throughput.gateway.requestsPerS, 1)}` : 'n/a'} | ${r.throughput ? `${num(r.throughput.direct.outputTokensPerS)} / ${num(r.throughput.gateway.outputTokensPerS)}` : 'n/a'} | ${triple(r.addedTtfb)} | ${pair(r.direct.outsideProvider)} / ${pair(r.gateway.outsideProvider)} | ${triple(r.direct.ttfb)} | ${triple(r.gateway.ttfb)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.gatewayRssMb, 1)} MB | ${verdict(r.addedTtfbMet)} |`,
+        `| ${r.store} | ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)}${r.addedTtfb.n < LOW_N ? ' (low n)' : ''} | ${num(r.ratePerConnection, 2)} | ${num(r.durationS)} | ${num(r.requests.direct)} / ${num(r.requests.gateway)} | ${r.throughput ? `${num(r.throughput.direct.requestsPerS, 1)} / ${num(r.throughput.gateway.requestsPerS, 1)}` : 'n/a'} | ${r.throughput ? `${num(r.throughput.direct.outputTokensPerS)} / ${num(r.throughput.gateway.outputTokensPerS)}` : 'n/a'} | ${triple(r.addedTtfb)} | ${pair(r.direct.outsideProvider)} / ${pair(r.gateway.outsideProvider)} | ${triple(r.direct.ttfb)} | ${triple(r.gateway.ttfb)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.gatewayRssMb, 1)} MB | ${verdict(r.addedTtfbMet)} |`,
       );
     }
     lines.push('', '</details>', '');
+  }
+  if (o.rows.some((r) => r.addedTtfbMet !== undefined)) {
+    lines.push(missesNote(o.rows), '');
   }
   return lines.join('\n');
 }
