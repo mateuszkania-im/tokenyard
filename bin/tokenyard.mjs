@@ -1520,21 +1520,50 @@ var init_writer = __esm({
 });
 
 // src/guardrails/credential-echo.ts
+function maskedStart(text2, end, key) {
+  let i = end;
+  let marks = 0;
+  let ellipsis = false;
+  while (i > 0 && end - i < MAX_MASK && isMask(text2.charCodeAt(i - 1))) {
+    i--;
+    if (text2.charCodeAt(i) === 8230) ellipsis = true;
+    else marks++;
+  }
+  if (marks < 3 && !ellipsis) return -1;
+  const maskStart = i;
+  let start = maskStart;
+  const first3 = key.slice(0, 3);
+  for (let j = maskStart - 1; j >= 0 && maskStart - j <= key.length && isKeyChar(text2.charCodeAt(j)); j--) {
+    if (text2.startsWith(first3, j)) start = j;
+  }
+  return start;
+}
 function redactCredentialEcho(body, key) {
   if (key.length < MIN_KEY_LENGTH) return null;
   const text2 = body.toString("utf8");
-  const masked = new RegExp(`(?:${escapeRe(key.slice(0, 3))}[A-Za-z0-9_-]*)?${MASK}${escapeRe(key.slice(-4))}`, "g");
-  const out = text2.split(key).join(REDACTED).replace(masked, REDACTED);
+  const exact = text2.split(key).join(REDACTED);
+  const last4 = key.slice(-4);
+  let out = "";
+  let copied = 0;
+  for (let at = exact.indexOf(last4); at >= 0; at = exact.indexOf(last4, at + 1)) {
+    const start = maskedStart(exact, at, key);
+    if (start < 0) continue;
+    out += `${exact.slice(copied, Math.max(copied, start))}${REDACTED}`;
+    copied = at + last4.length;
+    at = copied - 1;
+  }
+  out += exact.slice(copied);
   return out === text2 ? null : Buffer.from(out, "utf8");
 }
-var MIN_KEY_LENGTH, MASK, REDACTED, escapeRe;
+var MIN_KEY_LENGTH, MAX_MASK, REDACTED, isMask, isKeyChar;
 var init_credential_echo = __esm({
   "src/guardrails/credential-echo.ts"() {
     "use strict";
     MIN_KEY_LENGTH = 16;
-    MASK = "(?:[*.\\u2022]{3,}|\\u2026)";
+    MAX_MASK = 64;
     REDACTED = "[redacted]";
-    escapeRe = (s2) => s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    isMask = (c) => c === 42 || c === 46 || c === 8226 || c === 8230;
+    isKeyChar = (c) => c >= 48 && c <= 57 || c >= 65 && c <= 90 || c >= 97 && c <= 122 || c === 95 || c === 45;
   }
 });
 
@@ -58857,13 +58886,12 @@ function readUpTo(s2, cap2) {
       s2.off("data", onData);
       s2.off("end", onEnd);
       s2.off("error", onEnd);
-      if (!ended) s2.pause();
       resolve5({ bytes: Buffer.concat(chunks), ended });
     };
     const onData = (c) => {
       chunks.push(c);
       n2 += c.length;
-      if (n2 > cap2) done(false);
+      if (n2 >= cap2) done(false);
     };
     const onEnd = () => done(true);
     s2.on("data", onData);
@@ -58871,21 +58899,18 @@ function readUpTo(s2, cap2) {
     s2.once("error", onEnd);
   });
 }
-async function* prepend(first2, rest) {
-  yield first2;
-  yield* rest;
-}
 async function withoutCredentialEcho(up, p, env, headers) {
   const key = p.credential === "passthrough" || up.status >= 200 && up.status < 300 ? void 0 : env[p.credential.env];
   if (!key) return up.body;
-  const head = await readUpTo(up.body, ERROR_BODY_SCAN_BYTES);
-  const redacted = redactCredentialEcho(head.bytes, key);
-  if (redacted !== null) {
-    if (head.ended) headers["content-length"] = String(redacted.length);
-    else delete headers["content-length"];
+  const head = await readUpTo(up.body, ERROR_BODY_CAP_BYTES + 2 * key.length + 128);
+  if (!head.ended) {
+    up.body.on("error", () => void 0);
+    up.body.destroy();
   }
-  const first2 = redacted ?? head.bytes;
-  return head.ended ? Readable2.from([first2]) : Readable2.from(prepend(first2, up.body));
+  let out = redactCredentialEcho(head.bytes, key) ?? head.bytes;
+  if (!head.ended || out.length > ERROR_BODY_CAP_BYTES) out = Buffer.concat([out.subarray(0, ERROR_BODY_CAP_BYTES), Buffer.from(TRUNCATED_MARKER)]);
+  headers["content-length"] = String(out.length);
+  return Readable2.from([out]);
 }
 function extractFeatures(surface, body) {
   if (surface === "anthropic-count-tokens") return extractCountTokensFeatures(body);
@@ -59364,7 +59389,7 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, ERROR_BODY_SCAN_BYTES, totalInput, isJson, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, ERROR_BODY_CAP_BYTES, TRUNCATED_MARKER, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -59413,7 +59438,8 @@ var init_handler = __esm({
       reason: d.block?.reason ?? null,
       chain: d.plan.chain.map((c) => c.provider)
     });
-    ERROR_BODY_SCAN_BYTES = 64 * 1024;
+    ERROR_BODY_CAP_BYTES = 64 * 1024;
+    TRUNCATED_MARKER = "\n[truncated by tokenyard]";
     totalInput = (u, surface) => u.input + u.cacheRead + (surface === "openai-responses" ? 0 : u.cacheWrite5m + u.cacheWrite1h);
     isJson = (b) => {
       try {
@@ -79298,8 +79324,8 @@ var require_linked_list = __commonJS({
           value
         };
       }
-      add(value, prepend2 = false) {
-        return prepend2 ? this.unshift(value) : this.push(value);
+      add(value, prepend = false) {
+        return prepend ? this.unshift(value) : this.push(value);
       }
       shift() {
         if (this.#head === void 0)

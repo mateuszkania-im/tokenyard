@@ -310,10 +310,11 @@ function providerCredential(p: ProviderSpec, env: NodeJS.ProcessEnv): { header: 
   return p.format === 'anthropic' ? { header: 'x-api-key', value } : { header: 'authorization', value: `Bearer ${value}` };
 }
 
-/** Error bodies up to this size are searched for an echo of the provider key (B2); a longer one passes beyond it unchanged. */
-const ERROR_BODY_SCAN_BYTES = 64 * 1024;
+/** At most this much of a non-2xx body reaches the client in API mode, all of it redacted (B2, S25-3). */
+const ERROR_BODY_CAP_BYTES = 64 * 1024;
+const TRUNCATED_MARKER = '\n[truncated by tokenyard]';
 
-/** The first `cap` bytes of `s` (or all of it, `ended`), leaving the rest unread in `s`. */
+/** The first `cap` bytes of `s` or more (or all of it, `ended`); the rest of `s` is left unread. */
 function readUpTo(s: Readable, cap: number): Promise<{ bytes: Buffer; ended: boolean }> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -322,13 +323,12 @@ function readUpTo(s: Readable, cap: number): Promise<{ bytes: Buffer; ended: boo
       s.off('data', onData);
       s.off('end', onEnd);
       s.off('error', onEnd);
-      if (!ended) s.pause();
       resolve({ bytes: Buffer.concat(chunks), ended });
     };
     const onData = (c: Buffer): void => {
       chunks.push(c);
       n += c.length;
-      if (n > cap) done(false);
+      if (n >= cap) done(false);
     };
     const onEnd = (): void => done(true);
     s.on('data', onData);
@@ -337,27 +337,27 @@ function readUpTo(s: Readable, cap: number): Promise<{ bytes: Buffer; ended: boo
   });
 }
 
-async function* prepend(first: Buffer, rest: Readable): AsyncGenerator<Buffer> {
-  yield first;
-  yield* rest;
-}
-
 /**
  * The body to send the client. In API mode every client shares the operator's key, so a non-2xx answer that quotes it
- * (a 401 echoing the header, OpenAI's masked `sk-proj-****WXYZ`) has the key and its masked forms replaced within its
- * first 64 KiB, and `headers` gets the new content-length (B2). Everything else is the upstream stream, untouched.
+ * (a 401 echoing the header, OpenAI's masked `sk-proj-****WXYZ`) is cut to 64 KiB with a marker and has the key and its
+ * masked forms replaced in everything forwarded; `headers` gets the new content-length (B2, S25-3). Bytes past the cut
+ * are read so the redaction sees a key or masked form that straddles it whole, then dropped. Everything else is the
+ * upstream stream, untouched.
  */
 async function withoutCredentialEcho(up: UpstreamResponse, p: ProviderSpec, env: NodeJS.ProcessEnv, headers: Record<string, string | string[]>): Promise<Readable> {
   const key = p.credential === 'passthrough' || (up.status >= 200 && up.status < 300) ? undefined : env[p.credential.env];
   if (!key) return up.body;
-  const head = await readUpTo(up.body, ERROR_BODY_SCAN_BYTES);
-  const redacted = redactCredentialEcho(head.bytes, key);
-  if (redacted !== null) {
-    if (head.ended) headers['content-length'] = String(redacted.length);
-    else delete headers['content-length'];
+  // Margin past the cap: a key, or a masked form (look-back of at most the key's length, a mask of at most 64), that
+  // starts before the cut ends inside it.
+  const head = await readUpTo(up.body, ERROR_BODY_CAP_BYTES + 2 * key.length + 128);
+  if (!head.ended) {
+    up.body.on('error', () => undefined);
+    up.body.destroy();
   }
-  const first = redacted ?? head.bytes;
-  return head.ended ? Readable.from([first]) : Readable.from(prepend(first, up.body));
+  let out = redactCredentialEcho(head.bytes, key) ?? head.bytes;
+  if (!head.ended || out.length > ERROR_BODY_CAP_BYTES) out = Buffer.concat([out.subarray(0, ERROR_BODY_CAP_BYTES), Buffer.from(TRUNCATED_MARKER)]);
+  headers['content-length'] = String(out.length);
+  return Readable.from([out]);
 }
 
 function extractFeatures(surface: Surface, body: Buffer): ExtractedFeatures {

@@ -106,13 +106,4 @@ test('B2c/C6 passthrough keeps the account headers both ways (the client is the 
   expect(clientHeaders({ 'anthropic-organization-id': 'a' }, {}, 'api')['anthropic-organization-id']).toBeUndefined();
 });
 
-test('B2 an error body over 64 KiB has the key replaced in its first 64 KiB and the rest passed on, without a stale content-length', async () => {
-  const key = `sk-ant-test-CANARY-${rnd(24)}`;
-  const tail = 'x'.repeat(100_000);
-  const s = await setup(key, () => ({ status: 500, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'error', error: { type: 'api_error', message: `${key} ${tail}` } }) }));
-  const r = await send(s.url, { path: '/v1/messages', headers: auth, body: msg });
-  expect(r.status).toBe(500);
-  expect(r.body.toString()).not.toContain(key);
-  expect(r.body.toString()).toContain(tail);
-  expect(r.headers['content-length']).toBeUndefined();
-});
+// A body over 64 KiB is capped and redacted in full: test/security/s25-3-error-body-cap.test.ts.
