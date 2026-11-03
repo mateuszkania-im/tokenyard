@@ -38,7 +38,8 @@ test('C1 policy errors quoting hostile keys never start a workflow command line'
   writeFileSync(join(r.repo, 'policy/policy.yaml'), HEAD_POLICY.replace(/^providers:\n/m, `providers:\n${keys}`));
   expect(await runAction(r.env({ fork: true }), fakeGh().gh)).toBe(1);
   expect(r.stderr.some((l) => l.includes('set-output'))).toBe(true);
-  for (const l of r.stderr) expect(l).not.toMatch(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/);
+  const control = (c: number): boolean => c <= 0x1f || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029;
+  for (const l of r.stderr) expect([...l].filter((ch) => control(ch.codePointAt(0) ?? 0))).toEqual([]);
   expectOnlyStopPair(r);
 });
 
