@@ -309,18 +309,113 @@ var init_hmac = __esm({
   }
 });
 
+// src/report/sanitize.ts
+function stripControls(s2) {
+  let out = "";
+  for (const ch of s2) if (!isControl(ch.codePointAt(0) ?? 0)) out += ch;
+  return out;
+}
+function sanitizeHeaderValue(s2, max = MAX_LABEL_LENGTH) {
+  let out = "";
+  for (let i = 0; i < s2.length; i++) {
+    const c = s2.charCodeAt(i);
+    if (c >= 32 && c <= 126) out += s2[i];
+  }
+  const value = out.slice(0, max);
+  return { value, changed: value !== s2 };
+}
+function escapeMarkdown(s2, max = 256) {
+  let out = "";
+  for (const ch of s2.slice(0, max)) {
+    const code2 = ch.codePointAt(0) ?? 0;
+    if (code2 === 10 || code2 === 13 || code2 === 9 || code2 === 8232 || code2 === 8233) out += " ";
+    else if (isControl(code2)) continue;
+    else out += MD_ENTITY[ch] ?? ch;
+  }
+  return out.replace(/[0-9a-fA-F]{7,}/g, (run) => run.match(/.{1,6}/g)?.join(ZERO_WIDTH_SPACE) ?? run).replace(/([A-Za-z])-(?=\d)/g, `$1-${ZERO_WIDTH_SPACE}`);
+}
+var isControl, MAX_LABEL_LENGTH, ZERO_WIDTH_SPACE, MD_ENTITY;
+var init_sanitize = __esm({
+  "src/report/sanitize.ts"() {
+    "use strict";
+    isControl = (code2) => code2 <= 31 || code2 >= 127 && code2 <= 159;
+    MAX_LABEL_LENGTH = 128;
+    ZERO_WIDTH_SPACE = "\u200B";
+    MD_ENTITY = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "|": "&#124;",
+      "`": "&#96;",
+      "*": "&#42;",
+      _: "&#95;",
+      "[": "&#91;",
+      "]": "&#93;",
+      "~": "&#126;",
+      // GitHub still resolves @name and #1 written as character references, so these two get a zero-width space instead.
+      "@": `@${ZERO_WIDTH_SPACE}`,
+      "#": `#${ZERO_WIDTH_SPACE}`,
+      // GitHub decodes character references before its emoji, autolink and cross-reference filters, so entities alone do not
+      // stop :smile:, https:// or www.; ':' gets a zero-width space, '.' stays an entity, '\\' cannot escape what follows it.
+      ":": `:${ZERO_WIDTH_SPACE}`,
+      ".": "&#46;",
+      "\\": "&#92;",
+      // $...$ renders as math on GitHub, also with a zero-width space or entity inside and with \\$; the fullwidth dollar sign does not.
+      $: "\uFF04"
+    };
+  }
+});
+
+// src/surfaces/labels.ts
+function rateLimitHeadersLabel(h) {
+  const out = {};
+  for (const [k, v] of Object.entries(h)) if (RATE_LIMIT_HEADER.test(k)) out[k] = sanitizeHeaderValue(String(v)).value;
+  return out;
+}
+var TOOL_TYPE, SERVICE_TIERS, ERROR_CODE, MODEL_ID, RATE_LIMIT_HEADER, INVALID_TOOL_TYPE, OTHER, toolTypeLabel, serviceTierLabel, errorCodeLabel, modelShapeLabel;
+var init_labels = __esm({
+  "src/surfaces/labels.ts"() {
+    "use strict";
+    init_sanitize();
+    TOOL_TYPE = /^[a-z0-9_]{1,64}$/;
+    SERVICE_TIERS = /* @__PURE__ */ new Set(["auto", "default", "flex", "priority", "scale"]);
+    ERROR_CODE = /^[a-z0-9_.]{1,64}$/;
+    MODEL_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+    RATE_LIMIT_HEADER = /^anthropic-ratelimit-unified-[a-z0-9-]{1,64}$/;
+    INVALID_TOOL_TYPE = "(invalid)";
+    OTHER = "other";
+    toolTypeLabel = (type) => TOOL_TYPE.test(type) ? type : INVALID_TOOL_TYPE;
+    serviceTierLabel = (tier) => SERVICE_TIERS.has(tier) ? tier : OTHER;
+    errorCodeLabel = (code2) => ERROR_CODE.test(code2) ? code2 : "error";
+    modelShapeLabel = (model) => model === "" || MODEL_ID.test(model) ? model : OTHER;
+  }
+});
+
 // src/ledger/anonymize.ts
 function anonymizeRecord(r, p) {
   const opt = (kind, v) => v === null ? null : p(kind, v);
   const enumOr = (kind, v, known) => v === null || known.has(v) ? v : p(kind, v);
   const a = r.attribution;
+  const f = r.features;
+  const o = r.outcome;
+  const tenant = p("tenant", r.tenant);
+  const team = opt("team", r.team);
+  const keyId = p("key", r.keyId);
+  const instance = p("instance", r.instance);
   return {
-    ...r,
-    tenant: p("tenant", r.tenant),
-    team: opt("team", r.team),
-    keyId: p("key", r.keyId),
-    client: { ...r.client, version: null },
-    instance: p("instance", r.instance),
+    v: r.v,
+    kind: r.kind,
+    id: r.id,
+    ts: r.ts,
+    instance,
+    seq: r.seq,
+    tenant,
+    team,
+    keyId,
+    traffic: r.traffic,
+    billing: r.billing,
+    surface: r.surface,
+    client: { agent: r.client.agent, version: null },
     attribution: {
       session: opt("session", a.session),
       agent: opt("agent", a.agent),
@@ -334,8 +429,75 @@ function anonymizeRecord(r, p) {
       feature: opt("feature", a.feature),
       ...a.sanitized ? { sanitized: true } : {}
     },
-    features: { ...r.features, prefixHash: opt("prefix", r.features.prefixHash) },
-    guardrail: { hits: r.guardrail.hits.map((h) => ({ ...h, valueHmac: p("valueHmac", h.valueHmac) })) }
+    features: {
+      model: modelShapeLabel(f.model),
+      stream: f.stream,
+      inputTokensBound: f.inputTokensBound,
+      boundKind: f.boundKind,
+      maxOutputTokens: f.maxOutputTokens,
+      serverTools: f.serverTools.map((t) => ({ type: toolTypeLabel(t.type), maxUses: t.maxUses })),
+      toolCount: f.toolCount,
+      thinking: f.thinking,
+      bodyBytes: f.bodyBytes,
+      prefixHash: opt("prefix", f.prefixHash),
+      contextCompacted: f.contextCompacted,
+      ...f.fastMode ? { fastMode: true } : {},
+      ...f.compaction ? { compaction: true } : {},
+      ...f.serviceTier !== void 0 ? { serviceTier: serviceTierLabel(f.serviceTier) } : {}
+    },
+    guardrail: { hits: r.guardrail.hits.map((h) => ({ rule: h.rule, action: h.action, valueHmac: p("valueHmac", h.valueHmac), where: h.where })) },
+    policy: {
+      revision: r.policy.revision,
+      ...r.policy.candidateRevision !== void 0 ? { candidateRevision: r.policy.candidateRevision } : {},
+      ...r.policy.candidateError !== void 0 ? { candidateError: r.policy.candidateError } : {}
+    },
+    decision: decisionOf(r.decision),
+    ...r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision) } : {},
+    outcome: {
+      provider: o.provider,
+      upstreamModel: o.upstreamModel === null ? null : modelShapeLabel(o.upstreamModel),
+      attempts: o.attempts,
+      cacheColdRisk: o.cacheColdRisk,
+      status: o.status,
+      errorClass: o.errorClass === null ? null : errorCodeLabel(o.errorClass),
+      midStreamError: o.midStreamError === null ? null : errorCodeLabel(o.midStreamError),
+      ttfbMs: o.ttfbMs,
+      totalMs: o.totalMs,
+      addedTtfbMs: o.addedTtfbMs,
+      usage: o.usage === null ? null : { input: o.usage.input, output: o.usage.output, cacheRead: o.usage.cacheRead, cacheWrite5m: o.usage.cacheWrite5m, cacheWrite1h: o.usage.cacheWrite1h },
+      usageSource: o.usageSource,
+      ...o.outputEstimated !== void 0 ? { outputEstimated: o.outputEstimated } : {},
+      costMicroUsd: o.costMicroUsd,
+      costBasis: o.costBasis,
+      priceTable: o.priceTable,
+      ...o.fast ? { fast: true } : {},
+      ...o.serviceTier !== void 0 ? { serviceTier: serviceTierLabel(o.serviceTier) } : {},
+      ...o.modifiers ? { modifiers: [...o.modifiers] } : {},
+      ...o.serverToolUses ? { serverToolUses: { ...o.serverToolUses } } : {},
+      aborted: o.aborted,
+      settledBy: o.settledBy,
+      overrun: o.overrun,
+      ...o.settledAtEstimate ? { settledAtEstimate: true } : {},
+      ...o.chargedMicroUsd !== void 0 ? { chargedMicroUsd: o.chargedMicroUsd } : {},
+      ...o.boundExceeded ? { boundExceeded: true } : {},
+      ...o.rateLimitHeaders ? { rateLimitHeaders: rateLimitHeadersLabel(o.rateLimitHeaders) } : {}
+    }
+  };
+}
+function decisionOf(d) {
+  return {
+    route: d.route,
+    action: d.action,
+    reason: d.reason,
+    chain: [...d.chain],
+    reservedMicroUsd: d.reservedMicroUsd,
+    boundAssumed: d.boundAssumed,
+    taintUnchecked: d.taintUnchecked,
+    audit: d.audit.map((x) => ({ name: x.name, wouldFail: x.wouldFail })),
+    ...d.storeDown ? { storeDown: true } : {},
+    ...d.preDecision ? { preDecision: true } : {},
+    ...d.admitOffsetMs !== void 0 ? { admitOffsetMs: d.admitOffsetMs } : {},
+    ...d.admitSeq !== void 0 ? { admitSeq: d.admitSeq } : {}
   };
 }
 function saltedPseudonyms(salt) {
@@ -351,6 +513,7 @@ var init_anonymize = __esm({
   "src/ledger/anonymize.ts"() {
     "use strict";
     init_hmac();
+    init_labels();
     HEX_KINDS = /* @__PURE__ */ new Set(["prefix", "session", "agent", "promptId", "valueHmac"]);
     REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
     AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
@@ -539,63 +702,6 @@ var init_export = __esm({
     DATE_DIR = /^\d{4}-\d{2}-\d{2}$/;
     FILE_NAME = /^(\d{2})\.(.+)\.ndjson(\.gz)?$/;
     hourLabel = (ms) => new Date(ms).toISOString().slice(0, 13);
-  }
-});
-
-// src/report/sanitize.ts
-function stripControls(s2) {
-  let out = "";
-  for (const ch of s2) if (!isControl(ch.codePointAt(0) ?? 0)) out += ch;
-  return out;
-}
-function sanitizeHeaderValue(s2, max = MAX_LABEL_LENGTH) {
-  let out = "";
-  for (let i = 0; i < s2.length; i++) {
-    const c = s2.charCodeAt(i);
-    if (c >= 32 && c <= 126) out += s2[i];
-  }
-  const value = out.slice(0, max);
-  return { value, changed: value !== s2 };
-}
-function escapeMarkdown(s2, max = 256) {
-  let out = "";
-  for (const ch of s2.slice(0, max)) {
-    const code2 = ch.codePointAt(0) ?? 0;
-    if (code2 === 10 || code2 === 13 || code2 === 9 || code2 === 8232 || code2 === 8233) out += " ";
-    else if (isControl(code2)) continue;
-    else out += MD_ENTITY[ch] ?? ch;
-  }
-  return out.replace(/[0-9a-fA-F]{7,}/g, (run) => run.match(/.{1,6}/g)?.join(ZERO_WIDTH_SPACE) ?? run).replace(/([A-Za-z])-(?=\d)/g, `$1-${ZERO_WIDTH_SPACE}`);
-}
-var isControl, MAX_LABEL_LENGTH, ZERO_WIDTH_SPACE, MD_ENTITY;
-var init_sanitize = __esm({
-  "src/report/sanitize.ts"() {
-    "use strict";
-    isControl = (code2) => code2 <= 31 || code2 >= 127 && code2 <= 159;
-    MAX_LABEL_LENGTH = 128;
-    ZERO_WIDTH_SPACE = "\u200B";
-    MD_ENTITY = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      "|": "&#124;",
-      "`": "&#96;",
-      "*": "&#42;",
-      _: "&#95;",
-      "[": "&#91;",
-      "]": "&#93;",
-      "~": "&#126;",
-      // GitHub still resolves @name and #1 written as character references, so these two get a zero-width space instead.
-      "@": `@${ZERO_WIDTH_SPACE}`,
-      "#": `#${ZERO_WIDTH_SPACE}`,
-      // GitHub decodes character references before its emoji, autolink and cross-reference filters, so entities alone do not
-      // stop :smile:, https:// or www.; ':' gets a zero-width space, '.' stays an entity, '\\' cannot escape what follows it.
-      ":": `:${ZERO_WIDTH_SPACE}`,
-      ".": "&#46;",
-      "\\": "&#92;",
-      // $...$ renders as math on GitHub, also with a zero-width space or entity inside and with \\$; the fullwidth dollar sign does not.
-      $: "\uFF04"
-    };
   }
 });
 
@@ -30355,7 +30461,7 @@ function decide(policy2, f) {
   const tier = f.serviceTier;
   if (tier !== void 0 && tier !== "auto") {
     const m = known === null ? null : lookupModel(t, known)?.price;
-    if (!m || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: "unpriced" };
+    if (!m || tier === "other" || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: "unpriced" };
   }
   const levels = budgetLevels(policy2, f);
   if (known === null) {
@@ -31153,7 +31259,7 @@ function extractAnthropicFeatures(body) {
     if (!isObj4(t) || t.type === void 0 || t.type === "custom") continue;
     const type = typeof t.type === "string" ? t.type : String(t.type);
     if (isClientTool(type)) continue;
-    serverTools.push({ type, maxUses: typeof t.max_uses === "number" ? t.max_uses : null });
+    serverTools.push({ type: toolTypeLabel(type), maxUses: typeof t.max_uses === "number" ? t.max_uses : null });
   }
   const mcp = parsed.mcp_servers;
   if (mcp !== void 0 && mcp !== null && !(Array.isArray(mcp) && mcp.length === 0)) serverTools.push({ type: "mcp_servers", maxUses: null });
@@ -31266,6 +31372,7 @@ var init_anthropic_messages = __esm({
   "src/surfaces/anthropic-messages.ts"() {
     "use strict";
     init_json_ranges();
+    init_labels();
     isObj4 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     CLIENT_TOOL_PREFIXES = ["memory_", "bash_", "text_editor_", "computer_", "browser_toolset_"];
     isClientTool = (type) => CLIENT_TOOL_PREFIXES.some((p) => type.startsWith(p));
@@ -31375,7 +31482,7 @@ function collectServerTools(tools, maxUses, out, depth, seen) {
       collectServerTools(t.tools, maxUses, out, depth + 1, seen);
       continue;
     }
-    out.push({ type, maxUses });
+    out.push({ type: toolTypeLabel(type), maxUses });
   }
 }
 function hasExpandingField2(parsed) {
@@ -31444,7 +31551,7 @@ function extractResponsesFeatures(body) {
     blockTypes: [...types],
     expandsServerSide: seen.openaiClient || hasExpandingField2(parsed),
     fastMode: false,
-    ...parsed.service_tier === void 0 || parsed.service_tier === null || parsed.service_tier === "default" ? {} : { serviceTier: String(parsed.service_tier) },
+    ...parsed.service_tier === void 0 || parsed.service_tier === null || parsed.service_tier === "default" ? {} : { serviceTier: typeof parsed.service_tier === "string" ? serviceTierLabel(parsed.service_tier) : "other" },
     parseError: false,
     ...turnRanges2(body, parsed.input),
     ...hasAmbiguousKeys2(body) ? { ambiguousKeys: true } : {}
@@ -31455,6 +31562,7 @@ var init_openai_responses = __esm({
   "src/surfaces/openai-responses.ts"() {
     "use strict";
     init_json_ranges();
+    init_labels();
     isObj5 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     USER_TOOL_TYPES = /* @__PURE__ */ new Set(["function", "custom"]);
     OPENAI_CLIENT_TOOL_TYPES = /* @__PURE__ */ new Set(["local_shell", "shell", "apply_patch"]);
@@ -58477,16 +58585,24 @@ var init_paths = __esm({
 // src/edge/trace-record.ts
 function parseClient(userAgent) {
   const ua = userAgent ?? "";
+  const version2 = (v) => v === void 0 ? null : sanitizeHeaderValue(v).value || null;
   const claude = /^claude-cli\/([^\s;()]+)/i.exec(ua);
-  if (claude) return { agent: "claude-code", version: claude[1] ?? null };
+  if (claude) return { agent: "claude-code", version: version2(claude[1]) };
   const codex = /^codex[\w-]*\/([^\s;()]+)/i.exec(ua);
-  if (codex) return { agent: "codex", version: codex[1] ?? null };
+  if (codex) return { agent: "codex", version: version2(codex[1]) };
   return { agent: "other", version: null };
 }
-function buildTraceRecord(o, salt) {
+function tracedModel(p, model) {
+  if (!model) return "";
+  if (lookupModel(p.prices, model) !== null) return model;
+  const listed = modelShapeLabel(model) === model && p.routes.some((r) => r.allowModels !== null && r.allowModels.some((re2) => globTest(re2, model)));
+  return listed ? model : OTHER;
+}
+function buildTraceRecord(o, salt, names) {
   const hmac = (v) => v === null ? null : pseudonym(salt, v);
   const u = o.usage;
   const a = o.attribution;
+  const rateLimit2 = rateLimitHeadersLabel(o.rateLimitHeaders ?? {});
   return {
     v: 1,
     kind: "request",
@@ -58513,7 +58629,7 @@ function buildTraceRecord(o, salt) {
       ...a.sanitized ? { sanitized: true } : {}
     },
     features: {
-      model: o.features.model ?? u?.responseModel ?? "",
+      model: tracedModel(names, o.features.model ?? u?.responseModel),
       stream: o.features.stream,
       // Exits before the decision have no bound: the body size stands in (at most one token per byte, spec 7.3).
       inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
@@ -58560,12 +58676,12 @@ function buildTraceRecord(o, salt) {
     } : {},
     outcome: {
       provider: o.provider,
-      upstreamModel: o.provider === null ? null : u?.responseModel ?? o.features.model,
+      upstreamModel: o.provider === null ? null : tracedModel(names, u?.responseModel ?? o.features.model),
       attempts: o.attempts ?? 1,
       cacheColdRisk: o.cacheColdRisk ?? false,
       status: o.status,
       errorClass: o.errorClass ?? null,
-      midStreamError: u?.midStreamError ?? null,
+      midStreamError: u?.midStreamError ? errorCodeLabel(u.midStreamError) : null,
       ttfbMs: o.ttfbMs,
       totalMs: o.totalMs,
       addedTtfbMs: o.addedTtfbMs,
@@ -58576,7 +58692,7 @@ function buildTraceRecord(o, salt) {
       costBasis: o.costBasis,
       priceTable: o.priceTable,
       ...u?.usage && (u.fast === true || o.features.fastMode) ? { fast: true } : {},
-      ...u?.usage && billedServiceTier(u, o.features) !== void 0 ? { serviceTier: billedServiceTier(u, o.features) } : {},
+      ...u?.usage && billedServiceTier(u, o.features) !== void 0 ? { serviceTier: serviceTierLabel(billedServiceTier(u, o.features)) } : {},
       ...o.costModifiers && o.costModifiers.length > 0 ? { modifiers: [...o.costModifiers] } : {},
       ...u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {},
       aborted: o.aborted,
@@ -58585,7 +58701,7 @@ function buildTraceRecord(o, salt) {
       ...o.settledAtEstimate ? { settledAtEstimate: true } : {},
       ...o.boundExceeded ? { boundExceeded: true } : {},
       ...o.chargedMicroUsd !== void 0 ? { chargedMicroUsd: o.chargedMicroUsd } : {},
-      ...o.rateLimitHeaders && Object.keys(o.rateLimitHeaders).length > 0 ? { rateLimitHeaders: o.rateLimitHeaders } : {}
+      ...Object.keys(rateLimit2).length > 0 ? { rateLimitHeaders: rateLimit2 } : {}
     }
   };
 }
@@ -58594,6 +58710,10 @@ var init_trace_record = __esm({
     "use strict";
     init_hmac();
     init_cost();
+    init_prices();
+    init_match();
+    init_sanitize();
+    init_labels();
   }
 });
 
@@ -58795,7 +58915,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   try {
     deps.onSettled?.(o);
     if (deps.traces || deps.metrics || deps.spans) {
-      const rec = buildTraceRecord(o, deps.traceSalt ?? "");
+      const rec = buildTraceRecord(o, deps.traceSalt ?? "", policy2);
       emitTelemetry(deps, policy2, rec, o.attemptLog);
       deps.traces?.write(rec);
     }
@@ -59135,6 +59255,7 @@ function createHandler(deps) {
             now = deps.clock();
           } catch {
           }
+          const current = deps.policy();
           const rec = buildTraceRecord(
             {
               ...known,
@@ -59151,9 +59272,10 @@ function createHandler(deps) {
               chargedMicroUsd: held.est,
               overrun: false
             },
-            deps.traceSalt ?? ""
+            deps.traceSalt ?? "",
+            current
           );
-          emitTelemetry(deps, deps.policy(), rec);
+          emitTelemetry(deps, current, rec);
           deps.traces?.write(rec);
         }).catch(() => void 0);
       }

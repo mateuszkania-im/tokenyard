@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { arrayElementRanges, topLevelValueRanges } from './json-ranges.js';
+import { serviceTierLabel, toolTypeLabel } from './labels.js';
 import type { ExtractedFeatures } from './types.js';
 
 type Obj = Record<string, unknown>;
@@ -85,7 +86,8 @@ function collectServerTools(tools: unknown[], maxUses: number | null, out: Extra
       collectServerTools(t.tools, maxUses, out, depth + 1, seen);
       continue;
     }
-    out.push({ type, maxUses });
+    // The type reaches traces and spans: free text in it is replaced, never copied (B1).
+    out.push({ type: toolTypeLabel(type), maxUses });
   }
 }
 
@@ -179,7 +181,7 @@ export function extractResponsesFeatures(body: Buffer): ExtractedFeatures {
     blockTypes: [...types],
     expandsServerSide: seen.openaiClient || hasExpandingField(parsed),
     fastMode: false,
-    ...(parsed.service_tier === undefined || parsed.service_tier === null || parsed.service_tier === 'default' ? {} : { serviceTier: String(parsed.service_tier) }),
+    ...(parsed.service_tier === undefined || parsed.service_tier === null || parsed.service_tier === 'default' ? {} : { serviceTier: typeof parsed.service_tier === 'string' ? serviceTierLabel(parsed.service_tier) : 'other' }),
     parseError: false,
     ...turnRanges(body, parsed.input),
     ...(hasAmbiguousKeys(body) ? { ambiguousKeys: true as const } : {}),

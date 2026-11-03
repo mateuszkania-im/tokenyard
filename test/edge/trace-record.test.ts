@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import { buildTraceRecord } from '../../src/edge/trace-record.js';
 import type { RequestOutcome } from '../../src/edge/handler.js';
+import type { PriceTable } from '../../src/pricing/prices.js';
+
+/** Only lookupModel reads the table here: model `m` is priced. */
+const PRICES = { version: 't', models: { m: {} }, modifiers: {}, serverTools: {} } as unknown as PriceTable;
 
 const outcome = (o: Partial<RequestOutcome> = {}): RequestOutcome => ({
   id: 'r1',
@@ -26,7 +30,7 @@ const outcome = (o: Partial<RequestOutcome> = {}): RequestOutcome => ({
 });
 
 test('builds the spec 9.1 record: key identity in clear, traffic from key kind, request start as ts', () => {
-  const r = buildTraceRecord(outcome(), 'salt');
+  const r = buildTraceRecord(outcome(), 'salt', { prices: PRICES, routes: [] });
   expect(r).toMatchObject({
     v: 1, kind: 'request', id: 'r1', ts: '2026-11-02T00:00:00.000Z', tenant: 't', team: null, keyId: 'key_1',
     traffic: 'product', billing: 'subscription', surface: 'anthropic-messages', client: { agent: 'codex', version: '0.9.1' },
@@ -40,12 +44,12 @@ test('builds the spec 9.1 record: key identity in clear, traffic from key kind, 
 
 test("flags a final usage whose output was estimated from streamed chars", () => {
   const u = outcome().usage!;
-  const r = buildTraceRecord(outcome({ usage: { ...u, outputEstimated: true } }), 'salt');
+  const r = buildTraceRecord(outcome({ usage: { ...u, outputEstimated: true } }), 'salt', { prices: PRICES, routes: [] });
   expect(r.outcome).toMatchObject({ usageSource: 'final', outputEstimated: true });
 });
 
 test('no usage is recorded as usageSource none with null usage and cost', () => {
-  const r = buildTraceRecord(outcome({ usage: null, costMicroUsd: null }), 'salt');
+  const r = buildTraceRecord(outcome({ usage: null, costMicroUsd: null }), 'salt', { prices: PRICES, routes: [] });
   expect(r.outcome).toMatchObject({ usage: null, usageSource: 'none', costMicroUsd: null });
 });
 
@@ -55,10 +59,11 @@ test('records what replay needs to reproduce the reservation and the cost: fast 
   const r = buildTraceRecord(
     outcome({ features: { ...base.features, fastMode: true }, usage: { ...u, fast: true, serverToolUses: { web_search: 2 } }, costModifiers: ['inferenceGeoUs'] }),
     'salt',
+    { prices: PRICES, routes: [] },
   );
   expect(r.features.fastMode).toBe(true);
   expect(r.outcome).toMatchObject({ fast: true, modifiers: ['inferenceGeoUs'], serverToolUses: { web_search: 2 } });
-  const plain = buildTraceRecord(outcome({ costModifiers: [] }), 'salt');
+  const plain = buildTraceRecord(outcome({ costModifiers: [] }), 'salt', { prices: PRICES, routes: [] });
   expect(plain.features.fastMode).toBeUndefined();
   expect(plain.outcome.fast).toBeUndefined();
   expect(plain.outcome.modifiers).toBeUndefined();
@@ -66,14 +71,14 @@ test('records what replay needs to reproduce the reservation and the cost: fast 
 });
 
 test('a request that ended before a decision is marked preDecision, so replay skips it', () => {
-  expect(buildTraceRecord(outcome({ route: null, decision: { action: 'block', reason: 'body-too-large' } }), 'salt').decision.preDecision).toBe(true);
-  expect(buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt').decision.preDecision).toBeUndefined();
+  expect(buildTraceRecord(outcome({ route: null, decision: { action: 'block', reason: 'body-too-large' } }), 'salt', { prices: PRICES, routes: [] }).decision.preDecision).toBe(true);
+  expect(buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt', { prices: PRICES, routes: [] }).decision.preDecision).toBeUndefined();
 });
 
 test('records when admit was called, so replay admits in the order the store saw', () => {
-  const r = buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' }, admitAt: { offsetMs: 12, seq: 7 } }), 'salt');
+  const r = buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' }, admitAt: { offsetMs: 12, seq: 7 } }), 'salt', { prices: PRICES, routes: [] });
   expect(r.decision).toMatchObject({ admitOffsetMs: 12, admitSeq: 7 });
-  const none = buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt');
+  const none = buildTraceRecord(outcome({ inputBound: { tokens: 10, kind: 'bytes' } }), 'salt', { prices: PRICES, routes: [] });
   expect(none.decision.admitOffsetMs).toBeUndefined();
   expect(none.decision.admitSeq).toBeUndefined();
 });

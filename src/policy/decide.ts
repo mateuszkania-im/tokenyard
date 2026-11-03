@@ -248,7 +248,8 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const tier = f.serviceTier;
   if (tier !== undefined && tier !== 'auto') {
     const m = known === null ? null : lookupModel(t, known)?.price;
-    if (!m || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: 'unpriced' };
+    // `other` stands for any tier outside the known ones (B1) and is never priced, whatever the table lists.
+    if (!m || tier === 'other' || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: 'unpriced' };
   }
   const levels = budgetLevels(policy, f);
 

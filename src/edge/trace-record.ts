@@ -1,28 +1,55 @@
 // The one place a trace record (spec 9.1) is built from what a request knew at its end.
 import { pseudonym } from '../guardrails/hmac.js';
 import { billedServiceTier } from '../pricing/cost.js';
+import { lookupModel } from '../pricing/prices.js';
+import { globTest } from '../policy/match.js';
+import type { CompiledPolicy } from '../policy/types.js';
 import type { TraceRecord } from '../ledger/record.js';
+import { sanitizeHeaderValue } from '../report/sanitize.js';
+import { errorCodeLabel, modelShapeLabel, OTHER, rateLimitHeadersLabel, serviceTierLabel } from '../surfaces/labels.js';
 import type { RequestOutcome } from './handler.js';
 
 /** Client agent and version from the User-Agent header, best effort (spec 9.1). */
 export function parseClient(userAgent: string | undefined): RequestOutcome['client'] {
   const ua = userAgent ?? '';
+  // The version is client free text: printable ASCII, at most 128 characters, like every header label (B1).
+  const version = (v: string | undefined): string | null => (v === undefined ? null : sanitizeHeaderValue(v).value || null);
   const claude = /^claude-cli\/([^\s;()]+)/i.exec(ua);
-  if (claude) return { agent: 'claude-code', version: claude[1] ?? null };
+  if (claude) return { agent: 'claude-code', version: version(claude[1]) };
   const codex = /^codex[\w-]*\/([^\s;()]+)/i.exec(ua);
-  if (codex) return { agent: 'codex', version: codex[1] ?? null };
+  if (codex) return { agent: 'codex', version: version(codex[1]) };
   return { agent: 'other', version: null };
 }
+
+/** The policy parts that say which model names a trace may hold. */
+export type ModelNames = Pick<CompiledPolicy, 'prices' | 'routes'>;
+
+/**
+ * The model as traced (B1), so a secret or prose pasted into `model` never reaches a trace, span or export: kept when
+ * the price table prices it, or when it has the shape of a model id (lowercase, at most 64 characters) and an explicit
+ * `allowModels` pattern of a route matches it (an operator-listed name the price table does not know yet, which replay
+ * needs to reproduce the route's allowlist); any other name is `other`. No model stays the empty string.
+ */
+export function tracedModel(p: ModelNames, model: string | null | undefined): string {
+  if (!model) return '';
+  if (lookupModel(p.prices, model) !== null) return model;
+  const listed = modelShapeLabel(model) === model && p.routes.some((r) => r.allowModels !== null && r.allowModels.some((re) => globTest(re, model)));
+  return listed ? model : OTHER;
+}
+
+
 
 /**
  * Pseudonymises session, agent, parent agent and prompt id with `salt`; request class, agent type, repo, branch,
  * ticket and feature are short labels chosen by tooling, not content, and stay in clear (they are what reports group by).
- * Nothing from the request body is copied: only counts, sizes and the model name.
+ * Nothing from the request body is copied: only counts, sizes, the model name as `tracedModel` bounds it,
+ * server tool types and the service tier, both bounded at extraction.
  */
-export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRecord, 'instance' | 'seq'> {
+export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNames): Omit<TraceRecord, 'instance' | 'seq'> {
   const hmac = (v: string | null): string | null => (v === null ? null : pseudonym(salt, v));
   const u = o.usage;
   const a = o.attribution;
+  const rateLimit = rateLimitHeadersLabel(o.rateLimitHeaders ?? {});
   return {
     v: 1,
     kind: 'request',
@@ -49,7 +76,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       ...(a.sanitized ? { sanitized: true as const } : {}),
     },
     features: {
-      model: o.features.model ?? u?.responseModel ?? '',
+      model: tracedModel(names, o.features.model ?? u?.responseModel),
       stream: o.features.stream,
       // Exits before the decision have no bound: the body size stands in (at most one token per byte, spec 7.3).
       inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
@@ -98,12 +125,12 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       : {}),
     outcome: {
       provider: o.provider,
-      upstreamModel: o.provider === null ? null : (u?.responseModel ?? o.features.model),
+      upstreamModel: o.provider === null ? null : tracedModel(names, u?.responseModel ?? o.features.model),
       attempts: o.attempts ?? 1,
       cacheColdRisk: o.cacheColdRisk ?? false,
       status: o.status,
       errorClass: o.errorClass ?? null,
-      midStreamError: u?.midStreamError ?? null,
+      midStreamError: u?.midStreamError ? errorCodeLabel(u.midStreamError) : null,
       ttfbMs: o.ttfbMs,
       totalMs: o.totalMs,
       addedTtfbMs: o.addedTtfbMs,
@@ -114,7 +141,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       costBasis: o.costBasis,
       priceTable: o.priceTable,
       ...(u?.usage && (u.fast === true || o.features.fastMode) ? { fast: true as const } : {}),
-      ...(u?.usage && billedServiceTier(u, o.features) !== undefined ? { serviceTier: billedServiceTier(u, o.features) as string } : {}),
+      ...(u?.usage && billedServiceTier(u, o.features) !== undefined ? { serviceTier: serviceTierLabel(billedServiceTier(u, o.features) as string) } : {}),
       ...(o.costModifiers && o.costModifiers.length > 0 ? { modifiers: [...o.costModifiers] } : {}),
       ...(u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {}),
       aborted: o.aborted,
@@ -123,7 +150,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       ...(o.settledAtEstimate ? { settledAtEstimate: true as const } : {}),
       ...(o.boundExceeded ? { boundExceeded: true as const } : {}),
       ...(o.chargedMicroUsd !== undefined ? { chargedMicroUsd: o.chargedMicroUsd } : {}),
-      ...(o.rateLimitHeaders && Object.keys(o.rateLimitHeaders).length > 0 ? { rateLimitHeaders: o.rateLimitHeaders } : {}),
+      ...(Object.keys(rateLimit).length > 0 ? { rateLimitHeaders: rateLimit } : {}),
     },
   };
 }

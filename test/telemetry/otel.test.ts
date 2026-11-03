@@ -2,6 +2,9 @@ import { InMemorySpanExporter } from '@opentelemetry/sdk-trace-base';
 import { expect, test } from 'vitest';
 import { buildTraceRecord } from '../../src/edge/trace-record.js';
 import type { RequestOutcome } from '../../src/edge/handler.js';
+import type { PriceTable } from '../../src/pricing/prices.js';
+
+const PRICES = { version: 't', models: { 'claude-sonnet-5-5': {} }, modifiers: {}, serverTools: {} } as unknown as PriceTable;
 import { createTracer, inputTokens } from '../../src/telemetry/otel.js';
 import { GEN_AI, TOKENYARD } from '../../src/telemetry/semconv.js';
 
@@ -36,7 +39,7 @@ test('gen_ai.usage.input_tokens = input + cache read + cache write', () => {
 test('one SERVER span per request and one CLIENT span per upstream attempt named "<operation> <model>"', async () => {
   const exporter = new InMemorySpanExporter();
   const sink = await createTracer(null, { exporter });
-  const rec = buildTraceRecord(outcome(), 'salt');
+  const rec = buildTraceRecord(outcome(), 'salt', { prices: PRICES, routes: [] });
   const t0 = Date.UTC(2026, 10, 2);
   sink.requestSpan(
     rec,
@@ -86,7 +89,7 @@ test('one SERVER span per request and one CLIENT span per upstream attempt named
 test('spans hold pseudonyms, never raw ids, repo paths, branch names or prompt text', async () => {
   const exporter = new InMemorySpanExporter();
   const sink = await createTracer(null, { exporter });
-  sink.requestSpan(buildTraceRecord(outcome(), 'salt'));
+  sink.requestSpan(buildTraceRecord(outcome(), 'salt', { prices: PRICES, routes: [] }));
   const finished = exporter.getFinishedSpans();
   await sink.shutdown();
   const dump = JSON.stringify(finished.map((s) => ({ n: s.name, a: s.attributes, e: s.events })));
@@ -100,23 +103,22 @@ test('spans hold pseudonyms, never raw ids, repo paths, branch names or prompt t
 test('a request that never reached a provider gets a SERVER span only', async () => {
   const exporter = new InMemorySpanExporter();
   const sink = await createTracer(null, { exporter });
-  sink.requestSpan(buildTraceRecord(outcome({ provider: null, usage: null, status: 429, decision: { action: 'block', reason: 'budget' }, errorClass: 'rate_limit_error' }), 'salt'));
+  sink.requestSpan(buildTraceRecord(outcome({ provider: null, usage: null, status: 429, decision: { action: 'block', reason: 'budget' }, errorClass: 'rate_limit_error' }), 'salt', { prices: PRICES, routes: [] }));
   const spans = exporter.getFinishedSpans(); // shutdown() clears the in-memory exporter
   await sink.shutdown();
   expect(spans.map((s) => s.kind)).toEqual([1]);
   expect(spans[0]?.attributes[TOKENYARD.decision]).toBe('block');
 });
 
-test('span names use the priced model or "other"; the request model attribute keeps the sanitised client value', async () => {
+test('span names use the priced model or "other"; an unpriced request model is "other" in the attribute too (B1)', async () => {
   const exporter = new InMemorySpanExporter();
   const sink = await createTracer(null, { exporter });
-  const rec = buildTraceRecord(outcome({ features: { ...outcome().features, model: 'evil\nmodel-' + 'x'.repeat(300) } }), 'salt');
+  const rec = buildTraceRecord(outcome({ features: { ...outcome().features, model: 'evil\nmodel-' + 'x'.repeat(300) } }), 'salt', { prices: PRICES, routes: [] });
   sink.requestSpan(rec, undefined, 'other');
-  sink.requestSpan(buildTraceRecord(outcome(), 'salt'));
+  sink.requestSpan(buildTraceRecord(outcome(), 'salt', { prices: PRICES, routes: [] }));
   const clients = exporter.getFinishedSpans().filter((s) => s.kind === 2);
   expect(clients.map((c) => c.name)).toEqual(['chat other', 'chat other']);
   const attr = String(clients[0]?.attributes[GEN_AI.requestModel]);
-  expect(attr).toMatch(/^evilmodel-x+$/);
-  expect(attr.length).toBeLessThanOrEqual(128);
+  expect(attr).toBe('other');
   await sink.shutdown();
 });

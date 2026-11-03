@@ -471,7 +471,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   try {
     deps.onSettled?.(o);
     if (deps.traces || deps.metrics || deps.spans) {
-      const rec = buildTraceRecord(o, deps.traceSalt ?? '');
+      const rec = buildTraceRecord(o, deps.traceSalt ?? '', policy);
       emitTelemetry(deps, policy, rec, o.attemptLog);
       deps.traces?.write(rec);
     }
@@ -907,6 +907,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
             } catch {
               // the clock is what failed; the line still goes out
             }
+            const current = deps.policy();
             const rec = buildTraceRecord(
               {
                 ...known,
@@ -924,8 +925,9 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
                 overrun: false,
               },
               deps.traceSalt ?? '',
+              current,
             );
-            emitTelemetry(deps, deps.policy(), rec);
+            emitTelemetry(deps, current, rec);
             deps.traces?.write(rec);
           })
           .catch(() => undefined);

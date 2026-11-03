@@ -1,4 +1,5 @@
 import { pseudonym } from '../guardrails/hmac.js';
+import { errorCodeLabel, modelShapeLabel, rateLimitHeadersLabel, serviceTierLabel, toolTypeLabel } from '../surfaces/labels.js';
 import type { TraceRecord } from './record.js';
 
 export type PseudonymKind =
@@ -29,13 +30,29 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
   const enumOr = (kind: PseudonymKind, v: string | null, known: ReadonlySet<string>): string | null =>
     v === null || known.has(v) ? v : p(kind, v);
   const a = r.attribution;
+  const f = r.features;
+  const o = r.outcome;
+  // Every object is rebuilt field by field (B1): a key this code does not name never reaches an export, and free text a
+  // client or upstream chose (model, tool type, service tier, error code) is bounded again, for traces written before
+  // the gateway bounded it at ingest.
+  const tenant = p('tenant', r.tenant);
+  const team = opt('team', r.team);
+  const keyId = p('key', r.keyId);
+  const instance = p('instance', r.instance);
   return {
-    ...r,
-    tenant: p('tenant', r.tenant),
-    team: opt('team', r.team),
-    keyId: p('key', r.keyId),
-    client: { ...r.client, version: null },
-    instance: p('instance', r.instance),
+    v: r.v,
+    kind: r.kind,
+    id: r.id,
+    ts: r.ts,
+    instance,
+    seq: r.seq,
+    tenant,
+    team,
+    keyId,
+    traffic: r.traffic,
+    billing: r.billing,
+    surface: r.surface,
+    client: { agent: r.client.agent, version: null },
     attribution: {
       session: opt('session', a.session),
       agent: opt('agent', a.agent),
@@ -49,8 +66,76 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
       feature: opt('feature', a.feature),
       ...(a.sanitized ? { sanitized: true as const } : {}),
     },
-    features: { ...r.features, prefixHash: opt('prefix', r.features.prefixHash) },
-    guardrail: { hits: r.guardrail.hits.map((h) => ({ ...h, valueHmac: p('valueHmac', h.valueHmac) })) },
+    features: {
+      model: modelShapeLabel(f.model),
+      stream: f.stream,
+      inputTokensBound: f.inputTokensBound,
+      boundKind: f.boundKind,
+      maxOutputTokens: f.maxOutputTokens,
+      serverTools: f.serverTools.map((t) => ({ type: toolTypeLabel(t.type), maxUses: t.maxUses })),
+      toolCount: f.toolCount,
+      thinking: f.thinking,
+      bodyBytes: f.bodyBytes,
+      prefixHash: opt('prefix', f.prefixHash),
+      contextCompacted: f.contextCompacted,
+      ...(f.fastMode ? { fastMode: true as const } : {}),
+      ...(f.compaction ? { compaction: true as const } : {}),
+      ...(f.serviceTier !== undefined ? { serviceTier: serviceTierLabel(f.serviceTier) } : {}),
+    },
+    guardrail: { hits: r.guardrail.hits.map((h) => ({ rule: h.rule, action: h.action, valueHmac: p('valueHmac', h.valueHmac), where: h.where })) },
+    policy: {
+      revision: r.policy.revision,
+      ...(r.policy.candidateRevision !== undefined ? { candidateRevision: r.policy.candidateRevision } : {}),
+      ...(r.policy.candidateError !== undefined ? { candidateError: r.policy.candidateError } : {}),
+    },
+    decision: decisionOf(r.decision),
+    ...(r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision) } : {}),
+    outcome: {
+      provider: o.provider,
+      upstreamModel: o.upstreamModel === null ? null : modelShapeLabel(o.upstreamModel),
+      attempts: o.attempts,
+      cacheColdRisk: o.cacheColdRisk,
+      status: o.status,
+      errorClass: o.errorClass === null ? null : errorCodeLabel(o.errorClass),
+      midStreamError: o.midStreamError === null ? null : errorCodeLabel(o.midStreamError),
+      ttfbMs: o.ttfbMs,
+      totalMs: o.totalMs,
+      addedTtfbMs: o.addedTtfbMs,
+      usage: o.usage === null ? null : { input: o.usage.input, output: o.usage.output, cacheRead: o.usage.cacheRead, cacheWrite5m: o.usage.cacheWrite5m, cacheWrite1h: o.usage.cacheWrite1h },
+      usageSource: o.usageSource,
+      ...(o.outputEstimated !== undefined ? { outputEstimated: o.outputEstimated } : {}),
+      costMicroUsd: o.costMicroUsd,
+      costBasis: o.costBasis,
+      priceTable: o.priceTable,
+      ...(o.fast ? { fast: true as const } : {}),
+      ...(o.serviceTier !== undefined ? { serviceTier: serviceTierLabel(o.serviceTier) } : {}),
+      ...(o.modifiers ? { modifiers: [...o.modifiers] } : {}),
+      ...(o.serverToolUses ? { serverToolUses: { ...o.serverToolUses } } : {}),
+      aborted: o.aborted,
+      settledBy: o.settledBy,
+      overrun: o.overrun,
+      ...(o.settledAtEstimate ? { settledAtEstimate: true as const } : {}),
+      ...(o.chargedMicroUsd !== undefined ? { chargedMicroUsd: o.chargedMicroUsd } : {}),
+      ...(o.boundExceeded ? { boundExceeded: true as const } : {}),
+      ...(o.rateLimitHeaders ? { rateLimitHeaders: rateLimitHeadersLabel(o.rateLimitHeaders) } : {}),
+    },
+  };
+}
+
+function decisionOf(d: TraceRecord['decision']): TraceRecord['decision'] {
+  return {
+    route: d.route,
+    action: d.action,
+    reason: d.reason,
+    chain: [...d.chain],
+    reservedMicroUsd: d.reservedMicroUsd,
+    boundAssumed: d.boundAssumed,
+    taintUnchecked: d.taintUnchecked,
+    audit: d.audit.map((x) => ({ name: x.name, wouldFail: x.wouldFail })),
+    ...(d.storeDown ? { storeDown: true as const } : {}),
+    ...(d.preDecision ? { preDecision: true as const } : {}),
+    ...(d.admitOffsetMs !== undefined ? { admitOffsetMs: d.admitOffsetMs } : {}),
+    ...(d.admitSeq !== undefined ? { admitSeq: d.admitSeq } : {}),
   };
 }
 

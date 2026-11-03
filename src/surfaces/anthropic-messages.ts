@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { arrayElementRanges, QUOTE, topLevelValueRanges } from './json-ranges.js';
+import { toolTypeLabel } from './labels.js';
 import type { ExtractedFeatures } from './types.js';
 
 type Obj = Record<string, unknown>;
@@ -106,7 +107,8 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     if (!isObj(t) || t.type === undefined || t.type === 'custom') continue;
     const type = typeof t.type === 'string' ? t.type : String(t.type);
     if (isClientTool(type)) continue;
-    serverTools.push({ type, maxUses: typeof t.max_uses === 'number' ? t.max_uses : null });
+    // The type reaches traces and spans: free text in it is replaced, never copied (B1).
+    serverTools.push({ type: toolTypeLabel(type), maxUses: typeof t.max_uses === 'number' ? t.max_uses : null });
   }
   // The MCP connector samples on the provider side (mcp_tool_use and mcp_tool_result inside one response),
   // whether or not an `mcp_toolset` entry names the server. No price entry exists, so it stays unpriced.

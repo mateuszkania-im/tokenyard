@@ -65,10 +65,10 @@ test('R8b a priced tier reserves and settles at the tier price; auto reserves at
   expect(auto.o.costMicroUsd).toBe(Math.round((a?.input ?? 0) * 0.75 + (a?.cacheRead ?? 0) * 0.075 + (a?.output ?? 0) * 4.5));
   expect(auto.o.usage?.serviceTier).toBe('default');
   // The trace keeps both, so replay reserves and reprices the same way.
-  const rec = buildTraceRecord(priority.o, 'salt');
+  const rec = buildTraceRecord(priority.o, 'salt', { prices: { version: 't', models: { 'gpt-5.4-mini': {} }, modifiers: {}, serverTools: {} } as unknown as PriceTable, routes: [] });
   expect(rec.features.serviceTier).toBe('priority');
   expect(rec.outcome.serviceTier).toBe('priority');
-  const autoRec = buildTraceRecord(auto.o, 'salt');
+  const autoRec = buildTraceRecord(auto.o, 'salt', { prices: { version: 't', models: { 'gpt-5.4-mini': {} }, modifiers: {}, serverTools: {} } as unknown as PriceTable, routes: [] });
   expect(autoRec.features.serviceTier).toBe('auto');
   expect(autoRec.outcome.serviceTier).toBeUndefined();
 });
