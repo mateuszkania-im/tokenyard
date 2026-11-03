@@ -403,6 +403,10 @@ var init_labels = __esm({
 });
 
 // src/ledger/anonymize.ts
+function exportedToolType(type, p) {
+  const t = toolTypeLabel(type);
+  return t === INVALID_TOOL_TYPE || TOOL_TYPE_WORDS.test(t) ? t : p("toolType", t);
+}
 function exportedModel(m, p) {
   if (m === "" || m === "other") return m;
   return MODEL_PSEUDONYM.test(m) || modelShapeLabel(m) !== m ? p("model", m) : m;
@@ -451,7 +455,7 @@ function anonymizeRecord(r, p) {
       inputTokensBound: f.inputTokensBound,
       boundKind: f.boundKind,
       maxOutputTokens: f.maxOutputTokens,
-      serverTools: f.serverTools.map((t) => ({ type: toolTypeLabel(t.type), maxUses: t.maxUses })),
+      serverTools: f.serverTools.map((t) => ({ type: exportedToolType(t.type, p), maxUses: t.maxUses })),
       toolCount: f.toolCount,
       thinking: f.thinking,
       bodyBytes: f.bodyBytes,
@@ -524,7 +528,7 @@ function saltedPseudonyms(salt) {
     return `${kind}-${h.slice(0, 8)}`;
   };
 }
-var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM;
+var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM, TOOL_TYPE_WORDS;
 var init_anonymize = __esm({
   "src/ledger/anonymize.ts"() {
     "use strict";
@@ -534,6 +538,7 @@ var init_anonymize = __esm({
     REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
     AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
     MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
+    TOOL_TYPE_WORDS = /^[a-z]+(?:_[a-z]+)*(?:_\d{8})?$/;
   }
 });
 

@@ -17,8 +17,14 @@ const token = fc.tuple(fc.constantFrom('sk-ant-api03-', 'ghp_', 'AKIA', 'xoxb-',
 const phrase = fc.tuple(label, label).map(([a, b]) => `Customer ${a} ${b}`);
 /** Something nobody wants in an export; every one holds a character no pseudonym (lowercase hex, `kind-`) has. */
 const sensitive = fc.oneof(email, path, winPath, hostname, token, phrase);
-/** Hostname-free: model ids and upstream error codes keep values shaped like ids (`claude-opus-5-5`, `overloaded_error`). */
-const notIdShaped = fc.oneof(email, path, winPath, token, phrase);
+/**
+ * Model ids and upstream error codes keep values shaped like ids (`claude-opus-5-5`, `overloaded_error`) by design (B1):
+ * the gateway writes a client's unpriced model name as `model-<hex>` at ingest, and error codes come from the upstream.
+ * So these fields get only values outside that shape (docs/testing.md).
+ */
+const notIdShaped = fc.oneof(email, path, winPath, token, phrase).filter((s) => !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(s));
+/** Server tool types: exports keep lowercase words joined by `_` with an optional date (S-V4-2); anything else must go. */
+const notToolTypeShaped = fc.oneof(sensitive, token.map((t) => t.toLowerCase().replace(/[^a-z0-9_]/g, '_'))).filter((s) => !/^[a-z]+(?:_[a-z]+)*(?:_\d{8})?$/.test(s));
 
 const SALT_A = 'export-salt-a';
 
@@ -28,7 +34,7 @@ const record = fc
     tenant: sensitive, team: fc.option(sensitive, { nil: null }), keyId: sensitive, instance: sensitive, version: sensitive,
     session: sensitive, agent: sensitive, parentAgent: sensitive, promptId: sensitive, requestClass: sensitive, agentType: sensitive,
     repo: sensitive, branch: sensitive, ticket: sensitive, feature: sensitive,
-    model: notIdShaped, upstreamModel: notIdShaped, toolType: sensitive, serviceTier: sensitive, prefixHash: sensitive, valueHmac: sensitive,
+    model: notIdShaped, upstreamModel: notIdShaped, toolType: notToolTypeShaped, serviceTier: sensitive, prefixHash: sensitive, valueHmac: sensitive,
     errorClass: notIdShaped, midStreamError: notIdShaped, headerName: sensitive, headerValue: fc.constantFrom('42', '2026-11-03T10:00:00Z'),
     extra: sensitive,
   })

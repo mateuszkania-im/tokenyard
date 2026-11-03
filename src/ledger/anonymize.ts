@@ -1,5 +1,5 @@
 import { pseudonym } from '../guardrails/hmac.js';
-import { errorCodeLabel, modelShapeLabel, rateLimitHeadersLabel, serviceTierLabel, toolTypeLabel } from '../surfaces/labels.js';
+import { errorCodeLabel, INVALID_TOOL_TYPE, modelShapeLabel, rateLimitHeadersLabel, serviceTierLabel, toolTypeLabel } from '../surfaces/labels.js';
 import type { TraceRecord } from './record.js';
 
 export type PseudonymKind =
@@ -8,7 +8,9 @@ export type PseudonymKind =
   // SHA-256 of the tools and system bytes that anyone holding those bytes can confirm. Re-keyed with the export salt.
   | 'prefix' | 'session' | 'agent' | 'promptId' | 'valueHmac' | 'instance'
   // A model name the gateway pseudonymised (B1), or a name a trace written before that holds in an unexpected shape.
-  | 'model';
+  | 'model'
+  // A server tool type not shaped like one (S-V4-2): a token or hex string a client put in `tools[].type`.
+  | 'toolType';
 
 /** Kinds whose pseudonym keeps the hex shape of the value it replaces (reports and replay treat them as opaque ids). */
 const HEX_KINDS: ReadonlySet<PseudonymKind> = new Set(['prefix', 'session', 'agent', 'promptId', 'valueHmac']);
@@ -28,6 +30,18 @@ const AGENT_TYPES: ReadonlySet<string> = new Set(['general-purpose', 'Explore', 
  * subagent still joins its parent. The record id is the caller's (export numbers records in export order).
  */
 const MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
+
+/**
+ * The shape of real server tool types: lowercase words joined by `_`, optionally ending in a date (`web_search_20250305`,
+ * `file_search`, `mcp`). The ingest bound (`[a-z0-9_]`) also lets lowercase tokens and hex secrets through (S-V4-2).
+ */
+const TOOL_TYPE_WORDS = /^[a-z]+(?:_[a-z]+)*(?:_\d{8})?$/;
+
+/** A tool type as exported: kept when shaped like one, else pseudonymised; an unknown type stays unpriced in replay. */
+function exportedToolType(type: string, p: (kind: PseudonymKind, v: string) => string): string {
+  const t = toolTypeLabel(type);
+  return t === INVALID_TOOL_TYPE || TOOL_TYPE_WORDS.test(t) ? t : p('toolType', t);
+}
 
 /**
  * The model as exported: the gateway writes a name in clear only when it is priced or a wildcard-free allowModels
@@ -87,7 +101,7 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
       inputTokensBound: f.inputTokensBound,
       boundKind: f.boundKind,
       maxOutputTokens: f.maxOutputTokens,
-      serverTools: f.serverTools.map((t) => ({ type: toolTypeLabel(t.type), maxUses: t.maxUses })),
+      serverTools: f.serverTools.map((t) => ({ type: exportedToolType(t.type, p), maxUses: t.maxUses })),
       toolCount: f.toolCount,
       thinking: f.thinking,
       bodyBytes: f.bodyBytes,
