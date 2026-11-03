@@ -166,7 +166,7 @@ test('soak rows judged with the V2 follow-up criteria render the RSS beyond the 
       },
     ],
   };
-  expect(renderBenchBlock({ ...results(), soak })).toContain('| memory | 1 | 45 | 1 (1.0) | 30.0% | 14.2 to -3.1, -2.5% | 40.5 to 41, 1.2% |');
+  expect(renderBenchBlock({ ...results(), soak })).toContain('| memory | 1 | 45 | 1 (1.0) | 30.0% | minus control 14.2 to -3.1, -2.5% | plus external 40.5 to 41, 1.2% |');
 });
 
 test('the misses are listed from the results, at the SLO levels and at the other levels, and low-n rows are labelled (V1 fix round)', () => {

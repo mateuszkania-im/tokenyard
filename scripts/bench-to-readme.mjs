@@ -202,7 +202,13 @@ function soakSection(k) {
   for (const r of k.runs) {
     // Check names before and after the V2 follow-up (RSS against a control process; heap after GC plus external).
     const v = (...parts) => r.verdicts.filter((x) => parts.some((part) => x.check.endsWith(part)));
-    const trend = (...parts) => v(...parts).map((x) => /^(?:gateway minus control )?(-?[\d.]+ to -?[\d.]+) MB; trend (-?[\d.]+)%/.exec(x.measured)).map((m) => (m ? `${m[1]}, ${m[2]}%` : 'n/a')).join('; ');
+    // A row judged with the V2 follow-up criteria says so in the cell: the two kinds of rows share the columns.
+    const label = (check) => (check.endsWith('beyond the control process') ? 'minus control ' : check.endsWith('plus external memory growth') ? 'plus external ' : '');
+    const trend = (...parts) =>
+      v(...parts)
+        .map((x) => [label(x.check), /^(?:gateway minus control )?(-?[\d.]+ to -?[\d.]+) MB; trend (-?[\d.]+)%/.exec(x.measured)])
+        .map(([l, m]) => (m ? `${l}${m[1]}, ${m[2]}%` : 'n/a'))
+        .join('; ');
     const gws = r.perGateway;
     lines.push(
       `| ${r.mode} | ${num(r.gateways)} | ${num(r.minutes)} | ${num(r.requests)} (${num(r.answeredPerS, 1)}) | ${gws.map((g) => `${num(g.cpuPct, 1)}%`).join(', ')} | ${trend(': RSS growth', ': RSS growth beyond the control process')} | ${trend(': heap used after GC growth', ': heap after GC plus external memory growth')} | ${gws.map((g) => `${num(g.idleBefore.fds)} / ${num(g.idleAfter.fds)}`).join('; ')} | ${gws.map((g) => num(g.idleAfter.series)).join(', ')} | ${r.redis ? num(r.redis.after.keys) : 'n/a'} | ${gws.map((g) => `${num(g.traceHours)}, ${num(g.traceMbPerHourOfLoad, 1)}`).join('; ')} | ${num(r.verdicts.filter((x) => x.ok).length)} of ${num(r.verdicts.length)} |`,
