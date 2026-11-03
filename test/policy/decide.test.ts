@@ -51,7 +51,7 @@ test('first matching route wins over surface, traffic, billing, team, requestCla
   expect(plan.policyRevision).toBe('r1');
 });
 
-test('a route matching anthropic-messages also serves count_tokens, with no reservation, rate check or stream slot', () => {
+test('a route matching anthropic-messages also serves count_tokens, with the rate checks only: no reservation or stream slot (ledger 183)', () => {
   const p = compile(`${HEAD}routes:
   - { name: msgs, match: { surface: anthropic-messages }, chain: [a] }
 budgets:
@@ -61,7 +61,8 @@ rateLimits:
   - { name: st, scope: key, concurrentStreams: 2 }
 ${STORE}`);
   const plan = decide(p, features({ surface: 'anthropic-count-tokens' }));
-  expect(plan).toMatchObject({ route: 'msgs', preBlock: null, reservations: [], rateChecks: [], streamSlots: [] });
+  expect(plan).toMatchObject({ route: 'msgs', preBlock: null, reservations: [], streamSlots: [] });
+  expect(plan.rateChecks.map((r) => r.limit)).toEqual(['rpm']);
   expect(decide(p, features()).reservations).toHaveLength(1);
 });
 

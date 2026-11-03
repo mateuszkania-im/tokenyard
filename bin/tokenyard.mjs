@@ -30797,6 +30797,12 @@ function budgetLevels(policy2, f) {
 function enforcedLevelApplies(policy2, f) {
   return budgetLevels(policy2, f).some((l) => l.enforce);
 }
+function rateChecks(policy2, f) {
+  return policy2.rateLimits.flatMap((l) => {
+    const value = levelValue(l.scope, f, true);
+    return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
+  });
+}
 function decide(policy2, f) {
   const hits = f.guardrail.hits;
   const warnings = hits.filter((h) => h.action === "warn").map((h) => ({ kind: "guardrail", rule: h.rule, where: h.where }));
@@ -30840,7 +30846,7 @@ function decide(policy2, f) {
   if (rewritesModel && (!allows(route2, upstreamModel) || !allows(authz, upstreamModel))) return { ...plan, preBlock: "model-not-allowed" };
   plan.chain = orderChain(route2, session ?? f.id).map((provider2) => ({ provider: provider2, upstreamModel, rewritesModel }));
   if (lastTurnBlocks.length > 0) return { ...plan, preBlock: "secret" };
-  if (f.surface === "anthropic-count-tokens") return plan;
+  if (f.surface === "anthropic-count-tokens") return { ...plan, rateChecks: rateChecks(policy2, f) };
   const t = policy2.prices;
   const known = pricedName(t, upstreamModel);
   const tier = f.serviceTier;
@@ -30881,10 +30887,7 @@ function decide(policy2, f) {
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
   if (levels.some((l) => l.resetsAt === null)) plan.sessionIdleTtlMs = idleTtlMs;
   if (worstMicro !== void 0 && levels.length > 0) plan.worstCaseMicroUsd = worstMicro;
-  plan.rateChecks = policy2.rateLimits.flatMap((l) => {
-    const value = levelValue(l.scope, f, true);
-    return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
-  });
+  plan.rateChecks = rateChecks(policy2, f);
   plan.streamSlots = policy2.streamLimits.flatMap((l) => {
     const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: streamKey(f.tenant, l.name, value), max: l.max }];

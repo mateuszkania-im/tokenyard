@@ -871,7 +871,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
 
   // 7. Admit: one store call for rate checks, stream slots, taint and every reservation (spec 7). Blocks that need no
   // counters (preBlocks, a reservation larger than its limit on its own) are answered without one; a last-turn secret
-  // still calls it to write the session taint. count_tokens plans hold nothing, so they never reach the store.
+  // still calls it to write the session taint. count_tokens plans hold rate checks only (ledger 183).
   const { pre, callsAdmit } = planAdmission(policy, plan);
   let admission: Admission | null = null;
   let admitAt: RequestOutcome['admitAt'];

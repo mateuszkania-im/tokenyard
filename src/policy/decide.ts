@@ -194,6 +194,14 @@ export function enforcedLevelApplies(policy: CompiledPolicy, f: RequestFeatures)
   return budgetLevels(policy, f).some((l) => l.enforce);
 }
 
+/** One request against every request-rate limit whose scope the request has. */
+function rateChecks(policy: CompiledPolicy, f: RequestFeatures): Plan['rateChecks'] {
+  return policy.rateLimits.flatMap((l) => {
+    const value = levelValue(l.scope, f, true);
+    return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
+  });
+}
+
 export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const hits = f.guardrail.hits;
   const warnings: Warning[] = hits.filter((h) => h.action === 'warn').map((h) => ({ kind: 'guardrail', rule: h.rule, where: h.where }));
@@ -250,8 +258,9 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   if (rewritesModel && (!allows(route, upstreamModel) || !allows(authz, upstreamModel))) return { ...plan, preBlock: 'model-not-allowed' };
   plan.chain = orderChain(route, session ?? f.id).map((provider) => ({ provider, upstreamModel, rewritesModel }));
   if (lastTurnBlocks.length > 0) return { ...plan, preBlock: 'secret' };
-  // count_tokens is free: forwarded with no reservation, rate check or stream slot (spec 5.3).
-  if (f.surface === 'anthropic-count-tokens') return plan;
+  // count_tokens is free: forwarded with no reservation or stream slot (spec 5.3), but it passes the key's request-rate
+  // checks, so one developer on a shared operator key cannot spend the organisation's count_tokens limit (ledger 183).
+  if (f.surface === 'anthropic-count-tokens') return { ...plan, rateChecks: rateChecks(policy, f) };
 
   const t = policy.prices;
   const known = pricedName(t, upstreamModel);
@@ -316,10 +325,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   // A request that ends without final usage settles at no less than this (A2-2): under session-aware the reservation
   // prices one iteration and no server tool fees, so it is no charge for a loop the provider may have run and billed.
   if (worstMicro !== undefined && levels.length > 0) plan.worstCaseMicroUsd = worstMicro;
-  plan.rateChecks = policy.rateLimits.flatMap((l) => {
-    const value = levelValue(l.scope, f, true);
-    return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
-  });
+  plan.rateChecks = rateChecks(policy, f);
   // Slots deliberately apply to every messages request, streamed or not: both hold an upstream slot (spec 5.3, 11).
   plan.streamSlots = policy.streamLimits.flatMap((l) => {
     const value = levelValue(l.scope, f, true);

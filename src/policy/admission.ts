@@ -12,7 +12,7 @@ export function holdsCounters(plan: Plan): boolean {
 /**
  * Before admit: the decision without counters (`pre`), whether a last-turn secret must still write the session taint,
  * and whether admit is called at all. Blocks that need no counters (pre-blocks, a reservation larger than its limit on
- * its own) are answered without a store call; a plan that holds nothing (count_tokens) never reaches the store.
+ * its own) are answered without a store call; a plan that holds nothing never reaches the store.
  */
 export function planAdmission(policy: CompiledPolicy, plan: Plan): { pre: Decision; taintWrite: boolean; callsAdmit: boolean } {
   const pre = resolve(policy, plan, null);

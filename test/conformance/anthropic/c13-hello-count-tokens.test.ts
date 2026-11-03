@@ -22,7 +22,7 @@ test('C13 HEAD /api/hello does not error the client; count_tokens is forwarded [
   expect(stack.mock.received).toHaveLength(1);
   expect(stack.mock.received[0]?.pathAndQuery).toBe('/v1/messages/count_tokens?beta=true');
   expect(stack.mock.received[0]?.body.equals(body)).toBe(true);
-  // Forwarded with no reservation: the counter store is never called for count_tokens (spec 5.3).
-  expect(spy.admits).toHaveLength(0);
-  expect(spy.settles).toHaveLength(0);
+  // Forwarded with no reservation or stream slot (spec 5.3); only the key's rate checks are admitted (ledger 183).
+  expect(spy.admits).toHaveLength(1);
+  expect(spy.admits[0]?.plan).toMatchObject({ reservations: [], streamSlots: [] });
 });

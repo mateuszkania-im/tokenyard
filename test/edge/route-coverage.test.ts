@@ -32,7 +32,7 @@ test('the route table lists messages as inference and count_tokens, models and h
   expect(ROUTES_SOURCE).not.toMatch(/inference: r\.surface/);
 });
 
-test('every inference route in ROUTE_TABLE calls admit; no other route does', async () => {
+test('every inference route in ROUTE_TABLE calls admit with a reservation; no other route reserves (count_tokens passes the rate checks)', async () => {
   process.env[PROVIDER_KEY_ENV] = 'k';
   const mock = await startAnthropicMock();
   closers.push(mock.close);
@@ -56,7 +56,9 @@ test('every inference route in ROUTE_TABLE calls admit; no other route does', as
         expect(spy.admits.at(-1)?.plan.reservations.length).toBeGreaterThan(0);
         await expect.poll(() => spy.settles.length).toBe(settlesBefore + 1);
       } else {
-        expect(spy.admits.length, `${r.method} ${path} must not call admit`).toBe(before);
+        // count_tokens passes the key's rate checks, with no reservation or stream slot (ledger 183); others never admit.
+        expect(spy.admits.length, `${r.method} ${path} admits`).toBe(before + (r.surface === 'anthropic-count-tokens' ? 1 : 0));
+        for (const a of spy.admits.slice(before)) expect(a.plan.reservations.length + a.plan.streamSlots.length, `${r.method} ${path} must not reserve`).toBe(0);
       }
     }
   }

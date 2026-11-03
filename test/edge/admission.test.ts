@@ -197,7 +197,7 @@ test('store down: budgets closed gives 503 retry-after 5; rate limits open; trac
   expect(openG.traces[0]?.outcome.settledBy).toBe('request');
 });
 
-test('count_tokens is forwarded without any store call even with a session (no reservation, slot or taint)', async () => {
+test('count_tokens passes the key\'s rate checks only: no reservation and no stream slot (ledger 183)', async () => {
   const mock = await startAnthropicMock();
   closers.push(mock.close);
   const spy = spyStore(createMemoryStore({ clock: Date.now }));
@@ -205,11 +205,23 @@ test('count_tokens is forwarded without any store call even with a session (no r
   const headers = { ...authHeaders, 'x-claude-code-session-id': 'sess-1' };
   const res = await send(g.url, { path: '/v1/messages/count_tokens', headers, body: msgBody({ model: 'claude-haiku-5-5' }) });
   expect(res.status).toBe(200);
-  expect(spy.admits).toHaveLength(0);
-  expect(spy.settles).toHaveLength(0);
-  // The same request to /v1/messages does reserve.
-  expect((await send(g.url, { path: '/v1/messages', headers, body: msgBody({ model: 'claude-haiku-5-5' }) })).status).toBe(200);
   expect(spy.admits).toHaveLength(1);
+  expect(spy.admits[0]?.plan).toMatchObject({ reservations: [], streamSlots: [], rateChecks: [{ limit: 'dev-rpm' }] });
+  await expect.poll(() => spy.settles.length).toBe(1);
+  expect(g.traces.at(-1)?.outcome.costMicroUsd).toBe(0);
+});
+
+test('a key over its request rate gets 429 on count_tokens, nothing sent (ledger 183)', async () => {
+  const mock = await startAnthropicMock();
+  closers.push(mock.close);
+  const g = await gateway({ upstream: mock.url, store: createMemoryStore({ clock: Date.now }), policy: { edit: (p) => void (p.rateLimits = [{ name: 'rpm', scope: 'key', rpm: 1, burst: 1 }]) } });
+  const count = (): Promise<{ status: number; headers: import('node:http').IncomingHttpHeaders }> =>
+    send(g.url, { path: '/v1/messages/count_tokens', headers: authHeaders, body: msgBody({ model: 'claude-haiku-5-5' }) });
+  expect((await count()).status).toBe(200);
+  const over = await count();
+  expect(over.status).toBe(429);
+  expect(Number(over.headers['retry-after'])).toBeGreaterThan(0);
+  expect(mock.received).toHaveLength(1);
 });
 
 test('a reservation that cannot be priced fails closed: 500 envelope, store never called', async () => {

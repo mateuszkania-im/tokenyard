@@ -335,9 +335,10 @@ test('GET /v1/models?limit=1000 lists only the models the key routes allow, no r
 test('HEAD /api/hello returns empty 200; count_tokens is forwarded without reservation', async () => {
   const calls: string[] = [];
   const store: CounterStore = {
-    admit: async () => {
-      calls.push('admit');
-      throw new Error('admit must not be called');
+    admit: async (plan) => {
+      // count_tokens reaches admit for the key's rate checks only (ledger 183): nothing reserved, no stream slot.
+      calls.push(plan.reservations.length + plan.streamSlots.length === 0 ? 'admit-rate-only' : 'admit');
+      return { admitted: true, failed: null, audit: [], totals: [] };
     },
     settle: async () => {
       calls.push('settle');
@@ -359,10 +360,10 @@ test('HEAD /api/hello returns empty 200; count_tokens is forwarded without reser
   expect(mock.received).toHaveLength(1);
   expect(mock.received[0]?.pathAndQuery).toBe('/v1/messages/count_tokens?beta=true');
   expect(mock.received[0]?.body.equals(body)).toBe(true);
-  expect(calls).toEqual([]);
-  // The same store is called for a messages request, so the assertion above is not vacuous.
+  await expect.poll(() => calls).toEqual(['admit-rate-only', 'settle']);
+  // The same store reserves for a messages request, so the assertion above is not vacuous.
   await send(gw.url, { path: '/v1/messages?beta=true', headers: auth, body });
-  expect(calls).toEqual(['admit']);
+  expect(calls.slice(2, 3)).toEqual(['admit']);
 });
 
 test('invalid JSON body is forwarded unchanged and the provider 400 reaches the client when no enforced budget applies', async () => {

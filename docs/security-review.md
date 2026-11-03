@@ -208,7 +208,10 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   session scopes are added, a missing header is charged to `(unattributed)` as budgets are (guarded in `decide`).
 - **Header-selected chains.** A header may choose a different provider chain among the models the key may use; this is
   by design (S10-2).
-- **Operational notes from reviewer C.** `count_tokens` has no rate limit of its own (it shares the upstream limit). If
+- **Operational notes from reviewer C.** `count_tokens` has no rate limit of its own; since the final review (ledger
+  183 overturned) it passes the key's request-rate checks, with no reservation, token budget or stream slot, so a key
+  over its rate gets 429 on it and one developer on a shared operator key cannot spend the organisation's upstream
+  `count_tokens` limit alone (`test/edge/admission.test.ts`, "a key over its request rate gets 429 on count_tokens"). If
   the `GET /user` lookup fails the Action assumes `github-actions[bot]` as comment author, so a GitHub App token can
   edit other marker comments. A policy can name any environment variable as a credential; the policy author is trusted.
 - **Information.** A `ty_live_` key used as a YAML map key is echoed in an "Unrecognized key" load error (key names are

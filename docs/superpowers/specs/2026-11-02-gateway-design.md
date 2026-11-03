@@ -177,7 +177,7 @@ Timestamps are taken at each numbered step and stored on the trace.
 
 Non-streaming requests follow the same steps; the body is piped unchanged and a copy is parsed for `usage` after the end.
 
-`/v1/messages/count_tokens` is forwarded with the same header rules and no reservation; if the provider has no such endpoint the gateway returns 404 and Claude Code falls back to a character estimate ([Claude Code gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md)). `GET /v1/models` is answered by tokenyard itself from the models the key's routes allow, only ids that contain `claude` (Claude Code keeps only those), with no redirect and well inside the 3 s discovery timeout ([Claude Code gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md)).
+`/v1/messages/count_tokens` is forwarded with the same header rules and no reservation (it passes the key's request-rate checks, no token budget or stream slot; final review ruling on ledger 183); if the provider has no such endpoint the gateway returns 404 and Claude Code falls back to a character estimate ([Claude Code gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md)). `GET /v1/models` is answered by tokenyard itself from the models the key's routes allow, only ids that contain `claude` (Claude Code keeps only those), with no redirect and well inside the 3 s discovery timeout ([Claude Code gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md)).
 
 ### 5.4 Request lifecycle: OpenAI Responses, streaming (Codex)
 
