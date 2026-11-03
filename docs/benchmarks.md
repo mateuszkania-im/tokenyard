@@ -178,6 +178,14 @@ A leak hunt rather than a latency benchmark: the shipped bundle (`bin/tokenyard.
 
 **Per-session counter state (S-V2-1, fixed in `ba909f9`).** Before the fix every distinct session id kept a session budget key for 30 days after its last admit, audit-mode levels included, so an authenticated client sending a new id on every request grew the store at its rate limit for a month: at the example's 120 requests per minute up to 172,800 keys a day, about 5.2 million in 30 days, roughly 0.8 to 1 GB of Redis per such key (arithmetic from the measured 150 to 190 bytes per key, not measured). Now session keys expire `sessions.idleTtlHours` (default 24) after their last admit, and one key may start at most `sessions.newPerKeyPerHour` (default 1,000; service keys `sessions.newPerServiceKeyPerHour`, default 10,000; or the key's own `maxNewSessionsPerHour`) new sessions an hour, a GCRA checked inside admit before anything is written; over it the request gets a 429 `session-churn` with `x-should-retry: false`. Each admitted session costs a marker and a session budget level (about 170 bytes each in the last Redis run), so one key can hold at most about 1,000 times 24 sessions at once: about 48,000 keys, roughly 8 MB of Redis, at the defaults (arithmetic). `test/security/s-v2-1-session-churn.test.ts` sends a new session id on every request through the gateway, on the memory store and on Redis: past the allowance every request is refused and the key count does not move over a thousand more, while another key with three sessions is unaffected.
 
+### Chaos and failure tests (`test/chaos/`, V3)
+
+Provider failures, client disconnects, slow consumers, Redis outages, hot reload under load, keep-alive reuse under
+load and the body cap against scan time, each checked against the same invariants (one trace line per request, a
+correct charge at least what the provider billed, fallback only before the first byte, nothing left in the store, no
+unhandled rejection). Scenarios, results and the three findings fixed: [docs/chaos.md](chaos.md). Reproduce with
+`npm run test:chaos` (Docker for the Redis cases).
+
 ## Live results (`examples/live/`)
 
 The live sessions run only through `npm run live` (design spec, section 14.1), on the maintainer's machine, against the real APIs under a hard cap enforced by tokenyard's own budget. Their raw traces stay in `.live/traces/` (gitignored). What is committed is derived from an anonymized export only:
