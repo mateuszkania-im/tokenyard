@@ -1,7 +1,7 @@
 # Security review (Task 25)
 
 Record of the adversarial review of tokenyard at the end of the build, the findings it produced, the tests that pin
-each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branch `mvp` at 9752407; this record is current at fc8926f plus the commit that adds this line.
+each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branch `mvp` at 9752407; second pass against 90d7337 (last section).
 
 ## Method
 
@@ -24,8 +24,7 @@ each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branc
 4. **Forwarded findings.** Every finding raised by the coordinator during the build (tasks 6 to 23) and every ruling
    attached to it got a dedicated test in `test/security/` in this batch (second table). Eleven of the new tests were
    re-checked by reverting the fix in a scratch worktree; see "Revert checks".
-5. **Second pass.** Reviewer A is re-run against the fixes and the result is recorded in the last section. It is a
-   placeholder until that pass has happened.
+5. **Second pass.** Reviewer A is re-run against the fixes and the result is recorded in the last section.
 
 Severity: High means a client can spend more than its budget allows, or a PR can change what the gate compares;
 Medium means a leak of non-secret data, a bypass that needs a lenient provider parser, or a bypass of a control that
@@ -169,6 +168,9 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   `TOKENYARD_TRACE_SALT` is unset; a recycled pid makes the lock look live and fails closed.
 - **Two instances and the R11 latch (A9).** The first request of each process reads the latch from the store, later
   reads happen in the background every 30 seconds, so another instance follows a new violation within 30 seconds.
+- **Live cap per checkout (second pass).** `npm run live` keeps its spend in `.live/traces` under the package root,
+  so two checkouts or worktrees each get the full `TOKENYARD_LIVE_BUDGET_USD` cap. Documented in the README; run live
+  tests from one checkout.
 - **Request deadline (A8).** Fixed at 18 minutes in `serve`; no flag. A stream longer than that is cut.
 - **Chain fallback (A6).** Relies on undici diagnostics channels to know the body was sent; a request not seen created
   counts as sent (fails toward charging, never toward a second provider).
@@ -204,5 +206,28 @@ findings raised by the coordinator or by batch review). A new finding gets a fai
 
 ## Second pass
 
-Pending. The controller re-runs reviewer A against the fixes and records here: date, reviewed commit, reviewer result,
-new findings (id, severity, status) or "no new finding of high severity".
+Date: 2026-11-03. Method: reviewer A (budget bypass) was re-run with fresh context against the fixes, the range
+9752407..90d7337, with the same brief as the first pass plus the list of fixed findings to re-attack. The reviewer
+wrote each attack as a failing probe against mock upstreams; the probes were turned into regression tests under
+`test/security/` (RED run first, then the fix, then GREEN; the probes pass afterwards).
+
+Result: three Medium findings; no High or Critical finding was found. Re-attacked and held: A1 with S25-1, A2, A3
+with S20-2 under the worst-case estimator, A4, the body-shape refusals (A5), A6, A7, A8, A9, A10, A11, path matching,
+late admits, the crash path and header-chosen routes.
+
+| Id | Area | Severity | Description | Regression test | Status | Commit |
+|---|---|---|---|---|---|---|
+| A2-1 | budget | Medium | Product-route PII redaction made the forwarded body longer than the bytes the bound was computed from (a 6-byte email becomes an 18-byte placeholder), so the reservation was no bound, and the self-made overrun tripped the shared R11 latch for every instance | `test/security/a2-1-redaction-grows-body.test.ts` | fixed: after redaction, model rewrite and the output cap, decide runs again on the final body length before admit, so the bound, the reservation and R11 all use the bytes actually sent | 4c1398c |
+| A2-2 | budget | Medium | Under `estimator: session-aware`, a stream that ended without its final usage settled at the session-aware reservation, which prices one iteration and no server tool fees, so dropping the connection before `message_delta` after a web search loop was a client-chosen discount | `test/security/a2-2-session-aware-abort.test.ts` | fixed: decide keeps the worst-case estimate on the plan; a request without final usage (and the fault path) settles at the higher of the reservation and the worst case; replay charges the same | 95bab19 |
+| A2-3 | budget | Medium (Low for the example policy) | OpenAI per-call tool fees were reserved but never charged: OpenAI reports calls as `*_call` output items, not in `usage`; and the price table keyed tools by name only, so OpenAI `web_search` was priced with Anthropic's entry | `test/security/a2-3-responses-tool-fee.test.ts` | fixed: server tool prices are per provider (`openai/<type>` keys); `web_search_call` items are counted from the JSON output, `response.output_item.done` and the terminal output; a priced OpenAI tool whose calls are not counted settles at the reservation; OpenAI `web_search` priced at $10 per 1,000 calls (pricing page, retrieved 2026-11-03), its loop reserved as `max_tool_calls + 1` iterations | b07a03c |
+
+Observations (no probe):
+
+- Each package checkout has its own `.live/traces`, so two worktrees each get the full $20 live cap. Documented in
+  the README Limitations and above under residual risks.
+- Replay of pseudonymised models cannot be priced by a head policy that adds a price for them; this affects only the
+  CI gate's cost estimate, not enforcement. Left as is.
+- The body-shape refusal reasons (`body-bom`, `duplicate-keys`, `too-deep`, `unparsable-body`) were missing from the
+  replay engine's `BODY_EXITS`. Such records normally carry `preDecision`; a record without it was decided again and
+  replayed as forwarded. Fixed: they are carried over as recorded, before decide
+  (`test/security/a2-obs-body-shape-replay.test.ts`, 90168ad).
