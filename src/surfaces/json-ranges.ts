@@ -168,8 +168,10 @@ export function duplicateTopLevelKey(b: Buffer, keys: readonly string[]): boolea
 /**
  * Most JSON values (strings, object keys included, numbers, literals, objects and arrays) a request body may hold
  * (S-V3-3). Parsing and scanning cost per value, not per byte: 32 MiB of `{},` took 2.5 s and 1.2 GB in JSON.parse
- * alone, 32 MiB of `1,` as the messages array 1.2 s and 1.2 GB. At the budget the whole request (parse, shape check,
- * three scans on a product route) takes at most about 0.6 s. A coding-agent body holds a few hundred to a few tens of
+ * alone, 32 MiB of `1,` as the messages array 1.2 s and 1.2 GB. Within the budget the rest is linear in the bytes:
+ * on 32 MiB (Apple M2 Pro, Node 22) the slowest answered body, one bare number, takes up to 0.68 s on a coding-agent
+ * route and 1.24 s on a product route, and an unparsable or duplicate-key body, scanned raw and decoded before its
+ * 400, up to 1.11 s and 2.19 s (docs/chaos.md, finding 4). A coding-agent body holds a few hundred to a few tens of
  * thousands of values (a long tool result or an image is one string; the bench's 31 MiB body holds 76,000), so the
  * budget leaves more than 10 times what a context window can carry.
  */

@@ -134,7 +134,9 @@ the sweeper settles it at its estimate, and the store and the trace lines agree 
 
    The scanner's views keep their decoded text in one buffer and their runs in a typed array (16 bytes per run, about
    100 before), and the keyword prefilter stops at one hit per keyword (32 MiB of `@` was 32 Mi hits, 0.85 s per
-   pass). Measured on 32 MiB minus 4 KiB (Apple silicon, Node 22, gateway and client in one process):
+   pass). Measured on 32 MiB minus 4 KiB (Apple silicon, Node 22, gateway and client in one process; the rows from
+   "one 32 MiB bare number" on were added by the V3 re-review round, R-V3-6, Apple M2 Pro, Node 22.14, the longest
+   event loop stall of three runs):
 
    | Body | Coding agent | Product |
    |---|---|---|
@@ -145,9 +147,19 @@ the sweeper settles it at its estimate, and the store and the trace lines agree 
    | 1 Mi escapes in 32 MiB of text | 200, 0.23 s | 200, 0.48 s |
    | 32 MiB of whitespace between values | 200, 0.39 s | 200, 0.54 s |
    | 32 MiB of plain text | 200, 0.14 s | 200, 0.26 s |
+   | one 32 MiB bare number (last turn, history or metadata) | 200, 0.43 to 0.68 s | 200, 1.18 to 1.24 s |
+   | 32 MiB of whitespace before one value (last turn, history or metadata) | 200, 0.44 to 0.47 s | 200, 0.57 to 0.65 s |
+   | unparsable (last brace missing): 32 MiB of private key header lines without an end line | 400, 1.01 to 1.11 s | 400, 2.15 to 2.19 s |
+   | unparsable: card-number-shaped digits, near-emails, one bare number | 400, 0.27 to 0.35 s | 400 or 413, 0.66 to 1.36 s |
+   | duplicate key: the same four contents | 400, 0.05 to 0.53 s | 400 or 413, 0.21 to 1.27 s |
 
    Peak RSS above the level before the request: at most 75 MB for every refused body (receiving it: chunks, then one
    Buffer) and at most 190 MB for any body within the budgets, against 1.5 to 2.2 GB before (short strings, bare tokens).
+   Within the budgets the cost is linear in the bytes and bounded by the 32 MiB body cap (ruling R-V3-6): the worst
+   answered body is one 32 MiB bare number (0.68 s coding agent, 1.24 s product: the byte loops of the value counter,
+   the body-shape check and the scan views, and the PII regexes on product routes), and the worst body overall is
+   refused with 400 only after its scan, because JSON that does not parse or repeats a key is scanned both raw and
+   decoded (1.11 s and 2.19 s). The first version of this table put the worst case at 0.39 s and 0.60 s.
 
 No other scenario found a fault: settlement, fallback, breaker scope, backpressure and fail-closed store handling held
 under every case above.

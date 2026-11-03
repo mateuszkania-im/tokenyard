@@ -58,8 +58,11 @@ const SIMPLE_ESCAPES: Record<number, string> = { 0x22: '"', 0x5c: '\\', 0x2f: '/
 /**
  * Most decoded runs one scan call (`scanBody` over all its regions, or `findSpans`) may build, over all its views.
  * A run costs about 40 ns and 16 bytes plus its text. A body that passes the gateway's earlier budgets (1 Mi JSON
- * values, 1 Mi escapes) makes at most 2 runs per value and 2 per escape, plus the joined copies of split message text;
- * the bench's 31 MiB coding-agent body makes 1.8 Mi, a 1 M token context window (about 4 MiB of text) under 0.6 Mi.
+ * values, 1 Mi escapes) makes at most 2 runs per value and 2 per escape, plus the joined copies of split message text:
+ * a message made of several pieces is scanned again as one joined view, which copies its runs, so such a body can make
+ * twice as many runs and be refused here while inside the escape budget (7.1 MiB of multi-block tool results with
+ * 947,000 escapes made 3.95 Mi runs). That needs far more than a 1 M token context window (about 4 MiB of text,
+ * under 0.6 Mi runs); the bench's 31 MiB coding-agent body makes 1.8 Mi.
  */
 export const SCAN_RUN_BUDGET = 3 * 1024 * 1024;
 /**
