@@ -67,3 +67,22 @@ test('A8 fake clock: a stream that keeps sending holds its slot until the deadli
   vi.useRealTimers();
   await vi.waitFor(() => expect(upstreamClosed).toBe(true), { timeout: 5000 });
 });
+
+test('A8 fix round: a deadline before upstream headers answers 504 and is traced as request_deadline, settled at the reservation', async () => {
+  let got = 0;
+  const up = await raw(async (req) => {
+    await readJson(req);
+    got++; // the provider has the request and never answers
+  });
+  const g = await gw(testPolicy({ upstream: up.url }), createMemoryStore({ clock: Date.now }), { requestDeadlineMs: 300 });
+  const r = await send(g.url, { path: '/v1/messages', headers: authHeaders, body: Buffer.from(JSON.stringify({ model: MODEL, max_tokens: 64, messages: [{ role: 'user', content: 'x' }] })) });
+  expect(got).toBe(1);
+  expect(r.status).toBe(504);
+  expect(r.headers['x-should-retry']).toBe('false');
+  await expect.poll(() => g.outcomes.length).toBe(1);
+  const o = g.outcomes[0]!;
+  expect(o.errorClass).toBe('request_deadline');
+  expect(o.aborted).toBe(false);
+  expect(o.settledAtEstimate).toBe(true);
+  expect(o.costMicroUsd).toBe(o.reservedMicroUsd);
+});

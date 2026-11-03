@@ -59124,6 +59124,10 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     sendError(req, res, own2(400, "invalid_request_error", "content-encoding", "request bodies must not be encoded (Content-Encoding other than identity); send it uncompressed", null, { shouldRetry: false }), true);
     return early({ status: 400, decision: { action: "block", reason: "content-encoding" }, errorClass: "invalid_request_error" });
   }
+  const deadlineExit = (over) => {
+    sendError(req, res, own2(504, "timeout_error", "request-deadline", `the request did not finish within ${Math.round((deps.requestDeadlineMs ?? DEFAULT_REQUEST_DEADLINE_MS) / 1e3)} s`, null, { shouldRetry: false }));
+    return early({ ...over, status: 504, errorClass: "request_deadline" });
+  };
   let body;
   try {
     body = await readBody(req, deps.bodyCapBytes);
@@ -59285,6 +59289,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     const n2 = err instanceof ChainError ? err.attempts : 1;
     if (!(err instanceof ChainError) || err.bodySent) held.chargeReservation = true;
     const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n2, attemptLog };
+    if (deadlineHit) return deadlineExit(common);
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
     sendError(req, res, own2(502, "api_error", "upstream-unreachable", `upstream ${common.provider} is unreachable`));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
@@ -59294,6 +59299,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     held.chargeReservation = true;
     up.body.on("error", () => void 0);
     up.body.destroy();
+    if (deadlineHit) return deadlineExit({ ...decided, ...admitted, ...answer });
     return early({ ...decided, ...admitted, ...answer, status: 499, aborted: true, errorClass: "client_abort" });
   }
   const upstreamHeadersAt = deps.clock();

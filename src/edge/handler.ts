@@ -669,6 +669,12 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     return early({ status: 400, decision: { action: 'block', reason: 'content-encoding' }, errorClass: 'invalid_request_error' });
   }
 
+  // A8: the request deadline fired while the client still waits for headers: answered 504, charged at the reservation.
+  const deadlineExit = (over: Partial<RequestOutcome>): Promise<void> => {
+    sendError(req, res, own(504, 'timeout_error', 'request-deadline', `the request did not finish within ${Math.round((deps.requestDeadlineMs ?? DEFAULT_REQUEST_DEADLINE_MS) / 1000)} s`, null, { shouldRetry: false }));
+    return early({ ...over, status: 504, errorClass: 'request_deadline' });
+  };
+
   // 3. Read the body.
   let body: Buffer;
   try {
@@ -868,6 +874,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     const n = err instanceof ChainError ? err.attempts : 1;
     if (!(err instanceof ChainError) || err.bodySent) held.chargeReservation = true;
     const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider.name, attempts: n, attemptLog };
+    if (deadlineHit) return deadlineExit(common);
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
     sendError(req, res, own(502, 'api_error', 'upstream-unreachable', `upstream ${common.provider} is unreachable`));
     return early({ ...common, status: 502, errorClass: 'upstream_unreachable' });
@@ -878,6 +885,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     held.chargeReservation = true;
     up.body.on('error', () => undefined);
     up.body.destroy();
+    if (deadlineHit) return deadlineExit({ ...decided, ...admitted, ...answer });
     return early({ ...decided, ...admitted, ...answer, status: 499, aborted: true, errorClass: 'client_abort' });
   }
 
