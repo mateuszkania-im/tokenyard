@@ -176,6 +176,24 @@ function upstreamFeatures(f: RequestFeatures, t: PriceTable, upstreamModel: stri
   return { ...f, model: upstreamModel, inputTokensBound: up.maxContextTokens, boundKind: 'context-window' };
 }
 
+/** The budget levels a request touches, with their keys for its window. */
+function budgetLevels(policy: CompiledPolicy, f: RequestFeatures): Array<Omit<Plan['reservations'][number], 'estMicroUsd'>> {
+  return policy.budgets.flatMap((b) => {
+    // A key without a team skips team levels; a missing session or repo header is charged to UNATTRIBUTED on enforced
+    // levels, so leaving a header out cannot dodge a budget.
+    const enforce = budgetEnforced(b, f.billing);
+    const value = levelValue(b.scope, f, enforce);
+    if (value === null) return [];
+    const w = b.window === null ? null : windowOf(b.window, f.ts);
+    return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce, resetsAt: w?.end ?? null }];
+  });
+}
+
+/** Whether an enforced budget level applies to this request (whatever its route or model). */
+export function enforcedLevelApplies(policy: CompiledPolicy, f: RequestFeatures): boolean {
+  return budgetLevels(policy, f).some((l) => l.enforce);
+}
+
 export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const hits = f.guardrail.hits;
   const warnings: Warning[] = hits.filter((h) => h.action === 'warn').map((h) => ({ kind: 'guardrail', rule: h.rule, where: h.where }));
@@ -232,15 +250,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     const m = known === null ? null : lookupModel(t, known)?.price;
     if (!m || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: 'unpriced' };
   }
-  const levels = policy.budgets.flatMap((b) => {
-    // A key without a team skips team levels; a missing session or repo header is charged to UNATTRIBUTED on enforced
-    // levels, so leaving a header out cannot dodge a budget.
-    const enforce = budgetEnforced(b, f.billing);
-    const value = levelValue(b.scope, f, enforce);
-    if (value === null) return [];
-    const w = b.window === null ? null : windowOf(b.window, f.ts);
-    return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce, resetsAt: w?.end ?? null }];
-  });
+  const levels = budgetLevels(policy, f);
 
   // An unpriced model is reserved at the envelope of the priced ones, which is no bound for a model dearer than all of
   // them: refused whenever an enforced level applies, as an unpriced server tool is (A2); allow-and-flag admits it only

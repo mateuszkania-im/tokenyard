@@ -8,7 +8,8 @@ import { PII_RULES } from '../guardrails/pii.js';
 import { type RedactionHit, redactionHits, redactProductBody } from '../guardrails/redact.js';
 import { DEFAULT_RULES } from '../guardrails/rules.js';
 import { findSpans, scanBody } from '../guardrails/scan.js';
-import { buildFeatures, decide } from '../policy/decide.js';
+import { buildFeatures, decide, enforcedLevelApplies } from '../policy/decide.js';
+import { bodyShapeRefusal } from '../surfaces/body-shape.js';
 import { modelsForKey } from '../policy/match.js';
 import { isAdmitted, planAdmission } from '../policy/admission.js';
 import { resolve } from '../policy/resolve.js';
@@ -548,6 +549,13 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       ...over,
     });
 
+  // A compressed or otherwise encoded body would be forwarded opaque while the gateway priced nothing it could read (A5).
+  const encoding = req.headers['content-encoding'];
+  if (encoding !== undefined && String(encoding).trim().toLowerCase() !== 'identity' && String(encoding).trim() !== '') {
+    sendError(req, res, own(400, 'invalid_request_error', 'content-encoding', 'request bodies must not be encoded (Content-Encoding other than identity); send it uncompressed', null, { shouldRetry: false }), true);
+    return early({ status: 400, decision: { action: 'block', reason: 'content-encoding' }, errorClass: 'invalid_request_error' });
+  }
+
   // 3. Read the body.
   let body: Buffer;
   try {
@@ -574,6 +582,20 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   let plan: Plan;
   try {
     f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
+    // Bodies another parser may read differently than JSON.parse did (A5, C7): a BOM, duplicate keys, and, when an
+    // enforced budget applies to a billed surface, JSON that does not parse. A last-turn secret is still answered as one.
+    const shape = bodyShapeRefusal(body, !features.parseError);
+    const unreadable = features.parseError && surface !== 'anthropic-count-tokens' && enforcedLevelApplies(policy, f);
+    const secret = guard.hits.some((h) => h.action === 'block' && h.where === 'last-turn');
+    if (!secret && (shape !== null || unreadable)) {
+      const reason = shape ?? 'unparsable-body';
+      const msg =
+        reason === 'body-bom' ? 'the request body starts with a byte order mark; send plain UTF-8 JSON'
+        : reason === 'duplicate-keys' ? 'the request body repeats a JSON key (at the top level or inside a tool); send each key once'
+        : 'the request body is not valid JSON, and this request touches an enforced budget, so it cannot be priced; it was not sent';
+      sendError(req, res, own(400, 'invalid_request_error', reason, msg, null, { shouldRetry: false }));
+      return early({ features, guardrailHits: guard.hits, status: 400, decision: { action: 'block', reason }, errorClass: 'invalid_request_error' });
+    }
     plan = decide(policy, f);
   } catch {
     sendError(req, res, own(500, 'api_error', 'reservation-error', 'the reservation for this request could not be computed; it was not sent'));

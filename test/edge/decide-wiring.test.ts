@@ -40,7 +40,9 @@ test('rewriteModel: a model that cannot be located exactly blocks the request be
   expect(JSON.parse(res.body.toString()).error).toMatchObject({ type: 'invalid_request_error' });
   expect(s.mock.received).toHaveLength(0);
   await expect.poll(() => s.records.length).toBe(1);
-  expect(s.records[0]).toMatchObject({ decision: { action: 'block', reason: 'model-rewrite-failed', route: 'claude-code' }, outcome: { status: 400, provider: null } });
+  // Two top-level model keys are refused before decide since A5 (a provider may read the other one), so the rewrite
+  // never runs; either way nothing reaches upstream.
+  expect(s.records[0]).toMatchObject({ decision: { action: 'block', reason: 'duplicate-keys', preDecision: true }, outcome: { status: 400, provider: null } });
 });
 
 test('a client request-class header cannot reach a route with wider allowModels', async () => {
