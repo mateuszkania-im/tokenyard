@@ -382,7 +382,8 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
 const keywordRegex = new Map<string, RegExp>();
 /** One alternation of the literal keywords, longest first, compiled once per keyword list. */
 function keywordAlternation(keywords: readonly string[]): RegExp {
-  const id = keywords.join('\0');
+  // JSON, not a join: ['b', 'A'] and ['b\0A'] joined with NUL are one text and were given one alternation.
+  const id = JSON.stringify(keywords);
   let re = keywordRegex.get(id);
   if (re === undefined) {
     if (keywordRegex.size >= 64) keywordRegex.clear(); // a handful of rule lists exist; never grows without bound

@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import { PII_RULES } from '../../src/guardrails/pii.js';
 import type { SecretRule } from '../../src/guardrails/rules.js';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
-import { findSpans, ScanBudget, ScanBudgetError, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
+import { findSpans, keywordsIn, ScanBudget, ScanBudgetError, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
 
@@ -115,4 +115,11 @@ test('raw scan: a value found both raw and decoded at the same bytes is reported
   expect(findSpans(plain, DEFAULT_RULES, { raw: true }).filter((s) => s.rule.id === 'anthropic-api-key')).toHaveLength(1);
   const escaped = Buffer.from(`{"content":"${SECRET.slice(0, 3)}\\u00${SECRET.charCodeAt(3).toString(16)}${SECRET.slice(4)}`);
   expect(findSpans(escaped, DEFAULT_RULES, { raw: true }).filter((s) => s.rule.id === 'anthropic-api-key').map((s) => s.value)).toEqual([SECRET]);
+});
+
+test('keyword lists that join to the same text are different lists (the alternation cache key, V5 property finding)', () => {
+  // ['b', 'A'] joined with NUL is 'b\0A', the one keyword of the second list: its cached alternation was reused
+  expect(keywordsIn('b\0x-S\0a', ['b', 'A'])).toEqual(new Set(['b']));
+  expect(keywordsIn('b\0x-S\0a', ['b\0A'])).toEqual(new Set());
+  expect(keywordsIn('xb\0Ay', ['b\0A'])).toEqual(new Set(['b\0A']));
 });

@@ -2073,7 +2073,7 @@ function buildViews(body, start, end, messages, raw, budget2) {
   return { all, joined: joined && joined.length > 0 ? joined : null };
 }
 function keywordAlternation(keywords) {
-  const id = keywords.join("\0");
+  const id = JSON.stringify(keywords);
   let re2 = keywordRegex.get(id);
   if (re2 === void 0) {
     if (keywordRegex.size >= 64) keywordRegex.clear();
