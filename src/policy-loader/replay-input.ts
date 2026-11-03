@@ -2,7 +2,8 @@
 import { execFileSync } from 'node:child_process';
 import { lstat, stat } from 'node:fs/promises';
 import { checkPath, cliRoot } from '../fsutil/safe-path.js';
-import { lstatSync, realpathSync } from 'node:fs';
+import { lstatSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { readLedger } from '../ledger/reader.js';
 import type { LedgerLine } from '../ledger/record.js';
@@ -57,21 +58,52 @@ export function locateRepoDir(dir: string, workspace: string | null): RepoDir {
     }
     return { top: realpathSync(root), rel: rel.split(sep).join('/'), label: dir };
   }
-  const top = realpathSync(execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim());
+  const top = realpathSync(execFileSync('git', ['--no-replace-objects', 'rev-parse', '--show-toplevel'], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv(null) }).trim());
   return { top, rel: relative(top, realpathSync(resolve(dir))).split(sep).join('/'), label: dir };
+}
+
+let emptyConfig: string | null = null;
+/** A config file that holds nothing: /dev/null, or on Windows an empty file in the temp directory. */
+function nullConfig(): string {
+  if (process.platform !== 'win32') return '/dev/null';
+  if (emptyConfig === null) {
+    const dir = mkdtempSync(join(tmpdir(), 'tokenyard-git-'));
+    emptyConfig = join(dir, 'empty.gitconfig');
+    writeFileSync(emptyConfig, '');
+  }
+  return emptyConfig;
+}
+
+/**
+ * The environment git runs with, built from scratch (C9): no GIT_* variable of the process reaches it, so an earlier
+ * step that wrote $GITHUB_ENV cannot point git at other objects, replace refs or config. Only what git needs to start.
+ */
+function gitEnv(repo: RepoDir | null): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  const keep = process.platform === 'win32' ? ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'TEMP', 'TMP', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH'] : ['PATH', 'HOME', 'TMPDIR'];
+  for (const k of keep) if (process.env[k] !== undefined) env[k] = process.env[k];
+  return {
+    ...env,
+    ...(repo === null ? {} : { GIT_CEILING_DIRECTORIES: dirname(repo.top) }),
+    GIT_NO_REPLACE_OBJECTS: '1',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: nullConfig(),
+    GIT_TERMINAL_PROMPT: '0',
+  };
 }
 
 /**
  * git against an explicit repository: its git dir and work tree are `top`, discovery and bare or nested repositories
- * found in the tree are off (`safe.bareRepository=explicit`, a ceiling at the parent of `top`).
+ * found in the tree are off (`safe.bareRepository=explicit`, a ceiling at the parent of `top`), replace refs are
+ * ignored and the environment is gitEnv's.
  */
 function gitIn(repo: RepoDir, args: string[]): string {
-  return execFileSync('git', ['-c', 'safe.bareRepository=explicit', '--git-dir', join(repo.top, '.git'), '--work-tree', repo.top, ...args], {
+  return execFileSync('git', ['--no-replace-objects', '-c', 'safe.bareRepository=explicit', '--git-dir', join(repo.top, '.git'), '--work-tree', repo.top, ...args], {
     cwd: repo.top,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(repo.top) },
+    env: gitEnv(repo),
   });
 }
 

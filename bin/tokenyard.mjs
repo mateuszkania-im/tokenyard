@@ -122292,7 +122292,8 @@ __export(replay_input_exports, {
 });
 import { execFileSync } from "node:child_process";
 import { lstat as lstat4, stat as stat2 } from "node:fs/promises";
-import { lstatSync as lstatSync2, realpathSync as realpathSync2 } from "node:fs";
+import { lstatSync as lstatSync2, mkdtempSync, realpathSync as realpathSync2, writeFileSync } from "node:fs";
+import { tmpdir as tmpdir2 } from "node:os";
 import { dirname as dirname3, isAbsolute as isAbsolute2, join as join9, relative as relative2, resolve as resolve4, sep as sep2 } from "node:path";
 async function openReplayTraces(paths, o = {}) {
   for (const p of paths) {
@@ -122319,16 +122320,38 @@ function locateRepoDir(dir, workspace) {
     }
     return { top: realpathSync2(root), rel: rel.split(sep2).join("/"), label: dir };
   }
-  const top = realpathSync2(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: resolve4(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim());
+  const top = realpathSync2(execFileSync("git", ["--no-replace-objects", "rev-parse", "--show-toplevel"], { cwd: resolve4(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv(null) }).trim());
   return { top, rel: relative2(top, realpathSync2(resolve4(dir))).split(sep2).join("/"), label: dir };
 }
+function nullConfig() {
+  if (process.platform !== "win32") return "/dev/null";
+  if (emptyConfig === null) {
+    const dir = mkdtempSync(join9(tmpdir2(), "tokenyard-git-"));
+    emptyConfig = join9(dir, "empty.gitconfig");
+    writeFileSync(emptyConfig, "");
+  }
+  return emptyConfig;
+}
+function gitEnv(repo) {
+  const env = {};
+  const keep = process.platform === "win32" ? ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "TEMP", "TMP", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"] : ["PATH", "HOME", "TMPDIR"];
+  for (const k of keep) if (process.env[k] !== void 0) env[k] = process.env[k];
+  return {
+    ...env,
+    ...repo === null ? {} : { GIT_CEILING_DIRECTORIES: dirname3(repo.top) },
+    GIT_NO_REPLACE_OBJECTS: "1",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: nullConfig(),
+    GIT_TERMINAL_PROMPT: "0"
+  };
+}
 function gitIn(repo, args) {
-  return execFileSync("git", ["-c", "safe.bareRepository=explicit", "--git-dir", join9(repo.top, ".git"), "--work-tree", repo.top, ...args], {
+  return execFileSync("git", ["--no-replace-objects", "-c", "safe.bareRepository=explicit", "--git-dir", join9(repo.top, ".git"), "--work-tree", repo.top, ...args], {
     cwd: repo.top,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname3(repo.top) }
+    env: gitEnv(repo)
   });
 }
 function resolveGitCommit(ref, repo) {
@@ -122376,6 +122399,7 @@ async function loadReplayPolicy(o) {
   const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
+var emptyConfig;
 var init_replay_input = __esm({
   "src/policy-loader/replay-input.ts"() {
     "use strict";
@@ -122386,6 +122410,7 @@ var init_replay_input = __esm({
     init_load_dir();
     init_engine();
     init_load_dir2();
+    emptyConfig = null;
   }
 });
 
