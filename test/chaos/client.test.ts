@@ -24,27 +24,38 @@ test.each<[string, ClientMode]>([
   await expect.poll(() => (h as Harness).attempts.filter((a) => a.status === 200 && !a.closedEarly && a.bytesWritten === 0).length).toBe(0);
 });
 
-test('client leaves at random times across 120 requests with mixed upstream behaviour', async () => {
+async function mixedRun(seed: number, n: number): Promise<void> {
   h = await startHarness();
-  const r = rng(Number(process.env.TOKENYARD_CHAOS_SEED ?? 11));
+  const r = rng(seed);
   const plan = new Map<string, number>();
   h.setBehaviour(({ chaosId, provider }) => {
     const x = plan.get(chaosId) ?? 0;
     if (x < 0.15 && provider === 'anthropic') return { kind: 'status', status: 529 };
-    if (x < 0.25) return { kind: 'ok', stream: true, cutAt: 200 + Math.floor(x * 4000) };
+    if (x < 0.2) return { kind: 'reset' };
+    if (x < 0.3) return { kind: 'ok', stream: true, cutAt: 200 + Math.floor(x * 4000) };
     return { kind: 'ok', stream: x < 0.8, ttfbMs: Math.floor(x * 30), padEvents: 30, chunkDelayMs: 1 };
   });
   const modes: ClientMode[] = [{ kind: 'normal' }, { kind: 'abortBeforeBody' }, { kind: 'abortMidUpload' }, { kind: 'abortAfterHeaders' }, { kind: 'abortAfterBytes', bytes: 100 }];
   const sent = await Promise.all(
-    Array.from({ length: 120 }, (_, i) => {
-      const id = `mix${i}`;
+    Array.from({ length: n }, (_, i) => {
+      const id = `mix${seed}x${i}`;
       plan.set(id, r());
       const mode = r() < 0.3 ? { kind: 'abortAfterMs' as const, ms: Math.floor(r() * 60) } : (modes[Math.floor(r() * modes.length)] as ClientMode);
       return chaosRequest((h as Harness).url, id, chatBody(id, { stream: (plan.get(id) as number) < 0.8, padBytes: Math.floor(r() * 50_000) }), mode);
     }),
   );
   await checkInvariants(h, sent);
+  await h.close();
+  h = null;
+}
+
+test('client leaves at random times across 120 requests with mixed upstream behaviour', async () => {
+  await mixedRun(Number(process.env.TOKENYARD_CHAOS_SEED ?? 11), 120);
 }, 30_000);
+
+test.skipIf(!process.env.TOKENYARD_CHAOS)('long: 20 seeds of 300 requests each, mixed clients and upstreams', async () => {
+  for (let seed = 100; seed < 120; seed++) await mixedRun(seed, 300);
+}, 600_000);
 
 /** A streaming request whose reader stops after the first chunk; returns controls to resume or destroy it. */
 function pausedReader(base: string, id: string): Promise<{ resume(): Promise<ClientResult>; destroy(): void; received(): number }> {
