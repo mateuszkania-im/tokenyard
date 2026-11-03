@@ -151,7 +151,16 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
 
   records.sort((a, b) => a.ms - b.ms || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
   const p = o.anonymizeSalt === undefined ? null : saltedPseudonyms(o.anonymizeSalt);
-  const text = [manifest, ...records.map(({ r }) => (p ? anonymizeRecord(r, p) : r))].map((l) => `${JSON.stringify(l)}\n`).join('');
+  // Anonymized: record ids become their position in the export (zero-padded, so ts-then-id order is unchanged) and
+  // instance ids are re-keyed in the manifest exactly as in the records.
+  const width = String(records.length).length;
+  const lines: object[] = p
+    ? [
+        { ...manifest, instances: manifest.instances.map((i) => ({ ...i, id: p('instance', i.id) })) },
+        ...records.map(({ r }, i) => ({ ...anonymizeRecord(r, p), id: `req-${String(i + 1).padStart(width, '0')}` })),
+      ]
+    : [manifest, ...records.map(({ r }) => r)];
+  const text = lines.map((l) => `${JSON.stringify(l)}\n`).join('');
   await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith('.gz') ? gzipSync(text) : text);
   return manifest;
 }

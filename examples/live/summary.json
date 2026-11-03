@@ -1,6 +1,7 @@
 {
   "source": "examples/live/live.ndjson.gz: tokenyard traces export --anonymize of the local live runs (spec 14.1); aggregates by bench/live-summary.ts",
   "priceTable": "test/live/prices.yaml, version 2026-11-03",
+  "dates": "UTC",
   "clients": [
     {
       "agent": "claude-code",
@@ -169,27 +170,52 @@
       "maxUsd": 0.9636
     }
   ],
+  "runCapsUsd": {
+    "claudeCode": [
+      3,
+      5,
+      8
+    ],
+    "codex": 3.5,
+    "source": "test/live/claude-code.live.md and test/live/codex.live.md: TOKENYARD_LIVE_BUDGET_USD of each harness start, lowered from the shell; the cap is cumulative over all live runs"
+  },
   "refusedByBudget": [
     {
       "what": "no server tools",
       "model": "claude-opus-5-5",
       "boundKind": "context-window",
       "requests": 3,
-      "reservationUsd": 9.152
+      "reservationUsd": 9.152,
+      "runCapUsd": 3,
+      "spentBeforeUsd": {
+        "min": 0.17134,
+        "max": 0.17134
+      }
     },
     {
       "what": "no server tools",
       "model": "claude-sonnet-5-5",
       "boundKind": "context-window",
       "requests": 11,
-      "reservationUsd": 5.808
+      "reservationUsd": 5.808,
+      "runCapUsd": 5,
+      "spentBeforeUsd": {
+        "min": 0.503831,
+        "max": 0.503831
+      }
     },
     {
       "what": "server tools web_search_20250305 (max_uses 8)",
       "model": "claude-sonnet-5-5",
       "boundKind": "context-window",
       "requests": 11,
-      "reservationUsd": 58.16
+      "reservationUsd": 58.16,
+      "runCapUsd": 8,
+      "spentBeforeUsd": {
+        "min": 0.512196,
+        "max": 0.512196
+      }
     }
-  ]
+  ],
+  "refusedByBudgetNote": "reservationUsd is what the worst-case estimator computes from the traced features with the price table above (refused records carry no reservation); a request is refused when its reservation is larger than the run cap in total, or larger than the cap minus spent and reserved"
 }

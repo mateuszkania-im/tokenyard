@@ -179,4 +179,12 @@ describe.skipIf(Boolean(process.env.CI) || !existsSync(RAW_NAMES))('raw live nam
     }
     expect(leaks).toEqual([]);
   });
+
+  test('examples/live contains no record, instance, session, agent or prompt id, prefix hash or guardrail HMAC from the raw live traces', () => {
+    const raw = JSON.parse(readFileSync(RAW_NAMES, 'utf8')) as { ids?: string[] };
+    expect(raw.ids?.length ?? 0).toBeGreaterThan(0);
+    const found = liveTexts().flatMap((t) => (raw.ids ?? []).filter((id) => t.text.includes(id)).map(() => t.file));
+    // Counts per file only: the ids themselves are never printed.
+    expect(found.length).toBe(0);
+  });
 });

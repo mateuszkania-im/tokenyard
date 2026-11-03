@@ -53,9 +53,11 @@ for (const r of sorted) {
 out.push('');
 out.push('## Client versions checked by hand');
 out.push('');
+out.push('Dates are UTC.');
+out.push('');
 out.push('| Client | Version | Date | Result |');
 out.push('|---|---|---|---|');
 out.push('| Claude Code | 2.1.316 | 2026-11-02 | `claude -p "say hi"` through tokenyard against the mock worked; it sent `POST /v1/messages?beta=true`. Then live against the real API through the live harness: 5 sessions with subagents, tool calls and WebSearch, per-request tokens equal to Claude Code\'s own OTel events on the 11 requests where both were captured; see `test/live/claude-code.live.md` |');
-out.push('| Codex | 0.166.0 | 2026-11-03 | `codex exec` with `wire_api = "responses"` through the live harness against the real OpenAI API (gpt-5.4-mini): a one-line edit in a scratch clone, 3 billed requests; see `test/live/codex.live.md` |');
+out.push('| Codex | 0.166.0 | 2026-11-02 | `codex exec` with `wire_api = "responses"` through the live harness against the real OpenAI API (gpt-5.4-mini): a one-line edit in a scratch clone, 3 billed requests; see `test/live/codex.live.md` |');
 out.push('');
 process.stdout.write(out.join('\n'));

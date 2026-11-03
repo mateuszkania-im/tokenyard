@@ -4,7 +4,7 @@
 // in any trace, so they are copied from the live run log (test/live/claude-code.live.md) and labelled as such.
 //
 // With the raw live traces present (.live/traces, local and gitignored), it also writes .live/raw-names.json: the raw
-// tenant, team, key, repo, branch, ticket and feature values, which test/docs/readme.test.ts checks never
+// tenant, team, key, repo, branch, ticket and feature values and every linkable id, which test/docs/readme.test.ts checks never
 // appear in examples/live. That file never leaves .live/.
 //   npx tsx bench/live-summary.ts
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -28,6 +28,13 @@ const RAW_NAMES = join(ROOT, '.live', 'raw-names.json');
  */
 const CLAUDE_CODE_REPORTED = [0.1713382, 0.09903, 0.158844, 0.0746165, 0.0123766];
 /** Client versions are dropped by --anonymize; these are the versions the live logs name. */
+/**
+ * The live cap of each Claude Code harness start, in start order: `TOKENYARD_LIVE_BUDGET_USD` lowered from the shell
+ * for each start to keep the runs small (test/live/claude-code.live.md, run 1: 3, then 5, then 8). The budget is
+ * cumulative: each start seeds the spend of the earlier runs. Codex ran under 3.5 (test/live/codex.live.md).
+ */
+const CLAUDE_CODE_RUN_CAPS_USD = [3, 5, 8];
+const CODEX_RUN_CAP_USD = 3.5;
 const CLIENTS = [
   { agent: 'claude-code', version: '2.1.316', log: 'test/live/claude-code.live.md' },
   { agent: 'codex', version: '0.166.0', log: 'test/live/codex.live.md' },
@@ -120,20 +127,40 @@ async function main(): Promise<void> {
   });
 
   // Requests refused because their worst-case reservation was larger than the live cap allowed.
-  const refusedGroups = new Map<string, { what: string; model: string; boundKind: string; requests: number; reservationUsd: number | null }>();
+  // Harness starts are the export's instances (one per start), in start order; Claude Code starts get their caps.
+  const firstTs = new Map<string, string>();
+  for (const r of rs) if (!firstTs.has(r.instance) || (firstTs.get(r.instance) as string) > r.ts) firstTs.set(r.instance, r.ts);
+  const starts = [...firstTs].sort((x, y) => (x[1] < y[1] ? -1 : 1)).map(([id]) => id);
+  const ccStarts = starts.filter((id) => rs.some((r) => r.instance === id && r.client.agent !== 'codex'));
+  const capOf = (instance: string): number | null => {
+    const i = ccStarts.indexOf(instance);
+    if (i >= 0) return CLAUDE_CODE_RUN_CAPS_USD[i] ?? null;
+    return rs.some((r) => r.instance === instance && r.client.agent === 'codex') ? CODEX_RUN_CAP_USD : null;
+  };
+  // Spend already charged when a request arrived: every earlier charge in the export (the cap is cumulative).
+  const spentBefore = (r: TraceRecord): number => sum(rs.filter((x) => x.ts < r.ts).map((x) => x.outcome.chargedMicroUsd ?? 0));
+
+  const refusedGroups = new Map<string, { what: string; model: string; boundKind: string; requests: number; reservationUsd: number | null; runCapUsd: number | null; spentBeforeUsd: { min: number; max: number } }>();
   for (const r of rs.filter((x) => x.decision.action === 'block' && x.decision.reason === 'budget')) {
     const what = r.features.serverTools.length > 0 ? `server tools ${r.features.serverTools.map((t) => `${t.type} (max_uses ${t.maxUses})`).join(', ')}` : 'no server tools';
-    const k = `${what}|${r.features.model}|${r.features.boundKind}`;
+    const cap = capOf(r.instance);
+    const k = `${what}|${r.features.model}|${r.features.boundKind}|${cap}`;
     const g = refusedGroups.get(k);
     const micro = worstCase(r, table);
-    if (g) g.requests++;
-    else refusedGroups.set(k, { what, model: r.features.model, boundKind: r.features.boundKind, requests: 1, reservationUsd: micro === null ? null : usd(micro) });
+    const spent = usd(spentBefore(r));
+    if (g) {
+      g.requests++;
+      g.spentBeforeUsd = { min: Math.min(g.spentBeforeUsd.min, spent), max: Math.max(g.spentBeforeUsd.max, spent) };
+    } else {
+      refusedGroups.set(k, { what, model: r.features.model, boundKind: r.features.boundKind, requests: 1, reservationUsd: micro === null ? null : usd(micro), runCapUsd: cap, spentBeforeUsd: { min: spent, max: spent } });
+    }
   }
 
   const codex = rs.filter((r) => r.client.agent === 'codex');
   const summary = {
     source: 'examples/live/live.ndjson.gz: tokenyard traces export --anonymize of the local live runs (spec 14.1); aggregates by bench/live-summary.ts',
     priceTable: `test/live/prices.yaml, version ${table.version}`,
+    dates: 'UTC',
     clients: CLIENTS.map((c) => ({ ...c, days: [...new Set(rs.filter((r) => r.client.agent === c.agent).map((r) => r.ts.slice(0, 10)))] })),
     records: rs.length,
     forwarded: rs.filter((r) => r.decision.action === 'forward').length,
@@ -173,7 +200,13 @@ async function main(): Promise<void> {
       actualToBytesBound: actualToBound.length === 0 ? null : { min: round(Math.min(...actualToBound), 3), max: round(Math.max(...actualToBound), 3) },
     },
     reservations,
+    runCapsUsd: {
+      claudeCode: CLAUDE_CODE_RUN_CAPS_USD,
+      codex: CODEX_RUN_CAP_USD,
+      source: 'test/live/claude-code.live.md and test/live/codex.live.md: TOKENYARD_LIVE_BUDGET_USD of each harness start, lowered from the shell; the cap is cumulative over all live runs',
+    },
     refusedByBudget: [...refusedGroups.values()],
+    refusedByBudgetNote: 'reservationUsd is what the worst-case estimator computes from the traced features with the price table above (refused records carry no reservation); a request is refused when its reservation is larger than the run cap in total, or larger than the cap minus spent and reserved',
   };
   writeFileSync(SUMMARY, `${JSON.stringify(summary, null, 2)}\n`);
   console.log(`wrote ${SUMMARY}: ${rs.length} records`);
@@ -183,7 +216,14 @@ async function main(): Promise<void> {
       .map((f) => join(RAW_DIR, f))
       .filter((f) => f.endsWith('.ndjson') && statSync(f).isFile());
     const names = new Map<string, string>();
+    // Linkable ids of the raw traces (record, instance, session, agent and prompt ids, prefix hashes, guardrail value
+    // HMACs): an anonymized export must contain none of them.
+    const ids = new Set<string>();
     for (const r of await requests(files)) {
+      const a0 = r.attribution;
+      for (const v of [r.id, r.instance, a0.session, a0.agent, a0.parentAgent, a0.promptId, r.features.prefixHash, ...r.guardrail.hits.map((h) => h.valueHmac)]) {
+        if (v) ids.add(v);
+      }
       const a = r.attribution;
       const fields: Array<[string, string | null]> = [
         ['tenant', r.tenant], ['team', r.team], ['key', r.keyId], ['repo', a.repo], ['branch', a.branch],
@@ -191,8 +231,8 @@ async function main(): Promise<void> {
       ];
       for (const [kind, v] of fields) if (v !== null && !names.has(v)) names.set(v, kind);
     }
-    writeFileSync(RAW_NAMES, `${JSON.stringify({ names: [...names].map(([value, kind]) => ({ kind, value })) }, null, 2)}\n`, { mode: 0o600 });
-    console.log(`wrote ${RAW_NAMES}: ${names.size} names (local only)`);
+    writeFileSync(RAW_NAMES, `${JSON.stringify({ names: [...names].map(([value, kind]) => ({ kind, value })), ids: [...ids] }, null, 2)}\n`, { mode: 0o600 });
+    console.log(`wrote ${RAW_NAMES}: ${names.size} names and ${ids.size} ids (local only)`);
   }
 }
 

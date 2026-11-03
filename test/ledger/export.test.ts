@@ -113,7 +113,7 @@ test('anonymizeRecord leaves null team, repo, branch and ticket null and calls p
   const r = baseRecord({ team: null });
   r.attribution = { ...r.attribution, repo: null, branch: null, ticket: null };
   const a = anonymizeRecord({ ...r, instance: 'i', seq: 1 }, (k, v) => (seen.push(k), `${k}:${v}`));
-  expect(seen).toEqual(['tenant', 'key']);
+  expect(seen).toEqual(['tenant', 'key', 'instance', 'session']);
   expect(a.team).toBeNull();
   expect(a.attribution.repo).toBeNull();
 });
@@ -176,6 +176,62 @@ test('anonymizeRecord is deny by default: unknown attribution keys and free-text
   // fixed enum values stay readable
   const known = anonymizeRecord({ ...r, attribution: { ...r.attribution, requestClass: 'subagent', agentType: 'Explore' }, instance: 'i', seq: 1 }, () => 'x');
   expect(known.attribution).toMatchObject({ requestClass: 'subagent', agentType: 'Explore', repo: 'x' });
+});
+
+test('export --anonymize re-keys every linkable id: prefix hash, session, agent and prompt HMACs, guardrail value HMACs, record and instance ids', async () => {
+  const root = join(dir, 't');
+  const H = (c: string): string => c.repeat(64);
+  const rec = (id: string, ts: number, inst: string, seq: number, o: { session: string; agent: string | null; parent: string | null; prompt: string; prefix: string; hmac?: string }) => {
+    const r = baseRecord({ id, ts: iso(ts) });
+    return {
+      ...r,
+      instance: inst,
+      seq,
+      attribution: { ...r.attribution, session: o.session, agent: o.agent, parentAgent: o.parent, promptId: o.prompt },
+      features: { ...r.features, prefixHash: o.prefix },
+      guardrail: { hits: o.hmac ? [{ rule: 'aws-access-key-id', action: 'block' as const, valueHmac: o.hmac, where: 'last-turn' as const }] : [] },
+    };
+  };
+  const seg = (inst: string) => ({ v: 1, kind: 'segment', instance: inst, startedAt: iso(T(10)), firstSeq: 1 });
+  const raw = {
+    ids: ['01RAWIDAAAAAAAAAAAAAAAAAA1', '01RAWIDAAAAAAAAAAAAAAAAAA2', '01RAWIDAAAAAAAAAAAAAAAAAA3'],
+    instances: ['instaaaa', 'instbbbb'],
+    hashes: [H('a'), H('b'), 'f'.repeat(32), 'e'.repeat(32), 'd'.repeat(32), 'c'.repeat(32), '9'.repeat(32)],
+  };
+  await writeFileLines(join(root, 'acme', '2026-11-02', '10.instaaaa.ndjson'), [
+    seg('instaaaa'),
+    rec(raw.ids[0] as string, T(10, 1), 'instaaaa', 1, { session: 'f'.repeat(32), agent: null, parent: null, prompt: 'd'.repeat(32), prefix: H('a'), hmac: '9'.repeat(32) }),
+    rec(raw.ids[2] as string, T(10, 1), 'instaaaa', 2, { session: 'f'.repeat(32), agent: 'e'.repeat(32), parent: 'c'.repeat(32), prompt: 'd'.repeat(32), prefix: H('a'), hmac: '9'.repeat(32) }),
+  ]);
+  await writeFileLines(join(root, 'acme', '2026-11-02', '10.instbbbb.ndjson'), [
+    seg('instbbbb'),
+    rec(raw.ids[1] as string, T(10, 2), 'instbbbb', 1, { session: 'c'.repeat(32), agent: 'c'.repeat(32), parent: null, prompt: 'e'.repeat(32), prefix: H('b') }),
+  ]);
+  await exportTraces({ dir: root, sinceMs: T(0), untilMs: T(23), out, anonymizeSalt: 'salt' });
+  const text = await readFile(out, 'utf8');
+  for (const v of [...raw.ids, ...raw.instances, ...raw.hashes]) expect(text).not.toContain(v);
+  const [manifest, a, b, c] = await parse(out);
+  // Order is the export's (ts, then raw id), and the new ids keep it.
+  const newIds = [a?.id, b?.id, c?.id];
+  expect(newIds).toEqual([...newIds].sort());
+  expect(new Set([a?.id, b?.id, c?.id]).size).toBe(3);
+  // Equality within one export survives: same session, prefix, prompt and guardrail value; agent joins parentAgent.
+  expect(a?.attribution.session).toBe(b?.attribution.session);
+  expect(a?.attribution.session).not.toBe(c?.attribution.session);
+  expect(a?.features.prefixHash).toBe(b?.features.prefixHash);
+  expect(a?.features.prefixHash).not.toBe(c?.features.prefixHash);
+  expect(a?.attribution.promptId).toBe(b?.attribution.promptId);
+  expect(a?.guardrail.hits[0].valueHmac).toBe(b?.guardrail.hits[0].valueHmac);
+  expect(b?.attribution.parentAgent).toBe(c?.attribution.agent);
+  expect(a?.attribution.agent).toBeNull();
+  // Instance ids match between the manifest and the records.
+  expect(new Set(manifest?.instances.map((i: { id: string }) => i.id))).toEqual(new Set([a?.instance, c?.instance]));
+  expect(a?.instance).toBe(b?.instance);
+  // Another salt gives unrelated values.
+  await exportTraces({ dir: root, sinceMs: T(0), untilMs: T(23), out, anonymizeSalt: 'other' });
+  const [, a2] = await parse(out);
+  expect(a2?.attribution.session).not.toBe(a?.attribution.session);
+  expect(a2?.features.prefixHash).not.toBe(a?.features.prefixHash);
 });
 
 test('manifest says whether each instance ended with a shutdown record, so replay can tell heartbeats that stopped', async () => {

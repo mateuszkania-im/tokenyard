@@ -66,10 +66,17 @@ node bin/tokenyard.mjs report --traces examples/live/live.ndjson.gz --since 2026
 npx tsx bench/live-summary.ts                   # examples/live/summary.json (and .live/raw-names.json, local only)
 ```
 
+`--anonymize` replaces tenant, team, key, repo, branch, ticket and feature with salted pseudonyms, drops the client version, and re-keys every linkable id with the same salt: record ids become their position in the export, instance ids, the session, agent and prompt HMACs, the prefix hash and guardrail value HMACs are replaced consistently within the export (so sessions, subagent joins, the cache-breaker list and taint still work) and match nothing in the raw traces. Dates in `summary.json` and the README are UTC.
+
 The screenshots `examples/live/report-light.png` and `report-dark.png` are that HTML report rendered by headless Chrome with the light and the dark color scheme (`--blink-settings=preferredColorScheme=1` and `=0`, `--force-device-scale-factor=2`). `summary.json` holds the aggregates the README quotes; the per-session cost Claude Code printed is not in any trace and is copied from `test/live/claude-code.live.md`, and the client versions (dropped by `--anonymize`) from the two live logs.
 
-`.live/raw-names.json` lists the raw tenant, team, key, repo, branch, ticket and feature values of the raw traces; the local-only test in `test/docs/readme.test.ts` checks that none of them appears in `examples/live/`. It is skipped in CI, where the raw traces do not exist.
+`.live/raw-names.json` lists the raw tenant, team, key, repo, branch, ticket and feature values of the raw traces and every linkable id in them (record, instance, session, agent and prompt ids, prefix hashes, guardrail value HMACs); the local-only tests in `test/docs/readme.test.ts` check that none of them appears in `examples/live/`. It is skipped in CI, where the raw traces do not exist.
 
 ## Demo comment image
 
-`docs/demo-comment-light.png` and `docs/demo-comment-dark.png` are a local render of the Markdown the GitHub Action posts (`renderMarkdown` on the replay of `examples/traces/demo.ndjson.gz` with `examples/policy` as base and `examples/policy-head` as head), converted to HTML with GitHub-like styles and captured with headless Chrome in both color schemes. No network service is involved. They will be replaced by a recording of the real demo pull request's bot comment once that pull request is open.
+`docs/demo-comment-light.png` and `docs/demo-comment-dark.png` are a local render of the Markdown the GitHub Action posts (`renderMarkdown` on the replay of `examples/traces/demo.ndjson.gz` with `examples/policy` as base and `examples/policy-head` as head), converted to HTML with GitHub-like styles and captured with headless Chrome in both color schemes. No network service is involved:
+
+```sh
+npx tsx scripts/render-demo-png.ts      # CHROME=<path> overrides the macOS Chrome location
+```
+ They will be replaced by a recording of the real demo pull request's bot comment once that pull request is open.

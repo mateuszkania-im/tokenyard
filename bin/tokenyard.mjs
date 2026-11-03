@@ -320,11 +320,12 @@ function anonymizeRecord(r, p) {
     team: opt("team", r.team),
     keyId: p("key", r.keyId),
     client: { ...r.client, version: null },
+    instance: p("instance", r.instance),
     attribution: {
-      session: a.session,
-      agent: a.agent,
-      parentAgent: a.parentAgent,
-      promptId: a.promptId,
+      session: opt("session", a.session),
+      agent: opt("agent", a.agent),
+      parentAgent: opt("agent", a.parentAgent),
+      promptId: opt("promptId", a.promptId),
       requestClass: enumOr("requestClass", a.requestClass, REQUEST_CLASSES),
       agentType: enumOr("agentType", a.agentType, AGENT_TYPES),
       repo: opt("repo", a.repo),
@@ -332,17 +333,25 @@ function anonymizeRecord(r, p) {
       ticket: opt("ticket", a.ticket),
       feature: opt("feature", a.feature),
       ...a.sanitized ? { sanitized: true } : {}
-    }
+    },
+    features: { ...r.features, prefixHash: opt("prefix", r.features.prefixHash) },
+    guardrail: { hits: r.guardrail.hits.map((h) => ({ ...h, valueHmac: p("valueHmac", h.valueHmac) })) }
   };
 }
 function saltedPseudonyms(salt) {
-  return (kind, v) => `${kind}-${pseudonym(salt, `${kind}:${v}`).slice(0, 8)}`;
+  return (kind, v) => {
+    const h = pseudonym(salt, `${kind}:${v}`);
+    if (HEX_KINDS.has(kind)) return h;
+    if (kind === "instance") return h.slice(0, 8);
+    return `${kind}-${h.slice(0, 8)}`;
+  };
 }
-var REQUEST_CLASSES, AGENT_TYPES;
+var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES;
 var init_anonymize = __esm({
   "src/ledger/anonymize.ts"() {
     "use strict";
     init_hmac();
+    HEX_KINDS = /* @__PURE__ */ new Set(["prefix", "session", "agent", "promptId", "valueHmac"]);
     REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
     AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
   }
@@ -480,7 +489,12 @@ async function exportTraces(o) {
   };
   records.sort((a, b) => a.ms - b.ms || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
   const p = o.anonymizeSalt === void 0 ? null : saltedPseudonyms(o.anonymizeSalt);
-  const text2 = [manifest, ...records.map(({ r }) => p ? anonymizeRecord(r, p) : r)].map((l) => `${JSON.stringify(l)}
+  const width = String(records.length).length;
+  const lines = p ? [
+    { ...manifest, instances: manifest.instances.map((i) => ({ ...i, id: p("instance", i.id) })) },
+    ...records.map(({ r }, i) => ({ ...anonymizeRecord(r, p), id: `req-${String(i + 1).padStart(width, "0")}` }))
+  ] : [manifest, ...records.map(({ r }) => r)];
+  const text2 = lines.map((l) => `${JSON.stringify(l)}
 `).join("");
   await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith(".gz") ? gzipSync(text2) : text2);
   return manifest;
