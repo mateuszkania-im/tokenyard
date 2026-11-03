@@ -108,6 +108,35 @@ describe('B4 check:secrets', () => {
   it('CI checks that npm pack produced a file before scanning it', () => {
     expect(readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8')).toContain('t=$(npm pack --silent) && test -f "$t" && npm run check:secrets -- "$t"');
   });
+  it('the pre-commit hook scans the staged blobs, not the working tree', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ty-b4-hook-'));
+    try {
+      const git = (...args: string[]) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { cwd: dir, encoding: 'utf8' });
+      git('init', '-q');
+      mkdirSync(join(dir, 'scripts'));
+      mkdirSync(join(dir, '.githooks'));
+      copyFileSync(SCRIPT, join(dir, 'scripts', 'check-no-secrets.mjs'));
+      copyFileSync(join(ROOT, '.githooks', 'pre-commit'), join(dir, '.githooks', 'pre-commit'));
+      git('config', 'core.hooksPath', '.githooks'); // the throwaway repo only
+      git('add', '-A');
+      expect(git('commit', '-q', '-m', 'clean').status).toBe(0);
+      // A secret staged, then removed from the working copy: the commit would still record it.
+      writeFileSync(join(dir, 'a.txt'), `k=${ANT}\n`);
+      git('add', 'a.txt');
+      writeFileSync(join(dir, 'a.txt'), 'clean\n');
+      const r = git('commit', '-q', '-m', 'leak');
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain('anthropic-api-key in: a.txt');
+      // The other way round: a secret only in the working copy does not block a clean staged blob.
+      git('add', 'a.txt');
+      writeFileSync(join(dir, 'b.txt'), 'clean\n');
+      git('add', 'b.txt');
+      writeFileSync(join(dir, 'b.txt'), `k=${ANT}\n`);
+      expect(git('commit', '-q', '-m', 'ok').status).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('the embedded rules are the gateway rules (DEFAULT_RULES without the entropy-only ones)', () => {
     const text = readFileSync(SCRIPT, 'utf8');
     const block = /\/\/ BEGIN RULES[^\n]*\n([\s\S]*?)\n\/\/ END RULES/.exec(text)?.[1] ?? '';

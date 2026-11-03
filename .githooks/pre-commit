@@ -1,4 +1,4 @@
 #!/bin/sh
-# Refuses a commit while a tracked file holds something the gateway's secret rules match (scripts/check-no-secrets.mjs).
+# Refuses a commit whose staged blobs hold something the gateway's secret rules match (scripts/check-no-secrets.mjs).
 # Enable once per clone: git config core.hooksPath .githooks
-exec node scripts/check-no-secrets.mjs
+exec node scripts/check-no-secrets.mjs --staged

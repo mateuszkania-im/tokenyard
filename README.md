@@ -467,7 +467,7 @@ tokenyard does not try to win on speed; a TypeScript gateway will not. What it a
 - **File modes.** Trace files, exports, HTML reports, replay JSON and the last-known-good policy file are created 0600, in directories created 0700; an existing trace or export file is narrowed to 0600 when written again.
 - **Ops endpoints.** `/metrics` is served only on a separate ops listener, on 127.0.0.1 by default; bound beyond loopback it requires a bearer token. Without a token, `/metrics` and `/readyz` answer only requests whose `Host` is a loopback address or `localhost` (421 otherwise), so a web page cannot read them through DNS rebinding. Metric label values come from bounded sets.
 - **Container.** The image runs as a non-root user with a read-only root filesystem, all capabilities dropped and one writable data volume; compose publishes ports on 127.0.0.1 only.
-- **Supply chain.** No runtime dependencies in the published package: everything is bundled into one committed file, `bin/tokenyard.mjs`, and CI fails when it differs from a fresh build. Lockfile committed. `npm run check:secrets` applies the gateway's own secret rules to every tracked file (inside `.gz` files too) and, in CI, to every entry of the packed npm tarball; a pre-commit hook in `.githooks/` runs it before each commit once enabled with `git config core.hooksPath .githooks`. Publishing with npm provenance is planned for the first release; it is not done yet.
+- **Supply chain.** No runtime dependencies in the published package: everything is bundled into one committed file, `bin/tokenyard.mjs`, and CI fails when it differs from a fresh build. Lockfile committed. `npm run check:secrets` applies the gateway's own secret rules to every tracked file (inside `.gz` files too) and, in CI, to every entry of the packed npm tarball; a pre-commit hook in `.githooks/` runs it on the staged files before each commit once enabled with `git config core.hooksPath .githooks`. Publishing with npm provenance is planned for the first release; it is not done yet.
 
 ## Limitations
 
@@ -500,7 +500,7 @@ npm run typecheck && npm run lint
 npm run build            # rebuild bin/tokenyard.mjs; commit it with any change under src/
 npm run check:bundle     # fails when the committed bundle is stale
 npm run check:secrets    # the gateway's secret rules over tracked files, .gz files and tar entries; add a .tgz to scan it
-git config core.hooksPath .githooks   # once per clone: the pre-commit hook runs check:secrets
+git config core.hooksPath .githooks   # once per clone: the pre-commit hook scans the staged files with the same rules
 npm run bench            # writes bench/results.json; then node scripts/bench-to-readme.mjs --write README.md
 npm run bench:check      # fails when the README block differs from bench/results.json
 ```

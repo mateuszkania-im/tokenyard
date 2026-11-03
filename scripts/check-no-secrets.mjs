@@ -1,4 +1,4 @@
-// `npm run check:secrets [file.tgz ...]`: fails when a tracked file, or a file given as an argument (the npm tarball in
+// `npm run check:secrets [file.tgz ...]` (or `--staged`, the pre-commit hook: the index's changed blobs): fails when a tracked file, or a file given as an argument (the npm tarball in
 // CI), holds a string one of the gateway's secret rules matches. Stand-alone (plain node, no imports from src), so the
 // pre-commit hook and CI run it before anything is built. .gz files are gunzipped and tar archives (.tgz, .tar) are
 // walked entry by entry, a .gz inside one included. Prints the rule id and the file, never the value.
@@ -65,10 +65,26 @@ if (RULES.length === 0) {
   console.error('check:secrets: no rules embedded; run npx tsx scripts/sync-secret-rules.ts');
   process.exit(2);
 }
-const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
-const named = process.argv.slice(2);
 const findings = [];
 let scanned = 0;
+
+// --staged (the pre-commit hook): the blobs the commit will record, from the index, not the working tree (a secret
+// staged and then removed from the working copy is still committed).
+if (process.argv[2] === '--staged') {
+  const staged = execFileSync('git', ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+  for (const file of staged) {
+    scanned++;
+    try {
+      findings.push(...scan(file, execFileSync('git', ['show', `:${file}`], { maxBuffer: MAX_INFLATED })));
+    } catch (e) {
+      findings.push(`unreadable (${e instanceof Error ? e.message.split('\n')[0] : String(e)}) in: ${file}`);
+    }
+  }
+  report();
+}
+
+const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+const named = process.argv.slice(2);
 for (const [file, required] of [...tracked.map((f) => [f, false]), ...named.map((f) => [f, true])]) {
   let data;
   try {
@@ -87,8 +103,13 @@ for (const [file, required] of [...tracked.map((f) => [f, false]), ...named.map(
     findings.push(`unreadable archive (${e instanceof Error ? e.message : String(e)}) in: ${file}`);
   }
 }
-if (findings.length > 0) {
-  for (const f of findings) console.error(`possible secret, ${f}`);
-  process.exit(1);
+report();
+
+function report() {
+  if (findings.length > 0) {
+    for (const f of findings) console.error(`possible secret, ${f}`);
+    process.exit(1);
+  }
+  console.log(`no secrets found in ${scanned} files`);
+  process.exit(0);
 }
-console.log(`no secrets found in ${scanned} files`);
