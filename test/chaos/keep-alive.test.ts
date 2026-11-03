@@ -202,11 +202,14 @@ test.skipIf(!process.env.TOKENYARD_CHAOS)('under load: a busy gateway resets no 
   expect(r.ok).toBe(r.sent);
 }, 180_000);
 
-test.skipIf(!process.env.TOKENYARD_CHAOS)('under load, heavy senders and probes in one busy client (as the V2 soak client): no resets', async () => {
+test.skipIf(!process.env.TOKENYARD_CHAOS)('under load, heavy senders and probes in one busy client (as the V2 soak client): at most a rare client-side reset', async () => {
   const stack = await startStack({ gw: { keepAliveTimeoutMs: 2_000 } });
   close = stack.close;
   const r = await loadRun(stack.gw.url, { seconds: SECONDS, closeAtMs: 3_000, roles: ['both'] });
   console.log(`keep-alive under load, one busy client worker: ${JSON.stringify(r)}`);
-  expect(r.errors).toEqual({});
-  expect(r.ok).toBe(r.sent);
+  // The gateway now closes only from a quiet loop. A client whose own loop is busy can still send on a socket before it
+  // has read the server's close (the HTTP/1.1 keep-alive race, client side): rare, and only on a reused socket. Before
+  // the fix a 30 s run of this case gave 39 resets in 758 requests.
+  for (const k of Object.keys(r.errors)) expect(k).toBe('ECONNRESET on a reused socket');
+  expect(r.sent - r.ok).toBeLessThanOrEqual(Math.ceil(r.sent / 200));
 }, 180_000);
