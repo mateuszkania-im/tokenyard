@@ -220,7 +220,10 @@ class Load {
   /** New sessions per key and pool cycle through this many ids, so per-session counter state stops growing (below). */
   private ring = new Map<string, number>();
   private readonly hostileSessions: string[];
-  /** Distinct session values the load sent (budget-session keys), and sessions sent a secret (taint keys). */
+  /**
+   * Distinct (tenant, session) pairs the load sent (one budget-session key each: counter keys are per tenant, and the
+   * secret and hostile session ids are sent by keys of both tenants), and the pairs that sent a secret (taint keys).
+   */
   readonly sessionValues = new Set<string>();
   readonly taintedSessions = new Set<string>();
 
@@ -259,7 +262,7 @@ class Load {
     const s = list[i] as Session;
     s.turn++;
     if (s.turn >= s.turns) list.splice(i, 1);
-    this.sessionValues.add(s.id);
+    this.sessionValues.add(`${dev.tenant}\0${s.id}`);
     return s;
   }
 
@@ -339,8 +342,8 @@ class Load {
       case 'secret': {
         // A session sends a key in its last turn: blocked, and the session is tainted (spec 6.6).
         const id = this.ringId('secret', 'all', SECRET_SESSIONS);
-        this.sessionValues.add(id);
-        this.taintedSessions.add(id);
+        this.sessionValues.add(`${dev.tenant}\0${id}`);
+        this.taintedSessions.add(`${dev.tenant}\0${id}`);
         return { kind, path: messages, stream: true, headers: this.ccHeaders(dev, id, 'main'), body: messagesBody({ model: 'claude-sonnet-5-5', maxTokens: 8_000, stream: true, turns: 2, last: `deploy with ${['AKIA', 'IOSFODNN7EXAMPLE'].join('')} please` }) };
       }
       case 'bad-model': {
@@ -352,7 +355,7 @@ class Load {
         // Every attribution header the gateway reads, with values a hostile client chooses: new random values on every
         // request, except the session id, drawn from a fixed set of hostile values (see ringId).
         const id = this.pick(this.hostileSessions);
-        this.sessionValues.add(id);
+        this.sessionValues.add(`${dev.tenant}\0${id}`);
         const headers: Record<string, string> = {
           ...this.ccHeaders(dev, id, hostileValue(this.rng)),
           'x-claude-code-agent-type': hostileValue(this.rng),
@@ -397,7 +400,7 @@ class Load {
    */
   heavyBurst(): Planned[] {
     const id = this.ringId('heavy', 'all', 4);
-    this.sessionValues.add(id);
+    this.sessionValues.add(`acme\0${id}`);
     const devs = this.setup.devs.filter((d) => d.tenant === 'acme').slice(0, 8);
     const body = messagesBody({ model: 'claude-opus-5-5', maxTokens: 128_000, stream: false, turns: 2, last: 'Refactor everything.', extraKb: 1_100 });
     return devs.flatMap((dev) => Array.from({ length: 3 }, () => ({ kind: 'heavy' as const, path: '/v1/messages?beta=true', stream: false, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-output': '100' }, body })));
@@ -407,7 +410,7 @@ class Load {
   slotCheck(dev: Dev): Planned[] {
     return Array.from({ length: STREAMS_PER_KEY + 1 }, () => {
       const id = this.id('slots');
-      this.sessionValues.add(id);
+      this.sessionValues.add(`${dev.tenant}\0${id}`);
       return { kind: 'slot-check' as const, path: '/v1/messages', stream: true, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-mock': 'slow' }, body: Buffer.from(JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 256, stream: true, messages: [{ role: 'user', content: 'go' }] })) };
     });
   }
@@ -807,11 +810,11 @@ async function main(mode: Mode): Promise<void> {
         streamKeys: streamCount,
         reservedMicroUsd: reserved,
         keysByClass: redisAfter.byClass,
-        // What the load could create: one session level per session value sent (plus the unattributed one), the window
+        // What the load could create: one session level per (tenant, session) sent (plus each tenant's unattributed one), the window
         // levels of each key, team and tenant (one day and one month window each, twice if the run crossed midnight UTC),
         // one GCRA and one stream counter per key, one taint set per session that sent a secret.
         bounds: {
-          'budget-session': load.sessionValues.size + 1,
+          'budget-session': load.sessionValues.size + 2,
           'budget-window': (devCount + 4 + 2) * 2,
           rate: devCount,
           streams: devCount,
