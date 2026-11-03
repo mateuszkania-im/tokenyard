@@ -1,4 +1,6 @@
-// Last-known-good bundle in --state-dir (spec 6.7). One file, replaced atomically, with its own sha256.
+// Last-known-good bundle in --state-dir (spec 6.7). One file, replaced atomically, with its own sha256. The sha256
+// detects corruption (a torn or edited copy); it is not authentication: whoever can write the state directory as the
+// gateway's user can write a valid file (C10). The directory is the gateway's own, private, like its trace directory.
 import { createHash } from 'node:crypto';
 import { rename, unlink } from 'node:fs/promises';
 import { cliRoot, ensureDirUnder, PRIVATE_DIR_MODE, readFileUnder, writeFileUnder } from '../fsutil/safe-path.js';
@@ -24,10 +26,13 @@ export async function writeLkg(stateDir: string, bundleText: string): Promise<vo
   }
 }
 
-/** The stored bundle, or null when there is none. A file whose sha256 does not match, or whose bundle does not verify, throws: a tampered copy is refused. */
+/**
+ * The stored bundle, or null when there is none. Throws when the file is not owned by this user with mode 0600, when
+ * its sha256 does not match (corruption), or when its bundle does not verify.
+ */
 export async function readLkg(stateDir: string): Promise<Bundle | null> {
   // Read through the S-FS-1 helper: no symbolic link on the way, a regular file, bounded (the bundle as a JSON string).
-  const raw = await readFileUnder(cliRoot(stateDir), join(stateDir, LKG_FILE), MAX_BUNDLE_BYTES * 8).catch((e: unknown) => {
+  const raw = await readFileUnder(cliRoot(stateDir), join(stateDir, LKG_FILE), MAX_BUNDLE_BYTES * 8, { ownPrivate: true }).catch((e: unknown) => {
     if (e instanceof Error && /larger than/.test(e.message)) throw new Error('last-known-good file is too large');
     throw e;
   });

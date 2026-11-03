@@ -486,6 +486,7 @@ tokenyard does not try to win on speed; a TypeScript gateway will not. What it a
 - **Replay limits.** The exactness table above is the whole claim. Cross-instance admit order on Redis is approximated; session taint from before `--since` is not rebuilt; a new secret rule cannot be replayed; latency and answer quality are not computed.
 - **Repo and branch attribution is fixed at launch** of Claude Code (`tokenyard env`), so a branch switch mid-session is not reflected.
 - **The demo pull request is not open yet.** The picture at the top is a local render of the comment Markdown. The Action writes `replay.json` and exposes its path as an output but does not upload it; add an `actions/upload-artifact` step as `.github/workflows/policy-replay.yml` does.
+- **The last-known-good file is checked for corruption, not authenticated.** Its sha256 catches a torn or accidentally edited copy; anyone who can write `--state-dir` as the gateway's user can write a valid one. The file must be owned by that user with mode 0600 and is refused otherwise; keep the state directory private to the gateway, like the trace directory.
 - **Docker Compose 2.20 or later** is needed for the compose demo (optional dependencies between profiles).
 - **Measured on one laptop against a mock.** The SLO rows that say "missed" are missed; the policy propagation and error-rate SLOs are production measures and are not measured here.
 - **PII redaction on product routes** skips 13-digit integers in the epoch-millisecond range when matching card numbers, to avoid redacting timestamps.

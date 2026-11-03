@@ -162,7 +162,7 @@ const tooLarge = (target: string, cap: number): Error => new UnsafePathError(`${
  * A regular file below `root`, read up to `capBytes` (more throws), or undefined when it does not exist. Opened with
  * O_NOFOLLOW and O_NONBLOCK (a FIFO never blocks the read); anything but a regular file is refused.
  */
-export async function readFileUnder(root: string, target: string, capBytes: number): Promise<Buffer | undefined> {
+export async function readFileUnder(root: string, target: string, capBytes: number, o: { ownPrivate?: boolean } = {}): Promise<Buffer | undefined> {
   try {
     await checkPath(root, target);
   } catch (e) {
@@ -180,6 +180,10 @@ export async function readFileUnder(root: string, target: string, capBytes: numb
   try {
     const st = await fh.stat();
     if (!st.isFile()) throw new UnsafePathError(`${target} is not a regular file`);
+    // ownPrivate: a file this process wrote with mode 0600 (checked on the open descriptor; not on Windows).
+    if (o.ownPrivate && process.platform !== 'win32' && (st.uid !== process.getuid?.() || (st.mode & 0o077) !== 0)) {
+      throw new UnsafePathError(`${target} has the wrong owner or permissions (expected owned by this user, mode 0600)`);
+    }
     if (st.size > capBytes) throw tooLarge(target, capBytes);
     const buf = Buffer.alloc(capBytes + 1);
     let n = 0;

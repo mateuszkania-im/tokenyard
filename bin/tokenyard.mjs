@@ -156,7 +156,7 @@ function openFailed(e2, target) {
   if (code2 === "ENXIO") throw new UnsafePathError(`${target} is not a regular file`);
   throw e2;
 }
-async function readFileUnder(root, target, capBytes) {
+async function readFileUnder(root, target, capBytes, o = {}) {
   try {
     await checkPath(root, target);
   } catch (e2) {
@@ -174,6 +174,9 @@ async function readFileUnder(root, target, capBytes) {
   try {
     const st = await fh.stat();
     if (!st.isFile()) throw new UnsafePathError(`${target} is not a regular file`);
+    if (o.ownPrivate && process.platform !== "win32" && (st.uid !== process.getuid?.() || (st.mode & 63) !== 0)) {
+      throw new UnsafePathError(`${target} has the wrong owner or permissions (expected owned by this user, mode 0600)`);
+    }
     if (st.size > capBytes) throw tooLarge(target, capBytes);
     const buf = Buffer.alloc(capBytes + 1);
     let n2 = 0;
@@ -60346,7 +60349,7 @@ async function writeLkg(stateDir, bundleText) {
   }
 }
 async function readLkg(stateDir) {
-  const raw = await readFileUnder(cliRoot(stateDir), join5(stateDir, LKG_FILE), MAX_BUNDLE_BYTES * 8).catch((e3) => {
+  const raw = await readFileUnder(cliRoot(stateDir), join5(stateDir, LKG_FILE), MAX_BUNDLE_BYTES * 8, { ownPrivate: true }).catch((e3) => {
     if (e3 instanceof Error && /larger than/.test(e3.message)) throw new Error("last-known-good file is too large");
     throw e3;
   });
