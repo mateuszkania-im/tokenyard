@@ -3,7 +3,7 @@
 // scripts/local-redis.mjs (random 127.0.0.1 port, random password, removed at the end); without either, Redis is
 // recorded as not measured. BENCH_QUICK=1 shortens the overhead runs for development; never commit its results.
 // Exits 1 when calibration finds a request billed above its input bound (R11), after writing the results.
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createClient } from 'redis';
 import { createRedisStore } from '../src/limits/redis-store.js';
@@ -12,7 +12,7 @@ import { isLoopbackRedisUrl, startLocalRedis } from '../scripts/local-redis.mjs'
 import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
-import { cpuRssSlopes, environment, type Percentiles, ROOT } from './lib.js';
+import { cpuRssSlopes, environment, type Percentiles, ROOT, ttfbVerdict } from './lib.js';
 import { benchOverhead, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
 import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
@@ -73,7 +73,7 @@ function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow
           sli,
           target: 'under 5 ms / under 25 ms',
           measured: `${a.p50 ?? 'n/a'} ms / ${a.p99 ?? 'n/a'} ms (n = ${count(a.n)}); client-side TTFB outside the provider, p50 / p99: direct ${pp(row.direct.outsideProvider)}, through the gateway ${pp(row.gateway.outsideProvider)}`,
-          met: a.p50 === null || a.p99 === null ? null : a.p50 < 5 && a.p99 < 25,
+          met: ttfbVerdict(a, row.gateway.outsideProvider),
         });
       }
     }
@@ -102,6 +102,40 @@ function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow
   });
   out.push({ sli: `Replay of ${o.replay.records.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} trace records`, target: 'under 60 s on a CI runner', measured: `${o.replay.seconds} s on the machine above (not a CI runner)`, met: o.replay.seconds < 60 });
   return out;
+}
+
+/** How the overhead benchmark measures, for the README. */
+function overheadMethod(): string {
+  return [
+          `An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed ${MOCK.ttftMs} ms time to first token and streams ${MOCK.outputTokens} tokens at ${MOCK.tokensPerSec} tokens/s.`,
+          `Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (${RATE['non-streaming']} requests/s non-streaming, ${RATE['streaming-500']} requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included).`,
+          'Added TTFB is the gateway\'s own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path.',
+          'The client-side columns are absolute percentiles of each path, never subtracted from each other; "outside the provider" is each request\'s TTFB minus the mock\'s own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock\'s timer jitter drops out.',
+          'An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target.',
+          'n is the number of samples behind each percentile. CPU is the gateway process\'s user plus system time over the run\'s wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams.',
+          'The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.',
+        ].join(' ');
+}
+
+/**
+ * `--recompute-slo`: re-derives the SLO rows, the CPU and RSS slopes and the method text of an existing bench/results.json from its own
+ * measured rows (after a change to how verdicts are derived); measures nothing and changes no measured value.
+ */
+function recomputeSlo(): void {
+  const file = join(ROOT, 'bench', 'results.json');
+  const r = JSON.parse(readFileSync(file, 'utf8')) as {
+    overhead: { rows: OverheadRow[]; redis: string; slopes: unknown; method: string };
+    budget: { runs: BudgetRun[] };
+    cache: { rows: CacheRow[] };
+    replay: { seconds: number; records: number };
+    slo: Slo[];
+    sloDerivedAt?: string;
+  };
+  r.overhead.method = overheadMethod();
+  r.overhead.slopes = cpuRssSlopes(r.overhead.rows, 100, 500);
+  r.slo = slos({ overhead: r.overhead.rows, budget: r.budget.runs, cache: r.cache.rows, replay: r.replay, redis: r.overhead.redis });
+  writeFileSync(file, `${JSON.stringify(r, null, 2)}\n`);
+  for (const s of r.slo) log(`SLO ${s.sli}: ${s.met === true ? 'met' : s.met === false ? 'missed' : 'not measured'}`);
 }
 
 async function main(): Promise<void> {
@@ -141,14 +175,7 @@ async function main(): Promise<void> {
       ...env,
       quick,
       overhead: {
-        method: [
-          `An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed ${MOCK.ttftMs} ms time to first token and streams ${MOCK.outputTokens} tokens at ${MOCK.tokensPerSec} tokens/s.`,
-          `Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (${RATE['non-streaming']} requests/s non-streaming, ${RATE['streaming-500']} requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included).`,
-          'Added TTFB is the gateway\'s own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path.',
-          'The client-side columns are absolute percentiles of each path, never subtracted from each other; "outside the provider" is each request\'s TTFB minus the mock\'s own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock\'s timer jitter drops out.',
-          'n is the number of samples behind each percentile. CPU is the gateway process\'s user plus system time over the run\'s wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams.',
-          'The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.',
-        ].join(' '),
+        method: overheadMethod(),
         mock: MOCK,
         redis: redisNote,
         rows: overhead,
@@ -180,4 +207,5 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+if (process.argv.includes('--recompute-slo')) recomputeSlo();
+else await main();

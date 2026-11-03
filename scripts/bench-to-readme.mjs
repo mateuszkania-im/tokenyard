@@ -59,7 +59,7 @@ function overheadSection(o) {
   }
   if (o.slopes && o.slopes.length > 0) {
     lines.push('Gateway cost per 100 more streams (slope between two levels):', '', '| Store | Scenario | Streams | CPU per 100 streams | RSS growth per 100 streams |', '|---|---|---|---:|---:|');
-    for (const x of o.slopes) lines.push(`| ${x.store} | ${SCENARIOS[x.scenario] ?? x.scenario} | ${num(x.from)} to ${num(x.to)} | ${num(x.cpuPctPer100Streams, 1)}% | ${num(x.rssMbPer100Streams, 1)} MB |`);
+    for (const x of o.slopes) lines.push(`| ${x.store} | ${SCENARIOS[x.scenario] ?? x.scenario} | ${num(x.from)} to ${num(x.to)} | ${num(x.cpuPctPer100Streams, 1)}%${x.saturated ? ' (gateway saturated at ' + num(x.to) + ' streams, so this understates it)' : ''} | ${num(x.rssMbPer100Streams, 1)} MB |`);
     lines.push('');
   }
   if (o.rows.some((r) => !main.includes(r.concurrency))) {

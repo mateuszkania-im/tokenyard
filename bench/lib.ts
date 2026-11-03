@@ -59,8 +59,8 @@ export function cpuRssSlopes(
   rows: ReadonlyArray<{ store: string; scenario: string; concurrency: number; gatewayCpuPct: number; rssGrowthMb: number }>,
   from: number,
   to: number,
-): Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number }> {
-  const out: Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number }> = [];
+): Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number; saturated: boolean }> {
+  const out: Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number; saturated: boolean }> = [];
   for (const lo of rows.filter((r) => r.concurrency === from)) {
     const hi = rows.find((r) => r.concurrency === to && r.store === lo.store && r.scenario === lo.scenario);
     if (!hi) continue;
@@ -72,6 +72,8 @@ export function cpuRssSlopes(
       to,
       cpuPctPer100Streams: round((hi.gatewayCpuPct - lo.gatewayCpuPct) * per100, 1),
       rssMbPer100Streams: round((hi.rssGrowthMb - lo.rssGrowthMb) * per100, 1),
+      // A single-threaded gateway at a full core or more cannot spend more CPU: the slope then understates the cost.
+      saturated: hi.gatewayCpuPct >= 95,
     });
   }
   return out;
@@ -155,4 +157,20 @@ export async function preconnect(agents: Agent[], base: string): Promise<void> {
       ),
     );
   }
+}
+
+/** SLO target for added TTFB (spec 12.1), ms. */
+export const ADDED_TTFB_TARGET = { p50: 5, p99: 25 } as const;
+
+/**
+ * Added TTFB verdict: met only when the gateway's own per-request measure and the client-side TTFB outside the
+ * provider through the gateway are both under target. The second is an upper bound on what the gateway adds (it
+ * also holds the client's and the loopback's share) and, unlike the first, includes time a request waits before the
+ * gateway starts handling it. Null when there are no samples.
+ */
+export function ttfbVerdict(gatewayMeasured: Percentiles, clientOutsideProvider: Percentiles): boolean | null {
+  const all = [gatewayMeasured.p50, gatewayMeasured.p99, clientOutsideProvider.p50, clientOutsideProvider.p99];
+  if (all.some((x) => x === null)) return null;
+  const under = (p: Percentiles): boolean => (p.p50 as number) < ADDED_TTFB_TARGET.p50 && (p.p99 as number) < ADDED_TTFB_TARGET.p99;
+  return under(gatewayMeasured) && under(clientOutsideProvider);
 }
