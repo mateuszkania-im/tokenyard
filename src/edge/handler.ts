@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream/promises';
-import type { TraceRecord } from '../ledger/record.js';
+import type { ReservedRecord, TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
 import { pseudonym } from '../guardrails/hmac.js';
 import { PII_RULES } from '../guardrails/pii.js';
@@ -42,6 +42,8 @@ import { buildTraceRecord, parseClient } from './trace-record.js';
 /** Where finished request records go. Implemented by `TraceWriter`; `null` when `--trace-dir` is not set. */
 export interface TraceSink {
   write(r: Omit<TraceRecord, 'instance' | 'seq'>): boolean;
+  /** Write-ahead line for an admitted request (A11); sinks without it skip it. */
+  reserved?(r: Omit<ReservedRecord, 'v' | 'kind' | 'instance'>): void;
 }
 
 /** Process-local failure state (spec 8): never in `policy/`, which is pure. */
@@ -732,6 +734,13 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? (plan.reservations[0]?.estMicroUsd ?? 0) : 0;
   if (held.admitted) deps.metrics?.inc('tokenyard_reservations_open', {}, 1);
+  if (held.admitted && held.est > 0) {
+    try {
+      deps.traces?.reserved?.({ id, ts: new Date(startedAt).toISOString(), tenant: f.tenant, team: f.team, keyId: f.keyId, billing: f.billing, attribution: { repo: f.attribution.repo, session: f.attribution.session }, reservedMicroUsd: held.est });
+    } catch {
+      // a failing trace sink must not fail the request
+    }
+  }
   const admitted = {
     reservedMicroUsd: held.est,
     ...(admission ? { audit: admission.audit } : {}),

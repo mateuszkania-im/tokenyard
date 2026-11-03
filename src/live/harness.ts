@@ -13,7 +13,7 @@ import { MAX_YAML_BYTES } from '../policy/safe-yaml.js';
 import { createGatewayRuntime } from '../edge/handler.js';
 import { createGateway, DEFAULT_BODY_CAP_BYTES } from '../edge/server.js';
 import { ulid } from '../edge/ulid.js';
-import { loadTraceRecords } from '../ledger/export.js';
+import { loadWarmupLines } from '../ledger/export.js';
 import type { LedgerLine } from '../ledger/record.js';
 import { defaultInstanceId, TraceWriter } from '../ledger/writer.js';
 import { createMemoryStore } from '../limits/memory-store.js';
@@ -71,34 +71,66 @@ const alive = (pid: number): boolean => {
   }
 };
 
+/** The pid in a lock file, or NaN when it cannot be read. */
+function lockHolder(path: string): number {
+  try {
+    return Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
+  } catch {
+    return Number.NaN;
+  }
+}
+
+const holderAlive = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && alive(pid);
+
+/** Creates `path` exclusively (`wx`) holding this pid; false when it exists. */
+function createExclusive(path: string): boolean {
+  let fd: number;
+  try {
+    fd = openSync(path, 'wx');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  }
+  try {
+    writeSync(fd, `${process.pid}\n`);
+  } finally {
+    closeSync(fd);
+  }
+  return true;
+}
+
 /**
- * Takes the exclusive lock (`wx`) holding this pid. A lock whose pid is not alive is stale and replaced; a live one
- * refuses. Returns the release function (idempotent; removes the file only while it still holds this pid).
+ * Takes the exclusive lock (`wx`) holding this pid. A lock whose pid is not alive is stale and replaced, but only
+ * inside a second exclusive file (`<lock>.takeover`): of two starts that both saw the same stale lock, one creates the
+ * takeover file, re-reads the lock under it and replaces it; the other finds the takeover file and refuses, so it can
+ * never unlink the lock the winner just took (A11). A takeover file left by a process that died mid-takeover is not
+ * removed automatically: the start refuses and names it. Returns the release function (idempotent; removes the lock only while it holds this pid).
  */
 function acquireLock(traceDir: string): () => void {
   const path = join(traceDir, LIVE_LOCK_FILE);
-  for (let attempt = 0; ; attempt++) {
+  const takeover = `${path}.takeover`;
+  const busy = (holder: number): Error => new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path})`);
+  if (!createExclusive(path)) {
+    const seen = lockHolder(path);
+    if (holderAlive(seen)) throw busy(seen);
+    if (!createExclusive(takeover)) {
+      const other = lockHolder(takeover);
+      if (holderAlive(other)) throw new Error(`tokenyard live: another live harness (pid ${other}) is taking over the stale lock on ${traceDir}; try again`);
+      throw new Error(`tokenyard live: a stale lock takeover file ${takeover} is left by a process that is gone; delete it and start again`);
+    }
     try {
-      const fd = openSync(path, 'wx');
-      try {
-        writeSync(fd, `${process.pid}\n`);
-      } finally {
-        closeSync(fd);
-      }
-      break;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || attempt > 0) throw e;
-      let holder = Number.NaN;
-      try {
-        holder = Number.parseInt(readFileSync(path, 'utf8').trim(), 10);
-      } catch {
-        // unreadable or gone: treated as stale below
-      }
-      if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
-        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path})`);
-      }
+      // Under the takeover file nobody else replaces the lock: re-read it, it may have been taken since.
+      const now = lockHolder(path);
+      if (holderAlive(now)) throw busy(now);
       try {
         unlinkSync(path);
+      } catch {
+        // already gone
+      }
+      if (!createExclusive(path)) throw busy(lockHolder(path));
+    } finally {
+      try {
+        unlinkSync(takeover);
       } catch {
         // already gone
       }
@@ -211,7 +243,7 @@ export async function startLiveHarness(o: {
   const release = acquireLock(traceDir);
   try {
     await assertReadable(traceDir);
-    const records = await loadTraceRecords({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS, untilMs: now });
+    const records = await loadWarmupLines({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS, untilMs: now });
     const entries = await warmupEntries(
       (async function* (): AsyncIterable<LedgerLine> {
         yield* records;
@@ -227,7 +259,8 @@ export async function startLiveHarness(o: {
     throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code ? ` (${code})` : ''}; refusing to start without the earlier spend`);
   }
 
-  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname(), now), queueMax: 10_000, clock: Date.now });
+  // writeAhead: an admitted request leaves a `reserved` line before it is sent, so a crash cannot hide its spend (A11).
+  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname(), now), queueMax: 10_000, clock: Date.now, writeAhead: true });
   let ticks = 0;
   const stopSweeper = startSweeper(store, {
     intervalMs: SWEEP_INTERVAL_MS,

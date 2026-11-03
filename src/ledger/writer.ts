@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { cliRoot, writeFileUnder } from '../fsutil/safe-path.js';
 import { join } from 'node:path';
-import type { HeartbeatRecord, SegmentRecord, ShutdownRecord, TraceRecord } from './record.js';
+import type { HeartbeatRecord, ReservedRecord, SegmentRecord, ShutdownRecord, TraceRecord } from './record.js';
 
 /** 8 hex characters of a hash of hostname and start time, so two instances never write the same file. */
 export function defaultInstanceId(hostname: string, startedAtMs: number): string {
@@ -38,7 +38,8 @@ export class TraceWriter {
   /** Trusted root of the trace dir (S-FS-1): no symbolic link from it down to any file written. */
   private readonly root: string;
 
-  constructor(private readonly o: { dir: string; instanceId: string; queueMax: number; clock(): number }) {
+  /** `writeAhead`: also write a `reserved` line when a request is admitted (live harness, A11). */
+  constructor(private readonly o: { dir: string; instanceId: string; queueMax: number; clock(): number; writeAhead?: boolean }) {
     this.root = cliRoot(o.dir);
   }
 
@@ -61,6 +62,17 @@ export class TraceWriter {
     this.queue.push({ path, tenant: r.tenant, at, request: true, line: { ...r, instance: this.o.instanceId, seq } });
     this.kick();
     return true;
+  }
+
+  /** Queues a write-ahead `reserved` line (only with `writeAhead`); like control lines it never counts toward `queueMax`. */
+  reserved(r: Omit<ReservedRecord, 'v' | 'kind' | 'instance'>): void {
+    if (this.closed || this.o.writeAhead !== true) return;
+    const at = this.o.clock();
+    const { path } = this.pathFor(r.tenant, at);
+    this.tenants.add(r.tenant);
+    const line: ReservedRecord = { v: 1, kind: 'reserved', instance: this.o.instanceId, ...r };
+    this.queue.push({ path, tenant: r.tenant, at, request: false, line: { ...line } });
+    this.kick();
   }
 
   private control(kind: 'heartbeat' | 'shutdown'): void {

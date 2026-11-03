@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { anonymizeRecord, saltedPseudonyms } from './anonymize.js';
 import { readLedger } from './reader.js';
-import type { HeartbeatRecord, ManifestRecord, SegmentRecord, TraceRecord } from './record.js';
+import type { HeartbeatRecord, ManifestRecord, ReservedRecord, SegmentRecord, TraceRecord } from './record.js';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -179,14 +179,23 @@ export async function pruneTraces(o: { dir: string; olderThanMs: number; nowMs: 
 
 /** Request records from a trace dir (raw per-instance files) or from one export file, filtered to the window and optionally one tenant. */
 export async function loadTraceRecords(o: { path: string; sinceMs: number; untilMs: number; tenant?: string }): Promise<TraceRecord[]> {
+  return (await loadLines(o, false)) as TraceRecord[];
+}
+
+/** Request records and write-ahead `reserved` lines (A11) in the window, for warm-up. */
+export async function loadWarmupLines(o: { path: string; sinceMs: number; untilMs: number }): Promise<Array<TraceRecord | ReservedRecord>> {
+  return loadLines(o, true);
+}
+
+async function loadLines(o: { path: string; sinceMs: number; untilMs: number; tenant?: string }, reserved: boolean): Promise<Array<TraceRecord | ReservedRecord>> {
   await checkPath(cliRoot(o.path), o.path);
   const isDir = (await lstat(o.path)).isDirectory();
   const paths = isDir
     ? (await listLedgerFiles(o.path, Math.floor(o.sinceMs / HOUR_MS) * HOUR_MS, Math.floor(o.untilMs / HOUR_MS) * HOUR_MS + HOUR_MS)).map((f) => f.path)
     : [o.path];
-  const out: TraceRecord[] = [];
+  const out: Array<TraceRecord | ReservedRecord> = [];
   for await (const line of readLedger(paths)) {
-    if (line.kind !== 'request') continue;
+    if (line.kind !== 'request' && !(reserved && line.kind === 'reserved')) continue;
     const ms = Date.parse(line.ts);
     if (ms >= o.sinceMs && ms <= o.untilMs && (o.tenant === undefined || line.tenant === o.tenant)) out.push(line);
   }

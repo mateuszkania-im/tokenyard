@@ -510,12 +510,18 @@ async function pruneTraces(o) {
   return old.length;
 }
 async function loadTraceRecords(o) {
+  return await loadLines(o, false);
+}
+async function loadWarmupLines(o) {
+  return loadLines(o, true);
+}
+async function loadLines(o, reserved) {
   await checkPath(cliRoot(o.path), o.path);
   const isDir = (await lstat2(o.path)).isDirectory();
   const paths = isDir ? (await listLedgerFiles(o.path, Math.floor(o.sinceMs / HOUR_MS) * HOUR_MS, Math.floor(o.untilMs / HOUR_MS) * HOUR_MS + HOUR_MS)).map((f) => f.path) : [o.path];
   const out = [];
   for await (const line of readLedger(paths)) {
-    if (line.kind !== "request") continue;
+    if (line.kind !== "request" && !(reserved && line.kind === "reserved")) continue;
     const ms = Date.parse(line.ts);
     if (ms >= o.sinceMs && ms <= o.untilMs && (o.tenant === void 0 || line.tenant === o.tenant)) out.push(line);
   }
@@ -1270,6 +1276,7 @@ var init_writer = __esm({
     "use strict";
     init_safe_path();
     TraceWriter = class {
+      /** `writeAhead`: also write a `reserved` line when a request is admitted (live harness, A11). */
       constructor(o) {
         this.o = o;
         this.root = cliRoot(o.dir);
@@ -1303,6 +1310,16 @@ var init_writer = __esm({
         this.queue.push({ path: path3, tenant: r.tenant, at, request: true, line: { ...r, instance: this.o.instanceId, seq } });
         this.kick();
         return true;
+      }
+      /** Queues a write-ahead `reserved` line (only with `writeAhead`); like control lines it never counts toward `queueMax`. */
+      reserved(r) {
+        if (this.closed || this.o.writeAhead !== true) return;
+        const at = this.o.clock();
+        const { path: path3 } = this.pathFor(r.tenant, at);
+        this.tenants.add(r.tenant);
+        const line = { v: 1, kind: "reserved", instance: this.o.instanceId, ...r };
+        this.queue.push({ path: path3, tenant: r.tenant, at, request: false, line: { ...line } });
+        this.kick();
       }
       control(kind) {
         const now = this.o.clock();
@@ -58971,6 +58988,12 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? plan.reservations[0]?.estMicroUsd ?? 0 : 0;
   if (held.admitted) deps.metrics?.inc("tokenyard_reservations_open", {}, 1);
+  if (held.admitted && held.est > 0) {
+    try {
+      deps.traces?.reserved?.({ id, ts: new Date(startedAt).toISOString(), tenant: f.tenant, team: f.team, keyId: f.keyId, billing: f.billing, attribution: { repo: f.attribution.repo, session: f.attribution.session }, reservedMicroUsd: held.est });
+    } catch {
+    }
+  }
   const admitted = {
     reservedMicroUsd: held.est,
     ...admission ? { audit: admission.audit } : {},
@@ -60444,12 +60467,24 @@ var init_memory_store = __esm({
 async function warmupEntries(records, policy2, nowMs) {
   const current = new Map(policy2.budgets.flatMap((b) => b.window === null ? [] : [[b.window, windowOf(b.window, nowMs)]]));
   const sums = /* @__PURE__ */ new Map();
+  const settled = /* @__PURE__ */ new Set();
+  const pending = /* @__PURE__ */ new Map();
   for await (const r of records) {
+    if (r.kind === "reserved") {
+      if (!settled.has(r.id)) pending.set(r.id, r);
+      continue;
+    }
     if (r.kind !== "request") continue;
-    const cost = r.outcome.chargedMicroUsd ?? r.outcome.costMicroUsd;
-    if (cost === null || !(cost > 0)) continue;
+    settled.add(r.id);
+    pending.delete(r.id);
+    add2(r, r.outcome.chargedMicroUsd ?? r.outcome.costMicroUsd);
+  }
+  for (const r of pending.values()) add2(r, r.reservedMicroUsd);
+  return [...sums].map(([key, s2]) => ({ key, spentMicroUsd: s2.spent, ttlMs: s2.expiresAt - nowMs }));
+  function add2(r, cost) {
+    if (cost === null || !(cost > 0)) return;
     const ts = Date.parse(r.ts);
-    if (Number.isNaN(ts)) continue;
+    if (Number.isNaN(ts)) return;
     for (const b of policy2.budgets) {
       const value = levelValue(b.scope, r, budgetEnforced(b, r.billing));
       if (value === null) continue;
@@ -60467,7 +60502,6 @@ async function warmupEntries(records, policy2, nowMs) {
       else sums.set(key, { spent: Math.round(cost), expiresAt: budgetExpiresAt(resetsAt, nowMs) });
     }
   }
-  return [...sums].map(([key, s2]) => ({ key, spentMicroUsd: s2.spent, ttlMs: s2.expiresAt - nowMs }));
 }
 var init_warmup = __esm({
   "src/limits/warmup.ts"() {
@@ -105813,7 +105847,7 @@ async function openCounterStore(o) {
 }
 async function warmUpFromTraces(store, traceDir, policy2, nowMs) {
   if (!existsSync(traceDir)) return 0;
-  const records = await loadTraceRecords({ path: traceDir, sinceMs: nowMs - WARMUP_LOOKBACK_MS, untilMs: nowMs });
+  const records = await loadWarmupLines({ path: traceDir, sinceMs: nowMs - WARMUP_LOOKBACK_MS, untilMs: nowMs });
   async function* lines() {
     yield* records;
   }
@@ -121649,30 +121683,52 @@ function defaultLivePaths() {
   const root = packageRoot();
   return { traceDir: join8(root, ".live", "traces"), policyDir: join8(root, "test", "live") };
 }
+function lockHolder(path3) {
+  try {
+    return Number.parseInt(readFileSync2(path3, "utf8").trim(), 10);
+  } catch {
+    return Number.NaN;
+  }
+}
+function createExclusive(path3) {
+  let fd;
+  try {
+    fd = openSync2(path3, "wx");
+  } catch (e2) {
+    if (e2.code === "EEXIST") return false;
+    throw e2;
+  }
+  try {
+    writeSync(fd, `${process.pid}
+`);
+  } finally {
+    closeSync2(fd);
+  }
+  return true;
+}
 function acquireLock(traceDir) {
   const path3 = join8(traceDir, LIVE_LOCK_FILE);
-  for (let attempt = 0; ; attempt++) {
+  const takeover = `${path3}.takeover`;
+  const busy = (holder) => new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path3})`);
+  if (!createExclusive(path3)) {
+    const seen = lockHolder(path3);
+    if (holderAlive(seen)) throw busy(seen);
+    if (!createExclusive(takeover)) {
+      const other = lockHolder(takeover);
+      if (holderAlive(other)) throw new Error(`tokenyard live: another live harness (pid ${other}) is taking over the stale lock on ${traceDir}; try again`);
+      throw new Error(`tokenyard live: a stale lock takeover file ${takeover} is left by a process that is gone; delete it and start again`);
+    }
     try {
-      const fd = openSync2(path3, "wx");
-      try {
-        writeSync(fd, `${process.pid}
-`);
-      } finally {
-        closeSync2(fd);
-      }
-      break;
-    } catch (e2) {
-      if (e2.code !== "EEXIST" || attempt > 0) throw e2;
-      let holder = Number.NaN;
-      try {
-        holder = Number.parseInt(readFileSync2(path3, "utf8").trim(), 10);
-      } catch {
-      }
-      if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
-        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path3})`);
-      }
+      const now = lockHolder(path3);
+      if (holderAlive(now)) throw busy(now);
       try {
         unlinkSync(path3);
+      } catch {
+      }
+      if (!createExclusive(path3)) throw busy(lockHolder(path3));
+    } finally {
+      try {
+        unlinkSync(takeover);
       } catch {
       }
     }
@@ -121752,7 +121808,7 @@ async function startLiveHarness(o) {
   const release = acquireLock(traceDir);
   try {
     await assertReadable(traceDir);
-    const records = await loadTraceRecords({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
+    const records = await loadWarmupLines({ path: traceDir, sinceMs: now - WARMUP_LOOKBACK_MS2, untilMs: now });
     const entries = await warmupEntries(
       (async function* () {
         yield* records;
@@ -121767,7 +121823,7 @@ async function startLiveHarness(o) {
     const code2 = e2.code;
     throw new Error(`tokenyard live: cannot read the live trace dir ${traceDir}${code2 ? ` (${code2})` : ""}; refusing to start without the earlier spend`);
   }
-  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now });
+  const writer = new TraceWriter({ dir: traceDir, instanceId: defaultInstanceId(hostname3(), now), queueMax: 1e4, clock: Date.now, writeAhead: true });
   let ticks = 0;
   const stopSweeper = startSweeper(store, {
     intervalMs: SWEEP_INTERVAL_MS,
@@ -121822,7 +121878,7 @@ async function startLiveHarness(o) {
     }
   };
 }
-var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_LOCK_FILE, PACKAGE_NAME, alive, WARMUP_LOOKBACK_MS2, usd2;
+var LIVE_LAST_DAY, LIVE_MAX_USD, LIVE_BUDGET, LIVE_TENANT, LIVE_LOCK_FILE, PACKAGE_NAME, alive, holderAlive, WARMUP_LOOKBACK_MS2, usd2;
 var init_harness = __esm({
   "src/live/harness.ts"() {
     "use strict";
@@ -121854,6 +121910,7 @@ var init_harness = __esm({
         return e2.code === "EPERM";
       }
     };
+    holderAlive = (pid) => Number.isInteger(pid) && pid > 0 && alive(pid);
     WARMUP_LOOKBACK_MS2 = 32 * 864e5;
     usd2 = (micro) => `$${(micro / 1e6).toFixed(2)}`;
   }

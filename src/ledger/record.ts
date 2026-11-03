@@ -83,4 +83,24 @@ export interface ManifestRecord {
     /** Not in spec 9.5: the instance's latest line is a shutdown record (a graceful stop). Absent in older exports. */
     shutdown?: boolean }>;
 }
-export type LedgerLine = TraceRecord | SegmentRecord | HeartbeatRecord | ShutdownRecord | ManifestRecord;
+/**
+ * Not in spec 9.1: a write-ahead line queued when a request is admitted (live harness, A11), before the upstream is
+ * called. Warm-up counts `reservedMicroUsd` on the request's budget levels until a request line with the same `id`
+ * appears, so a request in flight when the process dies is still counted by the next run. Scope fields as on the
+ * request line (session pseudonymised); no content.
+ */
+export interface ReservedRecord {
+  v: 1;
+  kind: 'reserved';
+  instance: string;
+  id: string;
+  ts: string;
+  tenant: string;
+  team: string | null;
+  keyId: string;
+  billing: 'api' | 'subscription';
+  attribution: { repo: string | null; session: string | null };
+  reservedMicroUsd: number;
+}
+
+export type LedgerLine = TraceRecord | SegmentRecord | HeartbeatRecord | ShutdownRecord | ManifestRecord | ReservedRecord;

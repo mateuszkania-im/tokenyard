@@ -2,7 +2,7 @@
 // and the warm-up that seeds spend recorded in the trace dir (spec 9.2 step 6, 14.1).
 import { existsSync } from 'node:fs';
 import type { LedgerLine } from '../ledger/record.js';
-import { loadTraceRecords } from '../ledger/export.js';
+import { loadWarmupLines } from '../ledger/export.js';
 import type { CompiledPolicy } from '../policy/types.js';
 import { SWEEP_LOCK_TENANT } from './keys.js';
 import { createMemoryStore } from './memory-store.js';
@@ -81,7 +81,7 @@ export async function openCounterStore(o: { kind: 'memory' | 'redis'; redisUrl?:
 /** Seeds the store with the spend the trace dir records for the current windows; returns how many keys were seeded. */
 export async function warmUpFromTraces(store: CounterStore, traceDir: string, policy: CompiledPolicy, nowMs: number): Promise<number> {
   if (!existsSync(traceDir)) return 0;
-  const records = await loadTraceRecords({ path: traceDir, sinceMs: nowMs - WARMUP_LOOKBACK_MS, untilMs: nowMs });
+  const records = await loadWarmupLines({ path: traceDir, sinceMs: nowMs - WARMUP_LOOKBACK_MS, untilMs: nowMs });
   async function* lines(): AsyncIterable<LedgerLine> {
     yield* records;
   }
