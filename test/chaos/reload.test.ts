@@ -69,9 +69,11 @@ test('an empty policy file keeps the old revision serving and counts one load er
   const { l } = await loader({ dir });
   const rev = l.active().revision;
   writeFileSync(join(dir, 'policy.yaml'), '');
-  await expect.poll(() => l.loadErrors, { timeout: 3_000 }).toBeGreaterThanOrEqual(1);
+  // 10 s, not 3: the load error needs the poll, the debounce and the two-read settle, and the full suite runs files in
+  // parallel (one miss in four full runs during V4).
+  await expect.poll(() => l.loadErrors, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
   expect(l.active().revision).toBe(rev);
-});
+}, 15_000);
 
 // ---- under load --------------------------------------------------------------------------------------------------
 
