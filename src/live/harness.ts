@@ -121,12 +121,14 @@ function acquireLock(traceDir: string): () => void {
   const path = join(traceDir, LIVE_LOCK_FILE);
   const takeover = `${path}.takeover`;
   const busy = (holder: number): Error => new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path})`);
-  if (!createExclusive(path)) {
+  for (let attempt = 0; !createExclusive(path); attempt++) {
     const seen = lockHolder(path);
     if (holderAlive(seen)) throw busy(seen);
     if (!createExclusive(takeover)) {
       const other = lockHolder(takeover);
       if (holderAlive(other)) throw new Error(`tokenyard live: another live harness (pid ${other}) is taking over the stale lock on ${traceDir}; try again`);
+      // The takeover just finished (its file is gone): look at the lock again, a few times at most.
+      if (!existsSync(takeover) && attempt < 3) continue;
       throw new Error(`tokenyard live: a stale lock takeover file ${takeover} is left by a process that is gone; delete it and start again`);
     }
     try {
@@ -146,6 +148,7 @@ function acquireLock(traceDir: string): () => void {
         // already gone
       }
     }
+    break;
   }
   let released = false;
   const release = (): void => {

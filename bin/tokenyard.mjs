@@ -121940,12 +121940,13 @@ function acquireLock(traceDir) {
   const path3 = join8(traceDir, LIVE_LOCK_FILE);
   const takeover = `${path3}.takeover`;
   const busy = (holder) => new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path3})`);
-  if (!createExclusive(path3)) {
+  for (let attempt = 0; !createExclusive(path3); attempt++) {
     const seen = lockHolder(path3);
     if (holderAlive(seen)) throw busy(seen);
     if (!createExclusive(takeover)) {
       const other = lockHolder(takeover);
       if (holderAlive(other)) throw new Error(`tokenyard live: another live harness (pid ${other}) is taking over the stale lock on ${traceDir}; try again`);
+      if (!existsSync2(takeover) && attempt < 3) continue;
       throw new Error(`tokenyard live: a stale lock takeover file ${takeover} is left by a process that is gone; delete it and start again`);
     }
     try {
@@ -121962,6 +121963,7 @@ function acquireLock(traceDir) {
       } catch {
       }
     }
+    break;
   }
   let released = false;
   const release = () => {
