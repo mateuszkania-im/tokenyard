@@ -1,6 +1,16 @@
 // V4 fuzz: `traces export --anonymize` (src/ledger/anonymize.ts). Generated secrets, file paths, emails, hostnames and
 // tokens never survive into the anonymized record, in any form the record keeps (the whole JSON line is searched);
 // pseudonyms stay stable within one salt.
+// Fuzzed (a generated value in each): tenant, team, keyId, instance, client.agent and client.version; every
+// attribution field (session, agent, parentAgent, promptId, requestClass, agentType, repo, branch, ticket, feature)
+// and an unknown attribution key; features.model, serverTools[].type, serviceTier, prefixHash and an unknown features
+// key; guardrail valueHmac; decision.seqEpoch; outcome.upstreamModel, errorClass, midStreamError, serviceTier, the
+// rate limit header names and an unknown outcome key; an unknown top-level key. Server tool types also get arbitrary
+// words, letters-only names included, in a property of their own.
+// Not fuzzed, copied as they are: values the deployment chooses (decision.route, reason, chain and audit[].name,
+// features.modelGlobs, policy.revision, candidateRevision and candidateError, outcome.priceTable, modifiers and
+// serverToolUses keys, guardrail rule names) and enums, numbers and booleans the gateway writes (surface, traffic,
+// billing, boundKind, usageSource, settledBy, guardrail action and where, every count, size, time and amount).
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { anonymizeRecord, saltedPseudonyms } from '../../src/ledger/anonymize.js';
@@ -29,7 +39,7 @@ const SALT_A = 'export-salt-a';
 /** A record with a generated value in every field a client, key file or deployment chooses. */
 const record = fc
   .record({
-    tenant: sensitive, team: fc.option(sensitive, { nil: null }), keyId: sensitive, instance: sensitive, version: sensitive,
+    tenant: sensitive, team: fc.option(sensitive, { nil: null }), keyId: sensitive, instance: sensitive, clientAgent: sensitive, version: sensitive, seqEpoch: sensitive,
     session: sensitive, agent: sensitive, parentAgent: sensitive, promptId: sensitive, requestClass: sensitive, agentType: sensitive,
     repo: sensitive, branch: sensitive, ticket: sensitive, feature: sensitive,
     model: notIdShaped, upstreamModel: notIdShaped, toolType: sensitive, serviceTier: sensitive, prefixHash: sensitive, valueHmac: sensitive,
@@ -45,9 +55,10 @@ const record = fc
       tenant: g.tenant,
       team: g.team,
       keyId: g.keyId,
-      client: { agent: 'claude-code' as const, version: g.version },
+      client: { agent: g.clientAgent, version: g.version },
       attribution: { session: g.session, agent: g.agent, parentAgent: g.parentAgent, promptId: g.promptId, requestClass: g.requestClass, agentType: g.agentType, repo: g.repo, branch: g.branch, ticket: g.ticket, feature: g.feature, sanitized: true as const, [`x-${g.extra}`]: g.extra },
       features: { ...b.features, model: g.model, serverTools: [{ type: g.toolType, maxUses: 1 }], prefixHash: g.prefixHash, serviceTier: g.serviceTier, [g.extra]: g.extra },
+      decision: { ...b.decision, seqEpoch: g.seqEpoch },
       guardrail: { hits: [{ rule: 'aws-access-key-id', action: 'block' as const, valueHmac: g.valueHmac, where: 'history' as const }] },
       outcome: { ...b.outcome, upstreamModel: g.upstreamModel, errorClass: g.errorClass, midStreamError: g.midStreamError, serviceTier: g.serviceTier, rateLimitHeaders: { [g.headerName]: g.headerValue, 'anthropic-ratelimit-unified-status': g.headerValue }, [g.extra]: g.extra },
       [g.extra]: g.extra,
