@@ -1,9 +1,9 @@
 // Spec 9.5 and 11: the GitHub Action (`tokenyard action`, started as the node24 `main` of action.yml). It reads policy
 // files as data through the safe loader and git refs through the hardened replay-input path, and never executes
 // anything that comes from the pull request. Fork PRs get the job summary only: no comment, no trace token, no API token.
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createWriteStream } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { appendFile, readFile } from 'node:fs/promises';
+import { createWriteStreamUnder, isUnder, writeFileUnder } from '../fsutil/safe-path.js';
+import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseDuration } from '../ledger/export.js';
@@ -52,7 +52,7 @@ async function readEvent(env: NodeJS.ProcessEnv): Promise<PullRequestEvent | nul
 }
 
 /** Downloads `url` to `dest` (https, or http to loopback for tests), with a size cap. The bearer token is sent only when given. */
-async function download(url: string, token: string | null, dest: string): Promise<void> {
+async function download(url: string, token: string | null, root: string, dest: string): Promise<void> {
   const u = new URL(url);
   const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]';
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) throw new Error('traces URL must be https');
@@ -65,7 +65,7 @@ async function download(url: string, token: string | null, dest: string): Promis
       cb(seen > MAX_TRACES_BYTES ? new Error('traces download is larger than 512 MiB') : null, chunk);
     },
   });
-  await pipeline(Readable.fromWeb(res.body as never), cap, createWriteStream(dest));
+  await pipeline(Readable.fromWeb(res.body as never), cap, await createWriteStreamUnder(root, dest));
 }
 
 function clip(body: string): string {
@@ -98,6 +98,8 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     const tracesInput = input(env, 'traces');
     if (tracesInput === '') throw new Error('the traces input is required');
     const repo = locateRepoDir(headDir, env.GITHUB_WORKSPACE ? env.GITHUB_WORKSPACE : null);
+    // Every path the PR tree can shape is read below the workspace with no symbolic link on the way (S-FS-1).
+    const inWorkspace = env.GITHUB_WORKSPACE ? { root: env.GITHUB_WORKSPACE } : {};
     // The trace token is read only outside fork PRs.
     const tracesToken = fork ? '' : input(env, 'traces-token');
     const headRev = (event?.headSha ?? env.GITHUB_SHA ?? 'head').slice(0, 7);
@@ -106,7 +108,7 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     let errors: Array<{ code: string; path: string; message: string }> = [];
     let warnings: Array<{ code: string; path: string; message: string }> = [];
     try {
-      ({ errors, warnings } = validatePolicy(await loadPolicyDir(headDir), { experimentalSubscription: false }));
+      ({ errors, warnings } = validatePolicy(await loadPolicyDir(headDir, inWorkspace), { experimentalSubscription: false }));
     } catch (e) {
       if (!(e instanceof PolicyLoadError)) throw e;
       errors = e.issues.map((i) => ({ code: e.code, path: i.path, message: i.message }));
@@ -121,17 +123,20 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     // 2. traces: a local path, or a URL fetched with the traces token (never in a fork PR)
     const work = env.RUNNER_TEMP || process.cwd();
     let tracesPath = tracesInput;
+    let tracesRoot: { root?: string } = inWorkspace;
     if (/^https?:\/\//i.test(tracesInput)) {
       tracesPath = join(work, new URL(tracesInput).pathname.endsWith('.gz') ? 'traces.ndjson.gz' : 'traces.ndjson');
-      await mkdir(dirname(tracesPath), { recursive: true });
-      await download(tracesInput, tracesToken === '' ? null : tracesToken, tracesPath);
+      tracesRoot = { root: work };
+      await download(tracesInput, tracesToken === '' ? null : tracesToken, work, tracesPath);
+    } else if (env.GITHUB_WORKSPACE && !isUnder(env.GITHUB_WORKSPACE, tracesPath)) {
+      tracesRoot = {};
     }
 
     // 3. replay
     const sinceInput = input(env, 'since');
     const sinceMs = sinceInput === '' ? null : /^\d+[hd]$/.test(sinceInput) ? Date.now() - parseDuration(sinceInput) : Date.parse(sinceInput);
     if (sinceMs !== null && Number.isNaN(sinceMs)) throw new Error('the since input must be a duration such as 7d, or an ISO time');
-    const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false });
+    const head = await loadReplayPolicy({ source: headDir, headDir, experimentalSubscription: false, ...inWorkspace });
     // The base is a git object read from the explicit repository at the workspace. In a pull request it is the event's
     // base commit and nothing else; the base-ref input is resolved as a git ref only for other events.
     const isPr = (env.GITHUB_EVENT_NAME ?? '').startsWith('pull_request');
@@ -139,11 +144,11 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     const commit = candidates.map((c) => resolveGitCommit(c, repo)).find((c) => c !== null);
     if (!commit) throw new Error(isPr ? 'the pull request base commit is missing from the event or from the checkout (use actions/checkout with fetch-depth: 0)' : `base-ref ${JSON.stringify(baseRef)} is not a git ref (fetch the base branch)`);
     const base = loadPolicyAtCommit({ commit, repo, experimentalSubscription: false });
-    const result = await replay({ base, head, traces: await openReplayTraces([tracesPath]), sinceMs, tenant: null });
+    const result = await replay({ base, head, traces: await openReplayTraces([tracesPath], tracesRoot), sinceMs, tenant: null });
 
     // 4. outputs: replay.json for the artifact step, the sticky comment, the job summary
     const jsonPath = join(work, 'replay.json');
-    await writeFile(jsonPath, renderJson(result));
+    await writeFileUnder(work, jsonPath, renderJson(result));
     if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, `replay-json=${jsonPath}\n`);
     const baseRev = event?.baseSha?.slice(0, 7) ?? baseRef;
     const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length } });

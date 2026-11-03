@@ -1,4 +1,5 @@
-import { createReadStream } from 'node:fs';
+import { constants } from 'node:fs';
+import { open } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import type { LedgerLine } from './record.js';
@@ -9,7 +10,8 @@ import type { LedgerLine } from './record.js';
  */
 export async function* readLedger(paths: string[]): AsyncIterable<LedgerLine> {
   for (const path of paths) {
-    const file = createReadStream(path);
+    // Never through a symbolic link at the file itself; callers check the directories (S-FS-1).
+    const file = (await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))).createReadStream();
     const input = path.endsWith('.gz') ? file.pipe(createGunzip()) : file;
     file.on('error', (e) => input.destroy(e));
     for await (const text of createInterface({ input, crlfDelay: Infinity })) {

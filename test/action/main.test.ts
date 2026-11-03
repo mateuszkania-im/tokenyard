@@ -323,3 +323,16 @@ test('a symlinked policy directory, or a directory outside the workspace, is ref
   expect(await runAction(outside, fakeGh().gh)).toBe(1);
   expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('outside the workspace');
 });
+
+test('a traces file in the workspace reached through a symbolic link is refused (S-FS-1)', async () => {
+  setHead();
+  mkdirSync(join(tmp, 'elsewhere-traces'));
+  cpSync(TRACES, join(tmp, 'elsewhere-traces', 'demo.ndjson.gz'));
+  symlinkSync(join(tmp, 'elsewhere-traces'), join(repo, 'traces-link'));
+  expect(await runAction(envFor({ traces: join(repo, 'traces-link', 'demo.ndjson.gz') }), fakeGh().gh)).toBe(1);
+  expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toContain('symbolic link');
+  // The same file copied into the workspace is read.
+  cpSync(TRACES, join(repo, 'demo.ndjson.gz'));
+  expect(await runAction(envFor({ traces: join(repo, 'demo.ndjson.gz') }), fakeGh().gh)).toBe(1);
+  expect(replayJson().base.costMicroUsd).toBeGreaterThan(0);
+});

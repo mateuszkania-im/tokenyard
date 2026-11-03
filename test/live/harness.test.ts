@@ -1,7 +1,7 @@
 // Live-test harness (spec 14.1, R12): the guard, the live policy, the cap seeded from earlier live traces, and key
 // handling. Runs in CI against the mock: no real key is ever used here.
 import { execFile, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -239,4 +239,17 @@ test('a start that fails after taking the lock releases it', async () => {
   closers.push(() => chmodSync(tenantDir, 0o700));
   await expect(startLiveHarness({ env, today: TODAY, traceDir, port: 0, upstream: m.url })).rejects.toThrow(/trace/);
   expect(existsSync(join(traceDir, LIVE_LOCK_FILE))).toBe(false);
+});
+
+test('a trace dir that is a symbolic link, or holds one, refuses to start (S-FS-1)', async () => {
+  const m = await mock();
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const env = { ANTHROPIC_API_KEY: KEY, TOKENYARD_LIVE_BUDGET_USD: '20' };
+  const real = await seeded(1);
+  const linked = join(tmp(), 'traces');
+  symlinkSync(real, linked);
+  await expect(startLiveHarness({ env, today: TODAY, traceDir: linked, port: 0, upstream: m.url })).rejects.toThrow(/trace/);
+  const holder = tmp();
+  symlinkSync(join(real, 'live'), join(holder, 'live'));
+  await expect(startLiveHarness({ env, today: TODAY, traceDir: holder, port: 0, upstream: m.url })).rejects.toThrow(/trace/);
 });

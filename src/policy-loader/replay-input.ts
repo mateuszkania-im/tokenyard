@@ -1,6 +1,7 @@
 // The file side of `tokenyard policy replay` (R-P2): reads trace files and policy sources, hands data to src/replay.
 import { execFileSync } from 'node:child_process';
-import { stat } from 'node:fs/promises';
+import { lstat, stat } from 'node:fs/promises';
+import { checkPath, cliRoot } from '../fsutil/safe-path.js';
 import { lstatSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { readLedger } from '../ledger/reader.js';
@@ -16,8 +17,11 @@ import { loadPolicyDir } from './load-dir.js';
  * Lines of one or more export files (plain or .gz). A directory is refused before anything is read: replay needs the
  * merged set `tokenyard traces export` writes, never raw per-instance files (spec 9.2 step 1).
  */
-export async function openReplayTraces(paths: string[]): Promise<AsyncIterable<LedgerLine>> {
-  for (const p of paths) if ((await stat(p)).isDirectory()) throw new RawTraceDirError(p);
+export async function openReplayTraces(paths: string[], o: { root?: string } = {}): Promise<AsyncIterable<LedgerLine>> {
+  for (const p of paths) {
+    await checkPath(o.root ?? cliRoot(p), p);
+    if ((await lstat(p)).isDirectory()) throw new RawTraceDirError(p);
+  }
   return readLedger(paths);
 }
 
@@ -119,9 +123,9 @@ export function loadPolicyAtCommit(o: { commit: string; repo: RepoDir; experimen
  * the one `serve --policy <dir>` records (the first 12 hex of the content sha256), unless `revision` is given (a bundle
  * built in CI records GITHUB_SHA).
  */
-export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean }): Promise<CompiledPolicy> {
+export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean; root?: string }): Promise<CompiledPolicy> {
   const isDir = await stat(o.source).then((s) => s.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source) : parsePolicyFiles(join(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
+  const src = isDir ? await loadPolicyDir(o.source, o.root === undefined ? {} : { root: o.root }) : parsePolicyFiles(join(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
   const revision = o.revision ?? buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }

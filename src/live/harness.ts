@@ -2,12 +2,14 @@
 // itself enforces across runs. The provider key is read only from `env` inside this process, by the gateway; the
 // harness prints the gateway URL, a `ty_` client key made for this run and the remaining budget, nothing else.
 import { randomBytes } from 'node:crypto';
-import { access, constants, mkdir, readdir } from 'node:fs/promises';
+import { access, constants, readdir } from 'node:fs/promises';
 import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createKey } from '../edge/keys.js';
+import { cliRoot, ensureDirUnder, readFileUnderSync, UnsafePathError } from '../fsutil/safe-path.js';
+import { MAX_YAML_BYTES } from '../policy/safe-yaml.js';
 import { createGatewayRuntime } from '../edge/handler.js';
 import { createGateway, DEFAULT_BODY_CAP_BYTES } from '../edge/server.js';
 import { ulid } from '../edge/ulid.js';
@@ -136,7 +138,13 @@ export function liveGuard(env: NodeJS.ProcessEnv, today: string): { ok: true; ca
  */
 export function loadLivePolicy(o: { capUsd: number; keyHash: string; dir?: string; upstream?: string }): CompiledPolicy {
   const dir = o.dir ?? defaultLivePaths().policyDir;
-  const read = (f: string): string => readFileSync(join(dir, f), 'utf8');
+  // Below the package root (or the given dir's own root) with no symbolic link on the way, bounded (S-FS-1).
+  const root = o.dir === undefined ? packageRoot() : cliRoot(o.dir);
+  const read = (f: string): string => {
+    const b = readFileUnderSync(root, join(dir, f), MAX_YAML_BYTES);
+    if (b === undefined) throw new Error(`the live policy has no ${f}`);
+    return b.toString('utf8');
+  };
   const keys = `- ${JSON.stringify({ hash: o.keyHash, keyId: `key_${o.keyHash.slice(0, 8)}`, tenant: LIVE_TENANT, team: LIVE_TENANT, name: 'live', kind: 'developer', billing: 'api' })}\n`;
   const src = parsePolicyFiles(dir, { 'policy.yaml': read('policy.yaml'), 'prices.yaml': read('prices.yaml'), 'keys.yaml': keys });
   const budgets = src.policy.budgets;
@@ -155,10 +163,14 @@ export function loadLivePolicy(o: { capUsd: number; keyHash: string; dir?: strin
   return compilePolicy(src, 'live', { experimentalSubscription: false });
 }
 
-/** Every directory and file under `dir` must be readable: a cap seeded from part of the traces would be too high. */
+/**
+ * Every directory and file under `dir` must be readable: a cap seeded from part of the traces would be too high. A
+ * symbolic link is refused (S-FS-1): the reader skips links, so a linked folder's spend would silently not count.
+ */
 async function assertReadable(dir: string): Promise<void> {
   for (const e of await readdir(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
+    if (e.isSymbolicLink()) throw new UnsafePathError(`${p} is a symbolic link`);
     if (e.isDirectory()) await assertReadable(p);
     else await access(p, constants.R_OK);
   }
@@ -189,7 +201,8 @@ export async function startLiveHarness(o: {
   const store = createMemoryStore({ clock: Date.now, deadlineMs: RESERVATION_DEADLINE_MS, onSwept: (ids) => runtime.onSwept(ids) });
   const runtime = createGatewayRuntime();
   try {
-    await mkdir(traceDir, { recursive: true });
+    // Under the package root (tests: the given dir's own root), created without following any symbolic link (S-FS-1).
+    await ensureDirUnder(o.traceDir === undefined ? packageRoot() : cliRoot(traceDir), traceDir);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     throw new Error(`tokenyard live: cannot create the live trace dir ${traceDir}${code ? ` (${code})` : ''}`);

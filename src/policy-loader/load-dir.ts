@@ -2,6 +2,7 @@
 import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { join } from 'node:path';
+import { checkPath, cliRoot } from '../fsutil/safe-path.js';
 import { MAX_YAML_BYTES } from '../policy/safe-yaml.js';
 import { parsePolicyFiles, policyFileNames, POLICY_FILE, PolicyLoadError, type PolicySource } from '../policy/load-dir.js';
 
@@ -32,8 +33,17 @@ async function readOrMissing(dir: string, name: string): Promise<string | undefi
   }
 }
 
-/** Loads policy.yaml and the files it names from `dir`. Throws PolicyLoadError (E_FILE_MISSING, E_YAML_UNSAFE, E_SCHEMA, ...). */
-export async function loadPolicyDir(dir: string): Promise<PolicySource> {
+/**
+ * Loads policy.yaml and the files it names from `dir`. Throws PolicyLoadError (E_FILE_MISSING, E_YAML_UNSAFE, E_SCHEMA,
+ * ...). The directory must lie below `root` (default: the working directory, or its own parent when outside it) with no
+ * symbolic link on the way (S-FS-1): UnsafePathError otherwise.
+ */
+export async function loadPolicyDir(dir: string, o: { root?: string } = {}): Promise<PolicySource> {
+  try {
+    await checkPath(o.root ?? cliRoot(dir), dir);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+  }
   const files: Record<string, string> = {};
   const policy = await readOrMissing(dir, POLICY_FILE);
   if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${dir}` }]);

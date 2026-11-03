@@ -1,5 +1,6 @@
 // Export (spec 9.5): merge every instance's files in a window into one ordered set with a manifest line first.
-import { readdir, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, rmdir, unlink } from 'node:fs/promises';
+import { checkPath, cliRoot, listDirUnder, writeFileUnder } from '../fsutil/safe-path.js';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { anonymizeRecord, saltedPseudonyms } from './anonymize.js';
@@ -29,13 +30,18 @@ export interface LedgerFile {
 /** Every `<tenant>/<YYYY-MM-DD>/<HH>.<instance>.ndjson` file under `dir` whose hour starts in [fromMs, toMs]. */
 export async function listLedgerFiles(dir: string, fromMs: number, toMs: number): Promise<LedgerFile[]> {
   const out: LedgerFile[] = [];
-  const names = async (p: string): Promise<string[]> => readdir(p).catch(() => []);
-  for (const tenantDir of await names(dir)) {
-    for (const date of await names(join(dir, tenantDir))) {
+  // The trace dir must be no symbolic link below its root (S-FS-1); linked entries inside it are skipped, not followed.
+  const root = cliRoot(dir);
+  await checkPath(root, dir, { allowMissing: true });
+  if ((await lstat(dir).catch(() => null))?.isDirectory() !== true) return out;
+  const entries = async (p: string, kind: 'dir' | 'file'): Promise<string[]> =>
+    (await listDirUnder(root, p).catch(() => [])).filter((e) => (kind === 'dir' ? e.isDirectory() : e.isFile())).map((e) => e.name);
+  for (const tenantDir of await entries(dir, 'dir')) {
+    for (const date of await entries(join(dir, tenantDir), 'dir')) {
       if (!DATE_DIR.test(date)) continue;
       const dayMs = Date.parse(`${date}T00:00:00.000Z`);
       if (dayMs + DAY_MS <= fromMs || dayMs > toMs) continue;
-      for (const f of await names(join(dir, tenantDir, date))) {
+      for (const f of await entries(join(dir, tenantDir, date), 'file')) {
         const m = FILE_NAME.exec(f);
         if (!m) continue;
         const hourMs = dayMs + Number(m[1]) * HOUR_MS;
@@ -146,7 +152,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
   records.sort((a, b) => a.ms - b.ms || (a.r.id < b.r.id ? -1 : a.r.id > b.r.id ? 1 : 0));
   const p = o.anonymizeSalt === undefined ? null : saltedPseudonyms(o.anonymizeSalt);
   const text = [manifest, ...records.map(({ r }) => (p ? anonymizeRecord(r, p) : r))].map((l) => `${JSON.stringify(l)}\n`).join('');
-  await writeFile(o.out, o.out.endsWith('.gz') ? gzipSync(text) : text);
+  await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith('.gz') ? gzipSync(text) : text);
   return manifest;
 }
 
@@ -164,7 +170,8 @@ export async function pruneTraces(o: { dir: string; olderThanMs: number; nowMs: 
 
 /** Request records from a trace dir (raw per-instance files) or from one export file, filtered to the window and optionally one tenant. */
 export async function loadTraceRecords(o: { path: string; sinceMs: number; untilMs: number; tenant?: string }): Promise<TraceRecord[]> {
-  const isDir = (await stat(o.path)).isDirectory();
+  await checkPath(cliRoot(o.path), o.path);
+  const isDir = (await lstat(o.path)).isDirectory();
   const paths = isDir
     ? (await listLedgerFiles(o.path, Math.floor(o.sinceMs / HOUR_MS) * HOUR_MS, Math.floor(o.untilMs / HOUR_MS) * HOUR_MS + HOUR_MS)).map((f) => f.path)
     : [o.path];

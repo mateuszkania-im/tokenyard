@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { appendFile } from 'node:fs/promises';
+import { cliRoot, writeFileUnder } from '../fsutil/safe-path.js';
 import type { KeyRecord } from '../policy/types.js';
 import { hashKey } from './auth.js';
 
@@ -22,7 +22,10 @@ export function createKey(): { plaintext: string; hash: string } {
   return { plaintext, hash: hashKey(plaintext) };
 }
 
-/** Appends one record to a YAML list file (creating it). Each record is one flow mapping line; JSON is valid YAML flow. */
+/**
+ * Appends one record to a YAML list file (creating it). Each record is one flow mapping line; JSON is valid YAML flow.
+ * Never through a symbolic link (S-FS-1).
+ */
 export async function appendKey(file: string, rec: KeyRecord): Promise<void> {
-  await appendFile(file, `- ${JSON.stringify(rec)}\n`, 'utf8');
+  await writeFileUnder(cliRoot(file), file, `- ${JSON.stringify(rec)}\n`, { append: true });
 }

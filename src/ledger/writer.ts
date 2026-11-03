@@ -1,6 +1,6 @@
 // NDJSON trace ledger writer (spec 9.1): bounded async queue, hourly files per tenant, one file set per instance.
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir } from 'node:fs/promises';
+import { cliRoot, writeFileUnder } from '../fsutil/safe-path.js';
 import { join } from 'node:path';
 import type { HeartbeatRecord, SegmentRecord, ShutdownRecord, TraceRecord } from './record.js';
 
@@ -35,7 +35,12 @@ export class TraceWriter {
   private draining: Promise<void> | null = null;
   private closed = false;
 
-  constructor(private readonly o: { dir: string; instanceId: string; queueMax: number; clock(): number }) {}
+  /** Trusted root of the trace dir (S-FS-1): no symbolic link from it down to any file written. */
+  private readonly root: string;
+
+  constructor(private readonly o: { dir: string; instanceId: string; queueMax: number; clock(): number }) {
+    this.root = cliRoot(o.dir);
+  }
 
   private pathFor(tenant: string, nowMs: number): { path: string } {
     const iso = new Date(nowMs).toISOString(); // 2026-11-02T10:30:00.000Z
@@ -109,8 +114,8 @@ export class TraceWriter {
       }
       text += items.map((i) => `${JSON.stringify(i.line)}\n`).join('');
       try {
-        await mkdir(join(path, '..'), { recursive: true });
-        await appendFile(path, text);
+        // Directories are created below the root one by one and the file is opened without following links (S-FS-1).
+        await writeFileUnder(this.root, path, text, { append: true });
       } catch {
         this.opened.delete(path);
         this.dropped += items.filter((i) => i.request).length;

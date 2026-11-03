@@ -264,8 +264,7 @@ policy
   .option('--out <file>', 'output file', 'dist/policy-bundle.json')
   .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
   .action(async (dir: string, o: { out: string; experimentalSubscription?: boolean }) => {
-    const { mkdir, writeFile } = await import('node:fs/promises');
-    const { dirname } = await import('node:path');
+    const { cliRoot, writeFileUnder } = await import('./fsutil/safe-path.js');
     const { loadPolicyDir } = await import('./policy-loader/load-dir.js');
     const { PolicyLoadError } = await import('./policy/load-dir.js');
     const { validatePolicy } = await import('./policy/validate.js');
@@ -278,8 +277,7 @@ policy
         process.exit(1);
       }
       const bundle = buildBundle(src, { createdAt: new Date().toISOString(), ...(process.env.GITHUB_SHA ? { revision: process.env.GITHUB_SHA.slice(0, 40) } : {}) });
-      await mkdir(dirname(o.out), { recursive: true });
-      await writeFile(o.out, serializeBundle(bundle));
+      await writeFileUnder(cliRoot(o.out), o.out, serializeBundle(bundle));
       console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
     } catch (e) {
       if (!(e instanceof PolicyLoadError)) throw e;
@@ -307,7 +305,7 @@ policy
   .option('--head-revision <rev>', 'revision of the head (default: its content revision)')
   .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
   .action(async (o: { base: string; head: string; traces: string[]; since?: string; tenant?: string; json?: string; baseRevision?: string; headRevision?: string; experimentalSubscription?: boolean }) => {
-    const { writeFile } = await import('node:fs/promises');
+    const { cliRoot, writeFileUnder } = await import('./fsutil/safe-path.js');
     const { loadReplayPolicy, openReplayTraces } = await import('./policy-loader/replay-input.js');
     const { replay } = await import('./replay/engine.js');
     const { renderJson } = await import('./replay/render-json.js');
@@ -319,7 +317,7 @@ policy
       const base = await loadReplayPolicy({ source: o.base, headDir: o.head, experimentalSubscription, ...(o.baseRevision ? { revision: o.baseRevision } : {}) });
       const head = await loadReplayPolicy({ source: o.head, headDir: o.head, experimentalSubscription, ...(o.headRevision ? { revision: o.headRevision } : {}) });
       const result = await replay({ base, head, traces: await openReplayTraces(o.traces), sinceMs, tenant: o.tenant ?? null });
-      if (o.json) await writeFile(o.json, renderJson(result));
+      if (o.json) await writeFileUnder(cliRoot(o.json), o.json, renderJson(result));
       process.stdout.write(renderTerminal(result));
       if (result.gates.failed.length > 0) process.exitCode = 1;
     } catch (e) {

@@ -1,6 +1,7 @@
 // `tokenyard demo`: mock Anthropic and OpenAI providers, a gateway with the example policy and synthetic traffic from 8 developers
 // run in this process on a virtual clock; the traces are exported and replayed against the demo PR's policy (spec 13).
-import { copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cliRoot, writeFileUnder } from '../fsutil/safe-path.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createGateway } from '../edge/server.js';
@@ -127,7 +128,7 @@ export async function runDemo(o: { out: NodeJS.WritableStream; seed: number; wri
     o.out.write(`${rec.requests} requests in ${rec.sessions} sessions recorded. Replaying them against examples/policy-head (the demo PR: compaction and auxiliary on a cheaper model, a tighter team budget).\n`);
     const result = await replay({ base: rec.base, head: rec.head, traces: readLedger([file]), sinceMs: null, tenant: null });
     if (o.writeTraces) {
-      await copyFile(file, o.writeTraces);
+      await writeFileUnder(cliRoot(o.writeTraces), o.writeTraces, await readFile(file));
       o.out.write(`Traces written to ${o.writeTraces}.\n`);
     }
     o.out.write(renderTerminal(result));
