@@ -3,7 +3,7 @@
 //   (SIGKILL) and the file fails. A child a test already signalled gets 5 s to exit first.
 // - node children get test/setup/child-listen-guard.mjs preloaded (NODE_OPTIONS), which records any listener bound
 //   to 0.0.0.0 or ::; in-process servers are checked the same way here. The global teardown (global-guard.ts) fails
-//   the run on any record, and on any recorded child that is still alive.
+//   the run on any record, and on any recorded child that was not seen exiting and is still alive.
 import type { ChildProcess } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
@@ -72,7 +72,17 @@ function install(dir: string): GuardState {
   const record = (child: ChildProcess, cmd: string): void => {
     const s = G[KEY] as GuardState;
     s.children.push({ child, cmd });
-    if (child.pid !== undefined) appendFileSync(join(s.dir, `spawned-${process.pid}.txt`), `${child.pid}\t${cmd}\n`);
+    if (child.pid === undefined) return;
+    const pid = child.pid;
+    appendFileSync(join(s.dir, `spawned-${process.pid}.txt`), `${pid}\t${cmd}\n`);
+    // The final check skips a pid seen exiting here: by then another process may have it (pids are reused).
+    child.once('exit', () => {
+      try {
+        appendFileSync(join(s.dir, `exited-${process.pid}.txt`), `${pid}\n`);
+      } catch {
+        // the run is over and the directory gone
+      }
+    });
   };
   const describe = (a: unknown[]): string => [a[0], ...(Array.isArray(a[1]) ? a[1] : [])].map(String).join(' ').slice(0, 300);
   type Fn = (...a: unknown[]) => unknown;
