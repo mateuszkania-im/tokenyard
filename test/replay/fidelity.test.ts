@@ -189,22 +189,30 @@ test('bursts competing for the last rate token and the one stream slot replay in
     },
   });
   const traces: Rec[] = [];
-  const gw = await startGateway({ policy, store: createMemoryStore({ clock: Date.now }), traces: { write: (r) => (traces.push(r), true) }, traceSalt: 'salt', runtime: createGatewayRuntime() });
+  // Requests that reached the handler (it reads its start time right after the id): the late requests are registered
+  // before the competing ones are sent, whatever the machine's load (no fixed pause).
+  const ids: string[] = [];
+  const gw = await startGateway({ policy, store: createMemoryStore({ clock: Date.now }), traces: { write: (r) => (traces.push(r), true) }, traceSalt: 'salt', runtime: createGatewayRuntime(), onId: (id) => ids.push(id) });
   closers.push(gw.close);
+  /** Waits until `n` requests reached the handler, then past the millisecond of the last start time (ts ordering). */
+  const registered = async (n: number): Promise<void> => {
+    await expect.poll(() => ids.length).toBe(n);
+    const t = Date.now();
+    while (Date.now() <= t) await new Promise((r) => setTimeout(r, 1));
+  };
   const big = (text: string): string => JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 64, messages: [{ role: 'user', content: `${text} ${'x'.repeat(20_000)}` }] });
   const small = (text: string): string => JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 64, messages: [{ role: 'user', content: text }] });
   const post = (plain: string, body: string) => send(gw.url, { path: '/v1/messages', headers: { ...authHeaders, 'x-api-key': plain }, body });
-  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   // Rate: one token is used; the big request starts first but finishes its upload after the small one took the last token.
   expect((await post(RATE, small('warm up'))).status).toBe(200);
   const lateRate = halfSent(gw.url, RATE, big('late rate'));
-  await pause(200);
+  await registered(2);
   expect((await post(RATE, small('early rate'))).status).toBe(200);
   expect(await lateRate.finish()).toBe(429);
   // Streams: the big request starts first, the small one takes the only slot and holds it upstream.
   const lateSlot = halfSent(gw.url, SLOT, big('late slot'));
-  await pause(200);
+  await registered(4);
   const holder = post(SLOT, small('slow holder'));
   await expect.poll(() => received.some((t) => t.includes('slow holder'))).toBe(true);
   expect(await lateSlot.finish()).toBe(429);
