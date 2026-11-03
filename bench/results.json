@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "runAt": "2026-11-03T01:32:41.887Z",
+  "runAt": "2026-11-03T02:03:24.628Z",
   "git": {
-    "commit": "f6fb6cc",
+    "commit": "5a72e15",
     "dirty": false
   },
   "hardware": {
@@ -17,16 +17,15 @@
   },
   "node": "v22.14.0",
   "tools": {
-    "autocannon": "8.0.0",
     "tsx": "4.23.15",
     "redis": "7.4.12"
   },
   "quick": false,
   "overhead": {
-    "method": "autocannon drives each scenario at the mock provider directly and through the gateway (both in their own processes, loopback); the mock answers after a fixed 100 ms time to first token and streams 500 tokens at 1000 tokens/s. Each connection is one stream with a fixed request rate below what it can complete directly; latencies are corrected for coordinated omission with that intended interval. Added time is the gateway percentile minus the direct percentile; CPU and RSS are the gateway process's; RSS per 100 streams is its peak growth during the run above its size just before it, scaled to 100 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.",
+    "method": "An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed 100 ms time to first token and streams 500 tokens at 2000 tokens/s. Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (5 requests/s non-streaming, 1.25 requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included). Added TTFB is the gateway's own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path. The client-side columns are absolute percentiles of each path, never subtracted from each other; \"outside the provider\" is each request's TTFB minus the mock's own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock's timer jitter drops out. An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target. n is the number of samples behind each percentile. CPU is the gateway process's user plus system time over the run's wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.",
     "mock": {
       "ttftMs": 100,
-      "tokensPerSec": 1000,
+      "tokensPerSec": 2000,
       "outputTokens": 500
     },
     "redis": "measured",
@@ -35,11 +34,19 @@
         "scenario": "non-streaming",
         "store": "memory",
         "concurrency": 1,
-        "ratePerConnection": 4,
+        "ratePerConnection": 5,
         "durationS": 20,
+        "intended": {
+          "direct": 100,
+          "gateway": 100
+        },
         "requests": {
-          "direct": 80,
-          "gateway": 80
+          "direct": 100,
+          "gateway": 100
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -49,56 +56,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 1.1,
+          "p95": 1.43,
+          "p99": 1.57,
+          "n": 100
+        },
         "direct": {
           "ttfb": {
-            "p50": 103.45,
-            "p95": 105.04,
-            "p99": 108.16
+            "p50": 105.59,
+            "p95": 106.9,
+            "p99": 107.98,
+            "n": 100
+          },
+          "outsideProvider": {
+            "p50": 3.29,
+            "p95": 4.31,
+            "p99": 5.19,
+            "n": 100
           },
           "total": {
-            "p50": 103.5,
-            "p95": 105.11,
-            "p99": 108.23
+            "p50": 105.8,
+            "p95": 107.14,
+            "p99": 108.37,
+            "n": 100
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 106.06,
-            "p95": 107.58,
-            "p99": 109
+            "p50": 108.2,
+            "p95": 110.16,
+            "p99": 111,
+            "n": 100
+          },
+          "outsideProvider": {
+            "p50": 6.21,
+            "p95": 7.77,
+            "p99": 9.35,
+            "n": 100
           },
           "total": {
-            "p50": 106.57,
-            "p95": 108.54,
-            "p99": 110.01
+            "p50": 108.72,
+            "p95": 110.89,
+            "p99": 111.47,
+            "n": 100
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 2.61,
-            "p95": 2.54,
-            "p99": 0.84
-          },
-          "total": {
-            "p50": 3.07,
-            "p95": 3.43,
-            "p99": 1.78
-          }
-        },
-        "gatewayCpuPct": 3,
-        "cpuPctPer100Streams": 298.4,
-        "gatewayRssMb": 123.2,
-        "rssMbPer100Streams": 235.9
+        "gatewayCpuPct": 4.2,
+        "gatewayRssMb": 109.8,
+        "rssGrowthMb": 2.4
       },
       {
         "scenario": "non-streaming",
         "store": "redis",
         "concurrency": 1,
-        "ratePerConnection": 4,
+        "ratePerConnection": 5,
         "durationS": 20,
+        "intended": {
+          "direct": 100,
+          "gateway": 100
+        },
         "requests": {
-          "direct": 80,
-          "gateway": 80
+          "direct": 100,
+          "gateway": 100
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -108,882 +132,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 3.11,
+          "p95": 4.25,
+          "p99": 4.85,
+          "n": 100
+        },
         "direct": {
           "ttfb": {
-            "p50": 103.45,
-            "p95": 105.04,
-            "p99": 108.16
+            "p50": 105.59,
+            "p95": 106.9,
+            "p99": 107.98,
+            "n": 100
+          },
+          "outsideProvider": {
+            "p50": 3.29,
+            "p95": 4.31,
+            "p99": 5.19,
+            "n": 100
           },
           "total": {
-            "p50": 103.5,
-            "p95": 105.11,
-            "p99": 108.23
+            "p50": 105.8,
+            "p95": 107.14,
+            "p99": 108.37,
+            "n": 100
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 107.15,
-            "p95": 110.94,
-            "p99": 113.08
+            "p50": 109.65,
+            "p95": 112.61,
+            "p99": 116.71,
+            "n": 100
+          },
+          "outsideProvider": {
+            "p50": 7.98,
+            "p95": 10.58,
+            "p99": 14.29,
+            "n": 100
           },
           "total": {
-            "p50": 107.71,
-            "p95": 111.53,
-            "p99": 113.67
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 3.7,
-            "p95": 5.9,
-            "p99": 4.92
-          },
-          "total": {
-            "p50": 4.21,
-            "p95": 6.42,
-            "p99": 5.44
-          }
-        },
-        "gatewayCpuPct": 3.5,
-        "cpuPctPer100Streams": 345.8,
-        "gatewayRssMb": 136.1,
-        "rssMbPer100Streams": 232.8
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 10,
-        "ratePerConnection": 4,
-        "durationS": 8,
-        "requests": {
-          "direct": 320,
-          "gateway": 320
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 103.97,
-            "p95": 105.76,
-            "p99": 106.89
-          },
-          "total": {
-            "p50": 104,
-            "p95": 105.77,
-            "p99": 106.94
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 111.28,
-            "p95": 120.84,
-            "p99": 176.13
-          },
-          "total": {
-            "p50": 111.45,
-            "p95": 120.87,
-            "p99": 176.28
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 7.31,
-            "p95": 15.08,
-            "p99": 69.24
-          },
-          "total": {
-            "p50": 7.45,
-            "p95": 15.1,
-            "p99": 69.34
-          }
-        },
-        "gatewayCpuPct": 10.5,
-        "cpuPctPer100Streams": 104.8,
-        "gatewayRssMb": 128,
-        "rssMbPer100Streams": 48.1
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 10,
-        "ratePerConnection": 4,
-        "durationS": 8,
-        "requests": {
-          "direct": 320,
-          "gateway": 320
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 103.97,
-            "p95": 105.76,
-            "p99": 106.89
-          },
-          "total": {
-            "p50": 104,
-            "p95": 105.77,
-            "p99": 106.94
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 114.21,
-            "p95": 118.48,
-            "p99": 119.94
-          },
-          "total": {
-            "p50": 114.4,
-            "p95": 118.6,
-            "p99": 120.64
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 10.24,
-            "p95": 12.72,
-            "p99": 13.05
-          },
-          "total": {
-            "p50": 10.4,
-            "p95": 12.83,
-            "p99": 13.7
-          }
-        },
-        "gatewayCpuPct": 9.8,
-        "cpuPctPer100Streams": 97.5,
-        "gatewayRssMb": 140.8,
-        "rssMbPer100Streams": 153.4
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 16,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 320,
-          "gateway": 320
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 103.86,
-            "p95": 106.24,
-            "p99": 106.85
-          },
-          "total": {
-            "p50": 103.88,
-            "p95": 106.25,
-            "p99": 106.86
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 112.04,
-            "p95": 119.77,
-            "p99": 121.84
-          },
-          "total": {
-            "p50": 112.16,
-            "p95": 119.85,
-            "p99": 121.92
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 8.18,
-            "p95": 13.53,
-            "p99": 14.99
-          },
-          "total": {
-            "p50": 8.28,
-            "p95": 13.6,
-            "p99": 15.06
-          }
-        },
-        "gatewayCpuPct": 13.4,
-        "cpuPctPer100Streams": 83.7,
-        "gatewayRssMb": 132.7,
-        "rssMbPer100Streams": 31.2
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 16,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 320,
-          "gateway": 320
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 103.86,
-            "p95": 106.24,
-            "p99": 106.85
-          },
-          "total": {
-            "p50": 103.88,
-            "p95": 106.25,
-            "p99": 106.86
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 115.97,
-            "p95": 120.99,
-            "p99": 122.22
-          },
-          "total": {
-            "p50": 116.05,
-            "p95": 121.16,
-            "p99": 122.44
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 12.11,
-            "p95": 14.75,
-            "p99": 15.37
-          },
-          "total": {
-            "p50": 12.17,
-            "p95": 14.91,
-            "p99": 15.58
-          }
-        },
-        "gatewayCpuPct": 12.6,
-        "cpuPctPer100Streams": 79,
-        "gatewayRssMb": 146.9,
-        "rssMbPer100Streams": 34.4
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 64,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 1280,
-          "gateway": 1280
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.47,
-            "p95": 117.42,
-            "p99": 124.38
-          },
-          "total": {
-            "p50": 104.48,
-            "p95": 117.43,
-            "p99": 124.38
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 119.2,
-            "p95": 130.81,
-            "p99": 136.56
-          },
-          "total": {
-            "p50": 119.25,
-            "p95": 130.89,
-            "p99": 136.61
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 14.73,
-            "p95": 13.39,
-            "p99": 12.18
-          },
-          "total": {
-            "p50": 14.77,
-            "p95": 13.46,
-            "p99": 12.23
-          }
-        },
-        "gatewayCpuPct": 20.3,
-        "cpuPctPer100Streams": 31.8,
-        "gatewayRssMb": 161,
-        "rssMbPer100Streams": 44.8
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 64,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 1280,
-          "gateway": 1280
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.47,
-            "p95": 117.42,
-            "p99": 124.38
-          },
-          "total": {
-            "p50": 104.48,
-            "p95": 117.43,
-            "p99": 124.38
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 129.23,
-            "p95": 187.42,
-            "p99": 209.21
-          },
-          "total": {
-            "p50": 129.31,
-            "p95": 187.54,
-            "p99": 209.22
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 24.76,
-            "p95": 70,
-            "p99": 84.83
-          },
-          "total": {
-            "p50": 24.83,
-            "p95": 70.11,
-            "p99": 84.84
-          }
-        },
-        "gatewayCpuPct": 23.5,
-        "cpuPctPer100Streams": 36.8,
-        "gatewayRssMb": 170,
-        "rssMbPer100Streams": 36
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 100,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 2000,
-          "gateway": 2000
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.09,
-            "p95": 107.43,
-            "p99": 108.7
-          },
-          "total": {
-            "p50": 104.1,
-            "p95": 107.44,
-            "p99": 108.71
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 112,
-            "p95": 126.87,
-            "p99": 132.68
-          },
-          "total": {
-            "p50": 112.05,
-            "p95": 126.93,
-            "p99": 132.73
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 7.91,
-            "p95": 19.44,
-            "p99": 23.98
-          },
-          "total": {
-            "p50": 7.95,
-            "p95": 19.49,
-            "p99": 24.02
-          }
-        },
-        "gatewayCpuPct": 28.8,
-        "cpuPctPer100Streams": 28.8,
-        "gatewayRssMb": 166.6,
-        "rssMbPer100Streams": 5.6
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 100,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 2000,
-          "gateway": 2000
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.09,
-            "p95": 107.43,
-            "p99": 108.7
-          },
-          "total": {
-            "p50": 104.1,
-            "p95": 107.44,
-            "p99": 108.71
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 119.66,
-            "p95": 130.92,
-            "p99": 141.46
-          },
-          "total": {
-            "p50": 119.7,
-            "p95": 130.98,
-            "p99": 141.52
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 15.57,
-            "p95": 23.49,
-            "p99": 32.76
-          },
-          "total": {
-            "p50": 15.6,
-            "p95": 23.54,
-            "p99": 32.81
-          }
-        },
-        "gatewayCpuPct": 29.6,
-        "cpuPctPer100Streams": 29.6,
-        "gatewayRssMb": 189.5,
-        "rssMbPer100Streams": 21.2
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 256,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 5376,
-          "gateway": 5376
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.65,
-            "p95": 110.45,
-            "p99": 114.45
-          },
-          "total": {
-            "p50": 104.65,
-            "p95": 110.46,
-            "p99": 114.45
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 117.06,
-            "p95": 131.05,
-            "p99": 138.66
-          },
-          "total": {
-            "p50": 117.07,
-            "p95": 131.1,
-            "p99": 138.66
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 12.41,
-            "p95": 20.6,
-            "p99": 24.21
-          },
-          "total": {
-            "p50": 12.42,
-            "p95": 20.64,
-            "p99": 24.21
-          }
-        },
-        "gatewayCpuPct": 40.1,
-        "cpuPctPer100Streams": 15.7,
-        "gatewayRssMb": 298.5,
-        "rssMbPer100Streams": 51.9
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 256,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 5376,
-          "gateway": 5120
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.65,
-            "p95": 110.45,
-            "p99": 114.45
-          },
-          "total": {
-            "p50": 104.65,
-            "p95": 110.46,
-            "p99": 114.45
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 123.57,
-            "p95": 137.88,
-            "p99": 166.87
-          },
-          "total": {
-            "p50": 123.61,
-            "p95": 137.92,
-            "p99": 166.89
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 18.92,
-            "p95": 27.43,
-            "p99": 52.42
-          },
-          "total": {
-            "p50": 18.96,
-            "p95": 27.46,
-            "p99": 52.44
-          }
-        },
-        "gatewayCpuPct": 52.7,
-        "cpuPctPer100Streams": 20.6,
-        "gatewayRssMb": 253.6,
-        "rssMbPer100Streams": 45.9
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 500,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 10512,
-          "gateway": 10000
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 105.14,
-            "p95": 111.82,
-            "p99": 114.52
-          },
-          "total": {
-            "p50": 105.14,
-            "p95": 111.82,
-            "p99": 114.52
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 124.21,
-            "p95": 145.7,
-            "p99": 159.38
-          },
-          "total": {
-            "p50": 124.24,
-            "p95": 145.73,
-            "p99": 159.66
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 19.07,
-            "p95": 33.88,
-            "p99": 44.86
-          },
-          "total": {
-            "p50": 19.1,
-            "p95": 33.91,
-            "p99": 45.14
-          }
-        },
-        "gatewayCpuPct": 77.2,
-        "cpuPctPer100Streams": 15.4,
-        "gatewayRssMb": 290.9,
-        "rssMbPer100Streams": 36.3
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 500,
-        "ratePerConnection": 4,
-        "durationS": 5,
-        "requests": {
-          "direct": 10512,
-          "gateway": 10000
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 105.14,
-            "p95": 111.82,
-            "p99": 114.52
-          },
-          "total": {
-            "p50": 105.14,
-            "p95": 111.82,
-            "p99": 114.52
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 137.49,
-            "p95": 188.85,
-            "p99": 196.43
-          },
-          "total": {
-            "p50": 137.51,
-            "p95": 188.88,
-            "p99": 196.46
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 32.35,
-            "p95": 77.03,
-            "p99": 81.91
-          },
-          "total": {
-            "p50": 32.37,
-            "p95": 77.06,
-            "p99": 81.94
-          }
-        },
-        "gatewayCpuPct": 78.8,
-        "cpuPctPer100Streams": 15.8,
-        "gatewayRssMb": 321.1,
-        "rssMbPer100Streams": 34.3
-      },
-      {
-        "scenario": "streaming-500",
-        "store": "memory",
-        "concurrency": 1,
-        "ratePerConnection": 1,
-        "durationS": 20,
-        "requests": {
-          "direct": 20,
-          "gateway": 20
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 103.41,
-            "p95": 104.3,
-            "p99": 104.63
-          },
-          "total": {
-            "p50": 726.93,
-            "p95": 739.25,
-            "p99": 745.36
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 107.17,
-            "p95": 116.28,
-            "p99": 121.43
-          },
-          "total": {
-            "p50": 732.84,
-            "p95": 782.82,
-            "p99": 809.42
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 3.76,
-            "p95": 11.98,
-            "p99": 16.8
-          },
-          "total": {
-            "p50": 5.91,
-            "p95": 43.57,
-            "p99": 64.06
-          }
-        },
-        "gatewayCpuPct": 4.6,
-        "cpuPctPer100Streams": 458.8,
-        "gatewayRssMb": 117.2,
-        "rssMbPer100Streams": 232.8
-      },
-      {
-        "scenario": "streaming-500",
-        "store": "redis",
-        "concurrency": 1,
-        "ratePerConnection": 1,
-        "durationS": 20,
-        "requests": {
-          "direct": 20,
-          "gateway": 20
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 103.41,
-            "p95": 104.3,
-            "p99": 104.63
-          },
-          "total": {
-            "p50": 726.93,
-            "p95": 739.25,
-            "p99": 745.36
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 108.86,
-            "p95": 118.35,
-            "p99": 122.49
-          },
-          "total": {
-            "p50": 733.91,
-            "p95": 747.58,
-            "p99": 750.41
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 5.45,
-            "p95": 14.05,
-            "p99": 17.86
-          },
-          "total": {
-            "p50": 6.98,
-            "p95": 8.33,
-            "p99": 5.05
+            "p50": 110.25,
+            "p95": 113.17,
+            "p99": 117.61,
+            "n": 100
           }
         },
         "gatewayCpuPct": 4.5,
-        "cpuPctPer100Streams": 449.1,
-        "gatewayRssMb": 127.3,
-        "rssMbPer100Streams": 109.4
+        "gatewayRssMb": 129.3,
+        "rssGrowthMb": 3.5
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "memory",
         "concurrency": 10,
-        "ratePerConnection": 1,
-        "durationS": 20,
+        "ratePerConnection": 5,
+        "durationS": 44,
+        "intended": {
+          "direct": 2200,
+          "gateway": 2200
+        },
         "requests": {
-          "direct": 200,
-          "gateway": 200
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -993,56 +208,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 0.44,
+          "p95": 0.72,
+          "p99": 0.82,
+          "n": 2200
+        },
         "direct": {
           "ttfb": {
-            "p50": 103.69,
-            "p95": 105.13,
-            "p99": 106.39
+            "p50": 102.63,
+            "p95": 105.16,
+            "p99": 106.08,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 1.56,
+            "p95": 3.16,
+            "p99": 3.82,
+            "n": 2200
           },
           "total": {
-            "p50": 725.38,
-            "p95": 739.33,
-            "p99": 740.49
+            "p50": 102.74,
+            "p95": 105.29,
+            "p99": 106.22,
+            "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 109.18,
-            "p95": 114.53,
-            "p99": 127.19
+            "p50": 104.56,
+            "p95": 107.37,
+            "p99": 109.17,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 3.01,
+            "p95": 5.43,
+            "p99": 7.25,
+            "n": 2200
           },
           "total": {
-            "p50": 728,
-            "p95": 749.69,
-            "p99": 766.3
+            "p50": 104.89,
+            "p95": 107.73,
+            "p99": 109.62,
+            "n": 2200
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 5.49,
-            "p95": 9.4,
-            "p99": 20.8
-          },
-          "total": {
-            "p50": 2.62,
-            "p95": 10.36,
-            "p99": 25.81
-          }
-        },
-        "gatewayCpuPct": 13,
-        "cpuPctPer100Streams": 130.4,
-        "gatewayRssMb": 131.8,
-        "rssMbPer100Streams": 145.9
+        "gatewayCpuPct": 21.6,
+        "gatewayRssMb": 141.3,
+        "rssGrowthMb": 31.5
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "redis",
         "concurrency": 10,
-        "ratePerConnection": 1,
-        "durationS": 20,
+        "ratePerConnection": 5,
+        "durationS": 44,
+        "intended": {
+          "direct": 2200,
+          "gateway": 2200
+        },
         "requests": {
-          "direct": 200,
-          "gateway": 200
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1052,56 +284,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 1.74,
+          "p95": 3.5,
+          "p99": 4.61,
+          "n": 2200
+        },
         "direct": {
           "ttfb": {
-            "p50": 103.69,
-            "p95": 105.13,
-            "p99": 106.39
+            "p50": 102.63,
+            "p95": 105.16,
+            "p99": 106.08,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 1.56,
+            "p95": 3.16,
+            "p99": 3.82,
+            "n": 2200
           },
           "total": {
-            "p50": 725.38,
-            "p95": 739.33,
-            "p99": 740.49
+            "p50": 102.74,
+            "p95": 105.29,
+            "p99": 106.22,
+            "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 111.05,
-            "p95": 114.1,
-            "p99": 116.08
+            "p50": 105.37,
+            "p95": 108.86,
+            "p99": 110.54,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 4.24,
+            "p95": 7.55,
+            "p99": 9.38,
+            "n": 2200
           },
           "total": {
-            "p50": 737.23,
-            "p95": 744.55,
-            "p99": 750.01
+            "p50": 105.6,
+            "p95": 109.16,
+            "p99": 110.79,
+            "n": 2200
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 7.36,
-            "p95": 8.97,
-            "p99": 9.69
-          },
-          "total": {
-            "p50": 11.85,
-            "p95": 5.22,
-            "p99": 9.52
-          }
-        },
-        "gatewayCpuPct": 13,
-        "cpuPctPer100Streams": 130,
-        "gatewayRssMb": 134.6,
-        "rssMbPer100Streams": 73.3
+        "gatewayCpuPct": 23,
+        "gatewayRssMb": 159.9,
+        "rssGrowthMb": 30.6
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "memory",
         "concurrency": 16,
-        "ratePerConnection": 1,
-        "durationS": 19,
+        "ratePerConnection": 5,
+        "durationS": 5,
+        "intended": {
+          "direct": 400,
+          "gateway": 400
+        },
         "requests": {
-          "direct": 304,
-          "gateway": 304
+          "direct": 400,
+          "gateway": 400
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1111,56 +360,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 0.38,
+          "p95": 0.66,
+          "p99": 0.76,
+          "n": 400
+        },
         "direct": {
           "ttfb": {
-            "p50": 103.7,
-            "p95": 105.49,
-            "p99": 106.39
+            "p50": 102.17,
+            "p95": 104.52,
+            "p99": 105.35,
+            "n": 400
+          },
+          "outsideProvider": {
+            "p50": 1.07,
+            "p95": 2.73,
+            "p99": 3.26,
+            "n": 400
           },
           "total": {
-            "p50": 716.54,
-            "p95": 791.82,
-            "p99": 798.03
+            "p50": 102.23,
+            "p95": 104.62,
+            "p99": 105.45,
+            "n": 400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 110.04,
-            "p95": 114.12,
-            "p99": 115.11
+            "p50": 103.81,
+            "p95": 107.1,
+            "p99": 112.13,
+            "n": 400
+          },
+          "outsideProvider": {
+            "p50": 2.7,
+            "p95": 5.38,
+            "p99": 8.12,
+            "n": 400
           },
           "total": {
-            "p50": 722.63,
-            "p95": 740.71,
-            "p99": 747.04
+            "p50": 103.97,
+            "p95": 107.51,
+            "p99": 112.53,
+            "n": 400
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 6.34,
-            "p95": 8.63,
-            "p99": 8.72
-          },
-          "total": {
-            "p50": 6.09,
-            "p95": -51.11,
-            "p99": -50.99
-          }
-        },
-        "gatewayCpuPct": 18.4,
-        "cpuPctPer100Streams": 114.9,
-        "gatewayRssMb": 130.6,
-        "rssMbPer100Streams": 8.6
+        "gatewayCpuPct": 22.4,
+        "gatewayRssMb": 138,
+        "rssGrowthMb": 0.2
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "redis",
         "concurrency": 16,
-        "ratePerConnection": 1,
-        "durationS": 19,
+        "ratePerConnection": 5,
+        "durationS": 5,
+        "intended": {
+          "direct": 400,
+          "gateway": 400
+        },
         "requests": {
-          "direct": 304,
-          "gateway": 304
+          "direct": 400,
+          "gateway": 400
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1170,56 +436,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 1.54,
+          "p95": 2.95,
+          "p99": 4.27,
+          "n": 400
+        },
         "direct": {
           "ttfb": {
-            "p50": 103.7,
-            "p95": 105.49,
-            "p99": 106.39
+            "p50": 102.17,
+            "p95": 104.52,
+            "p99": 105.35,
+            "n": 400
+          },
+          "outsideProvider": {
+            "p50": 1.07,
+            "p95": 2.73,
+            "p99": 3.26,
+            "n": 400
           },
           "total": {
-            "p50": 716.54,
-            "p95": 791.82,
-            "p99": 798.03
+            "p50": 102.23,
+            "p95": 104.62,
+            "p99": 105.45,
+            "n": 400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 112.48,
-            "p95": 115.7,
-            "p99": 116.12
+            "p50": 104.77,
+            "p95": 108.1,
+            "p99": 109.81,
+            "n": 400
+          },
+          "outsideProvider": {
+            "p50": 3.77,
+            "p95": 6.83,
+            "p99": 8.63,
+            "n": 400
           },
           "total": {
-            "p50": 724.56,
-            "p95": 745.21,
-            "p99": 745.9
+            "p50": 104.99,
+            "p95": 108.53,
+            "p99": 110.19,
+            "n": 400
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 8.78,
-            "p95": 10.21,
-            "p99": 9.73
-          },
-          "total": {
-            "p50": 8.02,
-            "p95": -46.61,
-            "p99": -52.13
-          }
-        },
-        "gatewayCpuPct": 18,
-        "cpuPctPer100Streams": 112.8,
-        "gatewayRssMb": 137.8,
-        "rssMbPer100Streams": 24.9
+        "gatewayCpuPct": 29,
+        "gatewayRssMb": 157.4,
+        "rssGrowthMb": 1.9
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "memory",
         "concurrency": 64,
-        "ratePerConnection": 1,
+        "ratePerConnection": 5,
         "durationS": 5,
+        "intended": {
+          "direct": 1600,
+          "gateway": 1600
+        },
         "requests": {
-          "direct": 320,
-          "gateway": 320
+          "direct": 1600,
+          "gateway": 1600
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1229,56 +512,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 0.12,
+          "p95": 0.24,
+          "p99": 0.47,
+          "n": 1600
+        },
         "direct": {
           "ttfb": {
-            "p50": 105.76,
-            "p95": 109.6,
-            "p99": 109.96
+            "p50": 100.82,
+            "p95": 102.65,
+            "p99": 104.14,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 0.36,
+            "p95": 1.69,
+            "p99": 2.63,
+            "n": 1600
           },
           "total": {
-            "p50": 722.4,
-            "p95": 728.41,
-            "p99": 729.14
+            "p50": 100.88,
+            "p95": 102.75,
+            "p99": 104.25,
+            "n": 1600
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 120.59,
-            "p95": 126.73,
-            "p99": 128.42
+            "p50": 101.3,
+            "p95": 103.82,
+            "p99": 105.33,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 0.92,
+            "p95": 2.77,
+            "p99": 4.06,
+            "n": 1600
           },
           "total": {
-            "p50": 717.28,
-            "p95": 762.12,
-            "p99": 762.35
+            "p50": 101.4,
+            "p95": 103.94,
+            "p99": 105.52,
+            "n": 1600
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 14.83,
-            "p95": 17.13,
-            "p99": 18.46
-          },
-          "total": {
-            "p50": -5.12,
-            "p95": 33.71,
-            "p99": 33.21
-          }
-        },
-        "gatewayCpuPct": 30.3,
-        "cpuPctPer100Streams": 47.4,
-        "gatewayRssMb": 145.9,
-        "rssMbPer100Streams": 27.1
+        "gatewayCpuPct": 46.5,
+        "gatewayRssMb": 149.6,
+        "rssGrowthMb": 14
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "redis",
         "concurrency": 64,
-        "ratePerConnection": 1,
+        "ratePerConnection": 5,
         "durationS": 5,
+        "intended": {
+          "direct": 1600,
+          "gateway": 1600
+        },
         "requests": {
-          "direct": 320,
-          "gateway": 320
+          "direct": 1600,
+          "gateway": 1600
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1288,56 +588,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 1.14,
+          "p95": 2.16,
+          "p99": 2.87,
+          "n": 1600
+        },
         "direct": {
           "ttfb": {
-            "p50": 105.76,
-            "p95": 109.6,
-            "p99": 109.96
+            "p50": 100.82,
+            "p95": 102.65,
+            "p99": 104.14,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 0.36,
+            "p95": 1.69,
+            "p99": 2.63,
+            "n": 1600
           },
           "total": {
-            "p50": 722.4,
-            "p95": 728.41,
-            "p99": 729.14
+            "p50": 100.88,
+            "p95": 102.75,
+            "p99": 104.25,
+            "n": 1600
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 121.57,
-            "p95": 128.61,
-            "p99": 129.47
+            "p50": 102.35,
+            "p95": 104.74,
+            "p99": 106.56,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 1.93,
+            "p95": 4.07,
+            "p99": 5.52,
+            "n": 1600
           },
           "total": {
-            "p50": 714.11,
-            "p95": 730.56,
-            "p99": 730.96
+            "p50": 102.44,
+            "p95": 104.86,
+            "p99": 106.66,
+            "n": 1600
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 15.81,
-            "p95": 19.01,
-            "p99": 19.51
-          },
-          "total": {
-            "p50": -8.29,
-            "p95": 2.15,
-            "p99": 1.82
-          }
-        },
-        "gatewayCpuPct": 31.7,
-        "cpuPctPer100Streams": 49.6,
-        "gatewayRssMb": 155.8,
-        "rssMbPer100Streams": 27.2
+        "gatewayCpuPct": 47.5,
+        "gatewayRssMb": 164.4,
+        "rssGrowthMb": 7.6
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "memory",
         "concurrency": 100,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 5,
+        "durationS": 10,
+        "intended": {
+          "direct": 5000,
+          "gateway": 5000
+        },
         "requests": {
-          "direct": 500,
-          "gateway": 500
+          "direct": 5000,
+          "gateway": 5000
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1347,56 +664,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 0.1,
+          "p95": 0.15,
+          "p99": 0.24,
+          "n": 5000
+        },
         "direct": {
           "ttfb": {
-            "p50": 105.28,
-            "p95": 109.65,
-            "p99": 110.38
+            "p50": 100.64,
+            "p95": 102.25,
+            "p99": 103.66,
+            "n": 5000
+          },
+          "outsideProvider": {
+            "p50": 0.26,
+            "p95": 1.47,
+            "p99": 2.35,
+            "n": 5000
           },
           "total": {
-            "p50": 737.81,
-            "p95": 757.2,
-            "p99": 758.98
+            "p50": 100.69,
+            "p95": 102.32,
+            "p99": 103.72,
+            "n": 5000
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 116.27,
-            "p95": 122.4,
-            "p99": 122.91
+            "p50": 100.88,
+            "p95": 102.65,
+            "p99": 103.82,
+            "n": 5000
+          },
+          "outsideProvider": {
+            "p50": 0.63,
+            "p95": 2.05,
+            "p99": 3.18,
+            "n": 5000
           },
           "total": {
-            "p50": 687.79,
-            "p95": 695.2,
-            "p99": 697.77
+            "p50": 100.97,
+            "p95": 102.74,
+            "p99": 103.92,
+            "n": 5000
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 10.99,
-            "p95": 12.75,
-            "p99": 12.53
-          },
-          "total": {
-            "p50": -50.02,
-            "p95": -62,
-            "p99": -61.21
-          }
-        },
-        "gatewayCpuPct": 34.6,
-        "cpuPctPer100Streams": 34.6,
-        "gatewayRssMb": 155.1,
-        "rssMbPer100Streams": 9.2
+        "gatewayCpuPct": 52.3,
+        "gatewayRssMb": 157.3,
+        "rssGrowthMb": 7.8
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "redis",
         "concurrency": 100,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 5,
+        "durationS": 10,
+        "intended": {
+          "direct": 5000,
+          "gateway": 5000
+        },
         "requests": {
-          "direct": 500,
-          "gateway": 500
+          "direct": 5000,
+          "gateway": 5000
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1406,56 +740,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 1.05,
+          "p95": 3.46,
+          "p99": 35.3,
+          "n": 5000
+        },
         "direct": {
           "ttfb": {
-            "p50": 105.28,
-            "p95": 109.65,
-            "p99": 110.38
+            "p50": 100.64,
+            "p95": 102.25,
+            "p99": 103.66,
+            "n": 5000
+          },
+          "outsideProvider": {
+            "p50": 0.26,
+            "p95": 1.47,
+            "p99": 2.35,
+            "n": 5000
           },
           "total": {
-            "p50": 737.81,
-            "p95": 757.2,
-            "p99": 758.98
+            "p50": 100.69,
+            "p95": 102.32,
+            "p99": 103.72,
+            "n": 5000
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 118.26,
-            "p95": 123.82,
-            "p99": 126.05
+            "p50": 101.94,
+            "p95": 105.84,
+            "p99": 137.12,
+            "n": 5000
+          },
+          "outsideProvider": {
+            "p50": 1.68,
+            "p95": 5.26,
+            "p99": 37.15,
+            "n": 5000
           },
           "total": {
-            "p50": 690.8,
-            "p95": 698.4,
-            "p99": 700.08
+            "p50": 102.01,
+            "p95": 105.9,
+            "p99": 137.14,
+            "n": 5000
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 12.98,
-            "p95": 14.17,
-            "p99": 15.67
-          },
-          "total": {
-            "p50": -47.01,
-            "p95": -58.8,
-            "p99": -58.9
-          }
-        },
-        "gatewayCpuPct": 35.6,
-        "cpuPctPer100Streams": 35.6,
-        "gatewayRssMb": 159,
-        "rssMbPer100Streams": 3.2
+        "gatewayCpuPct": 50.5,
+        "gatewayRssMb": 171.1,
+        "rssGrowthMb": 6.5
       },
       {
-        "scenario": "streaming-500",
+        "scenario": "non-streaming",
         "store": "memory",
         "concurrency": 256,
-        "ratePerConnection": 1,
+        "ratePerConnection": 5,
         "durationS": 5,
+        "intended": {
+          "direct": 6400,
+          "gateway": 6400
+        },
         "requests": {
-          "direct": 1280,
-          "gateway": 1280
+          "direct": 6400,
+          "gateway": 6400
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1465,174 +816,1289 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 0.05,
+          "p95": 0.1,
+          "p99": 0.17,
+          "n": 6400
+        },
         "direct": {
           "ttfb": {
-            "p50": 106.42,
-            "p95": 113.87,
-            "p99": 116.4
+            "p50": 100.6,
+            "p95": 102.26,
+            "p99": 105.01,
+            "n": 6400
+          },
+          "outsideProvider": {
+            "p50": 0.27,
+            "p95": 1.61,
+            "p99": 3.34,
+            "n": 6400
           },
           "total": {
-            "p50": 749.72,
-            "p95": 757.42,
-            "p99": 758.56
+            "p50": 100.65,
+            "p95": 102.32,
+            "p99": 105.03,
+            "n": 6400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 114.97,
-            "p95": 125,
-            "p99": 129.96
+            "p50": 100.95,
+            "p95": 215.01,
+            "p99": 266.99,
+            "n": 6400
+          },
+          "outsideProvider": {
+            "p50": 0.78,
+            "p95": 113.39,
+            "p99": 164.48,
+            "n": 6400
           },
           "total": {
-            "p50": 677.39,
-            "p95": 685.82,
-            "p99": 689.21
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 8.55,
-            "p95": 11.13,
-            "p99": 13.56
-          },
-          "total": {
-            "p50": -72.33,
-            "p95": -71.6,
-            "p99": -69.35
-          }
-        },
-        "gatewayCpuPct": 62,
-        "cpuPctPer100Streams": 24.2,
-        "gatewayRssMb": 174.1,
-        "rssMbPer100Streams": 7.4
-      },
-      {
-        "scenario": "streaming-500",
-        "store": "redis",
-        "concurrency": 256,
-        "ratePerConnection": 1,
-        "durationS": 5,
-        "requests": {
-          "direct": 1280,
-          "gateway": 1344
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 106.42,
-            "p95": 113.87,
-            "p99": 116.4
-          },
-          "total": {
-            "p50": 749.72,
-            "p95": 757.42,
-            "p99": 758.56
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 118.72,
-            "p95": 126.23,
-            "p99": 131.2
-          },
-          "total": {
-            "p50": 682.27,
-            "p95": 704.09,
-            "p99": 750.85
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 12.3,
-            "p95": 12.36,
-            "p99": 14.8
-          },
-          "total": {
-            "p50": -67.45,
-            "p95": -53.33,
-            "p99": -7.71
-          }
-        },
-        "gatewayCpuPct": 55.7,
-        "cpuPctPer100Streams": 21.7,
-        "gatewayRssMb": 178.4,
-        "rssMbPer100Streams": 7.6
-      },
-      {
-        "scenario": "streaming-500",
-        "store": "memory",
-        "concurrency": 500,
-        "ratePerConnection": 1,
-        "durationS": 5,
-        "requests": {
-          "direct": 2616,
-          "gateway": 2564
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 104.79,
-            "p95": 115.56,
-            "p99": 124.98
-          },
-          "total": {
-            "p50": 764.55,
-            "p95": 780.01,
-            "p99": 786.89
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 114.26,
-            "p95": 131.31,
-            "p99": 269.64
-          },
-          "total": {
-            "p50": 730.33,
-            "p95": 747.96,
-            "p99": 862.68
-          }
-        },
-        "added": {
-          "ttfb": {
-            "p50": 9.47,
-            "p95": 15.75,
-            "p99": 144.66
-          },
-          "total": {
-            "p50": -34.22,
-            "p95": -32.05,
-            "p99": 75.79
+            "p50": 101,
+            "p95": 215.05,
+            "p99": 267.09,
+            "n": 6400
           }
         },
         "gatewayCpuPct": 79,
-        "cpuPctPer100Streams": 15.8,
-        "gatewayRssMb": 253.5,
-        "rssMbPer100Streams": 15.9
+        "gatewayRssMb": 211.7,
+        "rssGrowthMb": 106.8
+      },
+      {
+        "scenario": "non-streaming",
+        "store": "redis",
+        "concurrency": 256,
+        "ratePerConnection": 5,
+        "durationS": 5,
+        "intended": {
+          "direct": 6400,
+          "gateway": 6400
+        },
+        "requests": {
+          "direct": 6400,
+          "gateway": 6400
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.64,
+          "p95": 1.41,
+          "p99": 2.05,
+          "n": 6400
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.6,
+            "p95": 102.26,
+            "p99": 105.01,
+            "n": 6400
+          },
+          "outsideProvider": {
+            "p50": 0.27,
+            "p95": 1.61,
+            "p99": 3.34,
+            "n": 6400
+          },
+          "total": {
+            "p50": 100.65,
+            "p95": 102.32,
+            "p99": 105.03,
+            "n": 6400
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101,
+            "p95": 102.62,
+            "p99": 103.75,
+            "n": 6400
+          },
+          "outsideProvider": {
+            "p50": 0.93,
+            "p95": 2.34,
+            "p99": 3.42,
+            "n": 6400
+          },
+          "total": {
+            "p50": 101.04,
+            "p95": 102.67,
+            "p99": 103.79,
+            "n": 6400
+          }
+        },
+        "gatewayCpuPct": 75.4,
+        "gatewayRssMb": 254.7,
+        "rssGrowthMb": 123.8
+      },
+      {
+        "scenario": "non-streaming",
+        "store": "memory",
+        "concurrency": 500,
+        "ratePerConnection": 5,
+        "durationS": 10,
+        "intended": {
+          "direct": 25000,
+          "gateway": 25000
+        },
+        "requests": {
+          "direct": 25000,
+          "gateway": 25000
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.04,
+          "p95": 0.06,
+          "p99": 0.09,
+          "n": 25000
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.7,
+            "p95": 102.91,
+            "p99": 105.41,
+            "n": 25000
+          },
+          "outsideProvider": {
+            "p50": 0.4,
+            "p95": 2.1,
+            "p99": 4.44,
+            "n": 25000
+          },
+          "total": {
+            "p50": 100.73,
+            "p95": 102.94,
+            "p99": 105.45,
+            "n": 25000
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 104.82,
+            "p95": 669.87,
+            "p99": 779.43,
+            "n": 25000
+          },
+          "outsideProvider": {
+            "p50": 4.71,
+            "p95": 565.58,
+            "p99": 677.02,
+            "n": 25000
+          },
+          "total": {
+            "p50": 104.87,
+            "p95": 669.9,
+            "p99": 779.45,
+            "n": 25000
+          }
+        },
+        "gatewayCpuPct": 100.2,
+        "gatewayRssMb": 299.9,
+        "rssGrowthMb": 201.8
+      },
+      {
+        "scenario": "non-streaming",
+        "store": "redis",
+        "concurrency": 500,
+        "ratePerConnection": 5,
+        "durationS": 10,
+        "intended": {
+          "direct": 25000,
+          "gateway": 25000
+        },
+        "requests": {
+          "direct": 25000,
+          "gateway": 25000
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 13.21,
+          "p95": 40.08,
+          "p99": 108.53,
+          "n": 25000
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.7,
+            "p95": 102.91,
+            "p99": 105.41,
+            "n": 25000
+          },
+          "outsideProvider": {
+            "p50": 0.4,
+            "p95": 2.1,
+            "p99": 4.44,
+            "n": 25000
+          },
+          "total": {
+            "p50": 100.73,
+            "p95": 102.94,
+            "p99": 105.45,
+            "n": 25000
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 184.63,
+            "p95": 1682.74,
+            "p99": 1910.69,
+            "n": 25000
+          },
+          "outsideProvider": {
+            "p50": 84.19,
+            "p95": 1578.75,
+            "p99": 1807.58,
+            "n": 25000
+          },
+          "total": {
+            "p50": 184.66,
+            "p95": 1682.77,
+            "p99": 1910.7,
+            "n": 25000
+          }
+        },
+        "gatewayCpuPct": 94.7,
+        "gatewayRssMb": 355.5,
+        "rssGrowthMb": 241.3
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 1,
+        "ratePerConnection": 1.25,
+        "durationS": 20,
+        "intended": {
+          "direct": 25,
+          "gateway": 25
+        },
+        "requests": {
+          "direct": 25,
+          "gateway": 25
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 1.22,
+          "p95": 1.31,
+          "p99": 1.36,
+          "n": 25
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 105.05,
+            "p95": 106.84,
+            "p99": 106.96,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 3.22,
+            "p95": 4.22,
+            "p99": 5.73,
+            "n": 25
+          },
+          "total": {
+            "p50": 361.74,
+            "p95": 369.19,
+            "p99": 369.81,
+            "n": 25
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 110.45,
+            "p95": 124.11,
+            "p99": 157.42,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 9.55,
+            "p95": 21.89,
+            "p99": 55.22,
+            "n": 25
+          },
+          "total": {
+            "p50": 368.9,
+            "p95": 382.24,
+            "p99": 409.2,
+            "n": 25
+          }
+        },
+        "gatewayCpuPct": 4.2,
+        "gatewayRssMb": 110.4,
+        "rssGrowthMb": 1.4
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "redis",
+        "concurrency": 1,
+        "ratePerConnection": 1.25,
+        "durationS": 20,
+        "intended": {
+          "direct": 25,
+          "gateway": 25
+        },
+        "requests": {
+          "direct": 25,
+          "gateway": 25
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 3.61,
+          "p95": 4.74,
+          "p99": 5.75,
+          "n": 25
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 105.05,
+            "p95": 106.84,
+            "p99": 106.96,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 3.22,
+            "p95": 4.22,
+            "p99": 5.73,
+            "n": 25
+          },
+          "total": {
+            "p50": 361.74,
+            "p95": 369.19,
+            "p99": 369.81,
+            "n": 25
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 113.51,
+            "p95": 127.71,
+            "p99": 163.9,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 12.02,
+            "p95": 26.02,
+            "p99": 61.76,
+            "n": 25
+          },
+          "total": {
+            "p50": 372.78,
+            "p95": 386.59,
+            "p99": 421.01,
+            "n": 25
+          }
+        },
+        "gatewayCpuPct": 5.3,
+        "gatewayRssMb": 119.2,
+        "rssGrowthMb": 2.3
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 10,
+        "ratePerConnection": 1.25,
+        "durationS": 176,
+        "intended": {
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "requests": {
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.48,
+          "p95": 0.87,
+          "p99": 1.12,
+          "n": 2200
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.93,
+            "p95": 102.28,
+            "p99": 103.17,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 0.43,
+            "p95": 1.45,
+            "p99": 2.15,
+            "n": 2200
+          },
+          "total": {
+            "p50": 355.02,
+            "p95": 362.69,
+            "p99": 366.58,
+            "n": 2200
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 102.31,
+            "p95": 104.55,
+            "p99": 107.34,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 1.8,
+            "p95": 3.77,
+            "p99": 5.48,
+            "n": 2200
+          },
+          "total": {
+            "p50": 356.21,
+            "p95": 369.67,
+            "p99": 390.42,
+            "n": 2200
+          }
+        },
+        "gatewayCpuPct": 18.6,
+        "gatewayRssMb": 111.6,
+        "rssGrowthMb": 18.9
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "redis",
+        "concurrency": 10,
+        "ratePerConnection": 1.25,
+        "durationS": 176,
+        "intended": {
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "requests": {
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 2.41,
+          "p95": 3.61,
+          "p99": 4.42,
+          "n": 2200
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.93,
+            "p95": 102.28,
+            "p99": 103.17,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 0.43,
+            "p95": 1.45,
+            "p99": 2.15,
+            "n": 2200
+          },
+          "total": {
+            "p50": 355.02,
+            "p95": 362.69,
+            "p99": 366.58,
+            "n": 2200
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 104.08,
+            "p95": 106.35,
+            "p99": 108.51,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 3.65,
+            "p95": 5.68,
+            "p99": 8.14,
+            "n": 2200
+          },
+          "total": {
+            "p50": 357.95,
+            "p95": 366.11,
+            "p99": 372.37,
+            "n": 2200
+          }
+        },
+        "gatewayCpuPct": 20.1,
+        "gatewayRssMb": 116.4,
+        "rssGrowthMb": 71.3
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 16,
+        "ratePerConnection": 1.25,
+        "durationS": 15,
+        "intended": {
+          "direct": 300,
+          "gateway": 301
+        },
+        "requests": {
+          "direct": 300,
+          "gateway": 301
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.43,
+          "p95": 0.66,
+          "p99": 0.87,
+          "n": 301
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.8,
+            "p95": 101.91,
+            "p99": 102.81,
+            "n": 300
+          },
+          "outsideProvider": {
+            "p50": 0.29,
+            "p95": 1.15,
+            "p99": 2.26,
+            "n": 300
+          },
+          "total": {
+            "p50": 360.28,
+            "p95": 371.53,
+            "p99": 373.79,
+            "n": 300
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101.9,
+            "p95": 103.57,
+            "p99": 107.17,
+            "n": 301
+          },
+          "outsideProvider": {
+            "p50": 1.47,
+            "p95": 2.79,
+            "p99": 6.98,
+            "n": 301
+          },
+          "total": {
+            "p50": 353.93,
+            "p95": 365.99,
+            "p99": 370.86,
+            "n": 301
+          }
+        },
+        "gatewayCpuPct": 25.8,
+        "gatewayRssMb": 93.1,
+        "rssGrowthMb": 40.3
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "redis",
+        "concurrency": 16,
+        "ratePerConnection": 1.25,
+        "durationS": 15,
+        "intended": {
+          "direct": 300,
+          "gateway": 296
+        },
+        "requests": {
+          "direct": 300,
+          "gateway": 296
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 2.03,
+          "p95": 3.51,
+          "p99": 4.64,
+          "n": 296
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.8,
+            "p95": 101.91,
+            "p99": 102.81,
+            "n": 300
+          },
+          "outsideProvider": {
+            "p50": 0.29,
+            "p95": 1.15,
+            "p99": 2.26,
+            "n": 300
+          },
+          "total": {
+            "p50": 360.28,
+            "p95": 371.53,
+            "p99": 373.79,
+            "n": 300
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 103.53,
+            "p95": 106.33,
+            "p99": 111.08,
+            "n": 296
+          },
+          "outsideProvider": {
+            "p50": 3.22,
+            "p95": 5.76,
+            "p99": 9.73,
+            "n": 296
+          },
+          "total": {
+            "p50": 361.13,
+            "p95": 374.39,
+            "p99": 385.63,
+            "n": 296
+          }
+        },
+        "gatewayCpuPct": 25.4,
+        "gatewayRssMb": 118.3,
+        "rssGrowthMb": 7.9
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 64,
+        "ratePerConnection": 1.25,
+        "durationS": 5,
+        "intended": {
+          "direct": 398,
+          "gateway": 394
+        },
+        "requests": {
+          "direct": 398,
+          "gateway": 394
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.13,
+          "p95": 0.36,
+          "p99": 0.6,
+          "n": 394
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 101.21,
+            "p95": 102.98,
+            "p99": 103.69,
+            "n": 398
+          },
+          "outsideProvider": {
+            "p50": 0.33,
+            "p95": 1.71,
+            "p99": 2.74,
+            "n": 398
+          },
+          "total": {
+            "p50": 389.18,
+            "p95": 401.28,
+            "p99": 405.12,
+            "n": 398
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101.2,
+            "p95": 103.08,
+            "p99": 105.49,
+            "n": 394
+          },
+          "outsideProvider": {
+            "p50": 0.77,
+            "p95": 2.67,
+            "p99": 4.92,
+            "n": 394
+          },
+          "total": {
+            "p50": 366.96,
+            "p95": 378.86,
+            "p99": 384.95,
+            "n": 394
+          }
+        },
+        "gatewayCpuPct": 43.2,
+        "gatewayRssMb": 106.2,
+        "rssGrowthMb": 25.7
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "redis",
+        "concurrency": 64,
+        "ratePerConnection": 1.25,
+        "durationS": 5,
+        "intended": {
+          "direct": 398,
+          "gateway": 398
+        },
+        "requests": {
+          "direct": 398,
+          "gateway": 398
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 1.56,
+          "p95": 3.03,
+          "p99": 4.17,
+          "n": 398
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 101.21,
+            "p95": 102.98,
+            "p99": 103.69,
+            "n": 398
+          },
+          "outsideProvider": {
+            "p50": 0.33,
+            "p95": 1.71,
+            "p99": 2.74,
+            "n": 398
+          },
+          "total": {
+            "p50": 389.18,
+            "p95": 401.28,
+            "p99": 405.12,
+            "n": 398
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 102.53,
+            "p95": 104.82,
+            "p99": 109.56,
+            "n": 398
+          },
+          "outsideProvider": {
+            "p50": 2.18,
+            "p95": 4.28,
+            "p99": 8.82,
+            "n": 398
+          },
+          "total": {
+            "p50": 364.65,
+            "p95": 378.32,
+            "p99": 382.57,
+            "n": 398
+          }
+        },
+        "gatewayCpuPct": 45.1,
+        "gatewayRssMb": 127.8,
+        "rssGrowthMb": 14.2
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 100,
+        "ratePerConnection": 1.25,
+        "durationS": 18,
+        "intended": {
+          "direct": 2251,
+          "gateway": 2252
+        },
+        "requests": {
+          "direct": 2251,
+          "gateway": 2252
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.08,
+          "p95": 0.14,
+          "p99": 0.31,
+          "n": 2252
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 101.32,
+            "p95": 103.41,
+            "p99": 104.72,
+            "n": 2251
+          },
+          "outsideProvider": {
+            "p50": 0.24,
+            "p95": 1.83,
+            "p99": 2.75,
+            "n": 2251
+          },
+          "total": {
+            "p50": 393.56,
+            "p95": 414.17,
+            "p99": 422.55,
+            "n": 2251
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101.07,
+            "p95": 102.71,
+            "p99": 103.82,
+            "n": 2252
+          },
+          "outsideProvider": {
+            "p50": 0.65,
+            "p95": 2.19,
+            "p99": 2.97,
+            "n": 2252
+          },
+          "total": {
+            "p50": 368.18,
+            "p95": 378.14,
+            "p99": 380.97,
+            "n": 2252
+          }
+        },
+        "gatewayCpuPct": 48.9,
+        "gatewayRssMb": 116.1,
+        "rssGrowthMb": 11.3
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "redis",
+        "concurrency": 100,
+        "ratePerConnection": 1.25,
+        "durationS": 18,
+        "intended": {
+          "direct": 2251,
+          "gateway": 2250
+        },
+        "requests": {
+          "direct": 2251,
+          "gateway": 2250
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 1.15,
+          "p95": 2.5,
+          "p99": 3.7,
+          "n": 2250
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 101.32,
+            "p95": 103.41,
+            "p99": 104.72,
+            "n": 2251
+          },
+          "outsideProvider": {
+            "p50": 0.24,
+            "p95": 1.83,
+            "p99": 2.75,
+            "n": 2251
+          },
+          "total": {
+            "p50": 393.56,
+            "p95": 414.17,
+            "p99": 422.55,
+            "n": 2251
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 102.07,
+            "p95": 104.41,
+            "p99": 106.22,
+            "n": 2250
+          },
+          "outsideProvider": {
+            "p50": 1.63,
+            "p95": 3.96,
+            "p99": 5.88,
+            "n": 2250
+          },
+          "total": {
+            "p50": 363.46,
+            "p95": 371.11,
+            "p99": 375.34,
+            "n": 2250
+          }
+        },
+        "gatewayCpuPct": 48.3,
+        "gatewayRssMb": 126.3,
+        "rssGrowthMb": 7.2
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 256,
+        "ratePerConnection": 1.25,
+        "durationS": 5,
+        "intended": {
+          "direct": 1598,
+          "gateway": 1602
+        },
+        "requests": {
+          "direct": 1598,
+          "gateway": 1602
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.05,
+          "p95": 0.09,
+          "p99": 0.15,
+          "n": 1602
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 101.29,
+            "p95": 102.98,
+            "p99": 103.86,
+            "n": 1598
+          },
+          "outsideProvider": {
+            "p50": 0.18,
+            "p95": 1.57,
+            "p99": 2.25,
+            "n": 1598
+          },
+          "total": {
+            "p50": 415.96,
+            "p95": 425.73,
+            "p99": 428.6,
+            "n": 1598
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101.02,
+            "p95": 102.96,
+            "p99": 104.03,
+            "n": 1602
+          },
+          "outsideProvider": {
+            "p50": 0.61,
+            "p95": 2.38,
+            "p99": 3.18,
+            "n": 1602
+          },
+          "total": {
+            "p50": 355.15,
+            "p95": 364.21,
+            "p99": 377.1,
+            "n": 1602
+          }
+        },
+        "gatewayCpuPct": 71.4,
+        "gatewayRssMb": 126.8,
+        "rssGrowthMb": 11.7
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "redis",
+        "concurrency": 256,
+        "ratePerConnection": 1.25,
+        "durationS": 5,
+        "intended": {
+          "direct": 1598,
+          "gateway": 1599
+        },
+        "requests": {
+          "direct": 1598,
+          "gateway": 1599
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 1.18,
+          "p95": 2.18,
+          "p99": 3.35,
+          "n": 1599
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 101.29,
+            "p95": 102.98,
+            "p99": 103.86,
+            "n": 1598
+          },
+          "outsideProvider": {
+            "p50": 0.18,
+            "p95": 1.57,
+            "p99": 2.25,
+            "n": 1598
+          },
+          "total": {
+            "p50": 415.96,
+            "p95": 425.73,
+            "p99": 428.6,
+            "n": 1598
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101.94,
+            "p95": 104.6,
+            "p99": 106.5,
+            "n": 1599
+          },
+          "outsideProvider": {
+            "p50": 1.52,
+            "p95": 4.1,
+            "p99": 6.12,
+            "n": 1599
+          },
+          "total": {
+            "p50": 349.98,
+            "p95": 361.19,
+            "p99": 371.39,
+            "n": 1599
+          }
+        },
+        "gatewayCpuPct": 72,
+        "gatewayRssMb": 148.3,
+        "rssGrowthMb": 23
+      },
+      {
+        "scenario": "streaming-500",
+        "store": "memory",
+        "concurrency": 500,
+        "ratePerConnection": 1.25,
+        "durationS": 10,
+        "intended": {
+          "direct": 6245,
+          "gateway": 6261
+        },
+        "requests": {
+          "direct": 6245,
+          "gateway": 6261
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.05,
+          "p95": 0.09,
+          "p99": 0.13,
+          "n": 6261
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 102.03,
+            "p95": 104.48,
+            "p99": 105.49,
+            "n": 6245
+          },
+          "outsideProvider": {
+            "p50": 0.52,
+            "p95": 2.22,
+            "p99": 2.83,
+            "n": 6245
+          },
+          "total": {
+            "p50": 421.11,
+            "p95": 441.72,
+            "p99": 447.48,
+            "n": 6245
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 111.37,
+            "p95": 116.33,
+            "p99": 119.59,
+            "n": 6261
+          },
+          "outsideProvider": {
+            "p50": 10.13,
+            "p95": 14.8,
+            "p99": 18.21,
+            "n": 6261
+          },
+          "total": {
+            "p50": 423.46,
+            "p95": 438.91,
+            "p99": 444.36,
+            "n": 6261
+          }
+        },
+        "gatewayCpuPct": 109.3,
+        "gatewayRssMb": 177.7,
+        "rssGrowthMb": 100.5
       },
       {
         "scenario": "streaming-500",
         "store": "redis",
         "concurrency": 500,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 1.25,
+        "durationS": 10,
+        "intended": {
+          "direct": 6245,
+          "gateway": 6240
+        },
         "requests": {
-          "direct": 2616,
-          "gateway": 2564
+          "direct": 6245,
+          "gateway": 6240
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1642,56 +2108,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 3.89,
+          "p95": 8.32,
+          "p99": 9.85,
+          "n": 6240
+        },
         "direct": {
           "ttfb": {
-            "p50": 104.79,
-            "p95": 115.56,
-            "p99": 124.98
+            "p50": 102.03,
+            "p95": 104.48,
+            "p99": 105.49,
+            "n": 6245
+          },
+          "outsideProvider": {
+            "p50": 0.52,
+            "p95": 2.22,
+            "p99": 2.83,
+            "n": 6245
           },
           "total": {
-            "p50": 764.55,
-            "p95": 780.01,
-            "p99": 786.89
+            "p50": 421.11,
+            "p95": 441.72,
+            "p99": 447.48,
+            "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 120.03,
-            "p95": 138.92,
-            "p99": 260.01
+            "p50": 113.8,
+            "p95": 121.06,
+            "p99": 124.94,
+            "n": 6240
+          },
+          "outsideProvider": {
+            "p50": 12.6,
+            "p95": 19.63,
+            "p99": 23.49,
+            "n": 6240
           },
           "total": {
-            "p50": 744.57,
-            "p95": 758.15,
-            "p99": 858.03
+            "p50": 422.61,
+            "p95": 437.37,
+            "p99": 441.49,
+            "n": 6240
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 15.24,
-            "p95": 23.36,
-            "p99": 135.03
-          },
-          "total": {
-            "p50": -19.98,
-            "p95": -21.86,
-            "p99": 71.14
-          }
-        },
-        "gatewayCpuPct": 89.2,
-        "cpuPctPer100Streams": 17.8,
-        "gatewayRssMb": 240,
-        "rssMbPer100Streams": 24.7
+        "gatewayCpuPct": 109.7,
+        "gatewayRssMb": 218.5,
+        "rssGrowthMb": 131.1
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 1,
-        "ratePerConnection": 1,
+        "ratePerConnection": 1.25,
         "durationS": 20,
+        "intended": {
+          "direct": 25,
+          "gateway": 25
+        },
         "requests": {
-          "direct": 20,
-          "gateway": 20
+          "direct": 25,
+          "gateway": 25
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1701,56 +2184,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 12.84,
+          "p95": 15.12,
+          "p99": 17.04,
+          "n": 25
+        },
         "direct": {
           "ttfb": {
-            "p50": 105.56,
-            "p95": 109.07,
-            "p99": 119.09
+            "p50": 108.81,
+            "p95": 110.19,
+            "p99": 110.4,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 3.56,
+            "p95": 4.41,
+            "p99": 4.61,
+            "n": 25
           },
           "total": {
-            "p50": 735.29,
-            "p95": 751.57,
-            "p99": 768.35
+            "p50": 364.79,
+            "p95": 369.79,
+            "p99": 374.01,
+            "n": 25
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 118.09,
-            "p95": 122.43,
-            "p99": 122.62
+            "p50": 121.41,
+            "p95": 125.49,
+            "p99": 128.56,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 18.22,
+            "p95": 21.6,
+            "p99": 24.93,
+            "n": 25
           },
           "total": {
-            "p50": 743.38,
-            "p95": 748.88,
-            "p99": 750.67
+            "p50": 379.09,
+            "p95": 385.13,
+            "p99": 385.3,
+            "n": 25
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 12.53,
-            "p95": 13.36,
-            "p99": 3.53
-          },
-          "total": {
-            "p50": 8.09,
-            "p95": -2.69,
-            "p99": -17.68
-          }
-        },
-        "gatewayCpuPct": 5.8,
-        "cpuPctPer100Streams": 576.1,
-        "gatewayRssMb": 138.6,
-        "rssMbPer100Streams": 2190.6
+        "gatewayCpuPct": 6.3,
+        "gatewayRssMb": 102.1,
+        "rssGrowthMb": 14
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 1,
-        "ratePerConnection": 1,
+        "ratePerConnection": 1.25,
         "durationS": 20,
+        "intended": {
+          "direct": 25,
+          "gateway": 25
+        },
         "requests": {
-          "direct": 20,
-          "gateway": 20
+          "direct": 25,
+          "gateway": 25
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1760,56 +2260,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 14.09,
+          "p95": 17.35,
+          "p99": 18.57,
+          "n": 25
+        },
         "direct": {
           "ttfb": {
-            "p50": 105.56,
-            "p95": 109.07,
-            "p99": 119.09
+            "p50": 108.81,
+            "p95": 110.19,
+            "p99": 110.4,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 3.56,
+            "p95": 4.41,
+            "p99": 4.61,
+            "n": 25
           },
           "total": {
-            "p50": 735.29,
-            "p95": 751.57,
-            "p99": 768.35
+            "p50": 364.79,
+            "p95": 369.79,
+            "p99": 374.01,
+            "n": 25
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 121.93,
-            "p95": 125.83,
-            "p99": 125.84
+            "p50": 122.28,
+            "p95": 127.96,
+            "p99": 128.22,
+            "n": 25
+          },
+          "outsideProvider": {
+            "p50": 18.47,
+            "p95": 24.34,
+            "p99": 24.51,
+            "n": 25
           },
           "total": {
-            "p50": 748.82,
-            "p95": 762.43,
-            "p99": 772.08
+            "p50": 378.89,
+            "p95": 384.91,
+            "p99": 395.94,
+            "n": 25
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 16.37,
-            "p95": 16.76,
-            "p99": 6.75
-          },
-          "total": {
-            "p50": 13.53,
-            "p95": 10.86,
-            "p99": 3.73
-          }
-        },
-        "gatewayCpuPct": 6,
-        "cpuPctPer100Streams": 604.6,
-        "gatewayRssMb": 133.7,
-        "rssMbPer100Streams": 1523.4
+        "gatewayCpuPct": 5.9,
+        "gatewayRssMb": 115.4,
+        "rssGrowthMb": 21.6
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 10,
-        "ratePerConnection": 1,
-        "durationS": 20,
+        "ratePerConnection": 1.25,
+        "durationS": 176,
+        "intended": {
+          "direct": 2200,
+          "gateway": 2200
+        },
         "requests": {
-          "direct": 200,
-          "gateway": 200
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1819,56 +2336,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 9.34,
+          "p95": 12.37,
+          "p99": 13.92,
+          "n": 2200
+        },
         "direct": {
           "ttfb": {
-            "p50": 111.74,
-            "p95": 118.8,
-            "p99": 120.39
+            "p50": 103.68,
+            "p95": 105.66,
+            "p99": 106.59,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 0.68,
+            "p95": 1.7,
+            "p99": 2.76,
+            "n": 2200
           },
           "total": {
-            "p50": 731.87,
-            "p95": 747.52,
-            "p99": 755.69
+            "p50": 360.2,
+            "p95": 369.36,
+            "p99": 378.64,
+            "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 171.5,
-            "p95": 177.81,
-            "p99": 179.74
+            "p50": 113.63,
+            "p95": 129.81,
+            "p99": 133.43,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 11.79,
+            "p95": 27.79,
+            "p99": 31.28,
+            "n": 2200
           },
           "total": {
-            "p50": 777.18,
-            "p95": 806.11,
-            "p99": 807.05
+            "p50": 362.68,
+            "p95": 374.74,
+            "p99": 380.1,
+            "n": 2200
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 59.76,
-            "p95": 59.01,
-            "p99": 59.35
-          },
-          "total": {
-            "p50": 45.31,
-            "p95": 58.59,
-            "p99": 51.36
-          }
-        },
-        "gatewayCpuPct": 18.8,
-        "cpuPctPer100Streams": 187.6,
-        "gatewayRssMb": 163.6,
-        "rssMbPer100Streams": 445.3
+        "gatewayCpuPct": 23,
+        "gatewayRssMb": 150.8,
+        "rssGrowthMb": 105.6
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 10,
-        "ratePerConnection": 1,
-        "durationS": 20,
+        "ratePerConnection": 1.25,
+        "durationS": 176,
+        "intended": {
+          "direct": 2200,
+          "gateway": 2200
+        },
         "requests": {
-          "direct": 200,
-          "gateway": 200
+          "direct": 2200,
+          "gateway": 2200
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1878,56 +2412,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 10.25,
+          "p95": 14.06,
+          "p99": 17.96,
+          "n": 2200
+        },
         "direct": {
           "ttfb": {
-            "p50": 111.74,
-            "p95": 118.8,
-            "p99": 120.39
+            "p50": 103.68,
+            "p95": 105.66,
+            "p99": 106.59,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 0.68,
+            "p95": 1.7,
+            "p99": 2.76,
+            "n": 2200
           },
           "total": {
-            "p50": 731.87,
-            "p95": 747.52,
-            "p99": 755.69
+            "p50": 360.2,
+            "p95": 369.36,
+            "p99": 378.64,
+            "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 175.95,
-            "p95": 181.88,
-            "p99": 184.53
+            "p50": 114.23,
+            "p95": 119.91,
+            "p99": 124.36,
+            "n": 2200
+          },
+          "outsideProvider": {
+            "p50": 12.56,
+            "p95": 17.81,
+            "p99": 22.99,
+            "n": 2200
           },
           "total": {
-            "p50": 781.82,
-            "p95": 801.51,
-            "p99": 805.62
+            "p50": 363.54,
+            "p95": 373.09,
+            "p99": 382.32,
+            "n": 2200
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 64.21,
-            "p95": 63.08,
-            "p99": 64.14
-          },
-          "total": {
-            "p50": 49.95,
-            "p95": 53.99,
-            "p99": 49.93
-          }
-        },
-        "gatewayCpuPct": 19.5,
-        "cpuPctPer100Streams": 195.3,
-        "gatewayRssMb": 158.9,
-        "rssMbPer100Streams": 313.8
+        "gatewayCpuPct": 24.6,
+        "gatewayRssMb": 147.5,
+        "rssGrowthMb": 102.6
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 16,
-        "ratePerConnection": 1,
-        "durationS": 19,
+        "ratePerConnection": 1.25,
+        "durationS": 15,
+        "intended": {
+          "direct": 300,
+          "gateway": 303
+        },
         "requests": {
-          "direct": 304,
-          "gateway": 304
+          "direct": 300,
+          "gateway": 303
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1937,56 +2488,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 7.43,
+          "p95": 11.04,
+          "p99": 13.33,
+          "n": 303
+        },
         "direct": {
           "ttfb": {
-            "p50": 114.65,
-            "p95": 124.58,
-            "p99": 126.63
+            "p50": 103.51,
+            "p95": 105.57,
+            "p99": 107.42,
+            "n": 300
+          },
+          "outsideProvider": {
+            "p50": 0.54,
+            "p95": 1.93,
+            "p99": 3.17,
+            "n": 300
           },
           "total": {
-            "p50": 726.84,
-            "p95": 755.72,
-            "p99": 768.51
+            "p50": 361.88,
+            "p95": 378.89,
+            "p99": 390.39,
+            "n": 300
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 200.07,
-            "p95": 205.37,
-            "p99": 206.64
+            "p50": 110.66,
+            "p95": 120.33,
+            "p99": 122.72,
+            "n": 303
+          },
+          "outsideProvider": {
+            "p50": 9.17,
+            "p95": 18.51,
+            "p99": 21.18,
+            "n": 303
           },
           "total": {
-            "p50": 781.29,
-            "p95": 823.04,
-            "p99": 826.91
+            "p50": 358.87,
+            "p95": 372.28,
+            "p99": 374.36,
+            "n": 303
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 85.42,
-            "p95": 80.79,
-            "p99": 80.01
-          },
-          "total": {
-            "p50": 54.45,
-            "p95": 67.32,
-            "p99": 58.4
-          }
-        },
-        "gatewayCpuPct": 25.9,
-        "cpuPctPer100Streams": 161.6,
-        "gatewayRssMb": 167.9,
-        "rssMbPer100Streams": 116.3
+        "gatewayCpuPct": 30.4,
+        "gatewayRssMb": 138.4,
+        "rssGrowthMb": 79.1
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 16,
-        "ratePerConnection": 1,
-        "durationS": 19,
+        "ratePerConnection": 1.25,
+        "durationS": 15,
+        "intended": {
+          "direct": 300,
+          "gateway": 297
+        },
         "requests": {
-          "direct": 304,
-          "gateway": 304
+          "direct": 300,
+          "gateway": 297
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -1996,56 +2564,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 10.07,
+          "p95": 27.63,
+          "p99": 31.6,
+          "n": 297
+        },
         "direct": {
           "ttfb": {
-            "p50": 114.65,
-            "p95": 124.58,
-            "p99": 126.63
+            "p50": 103.51,
+            "p95": 105.57,
+            "p99": 107.42,
+            "n": 300
+          },
+          "outsideProvider": {
+            "p50": 0.54,
+            "p95": 1.93,
+            "p99": 3.17,
+            "n": 300
           },
           "total": {
-            "p50": 726.84,
-            "p95": 755.72,
-            "p99": 768.51
+            "p50": 361.88,
+            "p95": 378.89,
+            "p99": 390.39,
+            "n": 300
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 203.96,
-            "p95": 214.51,
-            "p99": 217.44
+            "p50": 115.52,
+            "p95": 142.74,
+            "p99": 145.27,
+            "n": 297
+          },
+          "outsideProvider": {
+            "p50": 14.2,
+            "p95": 41.32,
+            "p99": 44.22,
+            "n": 297
           },
           "total": {
-            "p50": 804.91,
-            "p95": 829.28,
-            "p99": 836.73
+            "p50": 366.76,
+            "p95": 385.7,
+            "p99": 388.01,
+            "n": 297
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 89.31,
-            "p95": 89.93,
-            "p99": 90.81
-          },
-          "total": {
-            "p50": 78.07,
-            "p95": 73.56,
-            "p99": 68.22
-          }
-        },
-        "gatewayCpuPct": 26.5,
-        "cpuPctPer100Streams": 165.7,
-        "gatewayRssMb": 178.1,
-        "rssMbPer100Streams": 133.6
+        "gatewayCpuPct": 29.1,
+        "gatewayRssMb": 151.7,
+        "rssGrowthMb": 81.1
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 64,
-        "ratePerConnection": 1,
+        "ratePerConnection": 1.25,
         "durationS": 5,
+        "intended": {
+          "direct": 398,
+          "gateway": 405
+        },
         "requests": {
-          "direct": 320,
-          "gateway": 283
+          "direct": 398,
+          "gateway": 405
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -2055,56 +2640,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 4.7,
+          "p95": 5.41,
+          "p99": 6.12,
+          "n": 405
+        },
         "direct": {
           "ttfb": {
-            "p50": 133.38,
-            "p95": 164.61,
-            "p99": 171.72
+            "p50": 102.73,
+            "p95": 105.38,
+            "p99": 107.24,
+            "n": 398
+          },
+          "outsideProvider": {
+            "p50": 0.49,
+            "p95": 2.79,
+            "p99": 5.26,
+            "n": 398
           },
           "total": {
-            "p50": 728.59,
-            "p95": 765.51,
-            "p99": 779.8
+            "p50": 373.15,
+            "p95": 382.01,
+            "p99": 385.13,
+            "n": 398
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 305.23,
-            "p95": 402.13,
-            "p99": 415.75
+            "p50": 108.53,
+            "p95": 125.39,
+            "p99": 128.07,
+            "n": 405
+          },
+          "outsideProvider": {
+            "p50": 7.57,
+            "p95": 24.26,
+            "p99": 27.4,
+            "n": 405
           },
           "total": {
-            "p50": 896.07,
-            "p95": 1062.36,
-            "p99": 1134.3
+            "p50": 347.94,
+            "p95": 366.97,
+            "p99": 372.61,
+            "n": 405
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 171.85,
-            "p95": 237.52,
-            "p99": 244.03
-          },
-          "total": {
-            "p50": 167.48,
-            "p95": 296.85,
-            "p99": 354.5
-          }
-        },
-        "gatewayCpuPct": 58.1,
-        "cpuPctPer100Streams": 90.8,
-        "gatewayRssMb": 237.5,
-        "rssMbPer100Streams": 112.4
+        "gatewayCpuPct": 65.1,
+        "gatewayRssMb": 156.6,
+        "rssGrowthMb": 28.9
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 64,
-        "ratePerConnection": 1,
+        "ratePerConnection": 1.25,
         "durationS": 5,
+        "intended": {
+          "direct": 398,
+          "gateway": 403
+        },
         "requests": {
-          "direct": 320,
-          "gateway": 308
+          "direct": 398,
+          "gateway": 403
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -2114,56 +2716,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 6.02,
+          "p95": 16.66,
+          "p99": 20.87,
+          "n": 403
+        },
         "direct": {
           "ttfb": {
-            "p50": 133.38,
-            "p95": 164.61,
-            "p99": 171.72
+            "p50": 102.73,
+            "p95": 105.38,
+            "p99": 107.24,
+            "n": 398
+          },
+          "outsideProvider": {
+            "p50": 0.49,
+            "p95": 2.79,
+            "p99": 5.26,
+            "n": 398
           },
           "total": {
-            "p50": 728.59,
-            "p95": 765.51,
-            "p99": 779.8
+            "p50": 373.15,
+            "p95": 382.01,
+            "p99": 385.13,
+            "n": 398
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 362.7,
-            "p95": 434.61,
-            "p99": 443.31
+            "p50": 113.33,
+            "p95": 131,
+            "p99": 136.56,
+            "n": 403
+          },
+          "outsideProvider": {
+            "p50": 12.25,
+            "p95": 30.17,
+            "p99": 35.36,
+            "n": 403
           },
           "total": {
-            "p50": 965.22,
-            "p95": 1102.95,
-            "p99": 1242.95
+            "p50": 352.18,
+            "p95": 365.2,
+            "p99": 374.38,
+            "n": 403
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 229.32,
-            "p95": 270,
-            "p99": 271.59
-          },
-          "total": {
-            "p50": 236.63,
-            "p95": 337.44,
-            "p99": 463.15
-          }
-        },
-        "gatewayCpuPct": 58.9,
-        "cpuPctPer100Streams": 92,
-        "gatewayRssMb": 259.8,
-        "rssMbPer100Streams": 154.1
+        "gatewayCpuPct": 62.9,
+        "gatewayRssMb": 179.1,
+        "rssGrowthMb": 45
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 100,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 1.25,
+        "durationS": 18,
+        "intended": {
+          "direct": 2253,
+          "gateway": 2251
+        },
         "requests": {
-          "direct": 500,
-          "gateway": 434
+          "direct": 2253,
+          "gateway": 2251
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -2173,56 +2792,73 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 4.03,
+          "p95": 4.64,
+          "p99": 5.21,
+          "n": 2251
+        },
         "direct": {
           "ttfb": {
-            "p50": 137.75,
-            "p95": 164.29,
-            "p99": 171.31
+            "p50": 101.87,
+            "p95": 103.68,
+            "p99": 104.79,
+            "n": 2253
+          },
+          "outsideProvider": {
+            "p50": 0.21,
+            "p95": 1.63,
+            "p99": 2.42,
+            "n": 2253
           },
           "total": {
-            "p50": 713.08,
-            "p95": 739.01,
-            "p99": 745.61
+            "p50": 366.06,
+            "p95": 375.12,
+            "p99": 379.5,
+            "n": 2253
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 405.46,
-            "p95": 462.93,
-            "p99": 554.62
+            "p50": 111.34,
+            "p95": 124.7,
+            "p99": 131.21,
+            "n": 2251
+          },
+          "outsideProvider": {
+            "p50": 10.32,
+            "p95": 23.54,
+            "p99": 30.53,
+            "n": 2251
           },
           "total": {
-            "p50": 961.67,
-            "p95": 1171.41,
-            "p99": 1231.89
+            "p50": 352.92,
+            "p95": 368.18,
+            "p99": 376.59,
+            "n": 2251
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 267.71,
-            "p95": 298.64,
-            "p99": 383.31
-          },
-          "total": {
-            "p50": 248.59,
-            "p95": 432.4,
-            "p99": 486.28
-          }
-        },
-        "gatewayCpuPct": 80,
-        "cpuPctPer100Streams": 80,
-        "gatewayRssMb": 334.4,
-        "rssMbPer100Streams": 152.5
+        "gatewayCpuPct": 87,
+        "gatewayRssMb": 193.2,
+        "rssGrowthMb": 51.4
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 100,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 1.25,
+        "durationS": 18,
+        "intended": {
+          "direct": 2253,
+          "gateway": 2261
+        },
         "requests": {
-          "direct": 500,
-          "gateway": 415
+          "direct": 2253,
+          "gateway": 2261
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
           "direct": 0,
@@ -2232,298 +2868,418 @@
           "direct": {},
           "gateway": {}
         },
+        "addedTtfb": {
+          "p50": 9.54,
+          "p95": 22.52,
+          "p99": 29.14,
+          "n": 2261
+        },
         "direct": {
           "ttfb": {
-            "p50": 137.75,
-            "p95": 164.29,
-            "p99": 171.31
+            "p50": 101.87,
+            "p95": 103.68,
+            "p99": 104.79,
+            "n": 2253
+          },
+          "outsideProvider": {
+            "p50": 0.21,
+            "p95": 1.63,
+            "p99": 2.42,
+            "n": 2253
           },
           "total": {
-            "p50": 713.08,
-            "p95": 739.01,
-            "p99": 745.61
+            "p50": 366.06,
+            "p95": 375.12,
+            "p99": 379.5,
+            "n": 2253
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 421.58,
-            "p95": 500.5,
-            "p99": 512.62
+            "p50": 122.86,
+            "p95": 145.48,
+            "p99": 157.95,
+            "n": 2261
+          },
+          "outsideProvider": {
+            "p50": 21.73,
+            "p95": 44.32,
+            "p99": 57.46,
+            "n": 2261
           },
           "total": {
-            "p50": 1066.49,
-            "p95": 1147.71,
-            "p99": 1182.03
+            "p50": 367.02,
+            "p95": 393.71,
+            "p99": 405.89,
+            "n": 2261
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 283.83,
-            "p95": 336.21,
-            "p99": 341.31
-          },
-          "total": {
-            "p50": 353.41,
-            "p95": 408.7,
-            "p99": 436.42
-          }
-        },
-        "gatewayCpuPct": 71.9,
-        "cpuPctPer100Streams": 71.9,
-        "gatewayRssMb": 267.2,
-        "rssMbPer100Streams": 8.5
+        "gatewayCpuPct": 89.4,
+        "gatewayRssMb": 245.3,
+        "rssGrowthMb": 130.7
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 256,
-        "ratePerConnection": 1,
+        "ratePerConnection": 1.25,
         "durationS": 5,
+        "intended": {
+          "direct": 1606,
+          "gateway": 1603
+        },
         "requests": {
-          "direct": 1272,
-          "gateway": 770
+          "direct": 1606,
+          "gateway": 1603
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
-          "direct": 8,
-          "gateway": 18354
+          "direct": 0,
+          "gateway": 0
         },
         "errorKinds": {
-          "direct": {
-            "socket": 8
-          },
-          "gateway": {
-            "socket": 18354
-          }
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 3.99,
+          "p95": 5.06,
+          "p99": 6.12,
+          "n": 1603
         },
         "direct": {
           "ttfb": {
-            "p50": 154.87,
-            "p95": 181.37,
-            "p99": 183.42
+            "p50": 101.55,
+            "p95": 103.66,
+            "p99": 104.94,
+            "n": 1606
+          },
+          "outsideProvider": {
+            "p50": 0.25,
+            "p95": 1.79,
+            "p99": 3.35,
+            "n": 1606
           },
           "total": {
-            "p50": 791.12,
-            "p95": 855.87,
-            "p99": 859.15
+            "p50": 351.78,
+            "p95": 363.87,
+            "p99": 369.25,
+            "n": 1606
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 884.56,
-            "p95": 1096.81,
-            "p99": 1146.76
+            "p50": 2149.14,
+            "p95": 3157.59,
+            "p99": 3296.91,
+            "n": 1603
+          },
+          "outsideProvider": {
+            "p50": 2048.12,
+            "p95": 3056.61,
+            "p99": 3196.03,
+            "n": 1603
           },
           "total": {
-            "p50": 1335.5,
-            "p95": 1725.55,
-            "p99": 1751.68
+            "p50": 2253.15,
+            "p95": 3236.6,
+            "p99": 3358.46,
+            "n": 1603
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 729.69,
-            "p95": 915.44,
-            "p99": 963.34
-          },
-          "total": {
-            "p50": 544.38,
-            "p95": 869.68,
-            "p99": 892.53
-          }
-        },
-        "gatewayCpuPct": 112.2,
-        "cpuPctPer100Streams": 43.8,
-        "gatewayRssMb": 318.8,
-        "rssMbPer100Streams": 12.9
+        "gatewayCpuPct": 111.9,
+        "gatewayRssMb": 365.1,
+        "rssGrowthMb": 236.4
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 256,
-        "ratePerConnection": 1,
+        "ratePerConnection": 1.25,
         "durationS": 5,
+        "intended": {
+          "direct": 1606,
+          "gateway": 1597
+        },
         "requests": {
-          "direct": 1272,
-          "gateway": 656
+          "direct": 1606,
+          "gateway": 1597
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
-          "direct": 8,
-          "gateway": 18136
+          "direct": 0,
+          "gateway": 0
         },
         "errorKinds": {
-          "direct": {
-            "socket": 8
-          },
-          "gateway": {
-            "socket": 18136
-          }
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 292.82,
+          "p95": 765.41,
+          "p99": 866.95,
+          "n": 1597
         },
         "direct": {
           "ttfb": {
-            "p50": 154.87,
-            "p95": 181.37,
-            "p99": 183.42
+            "p50": 101.55,
+            "p95": 103.66,
+            "p99": 104.94,
+            "n": 1606
+          },
+          "outsideProvider": {
+            "p50": 0.25,
+            "p95": 1.79,
+            "p99": 3.35,
+            "n": 1606
           },
           "total": {
-            "p50": 791.12,
-            "p95": 855.87,
-            "p99": 859.15
+            "p50": 351.78,
+            "p95": 363.87,
+            "p99": 369.25,
+            "n": 1606
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 1081.87,
-            "p95": 1250.5,
-            "p99": 1258.49
+            "p50": 2285.58,
+            "p95": 4052.59,
+            "p99": 4252.52,
+            "n": 1597
+          },
+          "outsideProvider": {
+            "p50": 2182.02,
+            "p95": 3949.71,
+            "p99": 4149.59,
+            "n": 1597
           },
           "total": {
-            "p50": 1650.47,
-            "p95": 1962.61,
-            "p99": 2011.08
+            "p50": 2620.68,
+            "p95": 4408.88,
+            "p99": 4604.48,
+            "n": 1597
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 927,
-            "p95": 1069.13,
-            "p99": 1075.07
-          },
-          "total": {
-            "p50": 859.35,
-            "p95": 1106.74,
-            "p99": 1151.93
-          }
-        },
-        "gatewayCpuPct": 100.9,
-        "cpuPctPer100Streams": 39.4,
-        "gatewayRssMb": 392.8,
-        "rssMbPer100Streams": 63.4
+        "gatewayCpuPct": 99.9,
+        "gatewayRssMb": 423.9,
+        "rssGrowthMb": 206.4
       },
       {
         "scenario": "body-150kb",
         "store": "memory",
         "concurrency": 500,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 1.25,
+        "durationS": 10,
+        "intended": {
+          "direct": 6245,
+          "gateway": 6233
+        },
         "requests": {
-          "direct": 1968,
-          "gateway": 752
+          "direct": 6245,
+          "gateway": 6233
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
-          "direct": 1395,
-          "gateway": 24613
+          "direct": 0,
+          "gateway": 0
         },
         "errorKinds": {
-          "direct": {
-            "socket": 1395
-          },
-          "gateway": {
-            "socket": 24613
-          }
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 4.02,
+          "p95": 5.04,
+          "p99": 6.11,
+          "n": 6233
         },
         "direct": {
           "ttfb": {
-            "p50": 133.15,
-            "p95": 204.73,
-            "p99": 230.34
+            "p50": 415.52,
+            "p95": 828.8,
+            "p99": 856.97,
+            "n": 6245
+          },
+          "outsideProvider": {
+            "p50": 308.71,
+            "p95": 724.37,
+            "p99": 749.52,
+            "n": 6245
           },
           "total": {
-            "p50": 1024.26,
-            "p95": 1119.05,
-            "p99": 1173.58
+            "p50": 1195.72,
+            "p95": 1520.5,
+            "p99": 1543.82,
+            "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 1301.52,
-            "p95": 2356.9,
-            "p99": 2359.59
+            "p50": 11619.96,
+            "p95": 19650.55,
+            "p99": 20053.9,
+            "n": 6233
+          },
+          "outsideProvider": {
+            "p50": 11518.26,
+            "p95": 19549.47,
+            "p99": 19953.45,
+            "n": 6233
           },
           "total": {
-            "p50": 1951.06,
-            "p95": 3056.28,
-            "p99": 3110.39
+            "p50": 11620.22,
+            "p95": 19814.96,
+            "p99": 20232.61,
+            "n": 6233
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 1168.37,
-            "p95": 2152.17,
-            "p99": 2129.25
-          },
-          "total": {
-            "p50": 926.8,
-            "p95": 1937.23,
-            "p99": 1936.81
-          }
-        },
-        "gatewayCpuPct": 109.5,
-        "cpuPctPer100Streams": 21.9,
-        "gatewayRssMb": 412.8,
-        "rssMbPer100Streams": 27.8
+        "gatewayCpuPct": 110,
+        "gatewayRssMb": 487.2,
+        "rssGrowthMb": 246.1
       },
       {
         "scenario": "body-150kb",
         "store": "redis",
         "concurrency": 500,
-        "ratePerConnection": 1,
-        "durationS": 5,
+        "ratePerConnection": 1.25,
+        "durationS": 10,
+        "intended": {
+          "direct": 6245,
+          "gateway": 6252
+        },
         "requests": {
-          "direct": 1968,
-          "gateway": 711
+          "direct": 6245,
+          "gateway": 522
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
         },
         "errors": {
-          "direct": 1395,
-          "gateway": 145918
+          "direct": 0,
+          "gateway": 5730
         },
         "errorKinds": {
-          "direct": {
-            "socket": 1395
-          },
+          "direct": {},
           "gateway": {
-            "socket": 145918
+            "502": 71,
+            "503": 5659
           }
+        },
+        "addedTtfb": {
+          "p50": 771.97,
+          "p95": 983.73,
+          "p99": 1004.49,
+          "n": 522
         },
         "direct": {
           "ttfb": {
-            "p50": 133.15,
-            "p95": 204.73,
-            "p99": 230.34
+            "p50": 415.52,
+            "p95": 828.8,
+            "p99": 856.97,
+            "n": 6245
+          },
+          "outsideProvider": {
+            "p50": 308.71,
+            "p95": 724.37,
+            "p99": 749.52,
+            "n": 6245
           },
           "total": {
-            "p50": 1024.26,
-            "p95": 1119.05,
-            "p99": 1173.58
+            "p50": 1195.72,
+            "p95": 1520.5,
+            "p99": 1543.82,
+            "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 794.85,
-            "p95": 2524.48,
-            "p99": 2915.14
+            "p50": 3975.79,
+            "p95": 17566.07,
+            "p99": 17903.73,
+            "n": 522
+          },
+          "outsideProvider": {
+            "p50": 3873.78,
+            "p95": 17464.13,
+            "p99": 17802.81,
+            "n": 522
           },
           "total": {
-            "p50": 1374.25,
-            "p95": 3102.7,
-            "p99": 3882.31
+            "p50": 3975.99,
+            "p95": 17842.47,
+            "p99": 18177.89,
+            "n": 522
           }
         },
-        "added": {
-          "ttfb": {
-            "p50": 661.7,
-            "p95": 2319.75,
-            "p99": 2684.8
-          },
-          "total": {
-            "p50": 349.99,
-            "p95": 1983.65,
-            "p99": 2708.73
-          }
-        },
-        "gatewayCpuPct": 108.9,
-        "cpuPctPer100Streams": 21.8,
-        "gatewayRssMb": 375.6,
-        "rssMbPer100Streams": 18.7
+        "gatewayCpuPct": 109.4,
+        "gatewayRssMb": 791.1,
+        "rssGrowthMb": 638.4
+      }
+    ],
+    "slopes": [
+      {
+        "store": "memory",
+        "scenario": "non-streaming",
+        "from": 100,
+        "to": 500,
+        "cpuPctPer100Streams": 12,
+        "rssMbPer100Streams": 48.5,
+        "saturated": true
+      },
+      {
+        "store": "redis",
+        "scenario": "non-streaming",
+        "from": 100,
+        "to": 500,
+        "cpuPctPer100Streams": 11.1,
+        "rssMbPer100Streams": 58.7,
+        "saturated": false
+      },
+      {
+        "store": "memory",
+        "scenario": "streaming-500",
+        "from": 100,
+        "to": 500,
+        "cpuPctPer100Streams": 15.1,
+        "rssMbPer100Streams": 22.3,
+        "saturated": true
+      },
+      {
+        "store": "redis",
+        "scenario": "streaming-500",
+        "from": 100,
+        "to": 500,
+        "cpuPctPer100Streams": 15.4,
+        "rssMbPer100Streams": 31,
+        "saturated": true
+      },
+      {
+        "store": "memory",
+        "scenario": "body-150kb",
+        "from": 100,
+        "to": 500,
+        "cpuPctPer100Streams": 5.8,
+        "rssMbPer100Streams": 48.7,
+        "saturated": true
+      },
+      {
+        "store": "redis",
+        "scenario": "body-150kb",
+        "from": 100,
+        "to": 500,
+        "cpuPctPer100Streams": 5,
+        "rssMbPer100Streams": 126.9,
+        "saturated": true
       }
     ]
   },
@@ -2534,10 +3290,12 @@
         "estimator": "worst-case",
         "limitUsd": 1,
         "requests": 1000,
-        "admitted": 85,
-        "rejected": 915,
-        "finalSpentUsd": 0.95843,
-        "maxSpentPlusReservedUsd": 0.999652,
+        "admitsBeforeFirstSettle": 1000,
+        "maxOpenReservations": 16,
+        "admitted": 16,
+        "rejected": 984,
+        "finalSpentUsd": 0.12012,
+        "maxSpentPlusReservedUsd": 0.998049,
         "maxOverspendUsd": 0,
         "spendDriftMicroUsd": 0,
         "reservedLeftMicroUsd": 0,
@@ -2548,10 +3306,12 @@
         "estimator": "worst-case",
         "limitUsd": 1,
         "requests": 1000,
-        "admitted": 82,
-        "rejected": 918,
-        "finalSpentUsd": 0.939482,
-        "maxSpentPlusReservedUsd": 0.999394,
+        "admitsBeforeFirstSettle": 1000,
+        "maxOpenReservations": 16,
+        "admitted": 16,
+        "rejected": 984,
+        "finalSpentUsd": 0.12012,
+        "maxSpentPlusReservedUsd": 0.998049,
         "maxOverspendUsd": 0,
         "spendDriftMicroUsd": 0,
         "reservedLeftMicroUsd": 0,
@@ -2562,10 +3322,12 @@
         "estimator": "session-aware",
         "limitUsd": 1,
         "requests": 1000,
-        "admitted": 91,
-        "rejected": 909,
-        "finalSpentUsd": 0.958889,
-        "maxSpentPlusReservedUsd": 0.998857,
+        "admitsBeforeFirstSettle": 1000,
+        "maxOpenReservations": 16,
+        "admitted": 16,
+        "rejected": 984,
+        "finalSpentUsd": 0.12012,
+        "maxSpentPlusReservedUsd": 0.998049,
         "maxOverspendUsd": 0,
         "spendDriftMicroUsd": 0,
         "reservedLeftMicroUsd": 0,
@@ -2576,10 +3338,12 @@
         "estimator": "session-aware",
         "limitUsd": 1,
         "requests": 1000,
-        "admitted": 80,
-        "rejected": 920,
-        "finalSpentUsd": 0.818798,
-        "maxSpentPlusReservedUsd": 0.99979,
+        "admitsBeforeFirstSettle": 1000,
+        "maxOpenReservations": 16,
+        "admitted": 16,
+        "rejected": 984,
+        "finalSpentUsd": 0.12012,
+        "maxSpentPlusReservedUsd": 0.998049,
         "maxOverspendUsd": 0,
         "spendDriftMicroUsd": 0,
         "reservedLeftMicroUsd": 0,
@@ -2611,6 +3375,7 @@
   "cache": {
     "turns": 40,
     "model": "claude-opus-5-5",
+    "note": "The naive proxy flattens `system` into a string, which drops the cache breakpoint on the system block. This session also marks the newest user block, and that breakpoint caches the whole prefix, the flattened system text included, so through the naive proxy the session still reads almost the same prefix from cache and costs about the same; its usage still differs from the direct run (conformance test C15b fails on it).",
     "rows": [
       {
         "path": "direct",
@@ -2640,8 +3405,8 @@
   },
   "scan": {
     "bodyMb": 4.14,
-    "lastTurnMbPerS": 89.1,
-    "fullBodyMbPerS": 48.1,
+    "lastTurnMbPerS": 85.7,
+    "fullBodyMbPerS": 45.4,
     "fpCorpus": {
       "files": 683,
       "mb": 6.7,
@@ -2651,8 +3416,8 @@
   },
   "replay": {
     "records": 1000000,
-    "seconds": 42.5,
-    "recordsPerSecond": 23555,
+    "seconds": 41.2,
+    "recordsPerSecond": 24260,
     "fileMb": 100.4,
     "fidelityAgreement": 1
   },
@@ -2726,115 +3491,115 @@
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 10 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "7.31 ms / 69.24 ms",
-      "met": false
+      "measured": "0.44 ms / 0.82 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.56 / 3.82 ms, through the gateway 3.01 / 7.25 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 100 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "7.91 ms / 23.98 ms",
-      "met": false
+      "measured": "0.1 ms / 0.24 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.26 / 2.35 ms, through the gateway 0.63 / 3.18 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 500 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "19.07 ms / 44.86 ms",
+      "measured": "0.04 ms / 0.09 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.4 / 4.44 ms, through the gateway 4.71 / 677.02 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 10 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "5.49 ms / 20.8 ms",
-      "met": false
+      "measured": "0.48 ms / 1.12 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.43 / 2.15 ms, through the gateway 1.8 / 5.48 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 100 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "10.99 ms / 12.53 ms",
-      "met": false
+      "measured": "0.08 ms / 0.31 ms (n = 2,252); client-side TTFB outside the provider, p50 / p99: direct 0.24 / 2.75 ms, through the gateway 0.65 / 2.97 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 500 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "9.47 ms / 144.66 ms",
+      "measured": "0.05 ms / 0.13 ms (n = 6,261); client-side TTFB outside the provider, p50 / p99: direct 0.52 / 2.83 ms, through the gateway 10.13 / 18.21 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 10 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "59.76 ms / 59.35 ms",
+      "measured": "9.34 ms / 13.92 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.68 / 2.76 ms, through the gateway 11.79 / 31.28 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 100 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "267.71 ms / 383.31 ms",
+      "measured": "4.03 ms / 5.21 ms (n = 2,251); client-side TTFB outside the provider, p50 / p99: direct 0.21 / 2.42 ms, through the gateway 10.32 / 30.53 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 500 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "1168.37 ms / 2129.25 ms",
+      "measured": "4.02 ms / 6.11 ms (n = 6,233); client-side TTFB outside the provider, p50 / p99: direct 308.71 / 749.52 ms, through the gateway 11518.26 / 19953.45 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 10 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "10.24 ms / 13.05 ms",
-      "met": false
+      "measured": "1.74 ms / 4.61 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.56 / 3.82 ms, through the gateway 4.24 / 9.38 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 100 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "15.57 ms / 32.76 ms",
+      "measured": "1.05 ms / 35.3 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.26 / 2.35 ms, through the gateway 1.68 / 37.15 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 500 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "32.35 ms / 81.91 ms",
+      "measured": "13.21 ms / 108.53 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.4 / 4.44 ms, through the gateway 84.19 / 1807.58 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 10 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "7.36 ms / 9.69 ms",
-      "met": false
+      "measured": "2.41 ms / 4.42 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.43 / 2.15 ms, through the gateway 3.65 / 8.14 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 100 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "12.98 ms / 15.67 ms",
-      "met": false
+      "measured": "1.15 ms / 3.7 ms (n = 2,250); client-side TTFB outside the provider, p50 / p99: direct 0.24 / 2.75 ms, through the gateway 1.63 / 5.88 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 500 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "15.24 ms / 135.03 ms",
+      "measured": "3.89 ms / 9.85 ms (n = 6,240); client-side TTFB outside the provider, p50 / p99: direct 0.52 / 2.83 ms, through the gateway 12.6 / 23.49 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 10 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "64.21 ms / 64.14 ms",
+      "measured": "10.25 ms / 17.96 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.68 / 2.76 ms, through the gateway 12.56 / 22.99 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 100 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "283.83 ms / 341.31 ms",
+      "measured": "9.54 ms / 29.14 ms (n = 2,261); client-side TTFB outside the provider, p50 / p99: direct 0.21 / 2.42 ms, through the gateway 21.73 / 57.46 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 500 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "661.7 ms / 2684.8 ms",
+      "measured": "771.97 ms / 1004.49 ms (n = 522); client-side TTFB outside the provider, p50 / p99: direct 308.71 / 749.52 ms, through the gateway 3873.78 / 17802.81 ms",
       "met": false
     },
     {
       "sli": "Gateway-attributable error rate",
       "target": "under 0.1% per month",
-      "measured": "not measured (a production SLI); overhead runs: 207021 errors beside 54313 answered requests through the gateway",
+      "measured": "not measured (a production SLI); overhead runs: 5730 errors beside 127768 answered requests through the gateway",
       "met": null
     },
     {
@@ -2846,7 +3611,7 @@
     {
       "sli": "Admitted spend above an enforced budget (worst-case estimator)",
       "target": "zero",
-      "measured": "$0 over 2 run(s) of 1,000 concurrent requests (memory, redis)",
+      "measured": "$0 over 2 run(s) of 1,000 requests sent at once (memory, redis)",
       "met": true
     },
     {
@@ -2864,7 +3629,7 @@
     {
       "sli": "Replay of 1,000,000 trace records",
       "target": "under 60 s on a CI runner",
-      "measured": "42.5 s on the machine above (not a CI runner)",
+      "measured": "41.2 s on the machine above (not a CI runner)",
       "met": true
     }
   ]

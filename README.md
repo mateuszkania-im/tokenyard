@@ -1,128 +1,139 @@
 <!-- BENCH:START -->
-Measured by `npm run bench` on Apple M2 Pro (12 cores, 16 GB, arm64), darwin 27.0.0, Node v22.14.0; autocannon 8.0.0, tsx 4.23.15, redis 7.4.12; commit `f6fb6cc`, run 2026-11-03T01:32:41.887Z. Every request goes to the mock provider on loopback; no real provider is called.
+Measured by `npm run bench` on Apple M2 Pro (12 cores, 16 GB, arm64), darwin 27.0.0, Node v22.14.0; tsx 4.23.15, redis 7.4.12; commit `5a72e15`, run 2026-11-03T02:03:24.628Z. Every request goes to the mock provider on loopback; no real provider is called.
 
 #### SLO targets (spec 12.1)
 
 | SLI | Target | Measured | Result |
 |---|---|---|---|
-| Added TTFB p50 / p99, non-streaming, 10 streams, memory store | under 5 ms / under 25 ms | 7.31 ms / 69.24 ms | missed |
-| Added TTFB p50 / p99, non-streaming, 100 streams, memory store | under 5 ms / under 25 ms | 7.91 ms / 23.98 ms | missed |
-| Added TTFB p50 / p99, non-streaming, 500 streams, memory store | under 5 ms / under 25 ms | 19.07 ms / 44.86 ms | missed |
-| Added TTFB p50 / p99, streaming 500 tokens, 10 streams, memory store | under 5 ms / under 25 ms | 5.49 ms / 20.8 ms | missed |
-| Added TTFB p50 / p99, streaming 500 tokens, 100 streams, memory store | under 5 ms / under 25 ms | 10.99 ms / 12.53 ms | missed |
-| Added TTFB p50 / p99, streaming 500 tokens, 500 streams, memory store | under 5 ms / under 25 ms | 9.47 ms / 144.66 ms | missed |
-| Added TTFB p50 / p99, streaming 150 KB body, 10 streams, memory store | under 5 ms / under 25 ms | 59.76 ms / 59.35 ms | missed |
-| Added TTFB p50 / p99, streaming 150 KB body, 100 streams, memory store | under 5 ms / under 25 ms | 267.71 ms / 383.31 ms | missed |
-| Added TTFB p50 / p99, streaming 150 KB body, 500 streams, memory store | under 5 ms / under 25 ms | 1168.37 ms / 2129.25 ms | missed |
-| Added TTFB p50 / p99, non-streaming, 10 streams, redis store | under 5 ms / under 25 ms | 10.24 ms / 13.05 ms | missed |
-| Added TTFB p50 / p99, non-streaming, 100 streams, redis store | under 5 ms / under 25 ms | 15.57 ms / 32.76 ms | missed |
-| Added TTFB p50 / p99, non-streaming, 500 streams, redis store | under 5 ms / under 25 ms | 32.35 ms / 81.91 ms | missed |
-| Added TTFB p50 / p99, streaming 500 tokens, 10 streams, redis store | under 5 ms / under 25 ms | 7.36 ms / 9.69 ms | missed |
-| Added TTFB p50 / p99, streaming 500 tokens, 100 streams, redis store | under 5 ms / under 25 ms | 12.98 ms / 15.67 ms | missed |
-| Added TTFB p50 / p99, streaming 500 tokens, 500 streams, redis store | under 5 ms / under 25 ms | 15.24 ms / 135.03 ms | missed |
-| Added TTFB p50 / p99, streaming 150 KB body, 10 streams, redis store | under 5 ms / under 25 ms | 64.21 ms / 64.14 ms | missed |
-| Added TTFB p50 / p99, streaming 150 KB body, 100 streams, redis store | under 5 ms / under 25 ms | 283.83 ms / 341.31 ms | missed |
-| Added TTFB p50 / p99, streaming 150 KB body, 500 streams, redis store | under 5 ms / under 25 ms | 661.7 ms / 2684.8 ms | missed |
-| Gateway-attributable error rate | under 0.1% per month | not measured (a production SLI); overhead runs: 207021 errors beside 54313 answered requests through the gateway | not measured |
+| Added TTFB p50 / p99, non-streaming, 10 streams, memory store | under 5 ms / under 25 ms | 0.44 ms / 0.82 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.56 / 3.82 ms, through the gateway 3.01 / 7.25 ms | met |
+| Added TTFB p50 / p99, non-streaming, 100 streams, memory store | under 5 ms / under 25 ms | 0.1 ms / 0.24 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.26 / 2.35 ms, through the gateway 0.63 / 3.18 ms | met |
+| Added TTFB p50 / p99, non-streaming, 500 streams, memory store | under 5 ms / under 25 ms | 0.04 ms / 0.09 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.4 / 4.44 ms, through the gateway 4.71 / 677.02 ms | missed |
+| Added TTFB p50 / p99, streaming 500 tokens, 10 streams, memory store | under 5 ms / under 25 ms | 0.48 ms / 1.12 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.43 / 2.15 ms, through the gateway 1.8 / 5.48 ms | met |
+| Added TTFB p50 / p99, streaming 500 tokens, 100 streams, memory store | under 5 ms / under 25 ms | 0.08 ms / 0.31 ms (n = 2,252); client-side TTFB outside the provider, p50 / p99: direct 0.24 / 2.75 ms, through the gateway 0.65 / 2.97 ms | met |
+| Added TTFB p50 / p99, streaming 500 tokens, 500 streams, memory store | under 5 ms / under 25 ms | 0.05 ms / 0.13 ms (n = 6,261); client-side TTFB outside the provider, p50 / p99: direct 0.52 / 2.83 ms, through the gateway 10.13 / 18.21 ms | missed |
+| Added TTFB p50 / p99, streaming 150 KB body, 10 streams, memory store | under 5 ms / under 25 ms | 9.34 ms / 13.92 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.68 / 2.76 ms, through the gateway 11.79 / 31.28 ms | missed |
+| Added TTFB p50 / p99, streaming 150 KB body, 100 streams, memory store | under 5 ms / under 25 ms | 4.03 ms / 5.21 ms (n = 2,251); client-side TTFB outside the provider, p50 / p99: direct 0.21 / 2.42 ms, through the gateway 10.32 / 30.53 ms | missed |
+| Added TTFB p50 / p99, streaming 150 KB body, 500 streams, memory store | under 5 ms / under 25 ms | 4.02 ms / 6.11 ms (n = 6,233); client-side TTFB outside the provider, p50 / p99: direct 308.71 / 749.52 ms, through the gateway 11518.26 / 19953.45 ms | missed |
+| Added TTFB p50 / p99, non-streaming, 10 streams, redis store | under 5 ms / under 25 ms | 1.74 ms / 4.61 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.56 / 3.82 ms, through the gateway 4.24 / 9.38 ms | met |
+| Added TTFB p50 / p99, non-streaming, 100 streams, redis store | under 5 ms / under 25 ms | 1.05 ms / 35.3 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.26 / 2.35 ms, through the gateway 1.68 / 37.15 ms | missed |
+| Added TTFB p50 / p99, non-streaming, 500 streams, redis store | under 5 ms / under 25 ms | 13.21 ms / 108.53 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.4 / 4.44 ms, through the gateway 84.19 / 1807.58 ms | missed |
+| Added TTFB p50 / p99, streaming 500 tokens, 10 streams, redis store | under 5 ms / under 25 ms | 2.41 ms / 4.42 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.43 / 2.15 ms, through the gateway 3.65 / 8.14 ms | met |
+| Added TTFB p50 / p99, streaming 500 tokens, 100 streams, redis store | under 5 ms / under 25 ms | 1.15 ms / 3.7 ms (n = 2,250); client-side TTFB outside the provider, p50 / p99: direct 0.24 / 2.75 ms, through the gateway 1.63 / 5.88 ms | met |
+| Added TTFB p50 / p99, streaming 500 tokens, 500 streams, redis store | under 5 ms / under 25 ms | 3.89 ms / 9.85 ms (n = 6,240); client-side TTFB outside the provider, p50 / p99: direct 0.52 / 2.83 ms, through the gateway 12.6 / 23.49 ms | missed |
+| Added TTFB p50 / p99, streaming 150 KB body, 10 streams, redis store | under 5 ms / under 25 ms | 10.25 ms / 17.96 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.68 / 2.76 ms, through the gateway 12.56 / 22.99 ms | missed |
+| Added TTFB p50 / p99, streaming 150 KB body, 100 streams, redis store | under 5 ms / under 25 ms | 9.54 ms / 29.14 ms (n = 2,261); client-side TTFB outside the provider, p50 / p99: direct 0.21 / 2.42 ms, through the gateway 21.73 / 57.46 ms | missed |
+| Added TTFB p50 / p99, streaming 150 KB body, 500 streams, redis store | under 5 ms / under 25 ms | 771.97 ms / 1004.49 ms (n = 522); client-side TTFB outside the provider, p50 / p99: direct 308.71 / 749.52 ms, through the gateway 3873.78 / 17802.81 ms | missed |
+| Gateway-attributable error rate | under 0.1% per month | not measured (a production SLI); overhead runs: 5730 errors beside 127768 answered requests through the gateway | not measured |
 | Policy propagation, merge to all instances, p99 | under 60 s | not measured | not measured |
-| Admitted spend above an enforced budget (worst-case estimator) | zero | $0 over 2 run(s) of 1,000 concurrent requests (memory, redis) | met |
+| Admitted spend above an enforced budget (worst-case estimator) | zero | $0 over 2 run(s) of 1,000 requests sent at once (memory, redis) | met |
 | Conformance suite on the pinned Claude Code and Codex versions | 100% | not measured by the benchmark (docs/conformance.md) | not measured |
 | Cache hit ratio through tokenyard versus direct, same session on the mock | equal | 95.65% versus 95.65% | met |
-| Replay of 1,000,000 trace records | under 60 s on a CI runner | 42.5 s on the machine above (not a CI runner) | met |
+| Replay of 1,000,000 trace records | under 60 s on a CI runner | 41.2 s on the machine above (not a CI runner) | met |
 
 #### Gateway overhead
 
-autocannon drives each scenario at the mock provider directly and through the gateway (both in their own processes, loopback); the mock answers after a fixed 100 ms time to first token and streams 500 tokens at 1000 tokens/s. Each connection is one stream with a fixed request rate below what it can complete directly; latencies are corrected for coordinated omission with that intended interval. Added time is the gateway percentile minus the direct percentile; CPU and RSS are the gateway process's; RSS per 100 streams is its peak growth during the run above its size just before it, scaled to 100 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.
+An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed 100 ms time to first token and streams 500 tokens at 2000 tokens/s. Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (5 requests/s non-streaming, 1.25 requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included). Added TTFB is the gateway's own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path. The client-side columns are absolute percentiles of each path, never subtracted from each other; "outside the provider" is each request's TTFB minus the mock's own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock's timer jitter drops out. An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target. n is the number of samples behind each percentile. CPU is the gateway process's user plus system time over the run's wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.
 
-Errors count non-2xx answers and socket errors. autocannon reconnects at once after a connection reset, so a saturated server shows many socket errors per stream.
+Errors count non-2xx answers and socket errors; scheduled requests the run could not send within its drain time are listed as dropped in bench/results.json.
 
 Memory store:
 
-| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms) | Added total p50 / p95 / p99 (ms) | Gateway CPU per 100 streams | Gateway RSS per 100 streams | Errors (direct / gateway) |
-|---|---:|---|---|---:|---:|---:|
-| Non-streaming, small body | 10 | 7.31 / 15.08 / 69.24 | 7.45 / 15.10 / 69.34 | 104.8% | 48.1 MB | 0 / 0 |
-| Non-streaming, small body | 100 | 7.91 / 19.44 / 23.98 | 7.95 / 19.49 / 24.02 | 28.8% | 5.6 MB | 0 / 0 |
-| Non-streaming, small body | 500 | 19.07 / 33.88 / 44.86 | 19.10 / 33.91 / 45.14 | 15.4% | 36.3 MB | 0 / 0 |
-| Streaming, 500 tokens | 10 | 5.49 / 9.40 / 20.80 | 2.62 / 10.36 / 25.81 | 130.4% | 145.9 MB | 0 / 0 |
-| Streaming, 500 tokens | 100 | 10.99 / 12.75 / 12.53 | -50.02 / -62.00 / -61.21 | 34.6% | 9.2 MB | 0 / 0 |
-| Streaming, 500 tokens | 500 | 9.47 / 15.75 / 144.66 | -34.22 / -32.05 / 75.79 | 15.8% | 15.9 MB | 0 / 0 |
-| Streaming, 150 KB body | 10 | 59.76 / 59.01 / 59.35 | 45.31 / 58.59 / 51.36 | 187.6% | 445.3 MB | 0 / 0 |
-| Streaming, 150 KB body | 100 | 267.71 / 298.64 / 383.31 | 248.59 / 432.40 / 486.28 | 80.0% | 152.5 MB | 0 / 0 |
-| Streaming, 150 KB body | 500 | 1,168.37 / 2,152.17 / 2,129.25 | 926.80 / 1,937.23 / 1,936.81 | 21.9% | 27.8 MB | 1,395 / 24,613 |
+| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms), gateway-measured | TTFB outside the provider p50 / p99 (ms), direct | Same, through the gateway | Total time p50 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS growth | Errors (direct / gateway) |
+|---|---:|---|---|---|---|---|---:|---:|---:|
+| Non-streaming, small body | 10 | 0.44 / 0.72 / 0.82 (n = 2,200) | 1.56 / 3.82 | 3.01 / 7.25 | 102.74 / 106.22 | 104.89 / 109.62 | 21.6% | 31.5 MB | 0 / 0 |
+| Non-streaming, small body | 100 | 0.10 / 0.15 / 0.24 (n = 5,000) | 0.26 / 2.35 | 0.63 / 3.18 | 100.69 / 103.72 | 100.97 / 103.92 | 52.3% | 7.8 MB | 0 / 0 |
+| Non-streaming, small body | 500 | 0.04 / 0.06 / 0.09 (n = 25,000) | 0.40 / 4.44 | 4.71 / 677.02 | 100.73 / 105.45 | 104.87 / 779.45 | 100.2% | 201.8 MB | 0 / 0 |
+| Streaming, 500 tokens | 10 | 0.48 / 0.87 / 1.12 (n = 2,200) | 0.43 / 2.15 | 1.80 / 5.48 | 355.02 / 366.58 | 356.21 / 390.42 | 18.6% | 18.9 MB | 0 / 0 |
+| Streaming, 500 tokens | 100 | 0.08 / 0.14 / 0.31 (n = 2,252) | 0.24 / 2.75 | 0.65 / 2.97 | 393.56 / 422.55 | 368.18 / 380.97 | 48.9% | 11.3 MB | 0 / 0 |
+| Streaming, 500 tokens | 500 | 0.05 / 0.09 / 0.13 (n = 6,261) | 0.52 / 2.83 | 10.13 / 18.21 | 421.11 / 447.48 | 423.46 / 444.36 | 109.3% | 100.5 MB | 0 / 0 |
+| Streaming, 150 KB body | 10 | 9.34 / 12.37 / 13.92 (n = 2,200) | 0.68 / 2.76 | 11.79 / 31.28 | 360.20 / 378.64 | 362.68 / 380.10 | 23.0% | 105.6 MB | 0 / 0 |
+| Streaming, 150 KB body | 100 | 4.03 / 4.64 / 5.21 (n = 2,251) | 0.21 / 2.42 | 10.32 / 30.53 | 366.06 / 379.50 | 352.92 / 376.59 | 87.0% | 51.4 MB | 0 / 0 |
+| Streaming, 150 KB body | 500 | 4.02 / 5.04 / 6.11 (n = 6,233) | 308.71 / 749.52 | 11,518.26 / 19,953.45 | 1,195.72 / 1,543.82 | 11,620.22 / 20,232.61 | 110.0% | 246.1 MB | 0 / 0 |
 
 Redis store:
 
-| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms) | Added total p50 / p95 / p99 (ms) | Gateway CPU per 100 streams | Gateway RSS per 100 streams | Errors (direct / gateway) |
-|---|---:|---|---|---:|---:|---:|
-| Non-streaming, small body | 10 | 10.24 / 12.72 / 13.05 | 10.40 / 12.83 / 13.70 | 97.5% | 153.4 MB | 0 / 0 |
-| Non-streaming, small body | 100 | 15.57 / 23.49 / 32.76 | 15.60 / 23.54 / 32.81 | 29.6% | 21.2 MB | 0 / 0 |
-| Non-streaming, small body | 500 | 32.35 / 77.03 / 81.91 | 32.37 / 77.06 / 81.94 | 15.8% | 34.3 MB | 0 / 0 |
-| Streaming, 500 tokens | 10 | 7.36 / 8.97 / 9.69 | 11.85 / 5.22 / 9.52 | 130.0% | 73.3 MB | 0 / 0 |
-| Streaming, 500 tokens | 100 | 12.98 / 14.17 / 15.67 | -47.01 / -58.80 / -58.90 | 35.6% | 3.2 MB | 0 / 0 |
-| Streaming, 500 tokens | 500 | 15.24 / 23.36 / 135.03 | -19.98 / -21.86 / 71.14 | 17.8% | 24.7 MB | 0 / 0 |
-| Streaming, 150 KB body | 10 | 64.21 / 63.08 / 64.14 | 49.95 / 53.99 / 49.93 | 195.3% | 313.8 MB | 0 / 0 |
-| Streaming, 150 KB body | 100 | 283.83 / 336.21 / 341.31 | 353.41 / 408.70 / 436.42 | 71.9% | 8.5 MB | 0 / 0 |
-| Streaming, 150 KB body | 500 | 661.70 / 2,319.75 / 2,684.80 | 349.99 / 1,983.65 / 2,708.73 | 21.8% | 18.7 MB | 1,395 / 145,918 |
+| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms), gateway-measured | TTFB outside the provider p50 / p99 (ms), direct | Same, through the gateway | Total time p50 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS growth | Errors (direct / gateway) |
+|---|---:|---|---|---|---|---|---:|---:|---:|
+| Non-streaming, small body | 10 | 1.74 / 3.50 / 4.61 (n = 2,200) | 1.56 / 3.82 | 4.24 / 9.38 | 102.74 / 106.22 | 105.60 / 110.79 | 23.0% | 30.6 MB | 0 / 0 |
+| Non-streaming, small body | 100 | 1.05 / 3.46 / 35.30 (n = 5,000) | 0.26 / 2.35 | 1.68 / 37.15 | 100.69 / 103.72 | 102.01 / 137.14 | 50.5% | 6.5 MB | 0 / 0 |
+| Non-streaming, small body | 500 | 13.21 / 40.08 / 108.53 (n = 25,000) | 0.40 / 4.44 | 84.19 / 1,807.58 | 100.73 / 105.45 | 184.66 / 1,910.70 | 94.7% | 241.3 MB | 0 / 0 |
+| Streaming, 500 tokens | 10 | 2.41 / 3.61 / 4.42 (n = 2,200) | 0.43 / 2.15 | 3.65 / 8.14 | 355.02 / 366.58 | 357.95 / 372.37 | 20.1% | 71.3 MB | 0 / 0 |
+| Streaming, 500 tokens | 100 | 1.15 / 2.50 / 3.70 (n = 2,250) | 0.24 / 2.75 | 1.63 / 5.88 | 393.56 / 422.55 | 363.46 / 375.34 | 48.3% | 7.2 MB | 0 / 0 |
+| Streaming, 500 tokens | 500 | 3.89 / 8.32 / 9.85 (n = 6,240) | 0.52 / 2.83 | 12.60 / 23.49 | 421.11 / 447.48 | 422.61 / 441.49 | 109.7% | 131.1 MB | 0 / 0 |
+| Streaming, 150 KB body | 10 | 10.25 / 14.06 / 17.96 (n = 2,200) | 0.68 / 2.76 | 12.56 / 22.99 | 360.20 / 378.64 | 363.54 / 382.32 | 24.6% | 102.6 MB | 0 / 0 |
+| Streaming, 150 KB body | 100 | 9.54 / 22.52 / 29.14 (n = 2,261) | 0.21 / 2.42 | 21.73 / 57.46 | 366.06 / 379.50 | 367.02 / 405.89 | 89.4% | 130.7 MB | 0 / 0 |
+| Streaming, 150 KB body | 500 | 771.97 / 983.73 / 1,004.49 (n = 522) | 308.71 / 749.52 | 3,873.78 / 17,802.81 | 1,195.72 / 1,543.82 | 3,975.99 / 18,177.89 | 109.4% | 638.4 MB | 0 / 5,730 |
 
-<details><summary>Every concurrency level, with absolute latencies</summary>
+Gateway cost per 100 more streams (slope between two levels):
 
-| Store | Scenario | Streams | Rate per stream (req/s) | Requests (direct / gateway) | Direct TTFB p50 / p95 / p99 (ms) | Gateway TTFB p50 / p95 / p99 (ms) | Direct total p50 / p95 / p99 (ms) | Gateway total p50 / p95 / p99 (ms) | Gateway CPU | Gateway RSS |
-|---|---|---:|---:|---:|---|---|---|---|---:|---:|
-| memory | Non-streaming, small body | 1 | 4.00 | 80 / 80 | 103.45 / 105.04 / 108.16 | 106.06 / 107.58 / 109.00 | 103.50 / 105.11 / 108.23 | 106.57 / 108.54 / 110.01 | 3.0% | 123.2 MB |
-| redis | Non-streaming, small body | 1 | 4.00 | 80 / 80 | 103.45 / 105.04 / 108.16 | 107.15 / 110.94 / 113.08 | 103.50 / 105.11 / 108.23 | 107.71 / 111.53 / 113.67 | 3.5% | 136.1 MB |
-| memory | Non-streaming, small body | 10 | 4.00 | 320 / 320 | 103.97 / 105.76 / 106.89 | 111.28 / 120.84 / 176.13 | 104.00 / 105.77 / 106.94 | 111.45 / 120.87 / 176.28 | 10.5% | 128.0 MB |
-| redis | Non-streaming, small body | 10 | 4.00 | 320 / 320 | 103.97 / 105.76 / 106.89 | 114.21 / 118.48 / 119.94 | 104.00 / 105.77 / 106.94 | 114.40 / 118.60 / 120.64 | 9.8% | 140.8 MB |
-| memory | Non-streaming, small body | 16 | 4.00 | 320 / 320 | 103.86 / 106.24 / 106.85 | 112.04 / 119.77 / 121.84 | 103.88 / 106.25 / 106.86 | 112.16 / 119.85 / 121.92 | 13.4% | 132.7 MB |
-| redis | Non-streaming, small body | 16 | 4.00 | 320 / 320 | 103.86 / 106.24 / 106.85 | 115.97 / 120.99 / 122.22 | 103.88 / 106.25 / 106.86 | 116.05 / 121.16 / 122.44 | 12.6% | 146.9 MB |
-| memory | Non-streaming, small body | 64 | 4.00 | 1,280 / 1,280 | 104.47 / 117.42 / 124.38 | 119.20 / 130.81 / 136.56 | 104.48 / 117.43 / 124.38 | 119.25 / 130.89 / 136.61 | 20.3% | 161.0 MB |
-| redis | Non-streaming, small body | 64 | 4.00 | 1,280 / 1,280 | 104.47 / 117.42 / 124.38 | 129.23 / 187.42 / 209.21 | 104.48 / 117.43 / 124.38 | 129.31 / 187.54 / 209.22 | 23.5% | 170.0 MB |
-| memory | Non-streaming, small body | 100 | 4.00 | 2,000 / 2,000 | 104.09 / 107.43 / 108.70 | 112.00 / 126.87 / 132.68 | 104.10 / 107.44 / 108.71 | 112.05 / 126.93 / 132.73 | 28.8% | 166.6 MB |
-| redis | Non-streaming, small body | 100 | 4.00 | 2,000 / 2,000 | 104.09 / 107.43 / 108.70 | 119.66 / 130.92 / 141.46 | 104.10 / 107.44 / 108.71 | 119.70 / 130.98 / 141.52 | 29.6% | 189.5 MB |
-| memory | Non-streaming, small body | 256 | 4.00 | 5,376 / 5,376 | 104.65 / 110.45 / 114.45 | 117.06 / 131.05 / 138.66 | 104.65 / 110.46 / 114.45 | 117.07 / 131.10 / 138.66 | 40.1% | 298.5 MB |
-| redis | Non-streaming, small body | 256 | 4.00 | 5,376 / 5,120 | 104.65 / 110.45 / 114.45 | 123.57 / 137.88 / 166.87 | 104.65 / 110.46 / 114.45 | 123.61 / 137.92 / 166.89 | 52.7% | 253.6 MB |
-| memory | Non-streaming, small body | 500 | 4.00 | 10,512 / 10,000 | 105.14 / 111.82 / 114.52 | 124.21 / 145.70 / 159.38 | 105.14 / 111.82 / 114.52 | 124.24 / 145.73 / 159.66 | 77.2% | 290.9 MB |
-| redis | Non-streaming, small body | 500 | 4.00 | 10,512 / 10,000 | 105.14 / 111.82 / 114.52 | 137.49 / 188.85 / 196.43 | 105.14 / 111.82 / 114.52 | 137.51 / 188.88 / 196.46 | 78.8% | 321.1 MB |
-| memory | Streaming, 500 tokens | 1 | 1.00 | 20 / 20 | 103.41 / 104.30 / 104.63 | 107.17 / 116.28 / 121.43 | 726.93 / 739.25 / 745.36 | 732.84 / 782.82 / 809.42 | 4.6% | 117.2 MB |
-| redis | Streaming, 500 tokens | 1 | 1.00 | 20 / 20 | 103.41 / 104.30 / 104.63 | 108.86 / 118.35 / 122.49 | 726.93 / 739.25 / 745.36 | 733.91 / 747.58 / 750.41 | 4.5% | 127.3 MB |
-| memory | Streaming, 500 tokens | 10 | 1.00 | 200 / 200 | 103.69 / 105.13 / 106.39 | 109.18 / 114.53 / 127.19 | 725.38 / 739.33 / 740.49 | 728.00 / 749.69 / 766.30 | 13.0% | 131.8 MB |
-| redis | Streaming, 500 tokens | 10 | 1.00 | 200 / 200 | 103.69 / 105.13 / 106.39 | 111.05 / 114.10 / 116.08 | 725.38 / 739.33 / 740.49 | 737.23 / 744.55 / 750.01 | 13.0% | 134.6 MB |
-| memory | Streaming, 500 tokens | 16 | 1.00 | 304 / 304 | 103.70 / 105.49 / 106.39 | 110.04 / 114.12 / 115.11 | 716.54 / 791.82 / 798.03 | 722.63 / 740.71 / 747.04 | 18.4% | 130.6 MB |
-| redis | Streaming, 500 tokens | 16 | 1.00 | 304 / 304 | 103.70 / 105.49 / 106.39 | 112.48 / 115.70 / 116.12 | 716.54 / 791.82 / 798.03 | 724.56 / 745.21 / 745.90 | 18.0% | 137.8 MB |
-| memory | Streaming, 500 tokens | 64 | 1.00 | 320 / 320 | 105.76 / 109.60 / 109.96 | 120.59 / 126.73 / 128.42 | 722.40 / 728.41 / 729.14 | 717.28 / 762.12 / 762.35 | 30.3% | 145.9 MB |
-| redis | Streaming, 500 tokens | 64 | 1.00 | 320 / 320 | 105.76 / 109.60 / 109.96 | 121.57 / 128.61 / 129.47 | 722.40 / 728.41 / 729.14 | 714.11 / 730.56 / 730.96 | 31.7% | 155.8 MB |
-| memory | Streaming, 500 tokens | 100 | 1.00 | 500 / 500 | 105.28 / 109.65 / 110.38 | 116.27 / 122.40 / 122.91 | 737.81 / 757.20 / 758.98 | 687.79 / 695.20 / 697.77 | 34.6% | 155.1 MB |
-| redis | Streaming, 500 tokens | 100 | 1.00 | 500 / 500 | 105.28 / 109.65 / 110.38 | 118.26 / 123.82 / 126.05 | 737.81 / 757.20 / 758.98 | 690.80 / 698.40 / 700.08 | 35.6% | 159.0 MB |
-| memory | Streaming, 500 tokens | 256 | 1.00 | 1,280 / 1,280 | 106.42 / 113.87 / 116.40 | 114.97 / 125.00 / 129.96 | 749.72 / 757.42 / 758.56 | 677.39 / 685.82 / 689.21 | 62.0% | 174.1 MB |
-| redis | Streaming, 500 tokens | 256 | 1.00 | 1,280 / 1,344 | 106.42 / 113.87 / 116.40 | 118.72 / 126.23 / 131.20 | 749.72 / 757.42 / 758.56 | 682.27 / 704.09 / 750.85 | 55.7% | 178.4 MB |
-| memory | Streaming, 500 tokens | 500 | 1.00 | 2,616 / 2,564 | 104.79 / 115.56 / 124.98 | 114.26 / 131.31 / 269.64 | 764.55 / 780.01 / 786.89 | 730.33 / 747.96 / 862.68 | 79.0% | 253.5 MB |
-| redis | Streaming, 500 tokens | 500 | 1.00 | 2,616 / 2,564 | 104.79 / 115.56 / 124.98 | 120.03 / 138.92 / 260.01 | 764.55 / 780.01 / 786.89 | 744.57 / 758.15 / 858.03 | 89.2% | 240.0 MB |
-| memory | Streaming, 150 KB body | 1 | 1.00 | 20 / 20 | 105.56 / 109.07 / 119.09 | 118.09 / 122.43 / 122.62 | 735.29 / 751.57 / 768.35 | 743.38 / 748.88 / 750.67 | 5.8% | 138.6 MB |
-| redis | Streaming, 150 KB body | 1 | 1.00 | 20 / 20 | 105.56 / 109.07 / 119.09 | 121.93 / 125.83 / 125.84 | 735.29 / 751.57 / 768.35 | 748.82 / 762.43 / 772.08 | 6.0% | 133.7 MB |
-| memory | Streaming, 150 KB body | 10 | 1.00 | 200 / 200 | 111.74 / 118.80 / 120.39 | 171.50 / 177.81 / 179.74 | 731.87 / 747.52 / 755.69 | 777.18 / 806.11 / 807.05 | 18.8% | 163.6 MB |
-| redis | Streaming, 150 KB body | 10 | 1.00 | 200 / 200 | 111.74 / 118.80 / 120.39 | 175.95 / 181.88 / 184.53 | 731.87 / 747.52 / 755.69 | 781.82 / 801.51 / 805.62 | 19.5% | 158.9 MB |
-| memory | Streaming, 150 KB body | 16 | 1.00 | 304 / 304 | 114.65 / 124.58 / 126.63 | 200.07 / 205.37 / 206.64 | 726.84 / 755.72 / 768.51 | 781.29 / 823.04 / 826.91 | 25.9% | 167.9 MB |
-| redis | Streaming, 150 KB body | 16 | 1.00 | 304 / 304 | 114.65 / 124.58 / 126.63 | 203.96 / 214.51 / 217.44 | 726.84 / 755.72 / 768.51 | 804.91 / 829.28 / 836.73 | 26.5% | 178.1 MB |
-| memory | Streaming, 150 KB body | 64 | 1.00 | 320 / 283 | 133.38 / 164.61 / 171.72 | 305.23 / 402.13 / 415.75 | 728.59 / 765.51 / 779.80 | 896.07 / 1,062.36 / 1,134.30 | 58.1% | 237.5 MB |
-| redis | Streaming, 150 KB body | 64 | 1.00 | 320 / 308 | 133.38 / 164.61 / 171.72 | 362.70 / 434.61 / 443.31 | 728.59 / 765.51 / 779.80 | 965.22 / 1,102.95 / 1,242.95 | 58.9% | 259.8 MB |
-| memory | Streaming, 150 KB body | 100 | 1.00 | 500 / 434 | 137.75 / 164.29 / 171.31 | 405.46 / 462.93 / 554.62 | 713.08 / 739.01 / 745.61 | 961.67 / 1,171.41 / 1,231.89 | 80.0% | 334.4 MB |
-| redis | Streaming, 150 KB body | 100 | 1.00 | 500 / 415 | 137.75 / 164.29 / 171.31 | 421.58 / 500.50 / 512.62 | 713.08 / 739.01 / 745.61 | 1,066.49 / 1,147.71 / 1,182.03 | 71.9% | 267.2 MB |
-| memory | Streaming, 150 KB body | 256 | 1.00 | 1,272 / 770 | 154.87 / 181.37 / 183.42 | 884.56 / 1,096.81 / 1,146.76 | 791.12 / 855.87 / 859.15 | 1,335.50 / 1,725.55 / 1,751.68 | 112.2% | 318.8 MB |
-| redis | Streaming, 150 KB body | 256 | 1.00 | 1,272 / 656 | 154.87 / 181.37 / 183.42 | 1,081.87 / 1,250.50 / 1,258.49 | 791.12 / 855.87 / 859.15 | 1,650.47 / 1,962.61 / 2,011.08 | 100.9% | 392.8 MB |
-| memory | Streaming, 150 KB body | 500 | 1.00 | 1,968 / 752 | 133.15 / 204.73 / 230.34 | 1,301.52 / 2,356.90 / 2,359.59 | 1,024.26 / 1,119.05 / 1,173.58 | 1,951.06 / 3,056.28 / 3,110.39 | 109.5% | 412.8 MB |
-| redis | Streaming, 150 KB body | 500 | 1.00 | 1,968 / 711 | 133.15 / 204.73 / 230.34 | 794.85 / 2,524.48 / 2,915.14 | 1,024.26 / 1,119.05 / 1,173.58 | 1,374.25 / 3,102.70 / 3,882.31 | 108.9% | 375.6 MB |
+| Store | Scenario | Streams | CPU per 100 streams | RSS growth per 100 streams |
+|---|---|---|---:|---:|
+| memory | Non-streaming, small body | 100 to 500 | 12.0% (gateway saturated at 500 streams, so this understates it) | 48.5 MB |
+| redis | Non-streaming, small body | 100 to 500 | 11.1% | 58.7 MB |
+| memory | Streaming, 500 tokens | 100 to 500 | 15.1% (gateway saturated at 500 streams, so this understates it) | 22.3 MB |
+| redis | Streaming, 500 tokens | 100 to 500 | 15.4% (gateway saturated at 500 streams, so this understates it) | 31.0 MB |
+| memory | Streaming, 150 KB body | 100 to 500 | 5.8% (gateway saturated at 500 streams, so this understates it) | 48.7 MB |
+| redis | Streaming, 150 KB body | 100 to 500 | 5.0% (gateway saturated at 500 streams, so this understates it) | 126.9 MB |
+
+<details><summary>Every concurrency level, with client-side TTFB from the scheduled send time</summary>
+
+| Store | Scenario | Streams | Rate per stream (req/s) | Seconds | Answered (direct / gateway) | Added TTFB p50 / p95 / p99 (ms) | TTFB p50 / p95 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS |
+|---|---|---:|---:|---:|---:|---|---|---|---:|---:|
+| memory | Non-streaming, small body | 1 | 5.00 | 20 | 100 / 100 | 1.10 / 1.43 / 1.57 | 105.59 / 106.90 / 107.98 | 108.20 / 110.16 / 111.00 | 4.2% | 109.8 MB |
+| redis | Non-streaming, small body | 1 | 5.00 | 20 | 100 / 100 | 3.11 / 4.25 / 4.85 | 105.59 / 106.90 / 107.98 | 109.65 / 112.61 / 116.71 | 4.5% | 129.3 MB |
+| memory | Non-streaming, small body | 10 | 5.00 | 44 | 2,200 / 2,200 | 0.44 / 0.72 / 0.82 | 102.63 / 105.16 / 106.08 | 104.56 / 107.37 / 109.17 | 21.6% | 141.3 MB |
+| redis | Non-streaming, small body | 10 | 5.00 | 44 | 2,200 / 2,200 | 1.74 / 3.50 / 4.61 | 102.63 / 105.16 / 106.08 | 105.37 / 108.86 / 110.54 | 23.0% | 159.9 MB |
+| memory | Non-streaming, small body | 16 | 5.00 | 5 | 400 / 400 | 0.38 / 0.66 / 0.76 | 102.17 / 104.52 / 105.35 | 103.81 / 107.10 / 112.13 | 22.4% | 138.0 MB |
+| redis | Non-streaming, small body | 16 | 5.00 | 5 | 400 / 400 | 1.54 / 2.95 / 4.27 | 102.17 / 104.52 / 105.35 | 104.77 / 108.10 / 109.81 | 29.0% | 157.4 MB |
+| memory | Non-streaming, small body | 64 | 5.00 | 5 | 1,600 / 1,600 | 0.12 / 0.24 / 0.47 | 100.82 / 102.65 / 104.14 | 101.30 / 103.82 / 105.33 | 46.5% | 149.6 MB |
+| redis | Non-streaming, small body | 64 | 5.00 | 5 | 1,600 / 1,600 | 1.14 / 2.16 / 2.87 | 100.82 / 102.65 / 104.14 | 102.35 / 104.74 / 106.56 | 47.5% | 164.4 MB |
+| memory | Non-streaming, small body | 100 | 5.00 | 10 | 5,000 / 5,000 | 0.10 / 0.15 / 0.24 | 100.64 / 102.25 / 103.66 | 100.88 / 102.65 / 103.82 | 52.3% | 157.3 MB |
+| redis | Non-streaming, small body | 100 | 5.00 | 10 | 5,000 / 5,000 | 1.05 / 3.46 / 35.30 | 100.64 / 102.25 / 103.66 | 101.94 / 105.84 / 137.12 | 50.5% | 171.1 MB |
+| memory | Non-streaming, small body | 256 | 5.00 | 5 | 6,400 / 6,400 | 0.05 / 0.10 / 0.17 | 100.60 / 102.26 / 105.01 | 100.95 / 215.01 / 266.99 | 79.0% | 211.7 MB |
+| redis | Non-streaming, small body | 256 | 5.00 | 5 | 6,400 / 6,400 | 0.64 / 1.41 / 2.05 | 100.60 / 102.26 / 105.01 | 101.00 / 102.62 / 103.75 | 75.4% | 254.7 MB |
+| memory | Non-streaming, small body | 500 | 5.00 | 10 | 25,000 / 25,000 | 0.04 / 0.06 / 0.09 | 100.70 / 102.91 / 105.41 | 104.82 / 669.87 / 779.43 | 100.2% | 299.9 MB |
+| redis | Non-streaming, small body | 500 | 5.00 | 10 | 25,000 / 25,000 | 13.21 / 40.08 / 108.53 | 100.70 / 102.91 / 105.41 | 184.63 / 1,682.74 / 1,910.69 | 94.7% | 355.5 MB |
+| memory | Streaming, 500 tokens | 1 | 1.25 | 20 | 25 / 25 | 1.22 / 1.31 / 1.36 | 105.05 / 106.84 / 106.96 | 110.45 / 124.11 / 157.42 | 4.2% | 110.4 MB |
+| redis | Streaming, 500 tokens | 1 | 1.25 | 20 | 25 / 25 | 3.61 / 4.74 / 5.75 | 105.05 / 106.84 / 106.96 | 113.51 / 127.71 / 163.90 | 5.3% | 119.2 MB |
+| memory | Streaming, 500 tokens | 10 | 1.25 | 176 | 2,200 / 2,200 | 0.48 / 0.87 / 1.12 | 100.93 / 102.28 / 103.17 | 102.31 / 104.55 / 107.34 | 18.6% | 111.6 MB |
+| redis | Streaming, 500 tokens | 10 | 1.25 | 176 | 2,200 / 2,200 | 2.41 / 3.61 / 4.42 | 100.93 / 102.28 / 103.17 | 104.08 / 106.35 / 108.51 | 20.1% | 116.4 MB |
+| memory | Streaming, 500 tokens | 16 | 1.25 | 15 | 300 / 301 | 0.43 / 0.66 / 0.87 | 100.80 / 101.91 / 102.81 | 101.90 / 103.57 / 107.17 | 25.8% | 93.1 MB |
+| redis | Streaming, 500 tokens | 16 | 1.25 | 15 | 300 / 296 | 2.03 / 3.51 / 4.64 | 100.80 / 101.91 / 102.81 | 103.53 / 106.33 / 111.08 | 25.4% | 118.3 MB |
+| memory | Streaming, 500 tokens | 64 | 1.25 | 5 | 398 / 394 | 0.13 / 0.36 / 0.60 | 101.21 / 102.98 / 103.69 | 101.20 / 103.08 / 105.49 | 43.2% | 106.2 MB |
+| redis | Streaming, 500 tokens | 64 | 1.25 | 5 | 398 / 398 | 1.56 / 3.03 / 4.17 | 101.21 / 102.98 / 103.69 | 102.53 / 104.82 / 109.56 | 45.1% | 127.8 MB |
+| memory | Streaming, 500 tokens | 100 | 1.25 | 18 | 2,251 / 2,252 | 0.08 / 0.14 / 0.31 | 101.32 / 103.41 / 104.72 | 101.07 / 102.71 / 103.82 | 48.9% | 116.1 MB |
+| redis | Streaming, 500 tokens | 100 | 1.25 | 18 | 2,251 / 2,250 | 1.15 / 2.50 / 3.70 | 101.32 / 103.41 / 104.72 | 102.07 / 104.41 / 106.22 | 48.3% | 126.3 MB |
+| memory | Streaming, 500 tokens | 256 | 1.25 | 5 | 1,598 / 1,602 | 0.05 / 0.09 / 0.15 | 101.29 / 102.98 / 103.86 | 101.02 / 102.96 / 104.03 | 71.4% | 126.8 MB |
+| redis | Streaming, 500 tokens | 256 | 1.25 | 5 | 1,598 / 1,599 | 1.18 / 2.18 / 3.35 | 101.29 / 102.98 / 103.86 | 101.94 / 104.60 / 106.50 | 72.0% | 148.3 MB |
+| memory | Streaming, 500 tokens | 500 | 1.25 | 10 | 6,245 / 6,261 | 0.05 / 0.09 / 0.13 | 102.03 / 104.48 / 105.49 | 111.37 / 116.33 / 119.59 | 109.3% | 177.7 MB |
+| redis | Streaming, 500 tokens | 500 | 1.25 | 10 | 6,245 / 6,240 | 3.89 / 8.32 / 9.85 | 102.03 / 104.48 / 105.49 | 113.80 / 121.06 / 124.94 | 109.7% | 218.5 MB |
+| memory | Streaming, 150 KB body | 1 | 1.25 | 20 | 25 / 25 | 12.84 / 15.12 / 17.04 | 108.81 / 110.19 / 110.40 | 121.41 / 125.49 / 128.56 | 6.3% | 102.1 MB |
+| redis | Streaming, 150 KB body | 1 | 1.25 | 20 | 25 / 25 | 14.09 / 17.35 / 18.57 | 108.81 / 110.19 / 110.40 | 122.28 / 127.96 / 128.22 | 5.9% | 115.4 MB |
+| memory | Streaming, 150 KB body | 10 | 1.25 | 176 | 2,200 / 2,200 | 9.34 / 12.37 / 13.92 | 103.68 / 105.66 / 106.59 | 113.63 / 129.81 / 133.43 | 23.0% | 150.8 MB |
+| redis | Streaming, 150 KB body | 10 | 1.25 | 176 | 2,200 / 2,200 | 10.25 / 14.06 / 17.96 | 103.68 / 105.66 / 106.59 | 114.23 / 119.91 / 124.36 | 24.6% | 147.5 MB |
+| memory | Streaming, 150 KB body | 16 | 1.25 | 15 | 300 / 303 | 7.43 / 11.04 / 13.33 | 103.51 / 105.57 / 107.42 | 110.66 / 120.33 / 122.72 | 30.4% | 138.4 MB |
+| redis | Streaming, 150 KB body | 16 | 1.25 | 15 | 300 / 297 | 10.07 / 27.63 / 31.60 | 103.51 / 105.57 / 107.42 | 115.52 / 142.74 / 145.27 | 29.1% | 151.7 MB |
+| memory | Streaming, 150 KB body | 64 | 1.25 | 5 | 398 / 405 | 4.70 / 5.41 / 6.12 | 102.73 / 105.38 / 107.24 | 108.53 / 125.39 / 128.07 | 65.1% | 156.6 MB |
+| redis | Streaming, 150 KB body | 64 | 1.25 | 5 | 398 / 403 | 6.02 / 16.66 / 20.87 | 102.73 / 105.38 / 107.24 | 113.33 / 131.00 / 136.56 | 62.9% | 179.1 MB |
+| memory | Streaming, 150 KB body | 100 | 1.25 | 18 | 2,253 / 2,251 | 4.03 / 4.64 / 5.21 | 101.87 / 103.68 / 104.79 | 111.34 / 124.70 / 131.21 | 87.0% | 193.2 MB |
+| redis | Streaming, 150 KB body | 100 | 1.25 | 18 | 2,253 / 2,261 | 9.54 / 22.52 / 29.14 | 101.87 / 103.68 / 104.79 | 122.86 / 145.48 / 157.95 | 89.4% | 245.3 MB |
+| memory | Streaming, 150 KB body | 256 | 1.25 | 5 | 1,606 / 1,603 | 3.99 / 5.06 / 6.12 | 101.55 / 103.66 / 104.94 | 2,149.14 / 3,157.59 / 3,296.91 | 111.9% | 365.1 MB |
+| redis | Streaming, 150 KB body | 256 | 1.25 | 5 | 1,606 / 1,597 | 292.82 / 765.41 / 866.95 | 101.55 / 103.66 / 104.94 | 2,285.58 / 4,052.59 / 4,252.52 | 99.9% | 423.9 MB |
+| memory | Streaming, 150 KB body | 500 | 1.25 | 10 | 6,245 / 6,233 | 4.02 / 5.04 / 6.11 | 415.52 / 828.80 / 856.97 | 11,619.96 / 19,650.55 / 20,053.90 | 110.0% | 487.2 MB |
+| redis | Streaming, 150 KB body | 500 | 1.25 | 10 | 6,245 / 522 | 771.97 / 983.73 / 1,004.49 | 415.52 / 828.80 / 856.97 | 3,975.79 / 17,566.07 / 17,903.73 | 109.4% | 791.1 MB |
 
 </details>
 
 #### Budget correctness
 
-The G4 proof scenario of spec 7.4: concurrent requests through the gateway against one enforced budget, each with an actual cost drawn (seeded) between 0 and its limits.
+The G4 proof scenario of spec 7.4: requests sent at the same moment, each on its own connection opened beforehand, through the gateway against one enforced budget, each with an actual cost drawn (seeded) between 0 and its limits. "Admit calls before the first settle" counts the requests the store decided while the first admitted ones were still open.
 
-| Store | Estimator | Budget | Concurrent requests | Admitted | Rejected | Final spend | Max spent + reserved after any admit | Max overspend | Final spend minus settled costs | Reserved left |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| memory | worst-case | $1.00 | 1,000 | 85 | 915 | $0.958430 | $0.999652 | $0.000000 | 0 micro-USD | 0 micro-USD |
-| redis | worst-case | $1.00 | 1,000 | 82 | 918 | $0.939482 | $0.999394 | $0.000000 | 0 micro-USD | 0 micro-USD |
-| memory | session-aware | $1.00 | 1,000 | 91 | 909 | $0.958889 | $0.998857 | $0.000000 | 0 micro-USD | 0 micro-USD |
-| redis | session-aware | $1.00 | 1,000 | 80 | 920 | $0.818798 | $0.999790 | $0.000000 | 0 micro-USD | 0 micro-USD |
+| Store | Estimator | Budget | Requests sent at once | Admit calls before the first settle | Most open reservations | Admitted | Rejected | Final spend | Max spent + reserved after any admit | Max overspend | Final spend minus settled costs | Reserved left |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| memory | worst-case | $1.00 | 1,000 | 1,000 | 16 | 16 | 984 | $0.120120 | $0.998049 | $0.000000 | 0 micro-USD | 0 micro-USD |
+| redis | worst-case | $1.00 | 1,000 | 1,000 | 16 | 16 | 984 | $0.120120 | $0.998049 | $0.000000 | 0 micro-USD | 0 micro-USD |
+| memory | session-aware | $1.00 | 1,000 | 1,000 | 16 | 16 | 984 | $0.120120 | $0.998049 | $0.000000 | 0 micro-USD | 0 micro-USD |
+| redis | session-aware | $1.00 | 1,000 | 1,000 | 16 | 16 | 984 | $0.120120 | $0.998049 | $0.000000 | 0 micro-USD | 0 micro-USD |
 
 Concurrency trade-off: one 150,000-byte turn with max_tokens 32,000 on claude-opus-5-5, sent concurrently in one session under a $25.00 session budget (enforced), while the mock holds every stream open:
 
@@ -143,13 +154,15 @@ The 40-turn Claude Code shaped session of conformance test C15, priced at claude
 | tokenyard | $0.1574 | 0 | 338,518 | 15,384 | 95.65% |
 | naive proxy | $0.1572 | 0 | 337,972 | 15,370 | 95.65% |
 
+The naive proxy flattens `system` into a string, which drops the cache breakpoint on the system block. This session also marks the newest user block, and that breakpoint caches the whole prefix, the flattened system text included, so through the naive proxy the session still reads almost the same prefix from cache and costs about the same; its usage still differs from the direct run (conformance test C15b fails on it).
+
 #### Secret scan
 
-Default rules on a 4.1 MiB synthetic coding-agent body: last-turn scan 89.1 MiB/s, full-body scan 48.1 MiB/s. False-positive corpus (source trees and lockfiles sent as tool results): 683 files, 6.7 MB, 0 block hits.
+Default rules on a 4.1 MiB synthetic coding-agent body: last-turn scan 85.7 MiB/s, full-body scan 45.4 MiB/s. False-positive corpus (source trees and lockfiles sent as tool results): 683 files, 6.7 MB, 0 block hits.
 
 #### Replay throughput
 
-1,000,000 synthetic trace records (the demo week repeated, 100.4 MB gzipped export) read, parsed and replayed against the demo's base and head policies in 42.5 s (23,555 records/s, fidelity 100.0%).
+1,000,000 synthetic trace records (the demo week repeated, 100.4 MB gzipped export) read, parsed and replayed against the demo's base and head policies in 41.2 s (24,260 records/s, fidelity 100.0%).
 
 #### Estimator calibration
 
