@@ -1,7 +1,7 @@
 // Spec 6.5: the pure decision function. No I/O, no clock (window starts come from `f.ts`), no randomness
 // (weighted splits hash the session or request id). Same arguments, same plan: replay over traces relies on it.
 import { createHash } from 'node:crypto';
-import { inputTokenBound, reservationPrice, reservedOutputTokens, serverToolKey, sessionAwareMicroUsd, worstCaseMicroUsd } from '../limits/estimator.js';
+import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd, worstCaseMicroUsd } from '../limits/estimator.js';
 import { budgetKey, gcraKey, keyTaintKey, streamKey, taintKey } from '../limits/keys.js';
 import { lookupModel, type ModelPrice, type PriceTable, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
@@ -276,7 +276,6 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     const r = policy.reservation;
     const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: reserve });
     est = r.estimator === 'session-aware' ? sessionAwareMicroUsd(uf, price, t, null, reserve) : worst.micro;
-    plan.outputTokensBound = reservedOutputTokens(uf, price, t, reserve);
     const enforced = levels.some((l) => l.enforce);
     // An unpriced server tool has no bound at all (its loop is reserved as one iteration): refused whenever an
     // enforced level applies; failure.unpricedModel: allow-and-flag admits it only when none does.

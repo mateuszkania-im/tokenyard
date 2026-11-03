@@ -30545,7 +30545,6 @@ function decide(policy2, f) {
     const r = policy2.reservation;
     const worst = worstCaseMicroUsd(uf, price2, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: reserve });
     est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price2, t, null, reserve) : worst.micro;
-    plan.outputTokensBound = reservedOutputTokens(uf, price2, t, reserve);
     const enforced = levels.some((l) => l.enforce);
     if (worst.block === "unpriced-server-tool") {
       if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
@@ -58963,16 +58962,12 @@ function actualCost(policy2, model, r, x) {
 async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   const o = { ...outcome };
   o.costModifiers = requestModifiers(policy2, o.features, o.usage);
-  let r = o.usage;
+  const r = o.usage;
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost = null;
   let costFailed = false;
   if (held.chargeReservation) costFailed = true;
-  if (!costFailed && r?.usage && o.surface === "anthropic-messages" && (r.source === "estimated" || r.outputEstimated === true)) {
-    const bound = held.plan?.outputTokensBound;
-    if (bound === void 0) costFailed = true;
-    else o.usage = r = { ...r, usage: { ...r.usage, output: Math.max(r.usage.output, bound) }, outputEstimated: true };
-  }
+  if (r?.usage && o.surface === "anthropic-messages" && (r.source === "estimated" || r.outputEstimated === true)) costFailed = true;
   if (costFailed) {
   } else if (r?.usage && model) {
     try {

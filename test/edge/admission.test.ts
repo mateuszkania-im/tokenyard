@@ -42,7 +42,7 @@ const sse = (event: string, data: unknown): string => `event: ${event}\ndata: ${
 const start = (model: string, usage: Record<string, number>) => sse('message_start', { type: 'message_start', message: { model, usage } });
 const json = (model: string, usage: Record<string, unknown>) => JSON.stringify({ id: 'msg_1', type: 'message', model, content: [], usage });
 
-test('aborted stream after message_start settles input from message_start and output at the reserved bound (A3), never zero', async () => {
+test('aborted stream after message_start, before its final usage, settles at the full reservation (A3), never zero', async () => {
   const up = await raw((req, res) => {
     req.resume();
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -66,11 +66,11 @@ test('aborted stream after message_start settles input from message_start and ou
   });
   await expect.poll(() => g.traces.length).toBe(1);
   const t = g.traces[0] as Rec;
-  // No message_delta output count: streamed characters bound nothing, so output is the request's max_tokens (64).
-  const expected = costMicroUsd(g.policy.prices, 'claude-haiku-5-5', { input: 120, cacheRead: 30, cacheWrite5m: 0, cacheWrite1h: 0, output: 64 });
+  // No final usage: neither the streamed characters nor message_start's input bound the bill, so the reservation stands.
+  const expected = spy.admits[0]?.plan.reservations[0]?.estMicroUsd as number;
   expect(expected).toBeGreaterThan(0);
   expect(spy.settles).toEqual([{ id: t.id, actual: expected, result: 'settled' }]);
-  expect(t.outcome).toMatchObject({ aborted: true, usageSource: 'estimated', costMicroUsd: expected, settledBy: 'request', overrun: false });
+  expect(t.outcome).toMatchObject({ aborted: true, usageSource: 'estimated', costMicroUsd: expected, settledAtEstimate: true, settledBy: 'request', overrun: false });
   expect(t.decision.reservedMicroUsd).toBe(spy.admits[0]?.plan.reservations[0]?.estMicroUsd);
 });
 
@@ -281,7 +281,7 @@ test('a final stream that also carried a mid-stream error is settled on its usag
   expect(g.traces[0]?.outcome).toMatchObject({ usageSource: 'final', midStreamError: 'overloaded_error', costMicroUsd: cost });
 });
 
-test('a final stream without a message_delta output count settles output at the bound, flagged on the trace (A3)', async () => {
+test('a final stream without a message_delta output count settles at the full reservation, flagged on the trace (A3)', async () => {
   const up = await raw((req, res) => {
     req.resume();
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -293,7 +293,7 @@ test('a final stream without a message_delta output count settles output at the 
   const g = await gateway({ upstream: up.url, store: spy.store });
   await send(g.url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-haiku-5-5', stream: true }) });
   await expect.poll(() => g.traces.length).toBe(1);
-  expect(g.traces[0]?.outcome).toMatchObject({ usageSource: 'final', outputEstimated: true, usage: { output: 64 } });
+  expect(g.traces[0]?.outcome).toMatchObject({ usageSource: 'final', outputEstimated: true, settledAtEstimate: true, costMicroUsd: spy.admits[0]?.plan.reservations[0]?.estMicroUsd });
   expect(spy.settles[0]?.actual).toBe(g.traces[0]?.outcome.costMicroUsd);
 });
 

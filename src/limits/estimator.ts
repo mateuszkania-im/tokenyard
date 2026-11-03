@@ -132,10 +132,9 @@ function loopIterations(f: RequestFeatures, t: PriceTable): number {
 
 /**
  * Output tokens the worst-case reservation covers: one iteration's bound, or `maxIterations * maxOutputTokens` with
- * server tools, plus one model-max summary per iteration under threshold compaction. A stream that ends without its
- * final output count is settled at this many output tokens (A3).
+ * server tools, plus one model-max summary per iteration under threshold compaction.
  */
-export function reservedOutputTokens(f: RequestFeatures, m: ModelPrice, t: PriceTable, reserveOutputTokens: number | null): number {
+function reservedOutputTokens(f: RequestFeatures, m: ModelPrice, t: PriceTable, reserveOutputTokens: number | null): number {
   const iterations = loopIterations(f, t);
   let out = f.serverTools.length > 0 ? iterations * m.maxOutputTokens : outputTokenBound(f, m, reserveOutputTokens);
   if (f.compaction === true) out += iterations * m.maxOutputTokens;

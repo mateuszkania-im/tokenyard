@@ -2,6 +2,9 @@
 // input + ceil(streamed delta chars / 4) output tokens. Chars/4 is not a bound: summarized thinking (billed for the
 // full thinking, streamed as a short summary), redacted thinking (no deltas at all) and text with more than one token
 // per 4 chars (CJK, code symbols) are all billed above it. The client chooses when to abort, so it chooses the charge.
+// Fix round 1 (controller ruling): input is not settled from message_start either, because with compaction or a
+// server-tool loop most billed input arrives only in the final message_delta (usage.iterations). Any stream that ends
+// without its final usage settles at the full reservation, as S20-2 does on Responses.
 import { afterEach, expect, test } from 'vitest';
 import { authHeaders } from '../helpers/conformance.js';
 import { testPolicy } from '../helpers/policy.js';
@@ -48,17 +51,14 @@ test('A3b abort after 2,000 CJK characters of text (about one token per characte
   expect(o.costMicroUsd ?? 0).toBeGreaterThanOrEqual(billed);
 });
 
-test('A3c a stream cut before message_delta settles output at the reserved output bound, input from message_start', async () => {
+test('A3c a stream cut before message_delta settles at the full reservation', async () => {
   const { o } = await run([{ type: 'text_delta', text: 'hello' }], 0);
-  const policy = testPolicy({ upstream: 'http://127.0.0.1:9' });
-  // max_tokens 32,000 is the reserved output bound; input 50 comes from message_start.
-  expect(o.usage?.usage?.output).toBe(32_000);
-  expect(o.usage?.usage?.input).toBe(50);
-  expect(o.costMicroUsd).toBe(costMicroUsd(policy.prices, MODEL, { input: 50, output: 32_000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 }));
-  expect(o.costMicroUsd ?? 0).toBeLessThanOrEqual(o.reservedMicroUsd ?? 0);
+  expect(o.settledAtEstimate).toBe(true);
+  expect(o.costMicroUsd).toBe(o.reservedMicroUsd);
+  expect(o.reservedMicroUsd ?? 0).toBeGreaterThan(0);
 });
 
-test('A3d message_stop without any message_delta usage also settles output at the bound', async () => {
+test('A3d message_stop without any message_delta usage also settles at the full reservation', async () => {
   const up = await raw(async (req, res) => {
     await readJson(req);
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -66,10 +66,47 @@ test('A3d message_stop without any message_delta usage also settles output at th
     res.write(sse('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'x' } }));
     res.end(sse('message_stop', { type: 'message_stop' }));
   });
-  const policy = testPolicy({ upstream: up.url });
-  const g = await gw(policy);
+  const g = await gw(testPolicy({ upstream: up.url }));
   const body = Buffer.from(JSON.stringify({ model: MODEL, max_tokens: 1000, stream: true, messages: [{ role: 'user', content: 'x' }] }));
   await sendAndAbort(g.url, '/v1/messages', authHeaders, body, { until: (s) => s.includes('message_stop') });
   await expect.poll(() => g.outcomes.length).toBe(1);
-  expect(g.outcomes[0]?.usage?.usage?.output).toBe(1000);
+  const o = g.outcomes[0]!;
+  expect(o.settledAtEstimate).toBe(true);
+  expect(o.costMicroUsd).toBe(o.reservedMicroUsd);
+});
+
+/** A stream that sends message_start with the top-level count, some blocks, then hangs until the client goes. */
+async function cutAfterStart(extraBody: Record<string, unknown>, headers: Record<string, string> = {}) {
+  const up = await raw(async (req, res) => {
+    await readJson(req);
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write(sse('message_start', { type: 'message_start', message: { model: MODEL, usage: { input_tokens: 23_000, output_tokens: 1 } } }));
+    res.write(sse('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'compaction', content: '' } }));
+    res.write(sse('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'compaction_delta', content: 'summary' } }));
+    res.write(': marker-sent\n\n');
+  });
+  const policy = testPolicy({ upstream: up.url });
+  const g = await gw(policy);
+  const body = Buffer.from(JSON.stringify({ model: MODEL, max_tokens: 4096, stream: true, messages: [{ role: 'user', content: 'Hello' }], ...extraBody }));
+  await sendAndAbort(g.url, '/v1/messages', { ...authHeaders, ...headers }, body, { until: (s) => s.includes('marker-sent') });
+  await expect.poll(() => g.outcomes.length).toBe(1);
+  return { o: g.outcomes[0]!, policy };
+}
+
+test('A3e threshold compaction cut before message_delta: the compaction input (only in usage.iterations) is covered', async () => {
+  const { o, policy } = await cutAfterStart({ context_management: { edits: [{ type: 'compact_20260112', trigger: { type: 'input_tokens', value: 150_000 } }] } }, { 'anthropic-beta': 'compact-2026-01-12' });
+  // A 900k-token compaction iteration plus the message iteration: what the provider may bill for the cut stream.
+  const bill = costMicroUsd(policy.prices, MODEL, { input: 923_000, output: 3_500, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 });
+  expect(o.settledAtEstimate).toBe(true);
+  expect(o.costMicroUsd).toBe(o.reservedMicroUsd);
+  expect(o.costMicroUsd ?? 0).toBeGreaterThanOrEqual(bill);
+});
+
+test('A3f server-tool loop cut before message_delta: the input of every iteration is covered', async () => {
+  const { o, policy } = await cutAfterStart({ tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }] });
+  // Several sampling iterations over a large context: far above message_start's 23,000 input tokens.
+  const bill = costMicroUsd(policy.prices, MODEL, { input: 3 * 900_000, output: 3 * 4_096, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 });
+  expect(o.settledAtEstimate).toBe(true);
+  expect(o.costMicroUsd).toBe(o.reservedMicroUsd);
+  expect(o.costMicroUsd ?? 0).toBeGreaterThanOrEqual(bill);
 });
