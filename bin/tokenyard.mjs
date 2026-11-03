@@ -30848,6 +30848,7 @@ function decide(policy2, f) {
     const m = known === null ? null : lookupModel(t, known)?.price;
     if (!m || tier === "other" || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: "unpriced" };
   }
+  if (f.fastMode && known !== null && lookupModel(t, known)?.price.fast === void 0) return { ...plan, preBlock: "unpriced" };
   const levels = budgetLevels(policy2, f);
   if (known === null) {
     if (policy2.failure.unpricedModel !== "allow-and-flag" || hasModels(t) && levels.some((l) => l.enforce)) return { ...plan, preBlock: "unpriced" };

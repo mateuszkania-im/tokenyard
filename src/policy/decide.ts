@@ -263,6 +263,10 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     // `other` stands for any tier outside the known ones (B1) and is never priced, whatever the table lists.
     if (!m || tier === 'other' || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: 'unpriced' };
   }
+  // Fast mode is priced only from the model's own fast prices: a request asking it on a priced model without them is
+  // refused as a tier without tier prices is (ruling superseding CL-t9e), never reserved at the standard rates. An
+  // unpriced model takes the unpriced-model path below.
+  if (f.fastMode && known !== null && lookupModel(t, known)?.price.fast === undefined) return { ...plan, preBlock: 'unpriced' };
   const levels = budgetLevels(policy, f);
 
   // An unpriced model is reserved at the envelope of the priced ones, which is no bound for a model dearer than all of
