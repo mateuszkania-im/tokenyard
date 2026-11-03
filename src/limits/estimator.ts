@@ -162,8 +162,10 @@ function roundUp(micro: number, what: string): number {
 
 /**
  * Worst-case reservation in integer micro-USD, rounded up once on the final sum (spec 7.3). Under the premises of
- * spec 7.4 the actual cost of the request is never above it. `f.fastMode` on a model with fast prices uses them;
- * a model without them rejects fast mode unbilled, so its standard prices stand.
+ * spec 7.4 the actual cost of the request is never above it. `f.fastMode` on a model with fast prices uses them.
+ * decide refuses fast mode on a priced model without them as unpriced before any estimate (CL-t9e); only the
+ * envelope of an unpriced model (allow-and-flag) reaches here with fast mode and no fast block, and its base prices
+ * already include every fast rate (reservationPrice).
  *
  * With server tools the provider may loop `maxIterations` times (the highest across the request's tools): input
  * is bounded by `maxIterations * maxContextTokens`, output by `maxIterations * maxOutputTokens`, and each tool's
