@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 import { expect, test } from 'vitest';
 
 const root = join(import.meta.dirname, '..');
-const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : /\.ts$/.test(e.name) ? [join(dir, e.name)] : []));
+const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith('.ts') ? [join(dir, e.name)] : []));
 
 test('every fc.assert call in the tests passes a seed', () => {
   const unseeded: string[] = [];
