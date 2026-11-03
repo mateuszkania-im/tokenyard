@@ -305,3 +305,29 @@ failure:
   expect(row(await run(policy(), head, xs))).toBe(true);
   expect(row(await run(policy(), warn, xs))).toBe(false);
 });
+
+// Final fix re-review residual: count_tokens passes the key's request-rate checks only since ledger 183 was overturned
+// (c8ca55e). A count_tokens record written before that took no rate token when served, so replay leaves it out of the
+// rate limits; a record marked decision.countTokensRateChecked replays its rate checks as served.
+test('count_tokens takes a rate token in replay only when its record says the gateway rate-checked it', async () => {
+  const rpm = 'rateLimits:\n  - { name: key-rpm, scope: key, rpm: 1, burst: 1 }\n';
+  const base = policy({ ci: rpm });
+  const head = policy({ revision: 'rev2', ci: rpm });
+  const count = (id: string, sec: number, marked: boolean): TraceRecord => {
+    const r = rec({ id, min: sec / 60, cost: 0, usage: null, session: `s-${id}`, ...(marked ? { decision: { countTokensRateChecked: true } } : {}) });
+    return { ...r, surface: 'anthropic-count-tokens', outcome: { ...r.outcome, usageSource: 'none' } };
+  };
+  // Old traces: a count_tokens, then a messages request one second later on the same key, both served.
+  const old = await run(base, head, [count('c0', 0, false), rec({ id: 'm1', min: 1 / 60, session: 's-m1' })]);
+  expect(old.fidelity.agreement).toBe(1);
+  expect(old.base).toMatchObject({ forwarded: 2, blocked: 0 });
+  expect(old.head).toMatchObject({ forwarded: 2, blocked: 0 });
+  // New traces: the count_tokens took the key's one token, so the messages request that follows was refused.
+  const now = await run(base, head, [count('c0', 0, true), rec({ id: 'm1', min: 1 / 60, session: 's-m1', decision: { action: 'block', reason: 'rate' } })]);
+  expect(now.fidelity.agreement).toBe(1);
+  expect(now.head).toMatchObject({ forwarded: 1, blocked: 1 });
+  expect(now.blocked).toEqual([
+    { policy: 'base', reason: 'rate', name: 'key-rpm', count: 1 },
+    { policy: 'head', reason: 'rate', name: 'key-rpm', count: 1 },
+  ]);
+});

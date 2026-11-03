@@ -41,7 +41,9 @@ export interface TraceRecord {
               /** Not in spec 9.1: the writer process's admit call number, which orders admits within one millisecond. */
               admitSeq?: number;
               /** Not in spec 9.1: a random id of the writer process; `admitSeq` and `outcome.settleSeq` count admits within one (instance, seqEpoch), since the count restarts with the process while the instance id may not. */
-              seqEpoch?: string };
+              seqEpoch?: string;
+              /** Not in spec 9.1: set (true) on every count_tokens record since count_tokens passes the key's request-rate checks (ledger 183 overturned, c8ca55e). Replay rate-checks a count_tokens record only when it is set: one written before took no rate token when served. */
+              countTokensRateChecked?: true };
   candidateDecision?: TraceRecord['decision'];
   outcome: {
     provider: string | null; upstreamModel: string | null; attempts: number; cacheColdRisk: boolean;

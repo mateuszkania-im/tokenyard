@@ -259,6 +259,8 @@ async function simulate(
     let plan: Plan;
     try {
       plan = decide(policy, f);
+      // count_tokens took no rate token before ledger 183 was overturned: a record from then replays as it was served.
+      if (f.surface === 'anthropic-count-tokens' && r.decision.countTokensRateChecked !== true) plan = { ...plan, rateChecks: [] };
     } catch {
       // The gateway answers 500 and reserves nothing when the reservation cannot be computed.
       return { ...NOTHING, kind: 'exit', decision: { action: 'block', reason: 'reservation-error', route: null, chain: [] } };

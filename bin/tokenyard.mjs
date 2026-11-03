@@ -554,7 +554,8 @@ function decisionOf(d, p) {
     ...d.admitSeq !== void 0 ? { admitSeq: d.admitSeq } : {},
     // A random process id the gateway writes (16 hex), re-keyed like every linkable id (S-V4-4); any other value is
     // dropped, and replay then uses the time rule.
-    ...d.seqEpoch !== void 0 && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: p("epoch", d.seqEpoch) } : {}
+    ...d.seqEpoch !== void 0 && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: p("epoch", d.seqEpoch) } : {},
+    ...d.countTokensRateChecked ? { countTokensRateChecked: true } : {}
   };
 }
 function saltedPseudonyms(salt) {
@@ -59295,7 +59296,9 @@ function buildTraceRecord(o, salt, names) {
       // Every exit after decide carries the bound it used; without one there was no plan to replay.
       ...o.inputBound === void 0 ? { preDecision: true } : {},
       ...o.admitAt ? { admitOffsetMs: o.admitAt.offsetMs, admitSeq: o.admitAt.seq } : {},
-      ...o.seqEpoch !== void 0 ? { seqEpoch: o.seqEpoch } : {}
+      ...o.seqEpoch !== void 0 ? { seqEpoch: o.seqEpoch } : {},
+      // Replay rate-checks count_tokens only on records that carry this (written since ledger 183 was overturned).
+      ...o.surface === "anthropic-count-tokens" ? { countTokensRateChecked: true } : {}
     },
     ...o.candidate && !("error" in o.candidate) ? {
       candidateDecision: {
@@ -122242,6 +122245,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
     let plan;
     try {
       plan = decide(policy2, f);
+      if (f.surface === "anthropic-count-tokens" && r.decision.countTokensRateChecked !== true) plan = { ...plan, rateChecks: [] };
     } catch {
       return { ...NOTHING3, kind: "exit", decision: { action: "block", reason: "reservation-error", route: null, chain: [] } };
     }

@@ -173,6 +173,7 @@ function decisionOf(d: TraceRecord['decision'], p: (kind: PseudonymKind, v: stri
     // A random process id the gateway writes (16 hex), re-keyed like every linkable id (S-V4-4); any other value is
     // dropped, and replay then uses the time rule.
     ...(d.seqEpoch !== undefined && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: p('epoch', d.seqEpoch) } : {}),
+    ...(d.countTokensRateChecked ? { countTokensRateChecked: true as const } : {}),
   };
 }
 

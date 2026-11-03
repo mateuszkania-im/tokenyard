@@ -139,6 +139,8 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
       ...(o.inputBound === undefined ? { preDecision: true as const } : {}),
       ...(o.admitAt ? { admitOffsetMs: o.admitAt.offsetMs, admitSeq: o.admitAt.seq } : {}),
       ...(o.seqEpoch !== undefined ? { seqEpoch: o.seqEpoch } : {}),
+      // Replay rate-checks count_tokens only on records that carry this (written since ledger 183 was overturned).
+      ...(o.surface === 'anthropic-count-tokens' ? { countTokensRateChecked: true as const } : {}),
     },
     ...(o.candidate && !('error' in o.candidate)
       ? {

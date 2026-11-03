@@ -91,7 +91,9 @@ writing process), a settle is ordered by `outcome.settleSeq`, the admits the pro
 `totalMs` is measured before settle, so a later admit can share its millisecond. The count starts again when a
 process restarts while `--instance-id` may be reused, so across process epochs, across instances, and in traces
 written without these fields the time alone decides. A record whose
-admit found the store down is replayed with the store down. Settlement charges what the gateway charged
+admit found the store down is replayed with the store down. A count_tokens record passes the request-rate limits only
+when it carries `decision.countTokensRateChecked` (written since count_tokens takes a rate token at the gateway);
+an older one took none when served and replays outside the rate limits. Settlement charges what the gateway charged
 (`outcome.chargedMicroUsd`) when the model, provider and price table are unchanged; the policy's reservation when the
 request was settled at its estimate or by the sweeper; otherwise the replayed cost.
 

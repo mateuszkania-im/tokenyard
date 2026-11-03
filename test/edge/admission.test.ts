@@ -3,6 +3,7 @@
 import { Agent, request } from 'node:http';
 import { afterEach, expect, test, vi } from 'vitest';
 import { createGatewayRuntime } from '../../src/edge/handler.js';
+import { anonymizeRecord, saltedPseudonyms } from '../../src/ledger/anonymize.js';
 import type { TraceRecord } from '../../src/ledger/record.js';
 import { createMemoryStore } from '../../src/limits/memory-store.js';
 import type { CounterStore } from '../../src/limits/store.js';
@@ -212,6 +213,10 @@ test('count_tokens passes the key\'s rate checks only: no reservation and no str
   // Nothing was reserved, so nothing was settled at an estimate: the flag would make replay and readers treat the
   // answer as unpriced (final fix re-review residual).
   expect(g.traces.at(-1)?.outcome.settledAtEstimate).toBeUndefined();
+  // Replay rate-checks count_tokens only on records that say so (records from before ledger 183 was overturned do not).
+  expect(g.traces.at(-1)?.decision.countTokensRateChecked).toBe(true);
+  const exported = anonymizeRecord({ ...(g.traces.at(-1) as Rec), instance: 'i1', seq: 1 }, saltedPseudonyms('x'));
+  expect(exported.decision.countTokensRateChecked).toBe(true);
 });
 
 test('a fault after admit on count_tokens traces charge 0 without the settled-at-estimate flag', async () => {
