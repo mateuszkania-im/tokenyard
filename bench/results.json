@@ -4177,7 +4177,7 @@
     }
   ],
   "soak": {
-    "method": "The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state for 30 days by design; that cost is measured on its own (Redis keys and bytes per key). A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory. Memory is judged after a 5 minute warm-up: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.",
+    "method": "The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state until it has been idle for 24 hours; that cost is measured on its own (Redis keys and bytes per key). A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory. Memory is judged after a 5 minute warm-up: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.",
     "thresholds": {
       "warmupS": 300,
       "windowS": 300,
@@ -4193,7 +4193,7 @@
     },
     "environment": {
       "git": {
-        "commit": "7ef3ca7",
+        "commit": "44e3563",
         "dirty": false
       },
       "node": "v22.14.0",
@@ -4562,62 +4562,60 @@
       {
         "mode": "redis",
         "gateways": 2,
-        "startedAt": "2026-11-03T12:30:55.442Z",
+        "startedAt": "2026-11-03T13:52:54.176Z",
         "minutes": 45,
         "offeredPerS": 160,
-        "requests": 439968,
-        "answeredPerS": 163,
+        "requests": 439960,
+        "answeredPerS": 162.9,
         "byKind": {
           "secret": {
-            "400 secret": 9082
+            "400 secret": 9087
           },
           "bad-model": {
-            "403 model": 9118
+            "403 model": 8909
           },
           "aux": {
-            "200": 54730
+            "200": 54769
           },
           "hostile": {
-            "200": 27295
+            "200": 26946
           },
           "codex-sync": {
-            "200": 13683,
-            "429 streams": 1
+            "200": 13787
           },
           "product": {
-            "200": 18161,
-            "429 streams": 5
+            "200": 18336
           },
           "codex": {
-            "200": 63826,
-            "429 streams": 2
+            "200": 63549
           },
           "sub": {
-            "200": 54394
+            "200": 54558,
+            "429 streams": 1
           },
           "fault": {
-            "200": 3351,
-            "500": 3389,
-            "529": 3396,
-            "ECONNRESET": 3366
+            "200": 3370,
+            "500": 3349,
+            "529": 3448,
+            "ECONNRESET": 3303
           },
           "abort": {
-            "aborted-by-client": 17965
+            "aborted-by-client": 18135
           },
           "hostile-model": {
-            "403 model": 9099
+            "403 model": 9186
           },
           "main": {
-            "200": 136535,
+            "200": 136660,
             "429 streams": 1
           },
           "compaction": {
-            "200": 4473
+            "200": 4470
           },
           "noisy": {
-            "200": 5423,
+            "200": 5419,
             "429 streams": 176,
-            "429 rate": 1969
+            "429 rate": 1973
           },
           "heavy": {
             "200": 363,
@@ -4625,28 +4623,28 @@
           }
         },
         "gatewayCpuPct": [
-          33.2,
-          34.3
+          31.5,
+          30.5
         ],
         "socketErrorsOutsideAborts": 0,
-        "passed": true,
+        "passed": false,
         "verdicts": [
           {
             "check": "soak0001: RSS growth",
             "threshold": "trend and last 5 min against first, each under 10%",
-            "measured": "112.39 to 104.13 MB; trend -15.54% (-26.21 MB/h), windows -7.35% (n = 80)",
-            "ok": true
+            "measured": "114.32 to 139.34 MB; trend 26.91% (51.73 MB/h), windows 21.88% (n = 80)",
+            "ok": false
           },
           {
             "check": "soak0001: heap used after GC growth",
             "threshold": "trend and last 5 min against first, each under 10%",
-            "measured": "30.49 to 31.1 MB; trend 2.32% (1.09 MB/h), windows 1.98% (n = 80)",
+            "measured": "30.54 to 31.07 MB; trend 1.79% (0.84 MB/h), windows 1.73% (n = 80)",
             "ok": true
           },
           {
             "check": "soak0001: open fds during load",
             "threshold": "trend over the run under 16",
-            "measured": "54 to 163, trend 4.2",
+            "measured": "54 to 94, trend 1.7",
             "ok": true
           },
           {
@@ -4670,13 +4668,13 @@
           {
             "check": "soak0001: metric series",
             "threshold": "at most 10 new after warm-up, under 1000 in all",
-            "measured": "67 after warm-up, 69 at the end, 69 at most",
+            "measured": "67 after warm-up, 67 at the end, 67 at most",
             "ok": true
           },
           {
             "check": "soak0001: event loop delay p99",
             "threshold": "under 100 ms in every sample after warm-up",
-            "measured": "14.76 ms at most",
+            "measured": "5.34 ms at most",
             "ok": true
           },
           {
@@ -4700,19 +4698,19 @@
           {
             "check": "soak0002: RSS growth",
             "threshold": "trend and last 5 min against first, each under 10%",
-            "measured": "111.35 to 104.71 MB; trend -14.94% (-25.16 MB/h), windows -5.96% (n = 80)",
-            "ok": true
+            "measured": "114.51 to 138.3 MB; trend 29.33% (56.79 MB/h), windows 20.77% (n = 80)",
+            "ok": false
           },
           {
             "check": "soak0002: heap used after GC growth",
             "threshold": "trend and last 5 min against first, each under 10%",
-            "measured": "30.46 to 31.14 MB; trend 2.46% (1.15 MB/h), windows 2.26% (n = 80)",
+            "measured": "30.59 to 31.05 MB; trend 1.61% (0.76 MB/h), windows 1.52% (n = 80)",
             "ok": true
           },
           {
             "check": "soak0002: open fds during load",
             "threshold": "trend over the run under 16",
-            "measured": "52 to 170, trend 5.3",
+            "measured": "55 to 82, trend -2",
             "ok": true
           },
           {
@@ -4736,13 +4734,13 @@
           {
             "check": "soak0002: metric series",
             "threshold": "at most 10 new after warm-up, under 1000 in all",
-            "measured": "67 after warm-up, 69 at the end, 69 at most",
+            "measured": "67 after warm-up, 68 at the end, 68 at most",
             "ok": true
           },
           {
             "check": "soak0002: event loop delay p99",
             "threshold": "under 100 ms in every sample after warm-up",
-            "measured": "12.13 ms at most",
+            "measured": "5.38 ms at most",
             "ok": true
           },
           {
@@ -4764,9 +4762,9 @@
             "ok": true
           },
           {
-            "check": "client total time p50 drift (2xx)",
+            "check": "client total time p50 drift (auxiliary requests, 2xx)",
             "threshold": "last 5 min against first under 25%",
-            "measured": "82.21 to 82.2 ms (-0.01%)",
+            "measured": "81.99 to 81.98 ms (-0.02%)",
             "ok": true
           },
           {
@@ -4782,9 +4780,21 @@
             "ok": true
           },
           {
+            "check": "Redis: spent within the limit on every enforced budget key",
+            "threshold": "spent at most the limit on each key after the load",
+            "measured": "1937 key(s), 0 over",
+            "ok": true
+          },
+          {
             "check": "Redis: keys per class within what the load could create",
             "threshold": "each class at most its bound (distinct scope values sent)",
-            "measured": "budget-session 1888/2129, budget-window 48/96, rate 0/42, streams 0/42, taint 200/200, sweep-lock 1/1, r11 0/0, other 0/0",
+            "measured": "budget-session 1889/2131, budget-window 48/96, rate 0/42, streams 0/42, taint 201/201, session-marker 2089/2129, new-sessions 0/42, sweep-lock 1/1, r11 0/0, other 0/0",
+            "ok": true
+          },
+          {
+            "check": "session taint across gateways",
+            "threshold": "a secret through one gateway taints the session on the other",
+            "measured": "clean follow-up refused (taint)",
             "ok": true
           },
           {
@@ -4799,185 +4809,185 @@
             "instance": "soak0001",
             "idleBefore": {
               "t": -1,
-              "rssMb": 83.48,
-              "heapMb": 28.74,
-              "externalMb": 4.88,
+              "rssMb": 83.02,
+              "heapMb": 28.8,
+              "externalMb": 4.83,
               "fds": 11,
               "tcpSockets": 4,
               "handles": 6,
-              "eventLoopP50Ms": 0.61,
-              "eventLoopP99Ms": 3.61,
-              "eventLoopMaxMs": 130.12,
+              "eventLoopP50Ms": 0.54,
+              "eventLoopP99Ms": 1.76,
+              "eventLoopMaxMs": 67.46,
               "series": 62,
               "reservationsOpen": 0,
               "traceFiles": 2,
-              "traceBytes": 255269
+              "traceBytes": 258239
             },
             "idleAfter": {
               "t": 2730,
-              "rssMb": 54.28,
-              "heapMb": 29.5,
-              "externalMb": 3.76,
+              "rssMb": 100.06,
+              "heapMb": 29.6,
+              "externalMb": 3.75,
               "fds": 11,
               "tcpSockets": 4,
               "handles": 6,
-              "eventLoopP50Ms": 1.03,
-              "eventLoopP99Ms": 1.48,
-              "eventLoopMaxMs": 29.75,
-              "series": 69,
+              "eventLoopP50Ms": 1.54,
+              "eventLoopP99Ms": 2.2,
+              "eventLoopMaxMs": 7.81,
+              "series": 67,
               "reservationsOpen": 0,
               "traceFiles": 4,
-              "traceBytes": 354394325
+              "traceBytes": 354325407
             },
             "traceHours": 2,
-            "traceMbPerHourOfLoad": 450.3,
-            "cpuPct": 33.2,
+            "traceMbPerHourOfLoad": 450.2,
+            "cpuPct": 31.5,
             "exitCode": 0,
             "unexpectedStderr": [],
             "every5min": [
               {
                 "t": 300,
-                "rssMb": 111.48,
-                "heapMb": 30.5,
-                "externalMb": 10.09,
-                "fds": 63,
-                "tcpSockets": 56,
-                "handles": 54,
+                "rssMb": 109,
+                "heapMb": 30.41,
+                "externalMb": 6.41,
+                "fds": 57,
+                "tcpSockets": 50,
+                "handles": 46,
                 "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 1.42,
-                "eventLoopMaxMs": 42.63,
+                "eventLoopP99Ms": 1.07,
+                "eventLoopMaxMs": 10.71,
                 "series": 67,
-                "reservationsOpen": 21,
+                "reservationsOpen": 20,
                 "traceFiles": 2,
-                "traceBytes": 39716401
+                "traceBytes": 39607816
               },
               {
                 "t": 600,
-                "rssMb": 116.16,
-                "heapMb": 30.49,
-                "externalMb": 9.75,
-                "fds": 58,
-                "tcpSockets": 51,
+                "rssMb": 134.2,
+                "heapMb": 30.57,
+                "externalMb": 9.79,
+                "fds": 57,
+                "tcpSockets": 50,
                 "handles": 46,
-                "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 1.05,
-                "eventLoopMaxMs": 64.06,
+                "eventLoopP50Ms": 0.03,
+                "eventLoopP99Ms": 1.01,
+                "eventLoopMaxMs": 21.24,
                 "series": 67,
-                "reservationsOpen": 20,
-                "traceFiles": 2,
-                "traceBytes": 78761547
+                "reservationsOpen": 15,
+                "traceFiles": 4,
+                "traceBytes": 78674635
               },
               {
                 "t": 900,
-                "rssMb": 117.5,
-                "heapMb": 30.68,
-                "externalMb": 5.62,
-                "fds": 59,
-                "tcpSockets": 52,
-                "handles": 46,
-                "eventLoopP50Ms": 0.02,
-                "eventLoopP99Ms": 1.04,
-                "eventLoopMaxMs": 12.84,
+                "rssMb": 99.28,
+                "heapMb": 30.67,
+                "externalMb": 5.92,
+                "fds": 65,
+                "tcpSockets": 58,
+                "handles": 45,
+                "eventLoopP50Ms": 0.06,
+                "eventLoopP99Ms": 2.02,
+                "eventLoopMaxMs": 26.47,
                 "series": 67,
-                "reservationsOpen": 16,
-                "traceFiles": 2,
-                "traceBytes": 118064269
+                "reservationsOpen": 17,
+                "traceFiles": 4,
+                "traceBytes": 118023490
               },
               {
                 "t": 1200,
-                "rssMb": 122.47,
-                "heapMb": 31.01,
-                "externalMb": 10.64,
-                "fds": 63,
-                "tcpSockets": 56,
-                "handles": 59,
+                "rssMb": 129.34,
+                "heapMb": 31.11,
+                "externalMb": 12.04,
+                "fds": 70,
+                "tcpSockets": 63,
+                "handles": 62,
                 "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 1.1,
-                "eventLoopMaxMs": 49.31,
+                "eventLoopP99Ms": 1.05,
+                "eventLoopMaxMs": 8.4,
                 "series": 67,
-                "reservationsOpen": 21,
-                "traceFiles": 2,
-                "traceBytes": 157515735
+                "reservationsOpen": 25,
+                "traceFiles": 4,
+                "traceBytes": 157536650
               },
               {
                 "t": 1500,
-                "rssMb": 115.2,
-                "heapMb": 30.96,
-                "externalMb": 6.45,
-                "fds": 68,
-                "tcpSockets": 61,
-                "handles": 59,
-                "eventLoopP50Ms": 0.05,
-                "eventLoopP99Ms": 1.98,
-                "eventLoopMaxMs": 7.33,
+                "rssMb": 117.69,
+                "heapMb": 31.12,
+                "externalMb": 11.27,
+                "fds": 65,
+                "tcpSockets": 58,
+                "handles": 55,
+                "eventLoopP50Ms": 0.04,
+                "eventLoopP99Ms": 1.35,
+                "eventLoopMaxMs": 20.59,
                 "series": 67,
                 "reservationsOpen": 21,
-                "traceFiles": 2,
-                "traceBytes": 196796208
+                "traceFiles": 4,
+                "traceBytes": 196800506
               },
               {
                 "t": 1800,
-                "rssMb": 101.42,
-                "heapMb": 31.11,
-                "externalMb": 9.7,
-                "fds": 64,
-                "tcpSockets": 57,
-                "handles": 60,
-                "eventLoopP50Ms": 0.08,
-                "eventLoopP99Ms": 9.09,
-                "eventLoopMaxMs": 79,
-                "series": 69,
-                "reservationsOpen": 23,
+                "rssMb": 146.13,
+                "heapMb": 30.93,
+                "externalMb": 8.4,
+                "fds": 59,
+                "tcpSockets": 52,
+                "handles": 50,
+                "eventLoopP50Ms": 0.03,
+                "eventLoopP99Ms": 1.05,
+                "eventLoopMaxMs": 5.25,
+                "series": 67,
+                "reservationsOpen": 20,
                 "traceFiles": 4,
-                "traceBytes": 235919811
+                "traceBytes": 235876299
               },
               {
                 "t": 2100,
-                "rssMb": 92.95,
-                "heapMb": 31.04,
-                "externalMb": 7.73,
-                "fds": 62,
-                "tcpSockets": 55,
-                "handles": 55,
-                "eventLoopP50Ms": 0.06,
-                "eventLoopP99Ms": 3.79,
-                "eventLoopMaxMs": 37.35,
-                "series": 69,
-                "reservationsOpen": 20,
+                "rssMb": 135.28,
+                "heapMb": 30.83,
+                "externalMb": 10.87,
+                "fds": 61,
+                "tcpSockets": 54,
+                "handles": 42,
+                "eventLoopP50Ms": 0.13,
+                "eventLoopP99Ms": 1.17,
+                "eventLoopMaxMs": 10.05,
+                "series": 67,
+                "reservationsOpen": 11,
                 "traceFiles": 4,
-                "traceBytes": 275289952
+                "traceBytes": 275231791
               },
               {
                 "t": 2400,
-                "rssMb": 102.83,
-                "heapMb": 31.2,
-                "externalMb": 9.74,
-                "fds": 68,
-                "tcpSockets": 61,
-                "handles": 57,
-                "eventLoopP50Ms": 0.05,
-                "eventLoopP99Ms": 1.08,
-                "eventLoopMaxMs": 42.07,
-                "series": 69,
-                "reservationsOpen": 24,
+                "rssMb": 149.77,
+                "heapMb": 30.71,
+                "externalMb": 9.77,
+                "fds": 64,
+                "tcpSockets": 57,
+                "handles": 47,
+                "eventLoopP50Ms": 0.11,
+                "eventLoopP99Ms": 1.15,
+                "eventLoopMaxMs": 34.56,
+                "series": 67,
+                "reservationsOpen": 20,
                 "traceFiles": 4,
-                "traceBytes": 314671983
+                "traceBytes": 314565491
               },
               {
                 "t": 2670,
-                "rssMb": 104.81,
-                "heapMb": 30.92,
-                "externalMb": 9.14,
-                "fds": 56,
-                "tcpSockets": 49,
-                "handles": 39,
-                "eventLoopP50Ms": 0.06,
-                "eventLoopP99Ms": 1.47,
-                "eventLoopMaxMs": 46.79,
-                "series": 69,
-                "reservationsOpen": 12,
+                "rssMb": 126.67,
+                "heapMb": 31.04,
+                "externalMb": 5.97,
+                "fds": 61,
+                "tcpSockets": 54,
+                "handles": 45,
+                "eventLoopP50Ms": 0.1,
+                "eventLoopP99Ms": 1.18,
+                "eventLoopMaxMs": 8.01,
+                "series": 67,
+                "reservationsOpen": 15,
                 "traceFiles": 4,
-                "traceBytes": 350179853
+                "traceBytes": 350077522
               }
             ]
           },
@@ -4985,367 +4995,382 @@
             "instance": "soak0002",
             "idleBefore": {
               "t": -1,
-              "rssMb": 82.94,
-              "heapMb": 28.74,
-              "externalMb": 4.41,
+              "rssMb": 82.22,
+              "heapMb": 28.78,
+              "externalMb": 4.42,
               "fds": 11,
               "tcpSockets": 4,
               "handles": 6,
-              "eventLoopP50Ms": 0.58,
-              "eventLoopP99Ms": 3.77,
-              "eventLoopMaxMs": 129.2,
+              "eventLoopP50Ms": 0.5,
+              "eventLoopP99Ms": 1.86,
+              "eventLoopMaxMs": 62.09,
               "series": 61,
               "reservationsOpen": 0,
               "traceFiles": 2,
-              "traceBytes": 251634
+              "traceBytes": 254674
             },
             "idleAfter": {
               "t": 2730,
-              "rssMb": 54.34,
-              "heapMb": 29.59,
-              "externalMb": 3.75,
+              "rssMb": 103.73,
+              "heapMb": 29.41,
+              "externalMb": 3.63,
               "fds": 11,
               "tcpSockets": 4,
               "handles": 6,
-              "eventLoopP50Ms": 1.03,
-              "eventLoopP99Ms": 1.52,
-              "eventLoopMaxMs": 29.68,
-              "series": 69,
+              "eventLoopP50Ms": 1.64,
+              "eventLoopP99Ms": 2.23,
+              "eventLoopMaxMs": 15.71,
+              "series": 68,
               "reservationsOpen": 0,
               "traceFiles": 4,
-              "traceBytes": 354114303
+              "traceBytes": 354039137
             },
             "traceHours": 2,
-            "traceMbPerHourOfLoad": 450,
-            "cpuPct": 34.3,
+            "traceMbPerHourOfLoad": 449.9,
+            "cpuPct": 30.5,
             "exitCode": 0,
             "unexpectedStderr": [],
             "every5min": [
               {
                 "t": 300,
-                "rssMb": 109.97,
-                "heapMb": 30.46,
-                "externalMb": 8.66,
-                "fds": 60,
-                "tcpSockets": 53,
-                "handles": 56,
-                "eventLoopP50Ms": 0.06,
-                "eventLoopP99Ms": 1.36,
-                "eventLoopMaxMs": 40.95,
-                "series": 67,
-                "reservationsOpen": 20,
-                "traceFiles": 2,
-                "traceBytes": 39678835
-              },
-              {
-                "t": 600,
-                "rssMb": 118.44,
-                "heapMb": 30.57,
-                "externalMb": 10.59,
-                "fds": 60,
-                "tcpSockets": 53,
-                "handles": 55,
+                "rssMb": 110.72,
+                "heapMb": 30.6,
+                "externalMb": 11.58,
+                "fds": 63,
+                "tcpSockets": 56,
+                "handles": 54,
                 "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 1.08,
-                "eventLoopMaxMs": 59.21,
-                "series": 67,
-                "reservationsOpen": 19,
-                "traceFiles": 2,
-                "traceBytes": 78643751
-              },
-              {
-                "t": 900,
-                "rssMb": 117.09,
-                "heapMb": 30.75,
-                "externalMb": 10.25,
-                "fds": 55,
-                "tcpSockets": 48,
-                "handles": 45,
-                "eventLoopP50Ms": 0.02,
-                "eventLoopP99Ms": 1.07,
-                "eventLoopMaxMs": 13.56,
+                "eventLoopP99Ms": 1.06,
+                "eventLoopMaxMs": 18.41,
                 "series": 67,
                 "reservationsOpen": 17,
                 "traceFiles": 2,
-                "traceBytes": 117850146
+                "traceBytes": 39641536
+              },
+              {
+                "t": 600,
+                "rssMb": 129.89,
+                "heapMb": 30.36,
+                "externalMb": 8.29,
+                "fds": 60,
+                "tcpSockets": 53,
+                "handles": 45,
+                "eventLoopP50Ms": 0.03,
+                "eventLoopP99Ms": 1.03,
+                "eventLoopMaxMs": 7.22,
+                "series": 67,
+                "reservationsOpen": 16,
+                "traceFiles": 4,
+                "traceBytes": 78661653
+              },
+              {
+                "t": 900,
+                "rssMb": 98.98,
+                "heapMb": 30.97,
+                "externalMb": 12.58,
+                "fds": 70,
+                "tcpSockets": 63,
+                "handles": 50,
+                "eventLoopP50Ms": 0.06,
+                "eventLoopP99Ms": 1.96,
+                "eventLoopMaxMs": 15.67,
+                "series": 67,
+                "reservationsOpen": 21,
+                "traceFiles": 4,
+                "traceBytes": 117895581
               },
               {
                 "t": 1200,
-                "rssMb": 126.48,
-                "heapMb": 31.12,
-                "externalMb": 10.31,
-                "fds": 75,
-                "tcpSockets": 68,
-                "handles": 68,
-                "eventLoopP50Ms": 0.05,
-                "eventLoopP99Ms": 1.08,
-                "eventLoopMaxMs": 56.52,
+                "rssMb": 124.13,
+                "heapMb": 30.98,
+                "externalMb": 10.45,
+                "fds": 61,
+                "tcpSockets": 54,
+                "handles": 54,
+                "eventLoopP50Ms": 0.04,
+                "eventLoopP99Ms": 1.1,
+                "eventLoopMaxMs": 6.73,
                 "series": 67,
-                "reservationsOpen": 28,
-                "traceFiles": 2,
-                "traceBytes": 157380318
+                "reservationsOpen": 23,
+                "traceFiles": 4,
+                "traceBytes": 157337896
               },
               {
                 "t": 1500,
-                "rssMb": 113,
-                "heapMb": 30.9,
-                "externalMb": 7.6,
-                "fds": 67,
-                "tcpSockets": 60,
-                "handles": 47,
+                "rssMb": 118.36,
+                "heapMb": 30.7,
+                "externalMb": 9.59,
+                "fds": 61,
+                "tcpSockets": 54,
+                "handles": 49,
                 "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 2.11,
-                "eventLoopMaxMs": 4.54,
+                "eventLoopP99Ms": 1.18,
+                "eventLoopMaxMs": 39.64,
                 "series": 67,
-                "reservationsOpen": 18,
-                "traceFiles": 2,
-                "traceBytes": 196649540
+                "reservationsOpen": 17,
+                "traceFiles": 4,
+                "traceBytes": 196559011
               },
               {
                 "t": 1800,
-                "rssMb": 104.08,
-                "heapMb": 31.12,
-                "externalMb": 8.76,
-                "fds": 62,
-                "tcpSockets": 55,
-                "handles": 58,
-                "eventLoopP50Ms": 0.08,
-                "eventLoopP99Ms": 10.37,
-                "eventLoopMaxMs": 65.24,
-                "series": 69,
-                "reservationsOpen": 23,
+                "rssMb": 150.64,
+                "heapMb": 31.01,
+                "externalMb": 11.84,
+                "fds": 66,
+                "tcpSockets": 59,
+                "handles": 52,
+                "eventLoopP50Ms": 0.02,
+                "eventLoopP99Ms": 1.06,
+                "eventLoopMaxMs": 4.39,
+                "series": 67,
+                "reservationsOpen": 20,
                 "traceFiles": 4,
-                "traceBytes": 235761124
+                "traceBytes": 235674447
               },
               {
                 "t": 2100,
-                "rssMb": 95.56,
-                "heapMb": 31.15,
-                "externalMb": 11.98,
-                "fds": 66,
-                "tcpSockets": 59,
-                "handles": 59,
-                "eventLoopP50Ms": 0.06,
-                "eventLoopP99Ms": 3.32,
-                "eventLoopMaxMs": 52.91,
-                "series": 69,
-                "reservationsOpen": 20,
+                "rssMb": 143.67,
+                "heapMb": 30.91,
+                "externalMb": 7.15,
+                "fds": 57,
+                "tcpSockets": 50,
+                "handles": 43,
+                "eventLoopP50Ms": 0.1,
+                "eventLoopP99Ms": 1.17,
+                "eventLoopMaxMs": 1.73,
+                "series": 67,
+                "reservationsOpen": 15,
                 "traceFiles": 4,
-                "traceBytes": 275024095
+                "traceBytes": 275042672
               },
               {
                 "t": 2400,
-                "rssMb": 104.16,
-                "heapMb": 31.07,
-                "externalMb": 7.87,
-                "fds": 78,
-                "tcpSockets": 71,
-                "handles": 56,
-                "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 1.07,
-                "eventLoopMaxMs": 44,
-                "series": 69,
-                "reservationsOpen": 18,
+                "rssMb": 145.23,
+                "heapMb": 31.1,
+                "externalMb": 9.94,
+                "fds": 66,
+                "tcpSockets": 59,
+                "handles": 57,
+                "eventLoopP50Ms": 0.09,
+                "eventLoopP99Ms": 1.21,
+                "eventLoopMaxMs": 6.14,
+                "series": 67,
+                "reservationsOpen": 19,
                 "traceFiles": 4,
-                "traceBytes": 314367079
+                "traceBytes": 314296143
               },
               {
                 "t": 2670,
-                "rssMb": 103.08,
-                "heapMb": 31.03,
-                "externalMb": 9.53,
-                "fds": 57,
-                "tcpSockets": 50,
-                "handles": 41,
-                "eventLoopP50Ms": 0.05,
-                "eventLoopP99Ms": 2.35,
-                "eventLoopMaxMs": 40.36,
-                "series": 69,
+                "rssMb": 130.22,
+                "heapMb": 30.88,
+                "externalMb": 10.96,
+                "fds": 55,
+                "tcpSockets": 48,
+                "handles": 35,
+                "eventLoopP50Ms": 0.1,
+                "eventLoopP99Ms": 1.16,
+                "eventLoopMaxMs": 1.42,
+                "series": 67,
                 "reservationsOpen": 12,
                 "traceFiles": 4,
-                "traceBytes": 349901679
+                "traceBytes": 349800199
               }
             ]
           }
         ],
         "mockRssMb": {
-          "first": 127,
-          "last": 98
+          "first": 140,
+          "last": 137
         },
         "redis": {
           "version": "7.4.12",
           "before": {
-            "keys": 222,
-            "usedMemoryMb": 1.65,
+            "keys": 395,
+            "usedMemoryMb": 1.66,
             "byClass": {
               "budget-session": 166,
+              "session-marker": 173,
+              "sweep-lock": 1,
               "budget-window": 47,
-              "taint": 8,
-              "sweep-lock": 1
+              "taint": 8
             }
           },
           "after": {
-            "keys": 2137,
-            "usedMemoryMb": 1.97,
+            "keys": 4228,
+            "usedMemoryMb": 2.28,
             "byClass": {
-              "budget-session": 1888,
-              "taint": 200,
-              "budget-window": 48,
-              "sweep-lock": 1
+              "budget-session": 1889,
+              "session-marker": 2089,
+              "taint": 201,
+              "sweep-lock": 1,
+              "budget-window": 48
             }
           },
           "bounds": {
-            "budget-session": 2129,
+            "budget-session": 2131,
             "budget-window": 96,
             "rate": 42,
             "streams": 42,
-            "taint": 200,
+            "taint": 201,
+            "session-marker": 2129,
+            "new-sessions": 42,
             "sweep-lock": 1,
             "r11": 0,
             "other": 0
           },
-          "sessionValuesSent": 2127,
-          "bytesPerKey": 175,
+          "sessionValuesSent": 2129,
+          "bytesPerKey": 170,
           "every5min": [
             {
               "t": 300,
-              "keys": 1632,
-              "usedMemoryMb": 1.9,
+              "keys": 3175,
+              "usedMemoryMb": 2.08,
               "byClass": {
-                "budget-session": 1330,
-                "taint": 194,
-                "reservation": 31,
-                "streams": 17,
+                "budget-session": 1333,
+                "reservation": 36,
+                "session-marker": 1527,
+                "taint": 195,
+                "sweep-lock": 1,
+                "streams": 19,
                 "budget-window": 48,
-                "rate": 9,
                 "deadlines": 2,
-                "sweep-lock": 1
+                "rate": 12,
+                "new-sessions": 2
               }
             },
             {
               "t": 600,
-              "keys": 1841,
-              "usedMemoryMb": 1.97,
+              "keys": 3575,
+              "usedMemoryMb": 2.17,
               "byClass": {
-                "budget-session": 1524,
-                "taint": 199,
-                "streams": 21,
+                "budget-session": 1533,
+                "session-marker": 1732,
+                "taint": 200,
+                "reservation": 29,
+                "sweep-lock": 1,
                 "budget-window": 48,
-                "reservation": 36,
-                "rate": 10,
+                "rate": 11,
+                "streams": 17,
                 "deadlines": 2,
-                "sweep-lock": 1
+                "new-sessions": 2
               }
             },
             {
               "t": 900,
-              "keys": 1870,
-              "usedMemoryMb": 1.95,
+              "keys": 3682,
+              "usedMemoryMb": 2.2,
               "byClass": {
                 "budget-session": 1568,
+                "session-marker": 1767,
                 "taint": 200,
+                "streams": 27,
+                "sweep-lock": 1,
                 "budget-window": 48,
-                "reservation": 27,
-                "streams": 17,
-                "rate": 7,
+                "reservation": 53,
                 "deadlines": 2,
-                "sweep-lock": 1
+                "rate": 16
               }
             },
             {
               "t": 1200,
-              "keys": 1904,
-              "usedMemoryMb": 1.99,
+              "keys": 3684,
+              "usedMemoryMb": 2.19,
               "byClass": {
                 "budget-session": 1568,
+                "session-marker": 1767,
                 "taint": 200,
+                "streams": 29,
+                "sweep-lock": 1,
+                "reservation": 49,
                 "budget-window": 48,
-                "rate": 14,
-                "streams": 26,
-                "reservation": 45,
-                "deadlines": 2,
-                "sweep-lock": 1
+                "rate": 20,
+                "deadlines": 2
               }
             },
             {
               "t": 1500,
-              "keys": 1883,
-              "usedMemoryMb": 1.96,
+              "keys": 3656,
+              "usedMemoryMb": 2.17,
               "byClass": {
                 "budget-session": 1568,
+                "session-marker": 1767,
                 "taint": 200,
-                "reservation": 33,
-                "streams": 21,
+                "sweep-lock": 1,
                 "budget-window": 48,
-                "rate": 10,
-                "deadlines": 2,
-                "sweep-lock": 1
+                "streams": 20,
+                "rate": 15,
+                "reservation": 35,
+                "deadlines": 2
               }
             },
             {
               "t": 1800,
-              "keys": 1885,
-              "usedMemoryMb": 1.99,
+              "keys": 3663,
+              "usedMemoryMb": 2.17,
               "byClass": {
                 "budget-session": 1568,
+                "session-marker": 1767,
                 "taint": 200,
+                "sweep-lock": 1,
                 "streams": 22,
                 "budget-window": 48,
-                "reservation": 36,
-                "rate": 8,
-                "deadlines": 2,
-                "sweep-lock": 1
+                "reservation": 38,
+                "rate": 17,
+                "deadlines": 2
               }
             },
             {
               "t": 2100,
-              "keys": 1868,
-              "usedMemoryMb": 1.96,
+              "keys": 3649,
+              "usedMemoryMb": 2.2,
               "byClass": {
                 "budget-session": 1568,
+                "session-marker": 1767,
                 "taint": 200,
-                "streams": 19,
+                "streams": 20,
+                "sweep-lock": 1,
                 "budget-window": 48,
-                "reservation": 29,
-                "deadlines": 2,
-                "rate": 1,
-                "sweep-lock": 1
+                "rate": 13,
+                "reservation": 30,
+                "deadlines": 2
               }
             },
             {
               "t": 2400,
-              "keys": 1877,
-              "usedMemoryMb": 1.97,
+              "keys": 3658,
+              "usedMemoryMb": 2.16,
               "byClass": {
                 "budget-session": 1568,
+                "session-marker": 1767,
                 "taint": 200,
-                "reservation": 30,
-                "streams": 20,
+                "sweep-lock": 1,
+                "streams": 21,
                 "budget-window": 48,
-                "rate": 8,
-                "deadlines": 2,
-                "sweep-lock": 1
+                "reservation": 37,
+                "rate": 14,
+                "deadlines": 2
               }
             },
             {
               "t": 2670,
-              "keys": 1845,
-              "usedMemoryMb": 1.96,
+              "keys": 3647,
+              "usedMemoryMb": 2.15,
               "byClass": {
-                "budget-session": 1568,
+                "budget-session": 1569,
+                "session-marker": 1768,
                 "taint": 200,
+                "streams": 21,
+                "sweep-lock": 1,
                 "budget-window": 48,
-                "reservation": 12,
-                "rate": 3,
-                "streams": 11,
-                "deadlines": 2,
-                "sweep-lock": 1
+                "rate": 9,
+                "reservation": 29,
+                "deadlines": 2
               }
             }
           ]
         },
         "git": {
-          "commit": "7ef3ca7",
+          "commit": "44e3563",
           "dirty": false
         }
       }

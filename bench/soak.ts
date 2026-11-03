@@ -235,10 +235,10 @@ class Load {
   }
 
   /**
-   * A session id from a fixed ring per key and prefix. Every distinct session id holds counter state for 30 days by
-   * design (the session budget level, SESSION_BUDGET_TTL_MS), so with endless new ids that state grows for the whole
-   * run and hides a real leak; with a ring it levels off within the warm-up and what grows after it is a leak. The
-   * per-session cost is measured separately (Redis keys and bytes per key, docs/benchmarks.md).
+   * A session id from a fixed ring per key and prefix. Every distinct session id holds counter state until it has been
+   * idle for sessions.idleTtlHours (24 h; the session budget level and the session marker), so with endless new ids that
+   * state grows for the whole run and hides a real leak; with a ring it levels off (after about 15 minutes) and the Redis
+   * key check bounds it by what was sent. The per-session cost is measured separately (bytes per key, docs/benchmarks.md).
    */
   private ringId(prefix: string, owner: string, size: number): string {
     const k = `${prefix}:${owner}`;
@@ -988,7 +988,7 @@ async function main(mode: Mode): Promise<void> {
 }
 
 const SOAK_METHOD = [
-  'The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state for 30 days by design; that cost is measured on its own (Redis keys and bytes per key).',
+  'The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state until it has been idle for 24 hours; that cost is measured on its own (Redis keys and bytes per key).',
   'A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory.',
   'Memory is judged after a 5 minute warm-up: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.',
 ].join(' ');
