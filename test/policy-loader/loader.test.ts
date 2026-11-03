@@ -44,6 +44,21 @@ test('file change swaps the snapshot; in-flight request keeps its revision', asy
   expect(l.loadErrors).toBe(0);
 });
 
+test('the watcher alone reloads: with the poll a minute away, a new revision and then a broken file are both noticed', async () => {
+  // The other reload tests poll every 100 ms to 1 s as a backup for a watcher event a loaded machine delivers late;
+  // this one leaves only the watcher, so a broken watcher fails here (V5 review). The waits are generous, not tight.
+  const dir = tempDir();
+  writePolicyDir(dir, UP, 'one');
+  const l = await started({ dir, pollMs: 60_000 });
+  const first = l.active().revision;
+  writePolicyDir(dir, UP, 'two');
+  await expect.poll(() => l.active().revision, { timeout: 12_000 }).not.toBe(first);
+  const second = l.active().revision;
+  writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: [unclosed');
+  await expect.poll(() => l.loadErrors, { timeout: 12_000 }).toBe(1);
+  expect(l.active().revision).toBe(second);
+}, 30_000);
+
 test('swap under load: 200 concurrent requests during 5 swaps, zero failed', async () => {
   process.env[PROVIDER_KEY_ENV] = 'k';
   const mock = await startAnthropicMock();
