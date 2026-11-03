@@ -71,14 +71,15 @@ function startStream(url: string): { marker: Promise<void>; done: Promise<string
 }
 
 /** The request lines of every trace file under `dir`. */
-function requestRecords(dir: string): Array<{ decision: { reservedMicroUsd: number }; outcome: { status: number; costMicroUsd: number | null; settledAtEstimate?: true } }> {
-  const out = [];
+type RequestLine = { decision: { reservedMicroUsd: number }; outcome: { status: number; costMicroUsd: number | null; settledAtEstimate?: true } };
+function requestRecords(dir: string): RequestLine[] {
+  const out: RequestLine[] = [];
   for (const f of readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!f.isFile() || !f.name.endsWith('.ndjson')) continue;
     for (const line of readFileSync(join(f.parentPath, f.name), 'utf8').split('\n')) {
       if (line === '') continue;
-      const r = JSON.parse(line) as { kind?: string; outcome?: unknown };
-      if (r.outcome !== undefined) out.push(r as never);
+      const r = JSON.parse(line) as Partial<RequestLine>;
+      if (r.outcome !== undefined) out.push(r as RequestLine);
     }
   }
   return out;
