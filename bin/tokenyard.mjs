@@ -126409,6 +126409,25 @@ var package_default = {
   version: "0.1.0",
   description: "LLM gateway for coding-agent traffic",
   license: "MIT",
+  repository: {
+    type: "git",
+    url: "git+https://github.com/mateuszkania-im/tokenyard.git"
+  },
+  homepage: "https://github.com/mateuszkania-im/tokenyard#readme",
+  bugs: {
+    url: "https://github.com/mateuszkania-im/tokenyard/issues"
+  },
+  keywords: [
+    "llm",
+    "gateway",
+    "proxy",
+    "claude-code",
+    "codex",
+    "budgets",
+    "policy-as-code",
+    "observability",
+    "opentelemetry"
+  ],
   type: "module",
   bin: {
     tokenyard: "bin/tokenyard.mjs"
@@ -126421,6 +126440,10 @@ var package_default = {
   ],
   engines: {
     node: ">=20.19"
+  },
+  publishConfig: {
+    access: "public",
+    provenance: true
   },
   scripts: {
     build: "node esbuild.config.mjs",

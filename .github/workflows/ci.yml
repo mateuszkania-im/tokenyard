@@ -2,6 +2,18 @@ name: ci
 on:
   push:
   pull_request:
+# Least privilege: every job only reads the repository. There is deliberately no publish job; Mateusz publishes by hand.
+permissions:
+  contents: read
+# A newer push to the same ref cancels the superseded run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  # Third-party actions are pinned to full commit SHAs (version in the trailing comment):
+  #   actions/checkout    3d3c42e5aac5ba805825da76410c181273ba90b1  v7.0.1
+  #   actions/setup-node  949feb2413d6458794dcd2491c4babbbce0c15c1  v7.1.0
+  CI: true
 jobs:
   test:
     strategy:
@@ -14,8 +26,10 @@ jobs:
           - { os: windows-latest, node: '22' }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -29,3 +43,63 @@ jobs:
       - name: pack and scan the npm tarball
         shell: bash
         run: t=$(npm pack --silent) && test -f "$t" && npm run check:secrets -- "$t"
+      # Registry signatures and provenance of the installed (dev) dependencies.
+      - name: verify registry signatures
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22'
+        run: npm audit signatures
+
+  # Store contract and the G4 budget proof on a real Redis. The runner has Docker, so the tests go through
+  # scripts/local-redis.mjs: a redis:7 container published on 127.0.0.1 only, on a random port, with a random
+  # password carried in REDIS_URL, removed afterwards. A `services:` container would publish a fixed port with
+  # whatever password the workflow file holds; this way nothing but the job can reach it and no secret sits in the YAML.
+  redis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:redis
+
+  # The installed package works: pack, install the tarball into an empty project, run the command.
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: node test/pack/pack.smoke.mjs
+
+  # README numbers must match bench/results.json.
+  bench-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run bench:check
+
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh test/compose.smoke.sh

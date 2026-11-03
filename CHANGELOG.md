@@ -27,6 +27,12 @@ First release.
 - `tokenyard report` (terminal and self-contained HTML).
 - Conformance suite (C1 to C18, R1 to R8), budget proof test on both stores, benchmarks (`npm run bench`) with the generated README block, anonymized results of live Claude Code and Codex sessions (`examples/live/`).
 
+### Security and packaging
+
+- Security review of the gateway (spec section 15): regression suite in `test/security/` (duplicate admit, latch scope, header trust, key handling, trace redaction), all findings fixed before release.
+- npm package `@mateuszkania-im/tokenyard`: one bundled file, no runtime dependencies, tarball limited to `bin/`, `action.yml`, `LICENSE`, `README.md` and `package.json`, scanned for secrets; `publishConfig` with public access and provenance.
+- CI: Node 20.19, 22 and 24 on Linux and Node 22 on Windows, Redis job (store contract and budget proof), pack smoke test on Linux and Windows (install the tarball, run `--version`, `policy check`, `demo`), README benchmark check, `npm audit signatures`, compose smoke test. Actions pinned to commit SHAs, read-only token, no publish job.
+
 ### Not in this release
 
 `/v1/chat/completions`, quality evaluation ([docs/future-quality.md](docs/future-quality.md)), Redis Cluster, Codex WebSocket transport. See the README's Limitations.
