@@ -92,6 +92,22 @@ describe('B4 check:secrets', () => {
     const r = runIn({ 'a.txt': `k=sk-ant-test-CANARY-${b62(40)}\naws=AKIAIOSFODNN7EXAMPLE\n` }, { 'pkg.tgz': gzipSync(tar({ 'package/README.md': 'clean\n' })) });
     expect(r.status, r.out).toBe(0);
   });
+  it('fails when a file named as an argument is missing, empty-named or unreadable (an empty npm pack must not pass)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ty-b4-arg-'));
+    try {
+      execFileSync('git', ['init', '-q'], { cwd: dir });
+      for (const arg of ['missing.tgz', '', dir]) {
+        const r = spawnSync(process.execPath, [SCRIPT, arg], { cwd: dir, encoding: 'utf8' });
+        expect(r.status, JSON.stringify(arg)).not.toBe(0);
+        expect(r.stderr).toMatch(/cannot read/);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('CI checks that npm pack produced a file before scanning it', () => {
+    expect(readFileSync(join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8')).toContain('t=$(npm pack --silent) && test -f "$t" && npm run check:secrets -- "$t"');
+  });
   it('the embedded rules are the gateway rules (DEFAULT_RULES without the entropy-only ones)', () => {
     const text = readFileSync(SCRIPT, 'utf8');
     const block = /\/\/ BEGIN RULES[^\n]*\n([\s\S]*?)\n\/\/ END RULES/.exec(text)?.[1] ?? '';

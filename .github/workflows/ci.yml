@@ -28,4 +28,4 @@ jobs:
       # The published tarball, scanned entry by entry (the files list decides what ships, not git).
       - name: pack and scan the npm tarball
         shell: bash
-        run: npm run check:secrets -- "$(npm pack --silent)"
+        run: t=$(npm pack --silent) && test -f "$t" && npm run check:secrets -- "$t"

@@ -65,16 +65,20 @@ if (RULES.length === 0) {
   console.error('check:secrets: no rules embedded; run npx tsx scripts/sync-secret-rules.ts');
   process.exit(2);
 }
-const files = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
-files.push(...process.argv.slice(2));
+const tracked = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+const named = process.argv.slice(2);
 const findings = [];
 let scanned = 0;
-for (const file of files) {
+for (const [file, required] of [...tracked.map((f) => [f, false]), ...named.map((f) => [f, true])]) {
   let data;
   try {
     data = readFileSync(file);
   } catch {
-    continue; // deleted in the working tree
+    // A tracked file deleted in the working tree has nothing to scan; a file named on the command line (the npm
+    // tarball) must exist, or a failed `npm pack` would pass.
+    if (!required) continue;
+    console.error(`check:secrets: cannot read ${JSON.stringify(file)}`);
+    process.exit(2);
   }
   scanned++;
   try {
