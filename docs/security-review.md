@@ -136,7 +136,7 @@ in the main tree) and the test run; every one failed on the reverted code and th
 | S-FS-1 | link check removed from the path walk | 2 failed |
 | T25 gitattributes (V7) | `--textconv` added to the base-side `git show` | 1 of 2 failed |
 | S6-2 service tier (V7) | tier label passes any value and `serviceTierPrice` drops `Object.hasOwn` | 1 failed |
-| T9-e (V7) | fast mode on a model without fast prices priced at its standard rates | 1 failed |
+| T9-e (V7, fix round 2) | the refusal of fast mode without fast prices absent (HEAD before the fix) | 2 failed |
 | T10 (V7) | rate limit scope enum widened to `session`, `repo`, `feature`, `agentType` | 4 failed |
 | S-V7-1 (V7) | raw id list without the epoch and placeholders (the generator before the fix) | 1 failed |
 
@@ -150,15 +150,10 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   such a prefix would be treated as a client tool (no provider tool using them was found).
 - **Fast mode price sets (task 9).** Under fast mode only the fast rate set counts for the reservation. If a provider
   ever lists fast prices below standard, the reservation is lower than the standard bound; policy validation does not
-  yet require `fast >= standard`. Policy validation also does not reject a model without a `fast` block (the price
-  table cannot say which models a provider serves fast); a response that reports fast mode for such a model settles at
-  the reservation, which is priced at the standard rates, so a provider that bills fast mode for a model the table
-  lists without fast prices is under-charged whenever that bill is above the reservation
-  (`test/security/t9-fast-mode-unpriced.test.ts`, T9-e). Accepted by ruling (progress.md:607, "Ruling: CL-t9e"): the
-  price table carries no list of fast-capable models, so anything further is guesswork; the cost is an
-  under-reservation bounded by the fast to standard rate ratio, and only for a price table that omits a model's fast
-  prices. Such a request is forwarded, not refused (T9-e); a model listed with fast prices is reserved and settled at
-  them (T9-d).
+  yet require `fast >= standard`. A request asking fast mode on a model without a `fast` block is refused as unpriced
+  (CL-t9e, T9-e); what is left is a provider that bills fast mode without the request asking for it: such a response
+  settles at the reservation, which is priced at the standard rates, so the charge is below the bill whenever the fast
+  bill is above that reservation (`test/security/t9-fast-mode-unpriced.test.ts`, T9-residual; ruling progress.md:614).
 - **Policy files caught mid-write (task 11, S-V3-2).** A changed policy directory activates only when two reads one
   settle interval (250 ms by default) apart agree (`test/policy-loader/loader-settle.test.ts`). A writer slower than
   that interval can still be caught with a prefix that validates, and a `--policy-url` source is not re-read. Operators
@@ -280,7 +275,7 @@ of the tables above. The checklist items and the minors marked for Task 25:
 | CL-t9b | R11 bytes-bound switch after a violation | see A9 | `a9-r11-latch-scope.test.ts` | fixed |
 | CL-t9c | Estimator throw must fail closed | Task 14 | `test/edge/admission.test.ts` ("a reservation that cannot be priced fails closed") | fixed |
 | CL-t9d | Settlement prices `usage.speed` fast | Task 14 | `t9-fast-mode-unpriced.test.ts` (T9-d), `test/edge/admission.test.ts` | fixed |
-| CL-t9e | Fast-capable model without a `fast` block | none | `t9-fast-mode-unpriced.test.ts` (T9-d: fast prices used when listed; T9-e: settles at the reservation) | accepted by ruling (progress.md:607, "Ruling: CL-t9e"; residual risks, "Fast mode price sets"): the price table carries no list of fast-capable models; cost: under-reservation bounded by the fast to standard rate ratio when the price table omits a model's fast prices. A request asking fast mode on such a model is forwarded, not refused (T9-e); the provider rejects fast mode for a model that does not offer it |
+| CL-t9e | Fast mode asked on a model whose price entry has no `fast` block was reserved at the standard rates | `git log --grep CL-t9e` | `test/security/t9-fast-mode-unpriced.test.ts` (T9-e) | fixed by ruling (progress.md:614, superseding the CL-t9e ruling at progress.md:607): refused as unpriced like S20-1 (403, `x-should-retry: false`, nothing sent), whatever `failure.unpricedModel` says; models with fast prices unchanged (T9-d) |
 | CL-fast-max | Under fast mode only the fast rate set counts | none | none | accepted by ruling (progress.md:611 (the Task 25.4 residual-risk entries, progress.md:487-488); residual risks, "Fast mode price sets") |
 | CL-client-tool | Client-tool classification by bare prefix | none | none | accepted by ruling (progress.md:611 (the Task 25.4 residual-risk entries, progress.md:487-488); residual risks, "Provider billing assumptions") |
 | CL-route | Rewrite priced at the served model, header predicates granting access, server tools not allowed, scope dodge by omitted headers | see S10-1 to S10-4 | `s10-1-*`, `s10-2-*`, `s10-3-*`, `s10-4-*.test.ts` | fixed |
