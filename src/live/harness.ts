@@ -3,7 +3,7 @@
 // harness prints the gateway URL, a `ty_` client key made for this run and the remaining budget, nothing else.
 import { randomBytes } from 'node:crypto';
 import { access, constants, readdir } from 'node:fs/promises';
-import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, linkSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,21 +82,32 @@ function lockHolder(path: string): number {
 
 const holderAlive = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && alive(pid);
 
-/** Creates `path` exclusively (`wx`) holding this pid; false when it exists. */
+/**
+ * Creates `path` holding this pid, only if it does not exist; false when it does. The pid is written to a private
+ * temporary file first and then hard-linked to `path` (atomic, fails with EEXIST), so no reader ever sees the file
+ * empty and takes a fresh lock for a stale one.
+ */
 function createExclusive(path: string): boolean {
-  let fd: number;
-  try {
-    fd = openSync(path, 'wx');
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw e;
-  }
+  const tmp = `${path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  const fd = openSync(tmp, 'wx', 0o600);
   try {
     writeSync(fd, `${process.pid}\n`);
   } finally {
     closeSync(fd);
   }
-  return true;
+  try {
+    linkSync(tmp, path);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  } finally {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // already gone
+    }
+  }
 }
 
 /**

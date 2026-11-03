@@ -121884,7 +121884,7 @@ __export(harness_exports, {
 });
 import { randomBytes as randomBytes5 } from "node:crypto";
 import { access, constants as constants4, readdir as readdir2 } from "node:fs/promises";
-import { closeSync as closeSync2, existsSync as existsSync2, openSync as openSync2, readFileSync as readFileSync2, unlinkSync, writeSync } from "node:fs";
+import { closeSync as closeSync2, existsSync as existsSync2, linkSync, openSync as openSync2, readFileSync as readFileSync2, unlinkSync, writeSync } from "node:fs";
 import { hostname as hostname3 } from "node:os";
 import { dirname as dirname2, join as join8 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -121915,20 +121915,26 @@ function lockHolder(path3) {
   }
 }
 function createExclusive(path3) {
-  let fd;
-  try {
-    fd = openSync2(path3, "wx");
-  } catch (e2) {
-    if (e2.code === "EEXIST") return false;
-    throw e2;
-  }
+  const tmp = `${path3}.${process.pid}.${randomBytes5(6).toString("hex")}.tmp`;
+  const fd = openSync2(tmp, "wx", 384);
   try {
     writeSync(fd, `${process.pid}
 `);
   } finally {
     closeSync2(fd);
   }
-  return true;
+  try {
+    linkSync(tmp, path3);
+    return true;
+  } catch (e2) {
+    if (e2.code === "EEXIST") return false;
+    throw e2;
+  } finally {
+    try {
+      unlinkSync(tmp);
+    } catch {
+    }
+  }
 }
 function acquireLock(traceDir) {
   const path3 = join8(traceDir, LIVE_LOCK_FILE);

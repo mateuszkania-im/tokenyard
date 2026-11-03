@@ -12,8 +12,14 @@ import { authHeaders } from '../helpers/conformance.js';
 import { closeAll, closers, raw, readJson, sendAndAbort, sse } from './common.js';
 
 const STALE = { path: '', once: false };
+/** Files opened for writing whose name is a lock file: each would be visible empty before its pid is written. */
+const OPENED_LOCKS: string[] = [];
 vi.mock('node:fs', async (importOriginal) => {
   const fs = await importOriginal<typeof import('node:fs')>();
+  const openSync = ((p: unknown, ...rest: unknown[]) => {
+    if (typeof p === 'string' && /live\.lock(\.takeover)?$/.test(p)) OPENED_LOCKS.push(p);
+    return (fs.openSync as (...a: unknown[]) => unknown)(p, ...rest);
+  }) as typeof fs.openSync;
   const readFileSync = ((p: unknown, ...rest: unknown[]) => {
     if (STALE.once && typeof p === 'string' && p === STALE.path) {
       STALE.once = false;
@@ -21,7 +27,7 @@ vi.mock('node:fs', async (importOriginal) => {
     }
     return (fs.readFileSync as (...a: unknown[]) => unknown)(p, ...rest);
   }) as typeof fs.readFileSync;
-  return { ...fs, default: { ...fs, readFileSync }, readFileSync };
+  return { ...fs, default: { ...fs, readFileSync, openSync }, readFileSync, openSync };
 });
 
 const { LIVE_LOCK_FILE, startLiveHarness } = await import('../../src/live/harness.js');
@@ -100,4 +106,17 @@ test('A11c warm-up counts a reserved line until its request line appears, and on
   const settled = { v: 1, kind: 'request', id: 'r1', ts, tenant: 'live', team: 'live', keyId: 'key_aaaaaaaa', billing: 'api', attribution: { repo: null, session: null }, outcome: { costMicroUsd: 1234, chargedMicroUsd: 1234 } };
   const done = await warmupEntries(lines([reserved, settled]), policy, now);
   expect(done.reduce((n, e) => n + e.spentMicroUsd, 0)).toBe(1234);
+});
+
+test('A11d fix round: the lock and the takeover file appear with their pid already in them (written, then linked)', async () => {
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const up = await raw((req, res) => void res.end());
+  const traceDir = tmp();
+  writeFileSync(join(traceDir, LIVE_LOCK_FILE), '999999\n'); // stale: the start goes through the takeover path too
+  OPENED_LOCKS.length = 0;
+  const h = await startLiveHarness({ env, today: '2026-11-03', traceDir, port: 0, upstream: up.url, policyDir: join(REPO, 'test', 'live') });
+  closers.push(h.close);
+  expect(OPENED_LOCKS).toEqual([]);
+  expect(readFileSync(join(traceDir, LIVE_LOCK_FILE), 'utf8')).toBe(`${process.pid}\n`);
+  expect(readdirSync(traceDir).filter((f) => f.includes('.lock'))).toEqual([LIVE_LOCK_FILE]);
 });
