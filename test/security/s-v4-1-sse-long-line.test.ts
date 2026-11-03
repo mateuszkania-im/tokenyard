@@ -13,6 +13,7 @@ import { createMetrics } from '../../src/telemetry/metrics.js';
 import { authHeaders, send, startRawUpstream } from '../helpers/conformance.js';
 import { startGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV, testPolicy } from '../helpers/policy.js';
+import { TIMING_BOUNDS } from '../helpers/timing.js';
 
 const closers: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -52,6 +53,7 @@ function longLineMs(bytes: number): number {
 test('S-V4-1 a long line delivered in small chunks parses in linear time (was quadratic: 1 MiB in 64-byte chunks took 20 s)', () => {
   const small = longLineMs(256 * 1024);
   const large = longLineMs(2 * 1024 * 1024);
+  if (!TIMING_BOUNDS) return;
   expect(large).toBeLessThan(10_000);
   expect(large / Math.max(small, 1)).toBeLessThan(32);
 });

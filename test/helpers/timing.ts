@@ -18,8 +18,16 @@ export function minCpuMs(fn: () => void, runs = 3): number {
 }
 
 /**
- * A CPU-time bound for this run: `ms` as measured uninstrumented, ten times that under `npm run test:coverage`, whose
+ * False under mutation testing (vitest.stryker.config.ts): Stryker runs instrumented code in worker threads, which
+ * share one process's CPU time, so neither a CPU-time bound nor a growth ratio measures one test's work there. The
+ * bounds are checked in `npm test` and `npm run test:coverage`; mutation testing is about behaviour. Tests that only
+ * bound time over 1 to 32 MiB bodies are skipped there (`test.skipIf(!TIMING_BOUNDS)`): instrumented, they take minutes.
+ */
+export const TIMING_BOUNDS = process.env.TOKENYARD_TIMING_BOUNDS !== 'off';
+
+/**
+ * A CPU-time bound for this run (no bound when TIMING_BOUNDS is false): `ms` as measured uninstrumented, ten times that under `npm run test:coverage`, whose
  * per-block counters made the byte loops of the scanner up to about 8 times slower (vitest.config.ts sets
  * TOKENYARD_COVERAGE). Still far below the quadratic or unbounded behaviour each bound rules out.
  */
-export const cpuBoundMs = (ms: number): number => (process.env.TOKENYARD_COVERAGE === '1' ? ms * 10 : ms);
+export const cpuBoundMs = (ms: number): number => (!TIMING_BOUNDS ? Number.POSITIVE_INFINITY : process.env.TOKENYARD_COVERAGE === '1' ? ms * 10 : ms);

@@ -7,6 +7,7 @@ import { expect, test } from 'vitest';
 import { isAlias, parseDocument, visit } from 'yaml';
 import { parseYamlSafe, YamlError } from '../../src/policy/safe-yaml.js';
 import { fuzz, fuzzTimeout } from '../helpers/fuzz.js';
+import { TIMING_BOUNDS } from '../helpers/timing.js';
 
 const EXAMPLE = readFileSync(new URL('../../examples/policy/policy.yaml', import.meta.url), 'utf8');
 
@@ -78,7 +79,7 @@ const PARSE_BOUND_MS = (() => {
     parse(EXAMPLE);
     best = Math.min(best, performance.now() - t);
   }
-  return Math.max(2_000, 200 * best);
+  return TIMING_BOUNDS ? Math.max(2_000, 200 * best) : Number.POSITIVE_INFINITY;
 })();
 
 test('the generators reach both outcomes (sanity: the fuzz is not all refusals)', () => {

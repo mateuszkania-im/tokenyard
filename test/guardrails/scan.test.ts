@@ -6,7 +6,7 @@ import { DEFAULT_RULES, type SecretRule } from '../../src/guardrails/rules.js';
 import { findSpans, keywordsIn, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
-import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
+import { cpuBoundMs, cpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
 
 const AWS = RULE_FIXTURES['aws-access-key-id']?.positive as string;
 const GH = RULE_FIXTURES['github-pat']?.positive as string;
@@ -145,7 +145,7 @@ test('an AKIA key written entirely in \\u escapes is found', () => {
   expect(scanLast(raw(`k ${escaped} k`))).toMatchObject([{ rule: 'aws-access-key-id', valueHmac: pseudonym('s', AWS) }]);
 });
 
-test('many messages with one hit each: linear, not hits times messages', () => {
+test.skipIf(!TIMING_BOUNDS)('many messages with one hit each: linear, not hits times messages', () => {
   const messages: unknown[] = [];
   let size = 0;
   for (let i = 0; size < 4 * 1024 * 1024; i++) {

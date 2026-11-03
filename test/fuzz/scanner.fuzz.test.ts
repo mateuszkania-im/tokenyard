@@ -14,7 +14,7 @@ import { bodyShapeRefusal } from '../../src/surfaces/body-shape.js';
 import { BODY_VALUE_BUDGET, countJsonValuesUpTo } from '../../src/surfaces/json-ranges.js';
 import { RULE_FIXTURES } from '../guardrails/fixtures.js';
 import { fuzz, fuzzTimeout } from '../helpers/fuzz.js';
-import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
+import { cpuBoundMs, cpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
 
 const BLOCKING = DEFAULT_RULES.filter((r) => !r.entropyOnly).map((r) => r.id);
 const SECRETS = Object.entries(RULE_FIXTURES).filter(([id]) => BLOCKING.includes(id)).map(([id, f]) => ({ id, value: f.positive }));
@@ -127,7 +127,7 @@ test('fuzz: countEscapesUpTo matches a reference count over whole units and stop
   );
 }, fuzzTimeout(10_000));
 
-test('S-V3-1 bound: a body holding the budget of mixed escapes in every turn scans within its time bound', () => {
+test.skipIf(!TIMING_BOUNDS)('S-V3-1 bound: a body holding the budget of mixed escapes in every turn scans within its time bound', () => {
   const kinds = ['\\n', '\\u0041', '\\\\', '\\"', '\\t', '\\u00e9'];
   let x = 1;
   const next = (): number => (x = (x * 48_271) % 2_147_483_647); // Park-Miller: exact in doubles
@@ -196,7 +196,7 @@ test('fuzz: the scan work budget only stops a scan: under any budget it throws S
   );
 }, fuzzTimeout(20_000));
 
-test('S-V3-3 bound: a body just under the value, escape and run budgets scans on every product scan within its time bound', () => {
+test.skipIf(!TIMING_BOUNDS)('S-V3-3 bound: a body just under the value, escape and run budgets scans on every product scan within its time bound', () => {
   // `"\na"` strings: one value and one escape each, three runs (separator, escape, text): the most runs a body can make
   // while it passes the gateway's value and escape budgets, without the joined copies that would pass the run budget.
   const n = Math.min(BODY_VALUE_BUDGET, SCAN_ESCAPE_BUDGET, Math.floor(SCAN_RUN_BUDGET / 3)) - 64;

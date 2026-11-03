@@ -10,7 +10,7 @@ import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
 import { findSpans, ScanBudget, scanBody } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
-import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
+import { cpuBoundMs, cpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
 
 const MIB = 1024 * 1024;
 const BOUND_MS = cpuBoundMs(1_000);
@@ -55,7 +55,7 @@ function adversarialBodies(): Array<[string, Buffer, boolean]> {
   ];
 }
 
-test('every rule scans adversarial 1 MiB bodies within the time bound (no super-linear backtracking)', () => {
+test.skipIf(!TIMING_BOUNDS)('every rule scans adversarial 1 MiB bodies within the time bound (no super-linear backtracking)', () => {
   const rules = [...DEFAULT_RULES, ...PII_RULES];
   const slow: string[] = [];
   let worst = 0;

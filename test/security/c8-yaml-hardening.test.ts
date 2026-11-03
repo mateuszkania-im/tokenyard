@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { MAX_YAML_NODES, parseYamlSafe, YamlError } from '../../src/policy/safe-yaml.js';
-import { cpuBoundMs, minCpuMs } from '../helpers/timing.js';
+import { cpuBoundMs, minCpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 
@@ -64,7 +64,7 @@ test('C8c: the duplicate-key check is linear: three times the keys cost less tha
   // A ceiling no linear check reaches (a quadratic check took far longer); the ratio is the real test: quadratic growth
   // would make three times the keys cost about nine times as much
   expect(Math.round(big)).toBeLessThan(cpuBoundMs(5_000));
-  expect(big / small).toBeLessThan(6);
+  if (TIMING_BOUNDS) expect(big / small).toBeLessThan(6);
 });
 
 test('C8c: a document with more nodes than the cap is refused', () => {

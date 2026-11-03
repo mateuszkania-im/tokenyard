@@ -6,10 +6,11 @@
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'vitest';
+import { TIMING_BOUNDS } from '../helpers/timing.js';
 
 const REPO = resolve(import.meta.dirname, '..', '..');
 
-test('S-V3-3 32 MiB hostile bodies, both routes, last turn and history: 413 scan-budget, nothing sent, bounded loop lag and memory', () => {
+test.skipIf(!TIMING_BOUNDS)('S-V3-3 32 MiB hostile bodies, both routes, last turn and history: 413 scan-budget, nothing sent, bounded loop lag and memory', () => {
   const r = spawnSync(process.execPath, ['--expose-gc', '--import', join(REPO, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs'), join(REPO, 'test', 'security', 'scan-budget-memory.child.ts')], {
     cwd: REPO,
     encoding: 'utf8',
