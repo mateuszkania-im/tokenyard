@@ -4,7 +4,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReservedRecord, TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
-import { pseudonym } from '../guardrails/hmac.js';
+import { guardrailKey, pseudonym } from '../guardrails/hmac.js';
 import { redactCredentialEcho } from '../guardrails/credential-echo.js';
 import { PII_RULES } from '../guardrails/pii.js';
 import { type RedactionHit, redactionHits, redactProductBody } from '../guardrails/redact.js';
@@ -67,8 +67,8 @@ export interface GatewayDeps {
   /** HMAC salt for session, agent, parent agent and prompt id in traces (spec 9.1); required when `traces` is set. */
   traceSalt?: string;
   /**
-   * HMAC salt for secret values (session taint, trace hits). Defaults to `traceSalt`, else a random salt per process:
-   * then taint written by one instance is not recognised by another sharing the same Redis.
+   * HMAC key for secret values (session taint, trace hits). Defaults to HMAC(traceSalt, "guardrail") (B8), else a random
+   * key per process: then taint written by one instance is not recognised by another sharing the same Redis.
    */
   guardrailSalt?: string;
   /** Called after settlement with what the request knew (tests). The trace record is queued separately. */
@@ -545,7 +545,8 @@ function scanGuardrails(policy: CompiledPolicy, product: boolean, body: Buffer, 
   const opts = { ...(x.messages && !untrusted ? { messages: x.messages } : {}), raw: untrusted };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => (product ? g.secrets.product : g.secrets.codingAgent), salt, opts);
   if (!product) return { hits, redactions: [] };
-  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, { ...opts, quotedOnly: g.pii.quotedOnly }));
+  // PII hits carry no value HMAC: a PESEL or an address is few enough guesses to enumerate (B8); they never taint.
+  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, { ...opts, quotedOnly: g.pii.quotedOnly, valueHmac: false }));
   const redactRules = [...(g.secrets.product === 'redact' ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : []), ...(g.pii.product === 'redact' ? PII_RULES : [])];
   const redactions = redactionHits(findSpans(body, redactRules, { ...opts, quotedOnly: g.pii.quotedOnly }));
   return { hits, redactions };
@@ -686,7 +687,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
 
   // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan.
   const product = key.kind === 'service';
-  const guard = scanGuardrails(policy, product, body, features, deps.guardrailSalt ?? deps.traceSalt ?? '');
+  const guard = scanGuardrails(policy, product, body, features, deps.guardrailSalt ?? '');
 
   // 6. Decide. A reservation that cannot be priced (the estimator throws) fails closed: refused before admit, so nothing
   // is reserved.
@@ -917,7 +918,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
 
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
   if ((deps.traces || deps.spans) && !deps.traceSalt) throw new Error('traces and spans need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
-  if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes(16).toString('hex') };
+  if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ? guardrailKey(deps.traceSalt) : randomBytes(16).toString('hex') };
   const runtime = deps.runtime ?? createGatewayRuntime();
   const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   // Breaker and retry budget outlive requests; they are rebuilt only when a reload changes the `failure` settings.

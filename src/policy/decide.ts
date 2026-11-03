@@ -199,7 +199,8 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   const warnings: Warning[] = hits.filter((h) => h.action === 'warn').map((h) => ({ kind: 'guardrail', rule: h.rule, where: h.where }));
   const lastTurnBlocks = hits.filter((h) => h.action === 'block' && h.where === 'last-turn');
   const session = f.attribution.session;
-  const history = hits.filter((h) => h.where === 'history');
+  // Hits without a value HMAC (PII, B8) never taint: there is no value to remember or look up.
+  const history = hits.filter((h) => h.where === 'history' && h.valueHmac !== '');
   const messages: Record<string, number> = {};
   for (const h of history) if (h.message !== undefined && !Object.hasOwn(messages, h.valueHmac)) messages[h.valueHmac] = h.message;
   const taint: Plan['taint'] =
@@ -208,7 +209,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
       : {
           key: session === null ? keyTaintKey(f.tenant, f.keyId) : taintKey(f.tenant, session),
           check: [...new Set(history.map((h) => h.valueHmac))],
-          add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac, ...(h.message === undefined ? {} : { message: h.message }) })),
+          add: lastTurnBlocks.filter((h) => h.valueHmac !== '').map((h) => ({ rule: h.rule, valueHmac: h.valueHmac, ...(h.message === undefined ? {} : { message: h.message }) })),
           ttlMs: Math.round(policy.guardrails.secrets.taintTtlHours * 3_600_000),
           ...(Object.keys(messages).length > 0 ? { messages } : {}),
         };

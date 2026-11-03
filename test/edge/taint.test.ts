@@ -4,7 +4,7 @@ import { createClient } from 'redis';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import { hashKey } from '../../src/edge/auth.js';
 import type { RequestOutcome } from '../../src/edge/handler.js';
-import { pseudonym } from '../../src/guardrails/hmac.js';
+import { guardrailKey, pseudonym } from '../../src/guardrails/hmac.js';
 import type { TraceRecord } from '../../src/ledger/record.js';
 import { createMemoryStore } from '../../src/limits/memory-store.js';
 import { createRedisStore } from '../../src/limits/redis-store.js';
@@ -91,7 +91,7 @@ test('last-turn hit with codingAgent block gives preBlock secret and Plan.taint.
   expect(g.up.got).toHaveLength(0);
 
   const session = pseudonym(SALT, 'sess-1');
-  const hmac = pseudonym(SALT, AWS);
+  const hmac = pseudonym(guardrailKey(SALT), AWS);
   expect(spy.admits).toHaveLength(1);
   const plan = spy.admits[0]?.plan;
   expect(plan?.preBlock).toBe('secret');
@@ -222,7 +222,7 @@ test('history hit of a value that was only warned does not block', async () => {
   expect((await post(g.url, turn2())).status).toBe(200);
   expect(g.up.got).toHaveLength(2);
   await expect.poll(() => g.traces.length).toBe(2);
-  expect(g.traces[0]?.guardrail.hits).toEqual([{ rule: 'aws-access-key-id', action: 'warn', valueHmac: pseudonym(SALT, AWS), where: 'last-turn' }]);
+  expect(g.traces[0]?.guardrail.hits).toEqual([{ rule: 'aws-access-key-id', action: 'warn', valueHmac: pseudonym(guardrailKey(SALT), AWS), where: 'last-turn' }]);
   // Warn rules are not scanned in history, so nothing is checked against the taint set.
   expect(g.traces[1]?.guardrail.hits).toEqual([]);
 });

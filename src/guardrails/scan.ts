@@ -351,7 +351,7 @@ function messageAt(messages: readonly Range[] | undefined, pos: number): number 
  * not scanned in history. Each value is reported once per rule and place, as an HMAC with `salt` of its decoded form
  * (so the same secret escaped another way matches the taint), with the index of its message when `messages` are
  * given. No last turn: the whole body is history. `raw` (a body JSON.parse refused) scans the raw bytes instead of
- * decoded strings.
+ * decoded strings. `valueHmac: false` (PII rules, B8) reports no value HMAC (an empty string) and one hit per rule and place.
  */
 export function scanBody(
   body: Buffer,
@@ -359,7 +359,7 @@ export function scanBody(
   rules: readonly SecretRule[],
   actionFor: (rule: SecretRule) => GuardrailAction,
   salt: string,
-  opts: { messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean } = {},
+  opts: { messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean; valueHmac?: boolean } = {},
 ): GuardrailHit[] {
   const action = (r: SecretRule): GuardrailAction => (r.entropyOnly ? 'warn' : actionFor(r));
   const historyRules = rules.filter((r) => action(r) !== 'warn');
@@ -374,7 +374,7 @@ export function scanBody(
   const seen = new Set<string>();
   for (const region of regions) {
     for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, ...(region.messages ? { messages: region.messages } : {}) })) {
-      const valueHmac = pseudonym(salt, s.value);
+      const valueHmac = opts.valueHmac === false ? '' : pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
       seen.add(id);

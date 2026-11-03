@@ -308,6 +308,9 @@ import { createHmac } from "node:crypto";
 function pseudonym(salt, value) {
   return createHmac("sha256", salt).update(value).digest("hex").slice(0, 32);
 }
+function guardrailKey(traceSalt) {
+  return createHmac("sha256", traceSalt).update("guardrail").digest("hex");
+}
 var init_hmac = __esm({
   "src/guardrails/hmac.ts"() {
     "use strict";
@@ -2020,7 +2023,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const seen = /* @__PURE__ */ new Set();
   for (const region of regions) {
     for (const s2 of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, ...region.messages ? { messages: region.messages } : {} })) {
-      const valueHmac = pseudonym(salt, s2.value);
+      const valueHmac = opts.valueHmac === false ? "" : pseudonym(salt, s2.value);
       const id = `${s2.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
       seen.add(id);
@@ -30490,13 +30493,13 @@ function decide(policy2, f) {
   const warnings = hits.filter((h) => h.action === "warn").map((h) => ({ kind: "guardrail", rule: h.rule, where: h.where }));
   const lastTurnBlocks = hits.filter((h) => h.action === "block" && h.where === "last-turn");
   const session = f.attribution.session;
-  const history = hits.filter((h) => h.where === "history");
+  const history = hits.filter((h) => h.where === "history" && h.valueHmac !== "");
   const messages = {};
   for (const h of history) if (h.message !== void 0 && !Object.hasOwn(messages, h.valueHmac)) messages[h.valueHmac] = h.message;
   const taint = session === null && !hits.some((h) => h.action === "block") ? null : {
     key: session === null ? keyTaintKey(f.tenant, f.keyId) : taintKey(f.tenant, session),
     check: [...new Set(history.map((h) => h.valueHmac))],
-    add: lastTurnBlocks.map((h) => ({ rule: h.rule, valueHmac: h.valueHmac, ...h.message === void 0 ? {} : { message: h.message } })),
+    add: lastTurnBlocks.filter((h) => h.valueHmac !== "").map((h) => ({ rule: h.rule, valueHmac: h.valueHmac, ...h.message === void 0 ? {} : { message: h.message } })),
     ttlMs: Math.round(policy2.guardrails.secrets.taintTtlHours * 36e5),
     ...Object.keys(messages).length > 0 ? { messages } : {}
   };
@@ -59031,7 +59034,7 @@ function scanGuardrails(policy2, product, body, x, salt) {
   const opts = { ...x.messages && !untrusted ? { messages: x.messages } : {}, raw: untrusted };
   const hits = scanBody(body, lastTurn, DEFAULT_RULES, () => product ? g.secrets.product : g.secrets.codingAgent, salt, opts);
   if (!product) return { hits, redactions: [] };
-  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, { ...opts, quotedOnly: g.pii.quotedOnly }));
+  hits.push(...scanBody(body, lastTurn, PII_RULES, () => g.pii.product, salt, { ...opts, quotedOnly: g.pii.quotedOnly, valueHmac: false }));
   const redactRules = [...g.secrets.product === "redact" ? DEFAULT_RULES.filter((r) => !r.entropyOnly) : [], ...g.pii.product === "redact" ? PII_RULES : []];
   const redactions = redactionHits(findSpans(body, redactRules, { ...opts, quotedOnly: g.pii.quotedOnly }));
   return { hits, redactions };
@@ -59131,7 +59134,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   await readLatch(deps, runtime);
   const features = extractFeatures(surface, body);
   const product = key.kind === "service";
-  const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? deps.traceSalt ?? "");
+  const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? "");
   let f;
   let plan;
   try {
@@ -59323,7 +59326,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
 }
 function createHandler(deps) {
   if ((deps.traces || deps.spans) && !deps.traceSalt) throw new Error("traces and spans need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
-  if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes3(16).toString("hex") };
+  if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ? guardrailKey(deps.traceSalt) : randomBytes3(16).toString("hex") };
   const runtime = deps.runtime ?? createGatewayRuntime();
   const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
   let state = null;
