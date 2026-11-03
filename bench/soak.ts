@@ -6,7 +6,7 @@
 // stream slot check per key, the store's reservations and slots, a clean SIGTERM exit. The verdicts use the thresholds
 // in bench/soak-lib.ts; the result goes into bench/results.json under `soak`. Never calls a real provider.
 //   npx tsx bench/soak.ts mock   (child: the mock providers)
-import { type ChildProcess, execFileSync, fork, spawn } from 'node:child_process';
+import { type ChildProcess, execFile, fork, spawn } from 'node:child_process';
 import { closeSync, copyFileSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { Agent, request } from 'node:http';
 import { createServer } from 'node:net';
@@ -34,6 +34,13 @@ const PROBE = join(ROOT, 'bench', 'soak-probe.mjs');
 /** Per key: the policy's concurrent stream limit, checked after the load. */
 const STREAMS_PER_KEY = 8;
 const SESSION_BUDGET = 'session';
+/** The soak policy's budgets, every level enforced; the end check compares each key's spent with its limit. */
+const BUDGETS = [
+  { name: 'org-month', scope: 'tenant', window: 'month', usd: 1_000_000, onExceed: 'block' },
+  { name: 'team-day', scope: 'team', window: 'day', usd: 100_000, onExceed: 'block' },
+  { name: 'dev-day', scope: 'key', window: 'day', usd: 10_000, onExceed: 'block' },
+  { name: SESSION_BUDGET, scope: 'session', usd: 200, onExceed: 'block' },
+];
 const log = (s: string): void => console.error(`soak: ${s}`);
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
@@ -107,12 +114,7 @@ function writePolicy(dir: string, mock: { anthropic: string; openai: string }): 
   // Every level enforced. Sessions cycle through fixed ids (Load.ringId), so a session id collects spend for the whole
   // run: 200 USD keeps ordinary sessions under it for 45 minutes (25 USD did not: a third of the requests were refused
   // after half an hour). The heavy bursts (24 requests of about 10.6 USD each at once on one session) go over it.
-  p.budgets = [
-    { name: 'org-month', scope: 'tenant', window: 'month', usd: 1_000_000, onExceed: 'block' },
-    { name: 'team-day', scope: 'team', window: 'day', usd: 100_000, onExceed: 'block' },
-    { name: 'dev-day', scope: 'key', window: 'day', usd: 10_000, onExceed: 'block' },
-    { name: SESSION_BUDGET, scope: 'session', usd: 200, onExceed: 'block' },
-  ];
+  p.budgets = BUDGETS;
   // Room for the steady load; the noisy key's minute bursts go over both limits.
   p.rateLimits = [
     { name: 'dev-rpm', scope: 'key', rpm: 600, burst: 100 },
@@ -406,6 +408,23 @@ class Load {
     return devs.flatMap((dev) => Array.from({ length: 3 }, () => ({ kind: 'heavy' as const, path: '/v1/messages?beta=true', stream: false, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-output': '100' }, body })));
   }
 
+  /**
+   * A secret in the last turn of a new session, then a clean turn of the same session whose history holds that secret,
+   * as Claude Code would send it next: the second must be refused (taint), wherever the first was sent.
+   */
+  taintPair(dev: Dev): [Planned, Planned] {
+    const id = this.id('taint');
+    this.sessionValues.add(`${dev.tenant}\0${id}`);
+    this.taintedSessions.add(`${dev.tenant}\0${id}`);
+    const secret = `deploy with ${['AKIA', 'IOSFODNN7EXAMPLE'].join('')} please`;
+    const body = (messages: unknown[]): Buffer => Buffer.from(JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 256, stream: false, messages }));
+    const headers = this.ccHeaders(dev, id, 'main');
+    return [
+      { kind: 'secret', path: '/v1/messages', stream: false, headers, body: body([{ role: 'user', content: secret }]) },
+      { kind: 'secret', path: '/v1/messages', stream: false, headers, body: body([{ role: 'user', content: secret }, { role: 'assistant', content: 'I will not use that.' }, { role: 'user', content: 'continue' }]) },
+    ];
+  }
+
   /** Per key, its stream limit plus one at once, each on a slow stream and a new session. */
   slotCheck(dev: Dev): Planned[] {
     return Array.from({ length: STREAMS_PER_KEY + 1 }, () => {
@@ -429,7 +448,8 @@ interface Result {
 function refusal(body: string): string | null {
   const m = /"message":"tokenyard: ([^"]*)"/.exec(body)?.[1];
   if (m === undefined) return null;
-  for (const [re, r] of [[/budget/i, 'budget'], [/concurrent|stream/i, 'streams'], [/rate/i, 'rate'], [/taint/i, 'taint'], [/secret|credential/i, 'secret'], [/model|pric/i, 'model']] as const) if (re.test(m)) return r;
+  // The taint answer says "this session's history ... holds a secret that rule ... blocked earlier" (src/policy/resolve.ts).
+  for (const [re, r] of [[/history[^"]* holds a secret/i, 'taint'], [/session-churn|new sessions per hour/i, 'session-churn'], [/budget/i, 'budget'], [/concurrent|stream/i, 'streams'], [/rate/i, 'rate'], [/taint/i, 'taint'], [/secret|credential/i, 'secret'], [/model|pric/i, 'model']] as const) if (re.test(m)) return r;
   return 'other';
 }
 
@@ -535,13 +555,11 @@ async function startGateway(o: { instance: string; mode: Mode; policyDir: string
 }
 
 /** Open file descriptors and TCP sockets of a process (lsof). */
-function lsofCounts(pid: number): { fds: number; tcp: number } {
-  let out = '';
-  try {
-    out = execFileSync('lsof', ['-n', '-P', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
-  } catch (e) {
-    out = (e as { stdout?: string }).stdout ?? '';
-  }
+async function lsofCounts(pid: number): Promise<{ fds: number; tcp: number }> {
+  // Async, so a sample never holds up the arrival loop (open loop).
+  const out = await new Promise<string>((resolve) => {
+    execFile('lsof', ['-n', '-P', '-p', String(pid)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, (_err, stdout) => resolve(stdout ?? ''));
+  });
   const lines = out.split('\n').slice(1).filter((l) => l.trim() !== '');
   // Numbered descriptors only (cwd, txt and mem mappings are not fds).
   const fds = lines.filter((l) => /^\S+\s+\d+\s+\S+\s+\d+[rwu]/.test(l));
@@ -589,7 +607,7 @@ interface ProbeReply {
 async function sampleGateway(g: Gateway, t: number, traceDir: string): Promise<{ sample: GatewaySample; probe: ProbeReply; metrics: ReturnType<typeof parseMetrics>; cpuPct: number | null }> {
   const probe = JSON.parse((await getText(`http://127.0.0.1:${g.probePort}/sample`)).body) as ProbeReply;
   const metrics = parseMetrics((await getText(`http://127.0.0.1:${g.opsPort}/metrics`)).body);
-  const { fds, tcp } = lsofCounts(g.child.pid as number);
+  const { fds, tcp } = await lsofCounts(g.child.pid as number);
   const tr = traceStats(traceDir, g.instance);
   const now = performance.now();
   const cpuPct = g.lastCpu ? Math.round(((probe.cpuUs - g.lastCpu.us) / 1e3 / (now - g.lastCpu.at)) * 1000) / 10 : null;
@@ -678,6 +696,9 @@ async function main(mode: Mode): Promise<void> {
   const mockUrls = await new Promise<{ anthropic: string; openai: string }>((resolve) => mock.once('message', (m) => resolve(m as { anthropic: string; openai: string })));
   const setup = writePolicy(join(runDir, 'policy'), mockUrls);
   const gateways: Gateway[] = [];
+  // A failed or interrupted run keeps its trace files (the per-request evidence, such as the status and error class of
+  // a reset request); a passing one removes them.
+  let keepTraces = true;
   try {
     for (let i = 1; i <= (mode === 'redis' ? 2 : 1); i++) gateways.push(await startGateway({ instance: `soak000${i}`, mode, policyDir: setup.dir, traceDir, runDir, redisUrl }));
     const agents = gateways.map(() => new Agent({ keepAlive: true, maxSockets: 512 }));
@@ -728,6 +749,7 @@ async function main(mode: Mode): Promise<void> {
     let nextHeavy = t0 + 90_000;
     let windowStart = 0;
     let next = t0;
+    let sampling = false;
     log(`load ${MINUTES} min`);
     while (performance.now() < endAt) {
       const now = performance.now();
@@ -754,6 +776,18 @@ async function main(mode: Mode): Promise<void> {
       }
       if (now >= nextSample) {
         nextSample += SAMPLE_MS;
+        // Sampled beside the arrivals, never awaited here: arrivals stay on their Poisson schedule. A sample still
+        // running when the next is due makes that one skip.
+        if (!sampling) {
+          sampling = true;
+          void sampleTick(now).catch((e: unknown) => log(`sample failed: ${e instanceof Error ? e.message : String(e)}`)).finally(() => (sampling = false));
+        }
+        continue;
+      }
+      await sleep(Math.min(next, nextSample, nextNoisy, nextRate, nextHeavy) - performance.now());
+    }
+    while (sampling) await sleep(100);
+    async function sampleTick(now: number): Promise<void> {
         const t = (now - t0) / 1000;
         const ss = await Promise.all(gateways.map((g) => sampleGateway(g, t, traceDir)));
         ss.forEach((s, i) => {
@@ -773,9 +807,6 @@ async function main(mode: Mode): Promise<void> {
         log(
           `t=${Math.round(t)}s inflight ${inflight} sent ${win.length} ${gateways.map((g, i) => { const s = ss[i]?.sample as GatewaySample; return `[${g.instance} cpu ${ss[i]?.cpuPct}% rss ${s.rssMb} heap ${s.heapMb} fds ${s.fds} tcp ${s.tcpSockets} handles ${s.handles} eld99 ${s.eventLoopP99Ms} series ${s.series} open ${s.reservationsOpen} traces ${s.traceFiles}/${Math.round(s.traceBytes / 1048576)}MB]`; }).join(' ')}${redis ? ` redis keys ${redisSeries.at(-1)?.keys} mem ${redisSeries.at(-1)?.usedMemoryMb}MB` : ''} statuses ${JSON.stringify(byStatus)}`,
         );
-        continue;
-      }
-      await sleep(Math.min(next, nextSample, nextNoisy, nextRate, nextHeavy) - performance.now());
     }
     const loadResults = [...results];
     log(`load done; draining ${inflight}`);
@@ -791,6 +822,13 @@ async function main(mode: Mode): Promise<void> {
       admitted += Math.min(ok, STREAMS_PER_KEY);
       if (rs.filter((r) => r.status === 429).length === 1) refusedExtra++;
     }
+    // Session taint: the secret through the first gateway, the clean follow-up through the last one (with two gateways,
+    // the other process; the taint set is in the shared store).
+    const [secretTurn, followUp] = load.taintPair(setup.devs[0] as Dev);
+    const first = await send(agents[0] as Agent, (gateways[0] as Gateway).url, secretTurn);
+    const second = await send(agents[gateways.length - 1] as Agent, (gateways[gateways.length - 1] as Gateway).url, followUp);
+    const taint = { gateways: gateways.length, refused: first.reason === 'secret' && second.status === 400 && second.reason === 'taint' };
+    log(`taint check: secret ${first.status} ${first.reason}, follow-up ${second.status} ${second.reason}`);
     await drain(30_000);
     for (const a of agents) a.destroy();
     // Past one sweeper tick (30 s), the R11 latch re-read and every keep-alive timeout.
@@ -802,9 +840,19 @@ async function main(mode: Mode): Promise<void> {
       const keys = await redisKeys(redis);
       let reserved = 0;
       let streamCount = 0;
+      let budgetKeys = 0;
+      const overLimit: string[] = [];
       for (const k of keys) {
         const c = classifyKey(k, new Set([SESSION_BUDGET]));
-        if (c === 'budget-session' || c === 'budget-window') reserved += Number((await redis.hGet(k, 'r')) ?? 0);
+        if (c === 'budget-session' || c === 'budget-window') {
+          reserved += Number((await redis.hGet(k, 'r')) ?? 0);
+          // Every level is enforced: spent (both gateways' settlements) must be within the level's limit.
+          const name = decodeURIComponent(k.split(':')[3] ?? '');
+          const limit = (BUDGETS.find((b) => b.name === name)?.usd ?? 0) * 1_000_000;
+          const spent = Number((await redis.hGet(k, 's')) ?? 0);
+          budgetKeys++;
+          if (spent > limit) overLimit.push(`${k} ${spent} > ${limit}`);
+        }
         if (c === 'streams') streamCount += Number((await redis.get(k)) ?? 0) > 0 ? 1 : 0;
       }
       const devCount = setup.devs.length + 2;
@@ -813,6 +861,8 @@ async function main(mode: Mode): Promise<void> {
         deadlineKeys: redisAfter.byClass.deadlines ?? 0,
         streamKeys: streamCount,
         reservedMicroUsd: reserved,
+        budgetKeys,
+        overLimit,
         keysByClass: redisAfter.byClass,
         // What the load could create: one session level per (tenant, session) sent (plus each tenant's unattributed one), the window
         // levels of each key, team and tenant (one day and one month window each, twice if the run crossed midnight UTC),
@@ -823,6 +873,9 @@ async function main(mode: Mode): Promise<void> {
           rate: devCount,
           streams: devCount,
           taint: load.taintedSessions.size,
+          // S-V2-1: one marker per (tenant, session) admitted, one new-sessions GCRA per key.
+          'session-marker': load.sessionValues.size,
+          'new-sessions': devCount,
           'sweep-lock': 1,
           r11: 0,
           other: 0,
@@ -857,6 +910,7 @@ async function main(mode: Mode): Promise<void> {
       latency: windows.filter((w) => w.auxP50Ms !== null).map((w) => ({ t: w.t, v: w.auxP50Ms as number })),
       slotCheck: { keys: setup.devs.length, admitted, expectedAdmitted: setup.devs.length * STREAMS_PER_KEY, refusedExtra, expectedRefused: setup.devs.length },
       redis: redisCheck,
+      taint,
       failedRequests: { socket: socketErrors },
     });
     for (const v of verdicts) log(`${v.ok ? 'PASS' : 'FAIL'} ${v.check}: ${v.measured} (threshold: ${v.threshold})`);
@@ -919,13 +973,17 @@ async function main(mode: Mode): Promise<void> {
     };
     writeFileSync(file, `${JSON.stringify(all, null, 2)}\n`);
     log(`${run.passed ? 'PASSED' : 'FAILED'}; bench/results.json soak.${mode} written; raw samples in ${join(runDir, 'samples.json')}`);
-    if (!run.passed) process.exitCode = 1;
+    keepTraces = !run.passed;
+    if (!run.passed) {
+      process.exitCode = 1;
+      log(`trace files kept for inspection in ${traceDir}`);
+    }
   } finally {
     for (const g of gateways) if (g.child.exitCode === null) g.child.kill('SIGKILL');
     mock.kill('SIGTERM');
     await redis?.close().catch(() => undefined);
     redisStop();
-    rmSync(traceDir, { recursive: true, force: true });
+    if (!keepTraces) rmSync(traceDir, { recursive: true, force: true });
   }
 }
 
@@ -940,7 +998,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (role === 'mock') await mockMain();
   else if (role === 'memory' || role === 'redis') await main(role);
   else {
-    console.error('usage: npm run soak -- <memory|redis>   (SOAK_MINUTES, default 45; SOAK_RATE requests/s per gateway, default 100)');
+    console.error('usage: npm run soak -- <memory|redis>   (SOAK_MINUTES, default 45; SOAK_RATE requests/s per gateway, default 80)');
     process.exit(2);
   }
 }

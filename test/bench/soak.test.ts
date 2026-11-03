@@ -66,6 +66,8 @@ test('counter keys are classified by the src/limits/keys.ts layout', () => {
   expect(classifyKey('ty:{acme}:deadlines', session)).toBe('deadlines');
   expect(classifyKey('ty:{_sweeper}:sweep-lock', session)).toBe('sweep-lock');
   expect(classifyKey('ty:{_global}:r11', session)).toBe('r11');
+  expect(classifyKey('ty:{acme}:sess:abc', session)).toBe('session-marker');
+  expect(classifyKey('ty:{acme}:ns:key_1', session)).toBe('new-sessions');
   expect(classifyKey('unrelated', session)).toBe('other');
 });
 
@@ -90,7 +92,8 @@ function healthyRun(): SoakJudgeInput {
     gateways: [gw],
     latency: every30s(45, () => 110),
     slotCheck: { keys: 2, admitted: 16, expectedAdmitted: 16, refusedExtra: 2, expectedRefused: 2 },
-    redis: { reservationKeys: 0, deadlineKeys: 0, streamKeys: 0, reservedMicroUsd: 0, keysByClass: { 'budget-session': 10 }, bounds: { 'budget-session': 12 } },
+    redis: { reservationKeys: 0, deadlineKeys: 0, streamKeys: 0, reservedMicroUsd: 0, budgetKeys: 60, overLimit: [], keysByClass: { 'budget-session': 10 }, bounds: { 'budget-session': 12 } },
+    taint: { gateways: 2, refused: true },
     failedRequests: { socket: 0 },
   };
 }
@@ -119,7 +122,13 @@ test('each leak signal fails its own check', () => {
   expect(failing((r) => (r.slotCheck.admitted = 15))).toEqual(['stream slots after the load']);
   expect(failing((r) => ((r.redis as NonNullable<SoakJudgeInput['redis']>).reservedMicroUsd = 5))).toEqual(['Redis: reservations, deadlines and stream counts after the load']);
   expect(failing((r) => ((r.redis as NonNullable<SoakJudgeInput['redis']>).keysByClass['budget-session'] = 13))).toEqual(['Redis: keys per class within what the load could create']);
-  expect(failing((r) => (r.latency = every30s(45, (t) => (t > 2000 ? 200 : 110))))).toEqual(['client total time p50 drift (2xx)']);
+  expect(failing((r) => (r.latency = every30s(45, (t) => (t > 2000 ? 200 : 110))))).toEqual(['client total time p50 drift (auxiliary requests, 2xx)']);
+  // Too short a run for both latency windows is not a pass.
+  expect(failing((r) => (r.latency = every30s(8, () => 110)))).toEqual(['client total time p50 drift (auxiliary requests, 2xx)']);
+  // V2 review: shared budgets are shown by spent within the limit on every enforced key, not by refusals alone.
+  expect(failing((r) => ((r.redis as NonNullable<SoakJudgeInput['redis']>).overLimit = ['ty:{acme}:b:session:s1 200000001 > 200000000']))).toEqual(['Redis: spent within the limit on every enforced budget key']);
+  expect(failing((r) => ((r.redis as NonNullable<SoakJudgeInput['redis']>).budgetKeys = 0))).toEqual(['Redis: spent within the limit on every enforced budget key']);
+  expect(failing((r) => (r.taint = { gateways: 2, refused: false }))).toEqual(['session taint across gateways']);
 });
 
 test('the thresholds are the ones stated in docs/benchmarks.md', () => {

@@ -26,10 +26,11 @@ if (Number.isInteger(port) && port > 0) {
     req.resume();
     if (req.url !== '/sample') return void res.writeHead(404).end();
     const loop = { p50Ms: ms(eld.percentile(50)), p99Ms: ms(eld.percentile(99)), maxMs: ms(eld.max) };
-    eld.reset();
+    // The forced GC runs before the reset, so its pause is not counted in the next sample's event loop delay.
     const beforeGc = cpuUs();
     globalThis.gc?.();
     gcUs += cpuUs() - beforeGc;
+    eld.reset();
     const m = process.memoryUsage();
     const handles = {};
     for (const h of process.getActiveResourcesInfo()) handles[h] = (handles[h] ?? 0) + 1;

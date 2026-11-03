@@ -65,6 +65,8 @@ export interface Growth {
   windowPct: number;
   /** Samples after warm-up. */
   n: number;
+  /** The measured span holds both windows (at least two window lengths after warm-up). */
+  enough: boolean;
   ok: boolean;
 }
 
@@ -93,6 +95,7 @@ export function growth(samples: readonly Point[], o: { warmupS: number; windowS:
     trendPct: round(trendPct),
     windowPct: round(windowPct),
     n: post.length,
+    enough,
     ok: enough && trendPct < o.maxPct && windowPct < o.maxPct,
   };
 }
@@ -126,7 +129,7 @@ export function parseMetrics(text: string): { series: number; byMetric: Record<s
   return { series: seen.size, byMetric, totals };
 }
 
-export type KeyClass = 'budget-window' | 'budget-session' | 'rate' | 'streams' | 'taint' | 'reservation' | 'deadlines' | 'sweep-lock' | 'r11' | 'other';
+export type KeyClass = 'budget-window' | 'budget-session' | 'rate' | 'streams' | 'taint' | 'session-marker' | 'new-sessions' | 'reservation' | 'deadlines' | 'sweep-lock' | 'r11' | 'other';
 
 /** The class of a counter store key (src/limits/keys.ts layout); session budgets are named by the policy. */
 export function classifyKey(key: string, sessionBudgets: ReadonlySet<string>): KeyClass {
@@ -137,6 +140,8 @@ export function classifyKey(key: string, sessionBudgets: ReadonlySet<string>): K
   if (rest.startsWith('g:')) return 'rate';
   if (rest.startsWith('st:')) return 'streams';
   if (rest.startsWith('taint:')) return 'taint';
+  if (rest.startsWith('sess:')) return 'session-marker';
+  if (rest.startsWith('ns:')) return 'new-sessions';
   if (rest.startsWith('res:')) return 'reservation';
   if (rest === 'deadlines') return 'deadlines';
   if (rest === 'sweep-lock') return 'sweep-lock';
@@ -194,7 +199,19 @@ export interface SoakJudgeInput {
   /** Stream slot check after the load: each key's limit admitted at once, and one more refused. */
   slotCheck: { keys: number; admitted: number; expectedAdmitted: number; refusedExtra: number; expectedRefused: number };
   /** Redis only: keys left after the load that must be gone, and budget reservations left. */
-  redis: { reservationKeys: number; deadlineKeys: number; streamKeys: number; reservedMicroUsd: number; keysByClass: Record<string, number>; bounds: Record<string, number> } | null;
+  redis: {
+    reservationKeys: number;
+    deadlineKeys: number;
+    streamKeys: number;
+    reservedMicroUsd: number;
+    keysByClass: Record<string, number>;
+    bounds: Record<string, number>;
+    /** Enforced budget keys read after the load, and those whose spent is above their limit. */
+    budgetKeys: number;
+    overLimit: string[];
+  } | null;
+  /** A secret sent through one gateway, then a clean turn of the same session through another (or the same one). */
+  taint: { gateways: number; refused: boolean } | null;
   failedRequests: { socket: number };
 }
 
@@ -236,14 +253,19 @@ export function judge(r: SoakJudgeInput, th: typeof SOAK_THRESHOLDS = SOAK_THRES
     out.push({ check: name('process health'), threshold: 'no crash, clean exit on SIGTERM, no uncaught exception, no unexpected stderr line', measured: `exit ${gw.exitCode}, ${gw.uncaught} uncaught, ${gw.unexpectedStderr.length} unexpected stderr line(s)`, ok: gw.exitCode === 0 && gw.uncaught === 0 && gw.unexpectedStderr.length === 0 });
   }
   const lat = growth(r.latency, { warmupS: th.warmupS, windowS: th.windowS, maxPct: th.latencyDriftPct });
-  out.push({ check: 'client total time p50 drift (2xx)', threshold: `last ${th.windowS / 60} min against first under ${th.latencyDriftPct}%`, measured: `${lat.first} to ${lat.last} ms (${lat.windowPct}%)`, ok: lat.n > 0 && lat.windowPct < th.latencyDriftPct });
+  out.push({ check: 'client total time p50 drift (auxiliary requests, 2xx)', threshold: `last ${th.windowS / 60} min against first under ${th.latencyDriftPct}%`, measured: `${lat.first} to ${lat.last} ms (${lat.windowPct}%)`, ok: lat.enough && lat.windowPct < th.latencyDriftPct });
   const s = r.slotCheck;
   out.push({ check: 'stream slots after the load', threshold: 'every key admits its full concurrent stream limit, and one more is refused', measured: `${s.admitted} of ${s.expectedAdmitted} admitted over ${s.keys} keys, ${s.refusedExtra} of ${s.expectedRefused} extra refused`, ok: s.admitted === s.expectedAdmitted && s.refusedExtra === s.expectedRefused });
   if (r.redis) {
     const x = r.redis;
     out.push({ check: 'Redis: reservations, deadlines and stream counts after the load', threshold: 'none left, nothing reserved', measured: `${x.reservationKeys} reservation, ${x.deadlineKeys} deadline, ${x.streamKeys} stream key(s); ${x.reservedMicroUsd} micro-USD reserved`, ok: x.reservationKeys === 0 && x.deadlineKeys === 0 && x.streamKeys === 0 && x.reservedMicroUsd === 0 });
     const over = Object.entries(x.bounds).filter(([k, bound]) => (x.keysByClass[k] ?? 0) > bound);
+    out.push({ check: 'Redis: spent within the limit on every enforced budget key', threshold: 'spent at most the limit on each key after the load', measured: `${x.budgetKeys} key(s), ${x.overLimit.length} over${x.overLimit.length > 0 ? `: ${x.overLimit.slice(0, 3).join(', ')}` : ''}`, ok: x.budgetKeys > 0 && x.overLimit.length === 0 });
     out.push({ check: 'Redis: keys per class within what the load could create', threshold: 'each class at most its bound (distinct scope values sent)', measured: Object.entries(x.bounds).map(([k, b]) => `${k} ${x.keysByClass[k] ?? 0}/${b}`).join(', '), ok: over.length === 0 });
+  }
+  if (r.taint) {
+    const across = r.taint.gateways > 1;
+    out.push({ check: across ? 'session taint across gateways' : 'session taint', threshold: across ? 'a secret through one gateway taints the session on the other' : 'a secret taints the session', measured: r.taint.refused ? 'clean follow-up refused (taint)' : 'clean follow-up admitted', ok: r.taint.refused });
   }
   out.push({ check: 'client socket errors', threshold: '0 apart from deliberate aborts', measured: String(r.failedRequests.socket), ok: r.failedRequests.socket === 0 });
   return out;
