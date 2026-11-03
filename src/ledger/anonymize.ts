@@ -142,6 +142,7 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
       ...(o.serverToolUses ? { serverToolUses: { ...o.serverToolUses } } : {}),
       aborted: o.aborted,
       settledBy: o.settledBy,
+      ...(o.settleSeq !== undefined ? { settleSeq: o.settleSeq } : {}),
       overrun: o.overrun,
       ...(o.settledAtEstimate ? { settledAtEstimate: true as const } : {}),
       ...(o.chargedMicroUsd !== undefined ? { chargedMicroUsd: o.chargedMicroUsd } : {}),

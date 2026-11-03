@@ -496,6 +496,7 @@ function anonymizeRecord(r, p) {
       ...o.serverToolUses ? { serverToolUses: { ...o.serverToolUses } } : {},
       aborted: o.aborted,
       settledBy: o.settledBy,
+      ...o.settleSeq !== void 0 ? { settleSeq: o.settleSeq } : {},
       overrun: o.overrun,
       ...o.settledAtEstimate ? { settledAtEstimate: true } : {},
       ...o.chargedMicroUsd !== void 0 ? { chargedMicroUsd: o.chargedMicroUsd } : {},
@@ -59119,6 +59120,7 @@ function buildTraceRecord(o, salt, names) {
       ...u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {},
       aborted: o.aborted,
       settledBy: o.settledBy ?? "request",
+      ...o.settleSeq !== void 0 ? { settleSeq: o.settleSeq } : {},
       overrun: o.overrun ?? false,
       ...o.settledAtEstimate ? { settledAtEstimate: true } : {},
       ...o.boundExceeded ? { boundExceeded: true } : {},
@@ -59367,6 +59369,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
     o.costMicroUsd = actual;
     o.overrun = (held.plan?.reservations.length ?? 0) > 0 && actual > held.est;
     let result;
+    o.settleSeq = runtime.admits;
     try {
       result = await withDeadline(deps.store.settle(o.id, actual), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
@@ -59757,6 +59760,7 @@ function createHandler(deps) {
         deps.metrics?.inc("tokenyard_reservations_open", {}, -1);
         const known = held.known;
         const charge = atEstimateCharge(held.plan, held.est);
+        const settleSeq = runtime.admits;
         void withDeadline(deps.store.settle(id, charge), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
           if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
           const swept = runtime.takeSwept(id) || !settled;
@@ -59779,6 +59783,7 @@ function createHandler(deps) {
               errorClass: "internal_error",
               settledAtEstimate: true,
               settledBy: swept ? "sweeper" : "request",
+              settleSeq,
               chargedMicroUsd: swept ? held.est : charge,
               overrun: charge > held.est
             },
@@ -121879,21 +121884,33 @@ async function* iterate(xs) {
 function admitOrder(window2) {
   return window2.map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r })).sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i).map(({ i, at }) => ({ i, at }));
 }
+function settlesBefore(p, until, next, lastSeq) {
+  if (p.at > until) return false;
+  if (next === null || p.settleSeq === void 0 || p.instance !== next.instance) return true;
+  const seq = next.decision.admitSeq;
+  return seq !== void 0 ? p.settleSeq < seq : p.settleSeq <= (lastSeq.get(p.instance) ?? 0);
+}
 async function simulate(policy2, which, window2, warm, startMs, ratios) {
   let now = startMs;
   const store = createSimStore(() => now);
   await store.seed(await warmupEntries(iterate(warm), policy2, startMs));
   const pending = [];
   let order = 0;
-  const schedule = (at, id, amount) => {
-    const p = { at, order: order++, id, amount };
+  const schedule = (r, at, amount) => {
+    const p = { at, order: order++, id: r.id, amount, instance: r.instance, settleSeq: r.outcome.settleSeq };
     let i = pending.length;
     while (i > 0 && pending[i - 1].at > at) i--;
     pending.splice(i, 0, p);
   };
-  const drain = async (until) => {
-    while (pending.length > 0 && pending[0].at <= until) {
-      const p = pending.shift();
+  const lastSeq = /* @__PURE__ */ new Map();
+  const drain = async (until, next) => {
+    for (let i = 0; i < pending.length && pending[i].at <= until; ) {
+      const p = pending[i];
+      if (!settlesBefore(p, until, next, lastSeq)) {
+        i++;
+        continue;
+      }
+      pending.splice(i, 1);
       now = p.at;
       await store.settle(p.id, p.amount);
     }
@@ -121928,7 +121945,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
     const est = plan.reservations[0]?.estMicroUsd ?? 0;
     if (decision.block !== null || first2 === void 0 || provider2 === void 0) {
       const reason = decision.block?.reason ?? "no-route";
-      if (admitted) schedule(end, r.id, 0);
+      if (admitted) schedule(r, end, 0);
       let scopeValue2 = "";
       if (reason === "budget") {
         const name2 = blockName(plan, f, reason, admission);
@@ -121938,7 +121955,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
       return { ...NOTHING3, kind: "block", decision: compared("block", reason), reason, name: blockName(plan, f, reason, admission), scopeValue: scopeValue2 };
     }
     const cost = replayedCost({ policy: policy2, r, provider: first2.provider, upstreamModel: first2.upstreamModel, estMicroUsd: est, atEstimateMicroUsd: atEstimateCharge(plan, est), ratios, firstSwitch });
-    if (admitted) schedule(end, r.id, cost.chargeMicroUsd);
+    if (admitted) schedule(r, end, cost.chargeMicroUsd);
     return { ...NOTHING3, kind: "forward", decision: compared("forward", null), provider: first2.provider, upstreamModel: first2.upstreamModel, cost };
   };
   const outcomes = [];
@@ -121946,8 +121963,10 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
   const sessions2 = /* @__PURE__ */ new Map();
   for (const { i, at: ms } of admitOrder(window2)) {
     const r = window2[i];
-    await drain(ms);
+    await drain(ms, r);
     now = ms;
+    const seq = r.decision.admitSeq;
+    if (seq !== void 0) lastSeq.set(r.instance, Math.max(seq, lastSeq.get(r.instance) ?? 0));
     const session = r.attribution.session;
     let s2 = null;
     if (session !== null) {
@@ -121984,7 +122003,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
       cuts.push(s2.cut);
     }
   }
-  await drain(Number.POSITIVE_INFINITY);
+  await drain(Number.POSITIVE_INFINITY, null);
   return { outcomes, cuts };
 }
 function totals(outcomes, window2) {
@@ -126827,7 +126846,7 @@ var package_default = {
     typecheck: "tsc --noEmit",
     lint: "oxlint",
     test: "vitest run",
-    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts",
+    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts test/property/store.property.test.ts test/property/admit-concurrency.property.test.ts",
     "test:chaos": "node scripts/local-redis.mjs env TOKENYARD_CHAOS=1 vitest run --no-file-parallelism test/chaos",
     bench: "tsx bench/run.ts",
     soak: "tsx bench/soak.ts",

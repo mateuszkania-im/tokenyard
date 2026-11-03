@@ -59,6 +59,8 @@ export interface TraceRecord {
     /** Not in spec 9.1: server tool uses by price table tool name, as billed. Absent when none. */
     serverToolUses?: Record<string, number>;
     aborted: boolean; settledBy: 'request' | 'sweeper'; overrun: boolean;
+    /** Not in spec 9.1: the writer instance's admit call count when settle was called (V4); replay settles before that instance's admit with a higher admitSeq only. */
+    settleSeq?: number;
     /** Not in spec 9.1: set (true) when the actual cost could not be computed and the reservation estimate was settled instead; `costMicroUsd` is that estimate. */
     settledAtEstimate?: true;
     /** Not in spec 9.1: what the counter store charged the budget levels at settlement (the estimate when the sweeper settled it); absent when nothing was reserved. Warm-up seeds this. */

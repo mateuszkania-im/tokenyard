@@ -178,6 +178,23 @@ interface Pending {
   order: number;
   id: string;
   amount: number;
+  /** The recording instance and its admit count when it settled (absent in older traces). */
+  instance: string;
+  settleSeq: number | undefined;
+}
+
+/**
+ * Whether a pending settle lands before `next`. A settle of the same instance carrying `settleSeq` (the admits the
+ * instance had issued when it called settle) is ordered exactly against that instance's admits, since totalMs is
+ * measured before settle and a later admit can share its millisecond (V4): before an admit numbered `admitSeq` only
+ * when settleSeq is lower; before a record that called no admit only once the instance's admit numbered settleSeq was
+ * replayed (`lastSeq`). Otherwise, and in traces written without settleSeq, the recorded end decides.
+ */
+function settlesBefore(p: Pending, until: number, next: TraceRecord | null, lastSeq: ReadonlyMap<string, number>): boolean {
+  if (p.at > until) return false;
+  if (next === null || p.settleSeq === undefined || p.instance !== next.instance) return true;
+  const seq = next.decision.admitSeq;
+  return seq !== undefined ? p.settleSeq < seq : p.settleSeq <= (lastSeq.get(p.instance) ?? 0);
 }
 
 /**
@@ -198,15 +215,23 @@ async function simulate(
   await store.seed(await warmupEntries(iterate(warm), policy, startMs));
   const pending: Pending[] = [];
   let order = 0;
-  const schedule = (at: number, id: string, amount: number): void => {
-    const p = { at, order: order++, id, amount };
+  const schedule = (r: TraceRecord, at: number, amount: number): void => {
+    const p = { at, order: order++, id: r.id, amount, instance: r.instance, settleSeq: r.outcome.settleSeq };
     let i = pending.length;
     while (i > 0 && (pending[i - 1] as Pending).at > at) i--;
     pending.splice(i, 0, p);
   };
-  const drain = async (until: number): Promise<void> => {
-    while (pending.length > 0 && (pending[0] as Pending).at <= until) {
-      const p = pending.shift() as Pending;
+  /** Highest admitSeq replayed per instance. */
+  const lastSeq = new Map<string, number>();
+  // A settle whose end has come but which the instance called after `next`'s admit stays pending (settlesBefore).
+  const drain = async (until: number, next: TraceRecord | null): Promise<void> => {
+    for (let i = 0; i < pending.length && (pending[i] as Pending).at <= until; ) {
+      const p = pending[i] as Pending;
+      if (!settlesBefore(p, until, next, lastSeq)) {
+        i++;
+        continue;
+      }
+      pending.splice(i, 1);
       now = p.at;
       await store.settle(p.id, p.amount);
     }
@@ -246,7 +271,7 @@ async function simulate(
     const est = plan.reservations[0]?.estMicroUsd ?? 0;
     if (decision.block !== null || first === undefined || provider === undefined) {
       const reason: BlockReason = decision.block?.reason ?? 'no-route';
-      if (admitted) schedule(end, r.id, 0);
+      if (admitted) schedule(r, end, 0);
       let scopeValue = '';
       if (reason === 'budget') {
         const name = blockName(plan, f, reason, admission);
@@ -256,7 +281,7 @@ async function simulate(
       return { ...NOTHING, kind: 'block', decision: compared('block', reason), reason, name: blockName(plan, f, reason, admission), scopeValue };
     }
     const cost = replayedCost({ policy, r, provider: first.provider, upstreamModel: first.upstreamModel, estMicroUsd: est, atEstimateMicroUsd: atEstimateCharge(plan, est), ratios, firstSwitch });
-    if (admitted) schedule(end, r.id, cost.chargeMicroUsd);
+    if (admitted) schedule(r, end, cost.chargeMicroUsd);
     return { ...NOTHING, kind: 'forward', decision: compared('forward', null), provider: first.provider, upstreamModel: first.upstreamModel, cost };
   };
 
@@ -265,8 +290,10 @@ async function simulate(
   const sessions = new Map<string, { index: number; forwarded: boolean; cut: CutSession | null }>();
   for (const { i, at: ms } of admitOrder(window)) {
     const r = window[i] as TraceRecord;
-    await drain(ms);
+    await drain(ms, r);
     now = ms;
+    const seq = r.decision.admitSeq;
+    if (seq !== undefined) lastSeq.set(r.instance, Math.max(seq, lastSeq.get(r.instance) ?? 0));
     const session = r.attribution.session;
     let s: { index: number; forwarded: boolean; cut: CutSession | null } | null = null;
     if (session !== null) {
@@ -304,7 +331,7 @@ async function simulate(
       cuts.push(s.cut);
     }
   }
-  await drain(Number.POSITIVE_INFINITY);
+  await drain(Number.POSITIVE_INFINITY, null);
   return { outcomes, cuts };
 }
 

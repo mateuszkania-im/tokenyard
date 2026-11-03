@@ -259,6 +259,8 @@ export interface RequestOutcome {
   guardrailHits?: GuardrailHit[];
   /** `sweeper` when the reservation was settled by the sweeper at its estimate, not by this request. */
   settledBy?: 'request' | 'sweeper';
+  /** Admits this process had issued when it called settle: replay orders the release against them (V4). */
+  settleSeq?: number;
   /** Actual cost above the reservation (spec 7.4: cannot happen under its premises). */
   overrun?: boolean;
   /** The actual cost could not be computed; the reservation estimate was settled and is `costMicroUsd`. */
@@ -527,6 +529,8 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     o.costMicroUsd = actual;
     o.overrun = (held.plan?.reservations.length ?? 0) > 0 && actual > held.est;
     let result: 'settled' | 'unknown' | 'failed';
+    // totalMs was measured before this call, so a later admit can share its millisecond; the count orders them.
+    o.settleSeq = runtime.admits;
     try {
       result = await withDeadline((deps.store as CounterStore).settle(o.id, actual), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
@@ -1031,6 +1035,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
         deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
         const known = held.known;
         const charge = atEstimateCharge(held.plan, held.est);
+        const settleSeq = runtime.admits;
         void withDeadline(deps.store.settle(id, charge), admitTimeoutMs)
           .then((r) => r === 'settled', () => false)
           .then((settled) => {
@@ -1056,6 +1061,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
                 errorClass: 'internal_error',
                 settledAtEstimate: true,
                 settledBy: swept ? 'sweeper' : 'request',
+                settleSeq,
                 chargedMicroUsd: swept ? held.est : charge,
                 overrun: charge > held.est,
               },

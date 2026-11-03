@@ -161,6 +161,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
       ...(u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {}),
       aborted: o.aborted,
       settledBy: o.settledBy ?? 'request',
+      ...(o.settleSeq !== undefined ? { settleSeq: o.settleSeq } : {}),
       overrun: o.overrun ?? false,
       ...(o.settledAtEstimate ? { settledAtEstimate: true as const } : {}),
       ...(o.boundExceeded ? { boundExceeded: true as const } : {}),
