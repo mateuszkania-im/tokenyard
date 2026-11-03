@@ -4219,11 +4219,12 @@
     }
   ],
   "soak": {
-    "method": "The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state until it has been idle for 24 hours; that cost is measured on its own (Redis keys and bytes per key). A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory. Memory is judged after a 5 minute warm-up: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.",
+    "method": "The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state until it has been idle for 24 hours; that cost is measured on its own (Redis keys and bytes per key). A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory. Memory is judged after a 5 minute warm-up on heap used after a full GC plus external memory: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%; RSS is judged the same way on the gateway minus the mock provider sampled at the same moments (a control process), against 10% of the gateway RSS. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.",
     "thresholds": {
       "warmupS": 300,
       "windowS": 300,
       "memoryGrowthPct": 10,
+      "rssBeyondControlPct": 10,
       "fdSlack": 16,
       "socketSlack": 8,
       "handleSlack": 16,
@@ -4235,7 +4236,7 @@
     },
     "environment": {
       "git": {
-        "commit": "44e3563",
+        "commit": "7da19cb",
         "dirty": false
       },
       "node": "v22.14.0",
@@ -4254,86 +4255,86 @@
       {
         "mode": "memory",
         "gateways": 1,
-        "startedAt": "2026-11-03T09:00:24.097Z",
+        "startedAt": "2026-11-03T18:21:06.711Z",
         "minutes": 45,
         "offeredPerS": 80,
-        "requests": 224305,
+        "requests": 224306,
         "answeredPerS": 83.1,
         "byKind": {
           "secret": {
-            "400 secret": 4563
+            "400 secret": 4681
           },
           "codex": {
-            "200": 32326
+            "200": 32074
           },
           "aux": {
-            "200": 27259
+            "200": 27143
           },
           "product": {
-            "200": 9092
-          },
-          "abort": {
-            "aborted-by-client": 9042
+            "200": 9144
           },
           "hostile": {
-            "200": 13621
+            "200": 13701
           },
           "sub": {
-            "200": 27259
+            "200": 27191
           },
           "bad-model": {
-            "403 model": 4492
+            "403 model": 4433
           },
           "main": {
-            "200": 67986
+            "200": 68427
           },
           "hostile-model": {
-            "403 model": 4449
+            "403 model": 4549
+          },
+          "abort": {
+            "aborted-by-client": 8931
           },
           "fault": {
-            "200": 1627,
-            "500": 1765,
-            "529": 1746,
-            "ECONNRESET": 1710
+            "200": 1663,
+            "500": 1688,
+            "529": 1712,
+            "ECONNRESET": 1702
           },
           "codex-sync": {
-            "200": 6921
+            "200": 6884
           },
           "compaction": {
-            "200": 2351
+            "200": 2287
           },
           "noisy": {
-            "200": 5427,
+            "200": 5413,
             "429 streams": 176,
-            "429 rate": 1965
+            "429 rate": 1979
           },
           "heavy": {
-            "200": 395,
-            "429 budget": 133
+            "200": 399,
+            "429 budget": 129
           }
         },
         "gatewayCpuPct": [
-          47.1
+          40.5
         ],
         "socketErrorsOutsideAborts": 0,
         "passed": true,
         "verdicts": [
           {
-            "check": "soak0001: RSS growth",
+            "check": "soak0001: heap after GC plus external memory growth",
             "threshold": "trend and last 5 min against first, each under 10%",
-            "measured": "124.53 to 116.64 MB; trend -4.02% (-7.52 MB/h), windows -6.33% (n = 80)",
+            "measured": "44.33 to 41.35 MB; trend -1.26% (-0.84 MB/h), windows -6.72% (n = 80)",
             "ok": true
           },
           {
-            "check": "soak0001: heap used after GC growth",
-            "threshold": "trend and last 5 min against first, each under 10%",
-            "measured": "29.04 to 29.61 MB; trend 1.96% (0.88 MB/h), windows 1.97% (n = 80)",
+            "check": "soak0001: RSS growth beyond the control process",
+            "threshold": "gateway RSS minus the control's: trend and last 5 min against first, each under 10% of the gateway's RSS",
+            "measured": "gateway minus control 11.34 to 14.29 MB; trend 3.81%, windows 1.81% of 162.98 MB (n = 80)",
             "ok": true
           },
           {
             "check": "soak0001: open fds during load",
             "threshold": "trend over the run under 16",
-            "measured": "58 to 97, trend -3",
+            "measured": "58 to 122, trend 3.8",
             "ok": true
           },
           {
@@ -4357,13 +4358,13 @@
           {
             "check": "soak0001: metric series",
             "threshold": "at most 10 new after warm-up, under 1000 in all",
-            "measured": "67 after warm-up, 67 at the end, 67 at most",
+            "measured": "67 after warm-up, 68 at the end, 68 at most",
             "ok": true
           },
           {
             "check": "soak0001: event loop delay p99",
             "threshold": "under 100 ms in every sample after warm-up",
-            "measured": "5.33 ms at most",
+            "measured": "2.19 ms at most",
             "ok": true
           },
           {
@@ -4385,15 +4386,21 @@
             "ok": true
           },
           {
-            "check": "client total time p50 drift (2xx)",
+            "check": "client total time p50 drift (auxiliary requests, 2xx)",
             "threshold": "last 5 min against first under 25%",
-            "measured": "82.2 to 81.92 ms (-0.34%)",
+            "measured": "81.52 to 81.39 ms (-0.16%)",
             "ok": true
           },
           {
             "check": "stream slots after the load",
             "threshold": "every key admits its full concurrent stream limit, and one more is refused",
             "measured": "320 of 320 admitted over 40 keys, 40 of 40 extra refused",
+            "ok": true
+          },
+          {
+            "check": "session taint",
+            "threshold": "a secret taints the session",
+            "measured": "clean follow-up refused (taint)",
             "ok": true
           },
           {
@@ -4408,196 +4415,196 @@
             "instance": "soak0001",
             "idleBefore": {
               "t": -1,
-              "rssMb": 81.03,
-              "heapMb": 26.27,
-              "externalMb": 4.43,
+              "rssMb": 100.66,
+              "heapMb": 26.55,
+              "externalMb": 4.23,
               "fds": 10,
               "tcpSockets": 3,
               "handles": 5,
-              "eventLoopP50Ms": 0.62,
-              "eventLoopP99Ms": 4.13,
-              "eventLoopMaxMs": 136.15,
+              "eventLoopP50Ms": 0.72,
+              "eventLoopP99Ms": 2.94,
+              "eventLoopMaxMs": 63.2,
               "series": 59,
               "reservationsOpen": 0,
-              "traceFiles": 4,
-              "traceBytes": 252045
+              "traceFiles": 2,
+              "traceBytes": 260422
             },
             "idleAfter": {
               "t": 2730,
-              "rssMb": 47.56,
-              "heapMb": 28.79,
-              "externalMb": 3.62,
+              "rssMb": 86.86,
+              "heapMb": 28.72,
+              "externalMb": 3.78,
               "fds": 10,
               "tcpSockets": 3,
               "handles": 5,
               "eventLoopP50Ms": 1.03,
-              "eventLoopP99Ms": 2.28,
-              "eventLoopMaxMs": 21.95,
-              "series": 67,
+              "eventLoopP99Ms": 1.37,
+              "eventLoopMaxMs": 19.39,
+              "series": 68,
               "reservationsOpen": 0,
               "traceFiles": 4,
-              "traceBytes": 360787314
+              "traceBytes": 371582427
             },
             "traceHours": 2,
-            "traceMbPerHourOfLoad": 458.4,
-            "cpuPct": 47.1,
+            "traceMbPerHourOfLoad": 472.2,
+            "cpuPct": 40.5,
             "exitCode": 0,
             "unexpectedStderr": [],
             "every5min": [
               {
                 "t": 300,
-                "rssMb": 105.88,
-                "heapMb": 28.92,
-                "externalMb": 10.59,
-                "fds": 66,
-                "tcpSockets": 59,
-                "handles": 61,
-                "eventLoopP50Ms": 0.11,
-                "eventLoopP99Ms": 4.31,
-                "eventLoopMaxMs": 35.15,
+                "rssMb": 165.64,
+                "heapMb": 29.39,
+                "externalMb": 10.85,
+                "fds": 75,
+                "tcpSockets": 68,
+                "handles": 67,
+                "eventLoopP50Ms": 0.18,
+                "eventLoopP99Ms": 1.38,
+                "eventLoopMaxMs": 9.4,
                 "series": 67,
-                "reservationsOpen": 24,
-                "traceFiles": 4,
-                "traceBytes": 40484307
+                "reservationsOpen": 27,
+                "traceFiles": 2,
+                "traceBytes": 41693972
               },
               {
                 "t": 600,
-                "rssMb": 107.88,
-                "heapMb": 28.87,
-                "externalMb": 9.64,
-                "fds": 62,
-                "tcpSockets": 55,
-                "handles": 47,
-                "eventLoopP50Ms": 0.08,
-                "eventLoopP99Ms": 3,
-                "eventLoopMaxMs": 8.61,
+                "rssMb": 199.91,
+                "heapMb": 29.38,
+                "externalMb": 10.82,
+                "fds": 63,
+                "tcpSockets": 56,
+                "handles": 51,
+                "eventLoopP50Ms": 0.15,
+                "eventLoopP99Ms": 1.43,
+                "eventLoopMaxMs": 8.09,
                 "series": 67,
-                "reservationsOpen": 18,
-                "traceFiles": 4,
-                "traceBytes": 80500116
+                "reservationsOpen": 20,
+                "traceFiles": 2,
+                "traceBytes": 82843879
               },
               {
                 "t": 900,
-                "rssMb": 114.61,
-                "heapMb": 29.34,
-                "externalMb": 7.16,
-                "fds": 66,
-                "tcpSockets": 59,
-                "handles": 56,
-                "eventLoopP50Ms": 0.11,
-                "eventLoopP99Ms": 3.54,
-                "eventLoopMaxMs": 43.58,
+                "rssMb": 161.23,
+                "heapMb": 29.59,
+                "externalMb": 8.41,
+                "fds": 70,
+                "tcpSockets": 63,
+                "handles": 59,
+                "eventLoopP50Ms": 0.17,
+                "eventLoopP99Ms": 1.33,
+                "eventLoopMaxMs": 17.05,
                 "series": 67,
-                "reservationsOpen": 23,
-                "traceFiles": 4,
-                "traceBytes": 120197963
+                "reservationsOpen": 25,
+                "traceFiles": 2,
+                "traceBytes": 123703630
               },
               {
                 "t": 1200,
-                "rssMb": 108.3,
-                "heapMb": 29.38,
-                "externalMb": 7.29,
-                "fds": 64,
-                "tcpSockets": 57,
-                "handles": 53,
-                "eventLoopP50Ms": 0.12,
-                "eventLoopP99Ms": 5.33,
-                "eventLoopMaxMs": 48,
+                "rssMb": 154.63,
+                "heapMb": 29.7,
+                "externalMb": 9.87,
+                "fds": 61,
+                "tcpSockets": 54,
+                "handles": 44,
+                "eventLoopP50Ms": 0.16,
+                "eventLoopP99Ms": 1.67,
+                "eventLoopMaxMs": 9.64,
                 "series": 67,
-                "reservationsOpen": 19,
-                "traceFiles": 4,
-                "traceBytes": 159834564
+                "reservationsOpen": 16,
+                "traceFiles": 2,
+                "traceBytes": 164531640
               },
               {
                 "t": 1500,
-                "rssMb": 117.19,
-                "heapMb": 29.29,
-                "externalMb": 7.98,
-                "fds": 59,
-                "tcpSockets": 52,
-                "handles": 41,
-                "eventLoopP50Ms": 0.09,
-                "eventLoopP99Ms": 4.2,
-                "eventLoopMaxMs": 59.66,
+                "rssMb": 162.05,
+                "heapMb": 29.85,
+                "externalMb": 11.58,
+                "fds": 62,
+                "tcpSockets": 55,
+                "handles": 45,
+                "eventLoopP50Ms": 0.17,
+                "eventLoopP99Ms": 1.42,
+                "eventLoopMaxMs": 6.48,
                 "series": 67,
-                "reservationsOpen": 15,
-                "traceFiles": 4,
-                "traceBytes": 199907670
+                "reservationsOpen": 18,
+                "traceFiles": 2,
+                "traceBytes": 205775854
               },
               {
                 "t": 1800,
-                "rssMb": 145.91,
-                "heapMb": 29.61,
-                "externalMb": 8.61,
-                "fds": 71,
-                "tcpSockets": 64,
-                "handles": 57,
-                "eventLoopP50Ms": 0.08,
-                "eventLoopP99Ms": 3.19,
-                "eventLoopMaxMs": 18.33,
+                "rssMb": 182.41,
+                "heapMb": 29.85,
+                "externalMb": 11.65,
+                "fds": 69,
+                "tcpSockets": 62,
+                "handles": 53,
+                "eventLoopP50Ms": 0.16,
+                "eventLoopP99Ms": 1.67,
+                "eventLoopMaxMs": 6.64,
                 "series": 67,
-                "reservationsOpen": 24,
-                "traceFiles": 4,
-                "traceBytes": 239892302
+                "reservationsOpen": 22,
+                "traceFiles": 2,
+                "traceBytes": 246927546
               },
               {
                 "t": 2100,
-                "rssMb": 114.13,
-                "heapMb": 29.6,
-                "externalMb": 7.26,
-                "fds": 67,
-                "tcpSockets": 60,
+                "rssMb": 173.3,
+                "heapMb": 30.1,
+                "externalMb": 10.54,
+                "fds": 68,
+                "tcpSockets": 61,
                 "handles": 58,
-                "eventLoopP50Ms": 0.08,
-                "eventLoopP99Ms": 3.32,
-                "eventLoopMaxMs": 18.3,
+                "eventLoopP50Ms": 0.17,
+                "eventLoopP99Ms": 1.45,
+                "eventLoopMaxMs": 4.82,
                 "series": 67,
                 "reservationsOpen": 25,
-                "traceFiles": 4,
-                "traceBytes": 280145664
+                "traceFiles": 2,
+                "traceBytes": 288449928
               },
               {
                 "t": 2400,
-                "rssMb": 134.92,
-                "heapMb": 29.7,
-                "externalMb": 8.93,
-                "fds": 71,
-                "tcpSockets": 64,
-                "handles": 63,
-                "eventLoopP50Ms": 0.08,
-                "eventLoopP99Ms": 3.53,
-                "eventLoopMaxMs": 35.38,
+                "rssMb": 118.89,
+                "heapMb": 29.9,
+                "externalMb": 6.66,
+                "fds": 77,
+                "tcpSockets": 70,
+                "handles": 61,
+                "eventLoopP50Ms": 0.07,
+                "eventLoopP99Ms": 2.19,
+                "eventLoopMaxMs": 182.28,
                 "series": 67,
-                "reservationsOpen": 27,
+                "reservationsOpen": 28,
                 "traceFiles": 4,
-                "traceBytes": 320181539
+                "traceBytes": 329715148
               },
               {
                 "t": 2670,
-                "rssMb": 108.59,
-                "heapMb": 29.33,
-                "externalMb": 8.93,
-                "fds": 59,
-                "tcpSockets": 52,
-                "handles": 37,
+                "rssMb": 142.3,
+                "heapMb": 29.98,
+                "externalMb": 13.06,
+                "fds": 66,
+                "tcpSockets": 59,
+                "handles": 43,
                 "eventLoopP50Ms": 0.04,
-                "eventLoopP99Ms": 1.3,
-                "eventLoopMaxMs": 70.54,
+                "eventLoopP99Ms": 1.11,
+                "eventLoopMaxMs": 8.15,
                 "series": 67,
-                "reservationsOpen": 12,
+                "reservationsOpen": 16,
                 "traceFiles": 4,
-                "traceBytes": 356432938
+                "traceBytes": 367103860
               }
             ]
           }
         ],
         "mockRssMb": {
-          "first": 115,
-          "last": 92
+          "first": 140,
+          "last": 117
         },
         "redis": null,
         "git": {
-          "commit": "07fd573",
+          "commit": "7da19cb",
           "dirty": false
         }
       },
