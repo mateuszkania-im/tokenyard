@@ -37,7 +37,12 @@ jobs:
       - run: npm ci
       # typecheck, lint, check:bundle, check:secrets and bench:check (README numbers match bench/results.json)
       - run: npm run check
-      - run: npm test
+      # Vitest 5 runs on Node ^22.12 or 24 only (its engines; on 20 its reporter needs Map.groupBy), so Node 20.19,
+      # the oldest the package supports, runs the shipped bundle instead: packed, installed and run (test:pack).
+      - if: matrix.node != '20.19'
+        run: npm test
+      - if: matrix.node == '20.19'
+        run: npm run test:pack
       # The published tarball, scanned entry by entry (the files list decides what ships, not git).
       - name: pack and scan the npm tarball
         shell: bash
