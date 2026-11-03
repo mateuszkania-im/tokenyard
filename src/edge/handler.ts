@@ -1,9 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReservedRecord, TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
 import { pseudonym } from '../guardrails/hmac.js';
+import { redactCredentialEcho } from '../guardrails/credential-echo.js';
 import { PII_RULES } from '../guardrails/pii.js';
 import { type RedactionHit, redactionHits, redactProductBody } from '../guardrails/redact.js';
 import { DEFAULT_RULES } from '../guardrails/rules.js';
@@ -306,6 +308,56 @@ function providerCredential(p: ProviderSpec, env: NodeJS.ProcessEnv): { header: 
   const value = env[p.credential.env];
   if (!value) return null; // upstream answers 401, which reaches the client unchanged
   return p.format === 'anthropic' ? { header: 'x-api-key', value } : { header: 'authorization', value: `Bearer ${value}` };
+}
+
+/** Error bodies up to this size are searched for an echo of the provider key (B2); a longer one passes beyond it unchanged. */
+const ERROR_BODY_SCAN_BYTES = 64 * 1024;
+
+/** The first `cap` bytes of `s` (or all of it, `ended`), leaving the rest unread in `s`. */
+function readUpTo(s: Readable, cap: number): Promise<{ bytes: Buffer; ended: boolean }> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let n = 0;
+    const done = (ended: boolean): void => {
+      s.off('data', onData);
+      s.off('end', onEnd);
+      s.off('error', onEnd);
+      if (!ended) s.pause();
+      resolve({ bytes: Buffer.concat(chunks), ended });
+    };
+    const onData = (c: Buffer): void => {
+      chunks.push(c);
+      n += c.length;
+      if (n > cap) done(false);
+    };
+    const onEnd = (): void => done(true);
+    s.on('data', onData);
+    s.once('end', onEnd);
+    s.once('error', onEnd);
+  });
+}
+
+async function* prepend(first: Buffer, rest: Readable): AsyncGenerator<Buffer> {
+  yield first;
+  yield* rest;
+}
+
+/**
+ * The body to send the client. In API mode every client shares the operator's key, so a non-2xx answer that quotes it
+ * (a 401 echoing the header, OpenAI's masked `sk-proj-****WXYZ`) has the key and its masked forms replaced within its
+ * first 64 KiB, and `headers` gets the new content-length (B2). Everything else is the upstream stream, untouched.
+ */
+async function withoutCredentialEcho(up: UpstreamResponse, p: ProviderSpec, env: NodeJS.ProcessEnv, headers: Record<string, string | string[]>): Promise<Readable> {
+  const key = p.credential === 'passthrough' || (up.status >= 200 && up.status < 300) ? undefined : env[p.credential.env];
+  if (!key) return up.body;
+  const head = await readUpTo(up.body, ERROR_BODY_SCAN_BYTES);
+  const redacted = redactCredentialEcho(head.bytes, key);
+  if (redacted !== null) {
+    if (head.ended) headers['content-length'] = String(redacted.length);
+    else delete headers['content-length'];
+  }
+  const first = redacted ?? head.bytes;
+  return head.ended ? Readable.from([first]) : Readable.from(prepend(first, up.body));
 }
 
 function extractFeatures(surface: Surface, body: Buffer): ExtractedFeatures {
@@ -820,20 +872,19 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // 10. First response headers: written and flushed at once, never compressed.
   const upstreamHeadersAt = deps.clock();
   const ttfbMs = upstreamHeadersAt - startedAt;
-  res.writeHead(
-    up.status,
-    clientHeaders(up.headers, {
-      'x-tokenyard-request-id': id,
-      'x-tokenyard-policy-revision': policy.revision,
-      'X-Accel-Buffering': 'no',
-    }),
+  const outHeaders = clientHeaders(
+    up.headers,
+    { 'x-tokenyard-request-id': id, 'x-tokenyard-policy-revision': policy.revision, 'X-Accel-Buffering': 'no' },
+    answered.credential === 'passthrough' ? 'passthrough' : 'api',
   );
+  const clientBody = await withoutCredentialEcho(up, answered, deps.env ?? process.env, outHeaders);
+  res.writeHead(up.status, outHeaders);
   res.flushHeaders();
 
-  // 11. Body: every chunk goes on unchanged before it is parsed; backpressure through pipeline.
+  // 11. Body: every chunk goes on unchanged before it is parsed (an API-mode error body aside); backpressure through pipeline.
   const tap = usageTap(surface, up, deps.bodyCapBytes);
   try {
-    await pipeline(up.body, createTee(tap.onChunk), res);
+    await pipeline(clientBody, createTee(tap.onChunk), res);
   } catch {
     // Client abort or upstream drop: the client sees exactly what upstream sent, truncated; nothing is synthesised.
   }

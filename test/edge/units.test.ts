@@ -47,6 +47,7 @@ test('clientHeaders drops hop-by-hop and upstream x-tokenyard-*, keeps the rest'
   const h = clientHeaders(
     { connection: 'keep-alive', 'transfer-encoding': 'chunked', 'x-tokenyard-request-id': 'spoof', 'retry-after': '3', 'set-cookie': ['a', 'b'] },
     { 'x-tokenyard-request-id': 'r1', 'X-Accel-Buffering': 'no' },
+    'api',
   );
   expect(h).toEqual({ 'retry-after': '3', 'set-cookie': ['a', 'b'], 'x-tokenyard-request-id': 'r1', 'X-Accel-Buffering': 'no' });
 });

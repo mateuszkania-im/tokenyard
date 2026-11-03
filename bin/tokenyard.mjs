@@ -1502,6 +1502,25 @@ var init_writer = __esm({
   }
 });
 
+// src/guardrails/credential-echo.ts
+function redactCredentialEcho(body, key) {
+  if (key.length < MIN_KEY_LENGTH) return null;
+  const text2 = body.toString("utf8");
+  const masked = new RegExp(`(?:${escapeRe(key.slice(0, 3))}[A-Za-z0-9_-]*)?${MASK}${escapeRe(key.slice(-4))}`, "g");
+  const out = text2.split(key).join(REDACTED).replace(masked, REDACTED);
+  return out === text2 ? null : Buffer.from(out, "utf8");
+}
+var MIN_KEY_LENGTH, MASK, REDACTED, escapeRe;
+var init_credential_echo = __esm({
+  "src/guardrails/credential-echo.ts"() {
+    "use strict";
+    MIN_KEY_LENGTH = 16;
+    MASK = "(?:[*.\\u2022]{3,}|\\u2026)";
+    REDACTED = "[redacted]";
+    escapeRe = (s2) => s2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+});
+
 // src/guardrails/pii.ts
 function peselValid(s2) {
   if (!/^\d{11}$/.test(s2)) return false;
@@ -43125,7 +43144,7 @@ var require_readable = __commonJS({
   "node_modules/undici/lib/api/readable.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable: Readable4 } = __require("node:stream");
+    var { Readable: Readable5 } = __require("node:stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError: InvalidArgumentError2, AbortError } = require_errors2();
     var util = require_util();
     var { ReadableStreamFrom } = require_util();
@@ -43139,7 +43158,7 @@ var require_readable = __commonJS({
     var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop = () => {
     };
-    var BodyReadable = class extends Readable4 {
+    var BodyReadable = class extends Readable5 {
       /**
        * @param {object} opts
        * @param {(this: Readable, size: number) => void} opts.resume
@@ -43528,7 +43547,7 @@ var require_api_request = __commonJS({
     "use strict";
     var assert2 = __require("node:assert");
     var { AsyncResource } = __require("node:async_hooks");
-    var { Readable: Readable4 } = require_readable();
+    var { Readable: Readable5 } = require_readable();
     var { InvalidArgumentError: InvalidArgumentError2, RequestAbortedError } = require_errors2();
     var util = require_util();
     function noop() {
@@ -43609,7 +43628,7 @@ var require_api_request = __commonJS({
         const parsedHeaders = responseHeaders === "raw" ? util.parseHeaders(rawHeaders) : headers;
         const contentType = parsedHeaders["content-type"];
         const contentLength = parsedHeaders["content-length"];
-        const res = new Readable4({
+        const res = new Readable5({
           resume,
           abort,
           contentType,
@@ -43918,7 +43937,7 @@ var require_api_pipeline = __commonJS({
   "node_modules/undici/lib/api/api-pipeline.js"(exports, module) {
     "use strict";
     var {
-      Readable: Readable4,
+      Readable: Readable5,
       Duplex,
       PassThrough
     } = __require("node:stream");
@@ -43934,7 +43953,7 @@ var require_api_pipeline = __commonJS({
     function noop() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
-    var PipelineRequest = class extends Readable4 {
+    var PipelineRequest = class extends Readable5 {
       constructor() {
         super({ autoDestroy: true });
         this[kResume] = null;
@@ -43951,7 +43970,7 @@ var require_api_pipeline = __commonJS({
         callback(err);
       }
     };
-    var PipelineResponse = class extends Readable4 {
+    var PipelineResponse = class extends Readable5 {
       constructor(resume) {
         super({ autoDestroy: true });
         this[kResume] = resume;
@@ -48969,7 +48988,7 @@ var require_cache2 = __commonJS({
   "node_modules/undici/lib/interceptor/cache.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable: Readable4 } = __require("node:stream");
+    var { Readable: Readable5 } = __require("node:stream");
     var util = require_util();
     var CacheHandler = require_cache_handler();
     var MemoryCacheStore = require_memory_cache_store();
@@ -49138,7 +49157,7 @@ var require_cache2 = __commonJS({
       return dispatch(opts, new CacheHandler(globalOpts, cacheKey, handler));
     }
     function sendCachedValue(handler, opts, result, age, context2, isStale2) {
-      const stream = util.isStream(result.body) ? result.body : Readable4.from(result.body ?? []);
+      const stream = util.isStream(result.body) ? result.body : Readable5.from(result.body ?? []);
       assert2(!stream.destroyed, "stream should not be destroyed");
       assert2(!stream.readableDidRead, "stream should not be readableDidRead");
       const controller = {
@@ -52534,7 +52553,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants3();
     var EE = __require("node:events");
-    var { Readable: Readable4, pipeline: pipeline3, finished, isErrored, isReadable } = __require("node:stream");
+    var { Readable: Readable5, pipeline: pipeline3, finished, isErrored, isReadable } = __require("node:stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
@@ -53519,7 +53538,7 @@ var require_fetch = __commonJS({
                   }
                 }
               }
-              this.body = new Readable4({ read: resume });
+              this.body = new Readable5({ read: resume });
               const onError = this.onError.bind(this);
               resolve5({
                 status,
@@ -58346,7 +58365,7 @@ function upstreamHeaders(inbound, opts) {
     if (value === void 0) continue;
     if (drop(name2) || name2 === "host" || name2 === "content-length" || name2 === "expect" || name2 === "accept-encoding") continue;
     if (name2.startsWith("x-tokenyard-")) continue;
-    if (opts.mode === "api" && (name2 === "authorization" || name2 === "x-api-key")) continue;
+    if (opts.mode === "api" && (name2 === "authorization" || name2 === "x-api-key" || ACCOUNT_HEADERS.has(name2))) continue;
     if (opts.clientKeyHeaders?.some((h) => h === name2)) continue;
     out[name2] = value;
   }
@@ -58355,16 +58374,17 @@ function upstreamHeaders(inbound, opts) {
   out["accept-encoding"] = "identity";
   return out;
 }
-function clientHeaders(up, extra) {
+function clientHeaders(up, extra, mode) {
   const drop = hopByHop(up);
   const out = {};
   for (const [name2, value] of Object.entries(up)) {
     if (value === void 0 || drop(name2) || name2.startsWith("x-tokenyard-")) continue;
+    if (mode === "api" && ACCOUNT_HEADERS.has(name2)) continue;
     out[name2] = value;
   }
   return { ...out, ...extra };
 }
-var HOP_BY_HOP;
+var HOP_BY_HOP, ACCOUNT_HEADERS;
 var init_headers = __esm({
   "src/edge/headers.ts"() {
     "use strict";
@@ -58377,6 +58397,7 @@ var init_headers = __esm({
       "upgrade",
       "http2-settings"
     ]);
+    ACCOUNT_HEADERS = /* @__PURE__ */ new Set(["anthropic-organization-id", "openai-organization", "openai-project"]);
   }
 });
 
@@ -58727,6 +58748,7 @@ __export(handler_exports, {
   createHandler: () => createHandler
 });
 import { randomBytes as randomBytes3 } from "node:crypto";
+import { Readable as Readable2 } from "node:stream";
 import { pipeline } from "node:stream/promises";
 function emitTelemetry(deps, policy2, rec, attempts) {
   try {
@@ -58809,6 +58831,44 @@ function providerCredential(p, env) {
   const value = env[p.credential.env];
   if (!value) return null;
   return p.format === "anthropic" ? { header: "x-api-key", value } : { header: "authorization", value: `Bearer ${value}` };
+}
+function readUpTo(s2, cap2) {
+  return new Promise((resolve5) => {
+    const chunks = [];
+    let n2 = 0;
+    const done = (ended) => {
+      s2.off("data", onData);
+      s2.off("end", onEnd);
+      s2.off("error", onEnd);
+      if (!ended) s2.pause();
+      resolve5({ bytes: Buffer.concat(chunks), ended });
+    };
+    const onData = (c) => {
+      chunks.push(c);
+      n2 += c.length;
+      if (n2 > cap2) done(false);
+    };
+    const onEnd = () => done(true);
+    s2.on("data", onData);
+    s2.once("end", onEnd);
+    s2.once("error", onEnd);
+  });
+}
+async function* prepend(first2, rest) {
+  yield first2;
+  yield* rest;
+}
+async function withoutCredentialEcho(up, p, env, headers) {
+  const key = p.credential === "passthrough" || up.status >= 200 && up.status < 300 ? void 0 : env[p.credential.env];
+  if (!key) return up.body;
+  const head = await readUpTo(up.body, ERROR_BODY_SCAN_BYTES);
+  const redacted = redactCredentialEcho(head.bytes, key);
+  if (redacted !== null) {
+    if (head.ended) headers["content-length"] = String(redacted.length);
+    else delete headers["content-length"];
+  }
+  const first2 = redacted ?? head.bytes;
+  return head.ended ? Readable2.from([first2]) : Readable2.from(prepend(first2, up.body));
 }
 function extractFeatures(surface, body) {
   if (surface === "anthropic-count-tokens") return extractCountTokensFeatures(body);
@@ -59182,18 +59242,17 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   }
   const upstreamHeadersAt = deps.clock();
   const ttfbMs = upstreamHeadersAt - startedAt;
-  res.writeHead(
-    up.status,
-    clientHeaders(up.headers, {
-      "x-tokenyard-request-id": id,
-      "x-tokenyard-policy-revision": policy2.revision,
-      "X-Accel-Buffering": "no"
-    })
+  const outHeaders = clientHeaders(
+    up.headers,
+    { "x-tokenyard-request-id": id, "x-tokenyard-policy-revision": policy2.revision, "X-Accel-Buffering": "no" },
+    answered.credential === "passthrough" ? "passthrough" : "api"
   );
+  const clientBody = await withoutCredentialEcho(up, answered, deps.env ?? process.env, outHeaders);
+  res.writeHead(up.status, outHeaders);
   res.flushHeaders();
   const tap = usageTap(surface, up, deps.bodyCapBytes);
   try {
-    await pipeline(up.body, createTee(tap.onChunk), res);
+    await pipeline(clientBody, createTee(tap.onChunk), res);
   } catch {
   }
   await settleAndTrace(deps, runtime, policy2, held, {
@@ -59288,11 +59347,12 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, ERROR_BODY_SCAN_BYTES, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
     init_hmac();
+    init_credential_echo();
     init_pii();
     init_redact();
     init_rules();
@@ -59336,6 +59396,7 @@ var init_handler = __esm({
       reason: d.block?.reason ?? null,
       chain: d.plan.chain.map((c) => c.provider)
     });
+    ERROR_BODY_SCAN_BYTES = 64 * 1024;
     totalInput = (u, surface) => u.input + u.cacheRead + (surface === "openai-responses" ? 0 : u.cacheWrite5m + u.cacheWrite1h);
     isJson = (b) => {
       try {
@@ -79220,8 +79281,8 @@ var require_linked_list = __commonJS({
           value
         };
       }
-      add(value, prepend = false) {
-        return prepend ? this.unshift(value) : this.push(value);
+      add(value, prepend2 = false) {
+        return prepend2 ? this.unshift(value) : this.push(value);
       }
       shift() {
         if (this.#head === void 0)
@@ -119946,7 +120007,7 @@ var init_is_export_retryable = __esm({
 
 // node_modules/@opentelemetry/otlp-exporter-base/build/esm/transport/http-transport-utils.js
 import * as zlib from "zlib";
-import { Readable as Readable2 } from "stream";
+import { Readable as Readable3 } from "stream";
 function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, data, timeoutMillis) {
   return new Promise((resolve5) => {
     const parsedUrl = new URL(url2);
@@ -120048,7 +120109,7 @@ function compressAndSend(req, compression, data, onError) {
   dataStream.pipe(req).on("error", onError);
 }
 function readableFromUint8Array(buff) {
-  const readable = new Readable2();
+  const readable = new Readable3();
   readable.push(buff);
   readable.push(null);
   return readable;
@@ -122419,7 +122480,7 @@ __export(main_exports, {
 });
 import { appendFile, readFile as readFile2 } from "node:fs/promises";
 import { join as join10 } from "node:path";
-import { Readable as Readable3, Transform as Transform2 } from "node:stream";
+import { Readable as Readable4, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 async function readEvent(env) {
   const path3 = env.GITHUB_EVENT_PATH;
@@ -122448,7 +122509,7 @@ async function download(url2, token, root, dest) {
       cb(seen > MAX_TRACES_BYTES ? new Error("traces download is larger than 512 MiB") : null, chunk);
     }
   });
-  await pipeline2(Readable3.fromWeb(res.body), cap2, await createWriteStreamUnder(root, dest));
+  await pipeline2(Readable4.fromWeb(res.body), cap2, await createWriteStreamUnder(root, dest));
 }
 function clip(body) {
   if (body.length <= MAX_COMMENT) return body;

@@ -12,6 +12,12 @@ const HOP_BY_HOP = new Set([
   'http2-settings',
 ]);
 
+/**
+ * Provider account selectors and identifiers. In API mode the account is the operator's: a client must not choose the
+ * organization or project the operator's key bills (C6), nor learn the operator's account ids from answers (B2).
+ */
+const ACCOUNT_HEADERS = new Set(['anthropic-organization-id', 'openai-organization', 'openai-project']);
+
 /** Hop-by-hop headers: the fixed list, `proxy-*`, and any header named in `Connection`. */
 function hopByHop(h: IncomingHttpHeaders): (name: string) => boolean {
   const listed = new Set<string>();
@@ -27,7 +33,8 @@ function hopByHop(h: IncomingHttpHeaders): (name: string) => boolean {
  * value pass verbatim. Dropped: hop-by-hop, `host` (set to the upstream host), `content-length`
  * (recomputed by the HTTP client from the body sent, which differs only after a model rewrite), `expect` (answered by this server),
  * `accept-encoding` (set to `identity` so the tee parses plain text), `x-tokenyard-*`, and in
- * API mode both inbound credential headers, replaced by the provider credential. In passthrough mode
+ * API mode both inbound credential headers, replaced by the provider credential, and the account selectors
+ * `openai-organization` and `openai-project`. In passthrough mode
  * the credential headers stay (the OAuth value goes upstream unchanged) except one that carries a tokenyard key.
  */
 export function upstreamHeaders(
@@ -46,7 +53,7 @@ export function upstreamHeaders(
     if (value === undefined) continue;
     if (drop(name) || name === 'host' || name === 'content-length' || name === 'expect' || name === 'accept-encoding') continue;
     if (name.startsWith('x-tokenyard-')) continue;
-    if (opts.mode === 'api' && (name === 'authorization' || name === 'x-api-key')) continue;
+    if (opts.mode === 'api' && (name === 'authorization' || name === 'x-api-key' || ACCOUNT_HEADERS.has(name))) continue;
     if (opts.clientKeyHeaders?.some((h) => h === name)) continue;
     out[name] = value;
   }
@@ -59,13 +66,15 @@ export function upstreamHeaders(
 /**
  * Headers towards the client: everything from upstream except hop-by-hop ones (so `retry-after`,
  * `x-should-retry` and `anthropic-ratelimit-unified-*` pass unchanged), with upstream `x-tokenyard-*`
- * replaced by tokenyard's own `extra` headers.
+ * replaced by tokenyard's own `extra` headers. In API mode the provider account ids (`anthropic-organization-id`,
+ * `openai-organization`, `openai-project`) are dropped too: they name the operator's account, not the client's.
  */
-export function clientHeaders(up: IncomingHttpHeaders, extra: Record<string, string>): HeaderMap {
+export function clientHeaders(up: IncomingHttpHeaders, extra: Record<string, string>, mode: 'api' | 'passthrough'): HeaderMap {
   const drop = hopByHop(up);
   const out: HeaderMap = {};
   for (const [name, value] of Object.entries(up)) {
     if (value === undefined || drop(name) || name.startsWith('x-tokenyard-')) continue;
+    if (mode === 'api' && ACCOUNT_HEADERS.has(name)) continue;
     out[name] = value;
   }
   return { ...out, ...extra };
