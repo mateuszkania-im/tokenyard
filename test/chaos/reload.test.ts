@@ -2,7 +2,7 @@
 // section not written yet) must never become the active policy (Task 11 minor), a corrupted bundle, an empty file and a
 // flapping policy URL keep the last good policy serving, and requests in flight settle cleanly through every swap.
 import { renameSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { Agent, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
@@ -114,12 +114,21 @@ async function gatewayOn(l: PolicyLoader) {
   return { url: g.url, memory, records };
 }
 
+/**
+ * `n` requests spread over 300 ms. At most 64 connections are open at once: macOS accepts at most 128 pending
+ * connections per listener (kern.ipc.somaxconn), and with 300 at once a busy machine reset some before the gateway
+ * read them (ECONNRESET, status 0), which says nothing about reloads.
+ */
 async function load(url: string, n: number, prefix: string): Promise<number[]> {
-  const out = await Promise.all(Array.from({ length: n }, async (_, i) => {
-    await sleep((i % 50) * 6);
-    return (await chaosRequest(url, `${prefix}${i}`, chatBody(`${prefix}${i}`))).status ?? 0;
-  }));
-  return out;
+  const agent = new Agent({ keepAlive: false, maxSockets: 64 });
+  try {
+    return await Promise.all(Array.from({ length: n }, async (_, i) => {
+      await sleep((i % 50) * 6);
+      return (await chaosRequest(url, `${prefix}${i}`, chatBody(`${prefix}${i}`), { kind: 'normal' }, agent)).status ?? 0;
+    }));
+  } finally {
+    agent.destroy();
+  }
 }
 
 test('under load: in-place writes, an empty file and atomic swaps of the policy directory; every request answered and settled', async () => {
