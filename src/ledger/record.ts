@@ -38,8 +38,10 @@ export interface TraceRecord {
               preDecision?: true;
               /** Not in spec 9.1: ms after the request started when admit was called (absent when it was not). Replay admits at ts plus this. */
               admitOffsetMs?: number;
-              /** Not in spec 9.1: the writer instance's admit call number, which orders admits within one millisecond. */
-              admitSeq?: number };
+              /** Not in spec 9.1: the writer process's admit call number, which orders admits within one millisecond. */
+              admitSeq?: number;
+              /** Not in spec 9.1: a random id of the writer process; `admitSeq` and `outcome.settleSeq` count admits within one (instance, seqEpoch), since the count restarts with the process while the instance id may not. */
+              seqEpoch?: string };
   candidateDecision?: TraceRecord['decision'];
   outcome: {
     provider: string | null; upstreamModel: string | null; attempts: number; cacheColdRisk: boolean;
@@ -59,7 +61,7 @@ export interface TraceRecord {
     /** Not in spec 9.1: server tool uses by price table tool name, as billed. Absent when none. */
     serverToolUses?: Record<string, number>;
     aborted: boolean; settledBy: 'request' | 'sweeper'; overrun: boolean;
-    /** Not in spec 9.1: the writer instance's admit call count when settle was called (V4); replay settles before that instance's admit with a higher admitSeq only. */
+    /** Not in spec 9.1: the writer process's admit call count when settle was called (V4); within one process epoch (`decision.seqEpoch`) replay settles before an admit with a higher admitSeq only. */
     settleSeq?: number;
     /** Not in spec 9.1: set (true) when the actual cost could not be computed and the reservation estimate was settled instead; `costMicroUsd` is that estimate. */
     settledAtEstimate?: true;

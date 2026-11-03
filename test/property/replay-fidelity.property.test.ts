@@ -2,7 +2,8 @@
 // unpriced models, sessions, a secret in the last turn and the same secret in a later history, expensive answers
 // against a small team budget, slow answers holding the one stream slot, count_tokens), sent in waves whose requests
 // race each other, is traced by the real gateway; replaying those traces under the policy that recorded them
-// reproduces every recorded decision (agreement 1, no disagreement).
+// reproduces every recorded decision (agreement 1, no disagreement). Between waves the gateway may restart under the
+// same instance id on the same store (V4 review I1): a new process epoch whose admit counts start again at 0.
 import fc from 'fast-check';
 import { afterEach, expect, test } from 'vitest';
 import { hashKey } from '../../src/edge/auth.js';
@@ -39,6 +40,7 @@ const req = fc.record({
 type Req = typeof req extends fc.Arbitrary<infer T> ? T : never;
 /** Decision kinds the recorded mixes reached, across all runs. */
 const reasons = new Set<string>();
+let restarts = 0;
 
 function bodyOf(r: Req): string {
   const leak = `aws_access_key_id = ${AWS}`;
@@ -72,7 +74,7 @@ test('property: replaying the traces of any request mix under the recording poli
 
   let run = 0;
   await fc.assert(
-    fc.asyncProperty(fc.array(fc.array(req, { minLength: 1, maxLength: 6, size: 'max' }), { minLength: 1, maxLength: 5, size: 'max' }), async (waves) => {
+    fc.asyncProperty(fc.array(fc.record({ restart: fc.boolean(), reqs: fc.array(req, { minLength: 1, maxLength: 6, size: 'max' }) }), { minLength: 1, maxLength: 5, size: 'max' }), async (waves) => {
       const policy = testPolicy({
         upstream: up.url,
         models: ['claude-haiku-*', 'claude-sonnet-5-5*'],
@@ -88,12 +90,24 @@ test('property: replaying the traces of any request mix under the recording poli
         },
       });
       const traces: Rec[] = [];
-      const gw = await startGateway({ policy, store: createMemoryStore({ clock: Date.now }), traces: { write: (r) => (traces.push(r), true) }, traceSalt: `salt${++run}`, runtime: createGatewayRuntime() });
+      const store = createMemoryStore({ clock: Date.now });
+      const salt = `salt${++run}`;
+      let processes = 0;
+      // Request ids are unique across processes, as the gateway's ULIDs are.
+      const start = (): ReturnType<typeof startGateway> => startGateway({ policy, store, traces: { write: (r) => (traces.push(r), true) }, traceSalt: salt, runtime: createGatewayRuntime(), idPrefix: `req_p${++processes}_` });
+      let gw = await start();
       let sent = 0;
       try {
-        for (const wave of waves) {
+        for (const [w, wave] of waves.entries()) {
+          if (wave.restart && w > 0) {
+            // A restart: every request of the old process is accounted, then a new process takes the same instance id.
+            await expect.poll(() => traces.length).toBe(sent);
+            await gw.close();
+            gw = await start();
+            restarts++;
+          }
           await Promise.all(
-            wave.map((r) => {
+            wave.reqs.map((r) => {
               sent++;
               return send(gw.url, { path: r.path, headers: { ...authHeaders, 'x-api-key': r.key, ...(r.session ? { 'x-claude-code-session-id': r.session } : {}) }, body: bodyOf(r) });
             }),
@@ -115,5 +129,6 @@ test('property: replaying the traces of any request mix under the recording poli
   );
   // The mixes reach every decision kind this policy can make.
   for (const k of ['forward', 'budget', 'model-not-allowed', 'rate', 'secret', 'streams', 'taint', 'unpriced']) expect(reasons, k).toContain(k);
+  expect(restarts).toBeGreaterThan(0);
 }, fuzzTimeout(60_000));
 

@@ -30,6 +30,10 @@ const AGENT_TYPES: ReadonlySet<string> = new Set(['general-purpose', 'Explore', 
  * subagent still joins its parent. The record id is the caller's (export numbers records in export order).
  */
 const MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
+/** `decision.seqEpoch` as the gateway writes it: random hex, linking records of one process only. */
+const SEQ_EPOCH = /^[0-9a-f]{1,32}$/;
+/** `client.agent` values the gateway writes; anything else in a trace becomes `other`. */
+const CLIENT_AGENTS: ReadonlySet<string> = new Set(['claude-code', 'codex', 'other']);
 
 /**
  * The shape of real server tool types: lowercase words joined by `_`, optionally ending in a date (`web_search_20250305`,
@@ -80,7 +84,7 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
     traffic: r.traffic,
     billing: r.billing,
     surface: r.surface,
-    client: { agent: r.client.agent, version: null },
+    client: { agent: CLIENT_AGENTS.has(r.client.agent) ? r.client.agent : 'other', version: null },
     attribution: {
       session: opt('session', a.session),
       agent: opt('agent', a.agent),
@@ -166,6 +170,8 @@ function decisionOf(d: TraceRecord['decision']): TraceRecord['decision'] {
     ...(d.preDecision ? { preDecision: true as const } : {}),
     ...(d.admitOffsetMs !== undefined ? { admitOffsetMs: d.admitOffsetMs } : {}),
     ...(d.admitSeq !== undefined ? { admitSeq: d.admitSeq } : {}),
+    // A random process id the gateway writes (16 hex); anything else is dropped, and replay then uses the time rule.
+    ...(d.seqEpoch !== undefined && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: d.seqEpoch } : {}),
   };
 }
 

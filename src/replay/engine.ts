@@ -162,39 +162,47 @@ async function* iterate(xs: readonly TraceRecord[]): AsyncIterable<LedgerLine> {
 
 /**
  * The order the store saw the records in: each at the time its admit was called (ts plus the recorded offset; the
- * body is read and scanned first, so a large body admits after a small one that started later), then by instance and
- * the instance's admit call number for admits in the same millisecond, then by ts and id. Records without an admit
- * take their ts.
+ * body is read and scanned first, so a large body admits after a small one that started later), then by instance,
+ * process epoch and the process's admit call number for admits in the same millisecond, then by ts and id. Records
+ * without an admit take their ts.
  */
 export function admitOrder(window: readonly TraceRecord[]): Array<{ i: number; at: number }> {
   return window
     .map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r }))
-    .sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i)
+    .sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || cmp(a.r.decision.seqEpoch ?? '', b.r.decision.seqEpoch ?? '') || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i)
     .map(({ i, at }) => ({ i, at }));
 }
+
+/**
+ * The (instance, process epoch) whose admit counts a record's admitSeq and settleSeq are, or null for a record written
+ * without an epoch: its counts are not compared with any other record's.
+ */
+const counter = (r: TraceRecord): string | null => (r.decision.seqEpoch === undefined ? null : `${r.instance}\u0000${r.decision.seqEpoch}`);
 
 interface Pending {
   at: number;
   order: number;
   id: string;
   amount: number;
-  /** The recording instance and its admit count when it settled (absent in older traces). */
-  instance: string;
+  /** The recording process (instance and epoch) and its admit count when it settled; null or absent in older traces. */
+  counter: string | null;
   settleSeq: number | undefined;
 }
 
 /**
- * Whether a pending settle lands before `next`. A settle of the same instance carrying `settleSeq` (the admits the
- * instance had issued when it called settle) is ordered exactly against that instance's admits, since totalMs is
- * measured before settle and a later admit can share its millisecond (V4): before an admit numbered `admitSeq` only
- * when settleSeq is lower; before a record that called no admit only once the instance's admit numbered settleSeq was
- * replayed (`lastSeq`). Otherwise, and in traces written without settleSeq, the recorded end decides.
+ * Whether a pending settle lands before `next`. A settle carrying `settleSeq` (the admits its process had issued when
+ * it called settle) is ordered exactly against the admits of the same process, that is the same instance and process
+ * epoch, since totalMs is measured before settle and a later admit can share its millisecond (V4): before an admit
+ * numbered `admitSeq` only when settleSeq is lower; before a record of that process that called no admit only once
+ * the admit numbered settleSeq was replayed (`lastSeq`). Against another instance, another process of the same
+ * instance (the admit count restarts with the process while `--instance-id` may not, V4 review I1), and in traces
+ * written without settleSeq or without an epoch, the recorded end decides.
  */
 function settlesBefore(p: Pending, until: number, next: TraceRecord | null, lastSeq: ReadonlyMap<string, number>): boolean {
   if (p.at > until) return false;
-  if (next === null || p.settleSeq === undefined || p.instance !== next.instance) return true;
+  if (next === null || p.settleSeq === undefined || p.counter === null || p.counter !== counter(next)) return true;
   const seq = next.decision.admitSeq;
-  return seq !== undefined ? p.settleSeq < seq : p.settleSeq <= (lastSeq.get(p.instance) ?? 0);
+  return seq !== undefined ? p.settleSeq < seq : p.settleSeq <= (lastSeq.get(p.counter) ?? 0);
 }
 
 /**
@@ -216,12 +224,12 @@ async function simulate(
   const pending: Pending[] = [];
   let order = 0;
   const schedule = (r: TraceRecord, at: number, amount: number): void => {
-    const p = { at, order: order++, id: r.id, amount, instance: r.instance, settleSeq: r.outcome.settleSeq };
+    const p = { at, order: order++, id: r.id, amount, counter: counter(r), settleSeq: r.outcome.settleSeq };
     let i = pending.length;
     while (i > 0 && (pending[i - 1] as Pending).at > at) i--;
     pending.splice(i, 0, p);
   };
-  /** Highest admitSeq replayed per instance. */
+  /** Highest admitSeq replayed per process (instance and epoch). */
   const lastSeq = new Map<string, number>();
   // A settle whose end has come but which the instance called after `next`'s admit stays pending (settlesBefore).
   const drain = async (until: number, next: TraceRecord | null): Promise<void> => {
@@ -293,7 +301,8 @@ async function simulate(
     await drain(ms, r);
     now = ms;
     const seq = r.decision.admitSeq;
-    if (seq !== undefined) lastSeq.set(r.instance, Math.max(seq, lastSeq.get(r.instance) ?? 0));
+    const c = counter(r);
+    if (seq !== undefined && c !== null) lastSeq.set(c, Math.max(seq, lastSeq.get(c) ?? 0));
     const session = r.attribution.session;
     let s: { index: number; forwarded: boolean; cut: CutSession | null } | null = null;
     if (session !== null) {

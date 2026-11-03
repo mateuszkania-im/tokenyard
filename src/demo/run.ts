@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { cliRoot, writeFileUnder } from '../fsutil/safe-path.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createGatewayRuntime } from '../edge/handler.js';
 import { createGateway } from '../edge/server.js';
 import { exportTraces } from '../ledger/export.js';
 import { readLedger } from '../ledger/reader.js';
@@ -24,6 +25,8 @@ const DAY_MS = 24 * HOUR_MS;
 /** Fixed so that traces are byte-identical for one seed. */
 const TRACE_SALT = 'tokenyard-demo-salt';
 const INSTANCE_ID = 'demo0001';
+/** A fixed process epoch (the gateway picks a random one), so the generated traces are byte-identical for one seed. */
+const DEMO_EPOCH = 'de300000de300001';
 export const DEMO_DAYS = 7;
 
 /**
@@ -74,6 +77,7 @@ export async function recordDemo(o: { seed: number; days?: number; traceFile: st
     store,
     traces: writer,
     traceSalt: TRACE_SALT,
+    runtime: createGatewayRuntime({ epoch: DEMO_EPOCH }),
     clock,
     newId: () => `req_${String(++ids).padStart(6, '0')}`,
     basePath: null,

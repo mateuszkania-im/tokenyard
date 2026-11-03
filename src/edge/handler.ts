@@ -149,6 +149,12 @@ export interface GatewayRuntime {
   boundViolations: number;
   /** Admit calls made by this process, in call order; each request's number is traced so replay can order admits that share a millisecond. */
   admits: number;
+  /**
+   * A random id of this process (16 hex characters), traced on every record as `decision.seqEpoch`: `admits` starts at
+   * 0 in each process while `--instance-id` may be reused across restarts, so replay compares admit and settle counts
+   * only within one (instance, epoch) (V4 review I1).
+   */
+  readonly epoch: string;
   /** Ids the sweeper settled at their estimate (pass as the store's `onSwept`); never throws. */
   onSwept(ids: string[]): void;
   /** Whether the sweeper settled this request; forgets the id. */
@@ -181,13 +187,15 @@ async function readLatch(deps: GatewayDeps, runtime: GatewayRuntime): Promise<vo
 /** Ids remembered for requests the sweeper settled; a request that never comes back must not grow it without end. */
 const SWEPT_MAX = 100_000;
 
-export function createGatewayRuntime(): GatewayRuntime {
+/** `epoch` fixes the process id (the demo, for byte-identical traces); by default it is random. */
+export function createGatewayRuntime(o: { epoch?: string } = {}): GatewayRuntime {
   const swept = new Set<string>();
   return {
     bytesBoundOff: false,
     latchReadAt: null,
     boundViolations: 0,
     admits: 0,
+    epoch: o.epoch ?? randomBytes(8).toString('hex'),
     onSwept(ids) {
       try {
         for (const id of ids) swept.add(id);
@@ -262,6 +270,8 @@ export interface RequestOutcome {
   settledBy?: 'request' | 'sweeper';
   /** Admits this process had issued when it called settle: replay orders the release against them (V4). */
   settleSeq?: number;
+  /** The process's `GatewayRuntime.epoch`: admitSeq and settleSeq count within it. */
+  seqEpoch?: string;
   /** Actual cost above the reservation (spec 7.4: cannot happen under its premises). */
   overrun?: boolean;
   /** The actual cost could not be computed; the reservation estimate was settled and is `costMicroUsd`. */
@@ -565,7 +575,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   try {
     deps.onSettled?.(o);
     if (deps.traces || deps.metrics || deps.spans) {
-      const rec = buildTraceRecord(o, deps.traceSalt ?? '', policy);
+      const rec = buildTraceRecord({ ...o, seqEpoch: runtime.epoch }, deps.traceSalt ?? '', policy);
       emitTelemetry(deps, policy, rec, o.attemptLog);
       deps.traces?.write(rec);
     }
@@ -1078,6 +1088,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
                 settledAtEstimate: true,
                 settledBy: swept ? 'sweeper' : 'request',
                 settleSeq,
+                seqEpoch: runtime.epoch,
                 chargedMicroUsd: swept ? held.est : charge,
                 overrun: charge > held.est,
               },

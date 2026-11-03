@@ -32,6 +32,8 @@ export async function startGateway(o: {
   keepAliveTimeoutMs?: number;
   /** Called with each request id the gateway hands out (one per request that reached the handler). */
   onId?: (id: string) => void;
+  /** Request ids are `<idPrefix><n>` (default `req_`): a restarted gateway in one test needs another prefix. */
+  idPrefix?: string;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
@@ -43,7 +45,7 @@ export async function startGateway(o: {
     ...(o.requestDeadlineMs !== undefined ? { requestDeadlineMs: o.requestDeadlineMs } : {}),
     ...(o.keepAliveTimeoutMs !== undefined ? { keepAliveTimeoutMs: o.keepAliveTimeoutMs } : {}),
     newId: () => {
-      const id = `req_${String(++n).padStart(6, '0')}`;
+      const id = `${o.idPrefix ?? 'req_'}${String(++n).padStart(6, '0')}`;
       o.onId?.(id);
       return id;
     },

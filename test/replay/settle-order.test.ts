@@ -4,8 +4,13 @@
 // `streams` or `budget` refusal replayed as forwarded. The gateway now records `outcome.settleSeq`, the number of
 // admits it had issued when it called settle; replay applies a settle before an admit of the same instance exactly
 // when settleSeq is below that admit's admitSeq. Records without it keep the time rule.
+// V4 review (I1): the admit count starts again at 0 when a process restarts, and `--instance-id` may be reused across
+// restarts (a pod name), so a settleSeq from before the restart was compared with admitSeqs of the new process and an
+// old release was held until the new process had issued as many admits. Every record now carries `decision.seqEpoch`,
+// a random id of the writing process; seqs are compared only within one (instance, epoch), otherwise the time rule.
 import { afterEach, expect, test } from 'vitest';
 import { createGatewayRuntime } from '../../src/edge/handler.js';
+import { anonymizeRecord, saltedPseudonyms } from '../../src/ledger/anonymize.js';
 import type { LedgerLine, TraceRecord } from '../../src/ledger/record.js';
 import { createMemoryStore } from '../../src/limits/memory-store.js';
 import { replay } from '../../src/replay/engine.js';
@@ -76,6 +81,42 @@ test('a release recorded in the same millisecond as a later admit of the instanc
   expect(r.fidelity.agreement).toBe(1);
 });
 
+test('every record carries the process epoch: one value per runtime, another after a restart', async () => {
+  const a = await record();
+  const b = await record();
+  const epochs = (t: Rec[]): Set<unknown> => new Set(t.map((x) => x.decision.seqEpoch));
+  expect(epochs(a.traces).size).toBe(1);
+  expect([...epochs(a.traces)][0]).toMatch(/^[0-9a-f]{16}$/);
+  expect([...epochs(b.traces)][0]).not.toBe([...epochs(a.traces)][0]);
+});
+
+test('I1 a restarted process reusing the instance id: its admit counts are not compared with the old process settleSeq', async () => {
+  const { policy, traces } = await record();
+  const holder = traces.find((t) => t.decision.action === 'forward') as Rec;
+  // The reviewer's reproduction: the same request again an hour later on the same instance id, as the first admit of a
+  // new process (admitSeq 1, settleSeq 1). The old holder settled with settleSeq 2, which is not below 1.
+  const later: Rec = structuredClone(holder);
+  later.id = 'req_after_restart';
+  later.ts = new Date(Date.parse(holder.ts) + 3_600_000).toISOString();
+  later.decision.admitSeq = 1;
+  later.decision.seqEpoch = 'feedfacefeedface';
+  later.outcome.settleSeq = 1;
+  const r = await replay({ base: policy, head: policy, traces: lines([...traces, later]), sinceMs: null, tenant: null });
+  expect(r.fidelity.disagreements).toEqual([]);
+  expect(r.fidelity.agreement).toBe(1);
+});
+
+test('records with settleSeq but no epoch (written before it) keep the time rule', async () => {
+  const { policy, traces } = await record();
+  const holder = traces.find((t) => t.decision.action === 'forward') as Rec;
+  const refused = traces.find((t) => t.decision.reason === 'streams') as Rec;
+  for (const t of traces) delete t.decision.seqEpoch;
+  // Ended a millisecond before the refused admit: with no epoch the time rule releases first, whatever settleSeq says.
+  holder.outcome.totalMs = Date.parse(refused.ts) + (refused.decision.admitOffsetMs ?? 0) - 1 - Date.parse(holder.ts);
+  const r = await replay({ base: policy, head: policy, traces: lines(traces), sinceMs: null, tenant: null });
+  expect(r.fidelity.disagreements).toHaveLength(1);
+});
+
 test('records without settleSeq (written before it) keep the time rule', async () => {
   const { policy, traces } = await record();
   const holder = traces.find((t) => t.decision.action === 'forward') as Rec;
@@ -100,4 +141,12 @@ test('a record that calls no admit, sorted between the release and the racing ad
   delete quiet.decision.admitSeq;
   const r = await replay({ base: policy, head: policy, traces: lines([holder, quiet, refused]), sinceMs: null, tenant: null });
   expect(r.fidelity.disagreements).toEqual([]);
+});
+
+test('anonymized exports keep the process epoch the gateway writes and drop any other value', async () => {
+  const { traces } = await record();
+  const p = saltedPseudonyms('export');
+  const rec = { ...(traces[0] as Rec), instance: 'gw01', seq: 1 };
+  expect(anonymizeRecord(rec, p).decision.seqEpoch).toBe(rec.decision.seqEpoch);
+  expect(anonymizeRecord({ ...rec, decision: { ...rec.decision, seqEpoch: 'jane@example.com' } }, p).decision.seqEpoch).toBeUndefined();
 });

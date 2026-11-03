@@ -434,7 +434,7 @@ function anonymizeRecord(r, p) {
     traffic: r.traffic,
     billing: r.billing,
     surface: r.surface,
-    client: { agent: r.client.agent, version: null },
+    client: { agent: CLIENT_AGENTS.has(r.client.agent) ? r.client.agent : "other", version: null },
     attribution: {
       session: opt("session", a.session),
       agent: opt("agent", a.agent),
@@ -518,7 +518,9 @@ function decisionOf(d) {
     ...d.storeDown ? { storeDown: true } : {},
     ...d.preDecision ? { preDecision: true } : {},
     ...d.admitOffsetMs !== void 0 ? { admitOffsetMs: d.admitOffsetMs } : {},
-    ...d.admitSeq !== void 0 ? { admitSeq: d.admitSeq } : {}
+    ...d.admitSeq !== void 0 ? { admitSeq: d.admitSeq } : {},
+    // A random process id the gateway writes (16 hex); anything else is dropped, and replay then uses the time rule.
+    ...d.seqEpoch !== void 0 && SEQ_EPOCH.test(d.seqEpoch) ? { seqEpoch: d.seqEpoch } : {}
   };
 }
 function saltedPseudonyms(salt) {
@@ -529,7 +531,7 @@ function saltedPseudonyms(salt) {
     return `${kind}-${h.slice(0, 8)}`;
   };
 }
-var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM, TOOL_TYPE_WORDS;
+var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM, SEQ_EPOCH, CLIENT_AGENTS, TOOL_TYPE_WORDS;
 var init_anonymize = __esm({
   "src/ledger/anonymize.ts"() {
     "use strict";
@@ -539,6 +541,8 @@ var init_anonymize = __esm({
     REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
     AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
     MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
+    SEQ_EPOCH = /^[0-9a-f]{1,32}$/;
+    CLIENT_AGENTS = /* @__PURE__ */ new Set(["claude-code", "codex", "other"]);
     TOOL_TYPE_WORDS = /^[a-z]+(?:_[a-z]+)*(?:_\d{8})?$/;
   }
 });
@@ -2195,9 +2199,9 @@ var init_scan = __esm({
     SCAN_RUN_BUDGET = 3 * 1024 * 1024;
     SCAN_MATCH_BUDGET = 64 * 1024;
     ScanBudgetError = class extends Error {
-      constructor(counter, limit) {
-        super(`the secret scan stopped after ${limit} ${counter === "runs" ? "decoded string pieces" : "rule matches"}`);
-        this.counter = counter;
+      constructor(counter2, limit) {
+        super(`the secret scan stopped after ${limit} ${counter2 === "runs" ? "decoded string pieces" : "rule matches"}`);
+        this.counter = counter2;
         this.limit = limit;
         this.name = "ScanBudgetError";
       }
@@ -13238,9 +13242,9 @@ var init_schemas = __esm({
           }`;
         doc.write(`const input = payload.value;`);
         const ids = /* @__PURE__ */ Object.create(null);
-        let counter = 0;
+        let counter2 = 0;
         for (const key of normalized.allKeys) {
-          ids[key] = `key_${counter++}`;
+          ids[key] = `key_${counter2++}`;
         }
         doc.write(memo2 ? `const newResult = memo.alloc(inst, payload, {}, ctx);` : `const newResult = {};`);
         for (const key of normalized.allKeys) {
@@ -41803,9 +41807,9 @@ var require_balanced_pool = __commonJS({
         if (allClientsBusy) {
           return;
         }
-        let counter = 0;
+        let counter2 = 0;
         let maxWeightIndex = this[kClients].findIndex((pool) => !pool[kNeedDrain]);
-        while (counter++ < this[kClients].length) {
+        while (counter2++ < this[kClients].length) {
           this[kIndex] = (this[kIndex] + 1) % this[kClients].length;
           const pool = this[kClients][this[kIndex]];
           if (pool[kWeight] > this[kClients][maxWeightIndex][kWeight] && !pool[kNeedDrain]) {
@@ -43377,7 +43381,7 @@ var require_retry_handler = __commonJS({
           errorCodes,
           methods
         } = retryOptions;
-        const { counter } = state;
+        const { counter: counter2 } = state;
         if (code2 && code2 !== "UND_ERR_REQ_RETRY" && !errorCodes.includes(code2)) {
           cb(err);
           return;
@@ -43390,7 +43394,7 @@ var require_retry_handler = __commonJS({
           cb(err);
           return;
         }
-        if (counter > maxRetries) {
+        if (counter2 > maxRetries) {
           cb(err);
           return;
         }
@@ -43399,7 +43403,7 @@ var require_retry_handler = __commonJS({
           retryAfterHeader = Number(retryAfterHeader);
           retryAfterHeader = Number.isNaN(retryAfterHeader) ? calculateRetryAfterHeader(headers["retry-after"]) : retryAfterHeader * 1e3;
         }
-        const retryTimeout = retryAfterHeader > 0 ? Math.min(retryAfterHeader, maxTimeout) : Math.min(minTimeout * timeoutFactor ** (counter - 1), maxTimeout);
+        const retryTimeout = retryAfterHeader > 0 ? Math.min(retryAfterHeader, maxTimeout) : Math.min(minTimeout * timeoutFactor ** (counter2 - 1), maxTimeout);
         setTimeout(() => cb(null), retryTimeout);
       }
       onResponseStart(controller, statusCode, headers, statusMessage) {
@@ -59194,7 +59198,8 @@ function buildTraceRecord(o, salt, names) {
       ...o.storeDown ? { storeDown: true } : {},
       // Every exit after decide carries the bound it used; without one there was no plan to replay.
       ...o.inputBound === void 0 ? { preDecision: true } : {},
-      ...o.admitAt ? { admitOffsetMs: o.admitAt.offsetMs, admitSeq: o.admitAt.seq } : {}
+      ...o.admitAt ? { admitOffsetMs: o.admitAt.offsetMs, admitSeq: o.admitAt.seq } : {},
+      ...o.seqEpoch !== void 0 ? { seqEpoch: o.seqEpoch } : {}
     },
     ...o.candidate && !("error" in o.candidate) ? {
       candidateDecision: {
@@ -59297,13 +59302,14 @@ async function readLatch(deps, runtime) {
   );
   if (first2) await read;
 }
-function createGatewayRuntime() {
+function createGatewayRuntime(o = {}) {
   const swept = /* @__PURE__ */ new Set();
   return {
     bytesBoundOff: false,
     latchReadAt: null,
     boundViolations: 0,
     admits: 0,
+    epoch: o.epoch ?? randomBytes3(8).toString("hex"),
     onSwept(ids) {
       try {
         for (const id of ids) swept.add(id);
@@ -59507,7 +59513,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   try {
     deps.onSettled?.(o);
     if (deps.traces || deps.metrics || deps.spans) {
-      const rec = buildTraceRecord(o, deps.traceSalt ?? "", policy2);
+      const rec = buildTraceRecord({ ...o, seqEpoch: runtime.epoch }, deps.traceSalt ?? "", policy2);
       emitTelemetry(deps, policy2, rec, o.attemptLog);
       deps.traces?.write(rec);
     }
@@ -59907,6 +59913,7 @@ function createHandler(deps) {
               settledAtEstimate: true,
               settledBy: swept ? "sweeper" : "request",
               settleSeq,
+              seqEpoch: runtime.epoch,
               chargedMicroUsd: swept ? held.est : charge,
               overrun: charge > held.est
             },
@@ -80918,12 +80925,12 @@ var require_commands_queue = __commonJS({
           (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Queue will keep maintenanceCommandTimeout for exisitng commands, just to be on the safe side. New commands will receive normal timeouts`);
           return;
         }
-        let counter = 0;
+        let counter2 = 0;
         const total = this.#toWrite.length;
         for (const node2 of this.#toWrite.nodes()) {
           const command = node2.value;
           _a3.#removeTimeoutListener(command);
-          counter++;
+          counter2++;
           const newTimeout = this.#maintenanceCommandTimeout;
           const signal = AbortSignal.timeout(newTimeout);
           command.timeout = {
@@ -80937,7 +80944,7 @@ var require_commands_queue = __commonJS({
             once: true
           });
         }
-        (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Total of ${counter} of ${total} timeouts reset to ${ms}`);
+        (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Total of ${counter2} of ${total} timeouts reset to ${ms}`);
       }
       get isPubSubActive() {
         return this.#pubSub.isActive;
@@ -112923,11 +112930,11 @@ var require_SpanProcessorMetrics = __commonJS({
       standardAttrs;
       droppedAttrs;
       constructor(componentType, meter, queueConfig) {
-        const counter = componentCounter2.get(componentType) ?? 0;
-        componentCounter2.set(componentType, counter + 1);
+        const counter2 = componentCounter2.get(componentType) ?? 0;
+        componentCounter2.set(componentType, counter2 + 1);
         this.standardAttrs = {
           [semconv_1.ATTR_OTEL_COMPONENT_TYPE]: componentType,
-          [semconv_1.ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter}`
+          [semconv_1.ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter2}`
         };
         this.droppedAttrs = {
           ...this.standardAttrs,
@@ -114249,11 +114256,11 @@ var init_ExporterMetrics = __esm({
         const { componentType, metricsHelper, meterProvider, url: url2, responseAttributesFromError } = options;
         this.responseAttributesFromError = responseAttributesFromError;
         const meter = meterProvider ? meterProvider.getMeter("@opentelemetry/otlp-exporter", VERSION2) : createNoopMeter();
-        const counter = componentCounter.get(componentType) ?? 0;
-        componentCounter.set(componentType, counter + 1);
+        const counter2 = componentCounter.get(componentType) ?? 0;
+        componentCounter.set(componentType, counter2 + 1);
         this.standardAttrs = {
           [ATTR_OTEL_COMPONENT_TYPE]: componentType,
-          [ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter}`
+          [ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter2}`
         };
         if (url2) {
           let urlToParse = url2;
@@ -117141,11 +117148,11 @@ var require_MetricReaderMetrics = __commonJS({
       collectionDuration;
       standardAttrs;
       constructor(componentType, meter) {
-        const counter = componentCounter2.get(componentType) ?? 0;
-        componentCounter2.set(componentType, counter + 1);
+        const counter2 = componentCounter2.get(componentType) ?? 0;
+        componentCounter2.set(componentType, counter2 + 1);
         this.standardAttrs = {
           [semconv_1.ATTR_OTEL_COMPONENT_TYPE]: componentType,
-          [semconv_1.ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter}`
+          [semconv_1.ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter2}`
         };
         this.collectionDuration = meter.createHistogram(semconv_1.METRIC_OTEL_SDK_METRIC_READER_COLLECTION_DURATION, {
           unit: "s",
@@ -121463,7 +121470,7 @@ function auxiliaryBody(rng, model) {
     })
   );
 }
-function planSession(rng, dev, startAt, secret, out, counter) {
+function planSession(rng, dev, startAt, secret, out, counter2) {
   const session = {
     dev,
     client: "claude-code",
@@ -121481,7 +121488,7 @@ function planSession(rng, dev, startAt, secret, out, counter) {
   const compactAt = turns >= 16 && rng() < 0.4 ? Math.floor(turns * 0.6) : -1;
   const secretTurn = secret ? 3 : -1;
   const add2 = (p) => {
-    out.push({ ...p, order: counter.n++, session });
+    out.push({ ...p, order: counter2.n++, session });
   };
   let t = startAt;
   let promptId = `prompt-${hex3(rng, 10)}`;
@@ -121517,14 +121524,14 @@ region = eu-west-1` : void 0;
   }
   return session;
 }
-function planCodexSession(rng, dev, model, startAt, out, counter) {
+function planCodexSession(rng, dev, model, startAt, out, counter2) {
   const id = `${hex3(rng, 8)}-${hex3(rng, 4)}-7${hex3(rng, 3)}-${hex3(rng, 4)}-${hex3(rng, 12)}`;
   const session = { dev, client: "codex", id, branch: `feat/WEB-${between(rng, 100, 999)}`, ticket: "", tolerance: 1, failures: 0 };
   session.ticket = /WEB-\d+/.exec(session.branch)?.[0] ?? "";
   const conv = new CodexConversation(rng, { model, instructions: text(mulberry32(hashString(`codex:${dev.repo}`)), 500), sessionId: id });
   let t = startAt;
   for (let i = between(rng, 4, 10); i > 0; i--) {
-    out.push({ at: t, order: counter.n++, session, kind: "main", agent: null, parent: null, agentType: null, promptId: "", build: () => conv.next() });
+    out.push({ at: t, order: counter2.n++, session, kind: "main", agent: null, parent: null, agentType: null, promptId: "", build: () => conv.next() });
     t += between(rng, 5, 40) * 1e3;
   }
   return session;
@@ -121538,7 +121545,7 @@ async function generateTraffic(o) {
   const rng = mulberry32(o.seed ^ 2654435769);
   const startMs = o.startMs ?? DEMO_START_MS;
   const planned = [];
-  const counter = { n: 0 };
+  const counter2 = { n: 0 };
   const sessions2 = [];
   for (let d = 0; d < o.days; d++) {
     const dayStart = startMs + d * DAY_MS4;
@@ -121548,7 +121555,7 @@ async function generateTraffic(o) {
       for (let s2 = 0; s2 < n2; s2++) {
         const startAt = dayStart + (8 + s2 * 4) * 36e5 + between(rng, 0, 90) * 6e4 + between(rng, 0, 59) * 1e3;
         const secret = dev.name === SECRET_DEV && d === SECRET_DAY && s2 === 0;
-        sessions2.push(planSession(rng, dev, startAt, secret, planned, counter));
+        sessions2.push(planSession(rng, dev, startAt, secret, planned, counter2));
       }
     }
   }
@@ -121561,7 +121568,7 @@ async function generateTraffic(o) {
       if (!dev || codexRng() < 0.4) continue;
       const model = c.models[Math.floor(codexRng() * c.models.length)];
       const startAt = dayStart + 14 * 36e5 + between(codexRng, 0, 180) * 6e4;
-      sessions2.push(planCodexSession(codexRng, dev, model, startAt, planned, counter));
+      sessions2.push(planCodexSession(codexRng, dev, model, startAt, planned, counter2));
     }
   }
   planned.sort((a, b) => a.at - b.at || a.order - b.order);
@@ -122024,13 +122031,13 @@ async function* iterate(xs) {
   yield* xs;
 }
 function admitOrder(window2) {
-  return window2.map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r })).sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i).map(({ i, at }) => ({ i, at }));
+  return window2.map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r })).sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || cmp(a.r.decision.seqEpoch ?? "", b.r.decision.seqEpoch ?? "") || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i).map(({ i, at }) => ({ i, at }));
 }
 function settlesBefore(p, until, next, lastSeq) {
   if (p.at > until) return false;
-  if (next === null || p.settleSeq === void 0 || p.instance !== next.instance) return true;
+  if (next === null || p.settleSeq === void 0 || p.counter === null || p.counter !== counter(next)) return true;
   const seq = next.decision.admitSeq;
-  return seq !== void 0 ? p.settleSeq < seq : p.settleSeq <= (lastSeq.get(p.instance) ?? 0);
+  return seq !== void 0 ? p.settleSeq < seq : p.settleSeq <= (lastSeq.get(p.counter) ?? 0);
 }
 async function simulate(policy2, which, window2, warm, startMs, ratios) {
   let now = startMs;
@@ -122039,7 +122046,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
   const pending = [];
   let order = 0;
   const schedule = (r, at, amount) => {
-    const p = { at, order: order++, id: r.id, amount, instance: r.instance, settleSeq: r.outcome.settleSeq };
+    const p = { at, order: order++, id: r.id, amount, counter: counter(r), settleSeq: r.outcome.settleSeq };
     let i = pending.length;
     while (i > 0 && pending[i - 1].at > at) i--;
     pending.splice(i, 0, p);
@@ -122108,7 +122115,8 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
     await drain(ms, r);
     now = ms;
     const seq = r.decision.admitSeq;
-    if (seq !== void 0) lastSeq.set(r.instance, Math.max(seq, lastSeq.get(r.instance) ?? 0));
+    const c = counter(r);
+    if (seq !== void 0 && c !== null) lastSeq.set(c, Math.max(seq, lastSeq.get(c) ?? 0));
     const session = r.attribution.session;
     let s2 = null;
     if (session !== null) {
@@ -122256,7 +122264,7 @@ async function replay(o) {
     gates: { failed: failedGates(gate.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }), failOn: gate.failOn, headChangesFailOn: gate.changed }
   };
 }
-var RawTraceDirError, CLASSES2, STORE_DOWN, NOTHING3, SHAPE_EXITS, BODY_EXITS, uniqSorted, recordedDecision;
+var RawTraceDirError, CLASSES2, STORE_DOWN, NOTHING3, SHAPE_EXITS, BODY_EXITS, uniqSorted, counter, recordedDecision;
 var init_engine = __esm({
   "src/replay/engine.ts"() {
     "use strict";
@@ -122284,6 +122292,7 @@ var init_engine = __esm({
     SHAPE_EXITS = /* @__PURE__ */ new Set(["body-bom", "duplicate-keys", "too-deep", "unparsable-body"]);
     BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed", "output-cap-failed", "write-ahead-failed", ...SHAPE_EXITS]);
     uniqSorted = (xs) => [...new Set(xs)].sort(cmp);
+    counter = (r) => r.decision.seqEpoch === void 0 ? null : `${r.instance}\0${r.decision.seqEpoch}`;
     recordedDecision = (r) => ({ action: r.decision.action, reason: r.decision.reason, route: r.decision.route, chain: [...r.decision.chain] });
   }
 });
@@ -122475,6 +122484,7 @@ async function recordDemo(o) {
     store,
     traces: writer,
     traceSalt: TRACE_SALT,
+    runtime: createGatewayRuntime({ epoch: DEMO_EPOCH }),
     clock,
     newId: () => `req_${String(++ids).padStart(6, "0")}`,
     basePath: null,
@@ -122538,11 +122548,12 @@ async function runDemo(o) {
     await rm(dir, { recursive: true, force: true });
   }
 }
-var HOUR_MS4, DAY_MS5, TRACE_SALT, INSTANCE_ID, DEMO_DAYS;
+var HOUR_MS4, DAY_MS5, TRACE_SALT, INSTANCE_ID, DEMO_EPOCH, DEMO_DAYS;
 var init_run = __esm({
   "src/demo/run.ts"() {
     "use strict";
     init_safe_path();
+    init_handler();
     init_server();
     init_export();
     init_reader();
@@ -122559,6 +122570,7 @@ var init_run = __esm({
     DAY_MS5 = 24 * HOUR_MS4;
     TRACE_SALT = "tokenyard-demo-salt";
     INSTANCE_ID = "demo0001";
+    DEMO_EPOCH = "de300000de300001";
     DEMO_DAYS = 7;
   }
 });

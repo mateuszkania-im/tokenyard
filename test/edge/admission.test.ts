@@ -591,3 +591,4 @@ test('a fault after admit queues a trace line with chargedMicroUsd equal to the 
   expect(t.decision.reservedMicroUsd).toBe(est);
   expect(spy.settles).toEqual([{ id: 'req_1', actual: est, result: 'settled' }]);
 });
+

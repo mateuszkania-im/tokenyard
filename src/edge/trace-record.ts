@@ -123,6 +123,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
       // Every exit after decide carries the bound it used; without one there was no plan to replay.
       ...(o.inputBound === undefined ? { preDecision: true as const } : {}),
       ...(o.admitAt ? { admitOffsetMs: o.admitAt.offsetMs, admitSeq: o.admitAt.seq } : {}),
+      ...(o.seqEpoch !== undefined ? { seqEpoch: o.seqEpoch } : {}),
     },
     ...(o.candidate && !('error' in o.candidate)
       ? {
