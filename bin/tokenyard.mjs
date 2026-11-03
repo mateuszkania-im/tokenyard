@@ -30336,8 +30336,7 @@ function decide(policy2, f) {
     warnings.push({ kind: "unpriced", model: upstreamModel });
   }
   const reserve = route2.reserveOutputTokens !== null && bodyRewritable && (f.surface === "anthropic-messages" || f.surface === "openai-responses") ? route2.reserveOutputTokens : null;
-  const asked = f.maxOutputTokens;
-  if (reserve !== null && !(asked !== null && Number.isFinite(asked) && asked > 0 && asked <= reserve)) plan.outputCap = reserve;
+  if (reserve !== null) plan.outputCap = reserve;
   let est = 0;
   if (hasModels(t)) {
     const price2 = reservationPrice(t, known).price;
@@ -31153,7 +31152,9 @@ function capTopLevelInteger(b, key, value) {
   const r = ranges[0];
   let out;
   if (r !== void 0) {
-    if (typeof parsed[key] !== "number") return null;
+    const current = parsed[key];
+    if (typeof current !== "number") return null;
+    if (current <= value) return b;
     out = Buffer.concat([b.subarray(0, r.start), Buffer.from(String(value), "utf8"), b.subarray(r.end)]);
   } else {
     if (Object.hasOwn(parsed, key)) return null;
@@ -58789,7 +58790,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     const capped = capTopLevelInteger(upstreamBody, field, plan.outputCap);
     if (!capped) {
       const msg = `route "${plan.route ?? ""}" caps ${field} at ${plan.outputCap}, but the request's top-level ${field} could not be set exactly (send one JSON object with at most one numeric "${field}")`;
-      sendError(req, res, own2(400, "invalid_request_error", "output-cap-failed", msg));
+      sendError(req, res, own2(400, "invalid_request_error", "output-cap-failed", msg, null, { shouldRetry: false }));
       return early({ ...decided, status: 400, decision: { action: "block", reason: "output-cap-failed" }, errorClass: "invalid_request_error" });
     }
     upstreamBody = capped;

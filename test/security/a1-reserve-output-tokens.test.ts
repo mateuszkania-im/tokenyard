@@ -128,3 +128,28 @@ test('A1e validate: reserveOutputTokens on a header-selectable route without bod
   const r = validatePolicy(await loadPolicyDir('test/fixtures/policy/E_RESERVE_OUTPUT_NO_REWRITE'), { experimentalSubscription: false });
   expect(r.errors.map((e) => e.code)).toEqual(['E_RESERVE_OUTPUT_NO_REWRITE']);
 });
+
+test('S25-1 duplicate max_tokens on a capped route is refused, whichever value comes first', async () => {
+  const bodies: Buffer[] = [];
+  const up = await raw(async (req, res) => {
+    const { raw: b } = await readJson(req);
+    bodies.push(b);
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'm', type: 'message', model: 'claude-haiku-5-5', content: [], usage: { input_tokens: 5, output_tokens: 5 } }));
+  });
+  const policy = testPolicy({
+    upstream: up.url,
+    extraKeys: [serviceKey],
+    editRoutes: (routes) => {
+      const r = routes.find((x) => x.name === 'product-default');
+      if (r) r.reserveOutputTokens = 100;
+    },
+  });
+  const g = await gw(policy);
+  for (const [a, b] of [[50, 64_000], [64_000, 50]]) {
+    const body = `{"model":"claude-haiku-5-5","max_tokens":${a},"max_tokens":${b},"messages":[{"role":"user","content":"x"}]}`;
+    const r = await send(g.url, { path: '/v1/messages', headers: { ...authHeaders, 'x-api-key': SERVICE_KEY }, body });
+    expect(r.status, body).toBe(400);
+    expect(r.headers['x-should-retry'], body).toBe('false');
+  }
+  expect(bodies).toHaveLength(0);
+});

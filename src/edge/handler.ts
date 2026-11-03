@@ -623,7 +623,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     const capped = capTopLevelInteger(upstreamBody, field, plan.outputCap);
     if (!capped) {
       const msg = `route "${plan.route ?? ''}" caps ${field} at ${plan.outputCap}, but the request's top-level ${field} could not be set exactly (send one JSON object with at most one numeric "${field}")`;
-      sendError(req, res, own(400, 'invalid_request_error', 'output-cap-failed', msg));
+      sendError(req, res, own(400, 'invalid_request_error', 'output-cap-failed', msg, null, { shouldRetry: false }));
       return early({ ...decided, status: 400, decision: { action: 'block', reason: 'output-cap-failed' }, errorClass: 'invalid_request_error' });
     }
     upstreamBody = capped;

@@ -253,8 +253,9 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   // reserveOutputTokens lowers the reservation only when the gateway writes it into the body as max_tokens
   // (max_output_tokens), under the same rule as a model rewrite; otherwise the client's own limit stands (A1).
   const reserve = route.reserveOutputTokens !== null && bodyRewritable && (f.surface === 'anthropic-messages' || f.surface === 'openai-responses') ? route.reserveOutputTokens : null;
-  const asked = f.maxOutputTokens;
-  if (reserve !== null && !(asked !== null && Number.isFinite(asked) && asked > 0 && asked <= reserve)) plan.outputCap = reserve;
+  // Always checked in the body, even when the parsed limit is already below it: a duplicate key may read differently
+  // upstream (S25-1).
+  if (reserve !== null) plan.outputCap = reserve;
 
   let est = 0;
   if (hasModels(t)) {
