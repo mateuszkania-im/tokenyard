@@ -3,13 +3,14 @@
 // a body that the provider's parser could read another way (a UTF-8 BOM some parsers skip, a duplicate key a
 // first-wins parser keeps, at any depth) is refused instead of guessed at.
 
+import { skipString } from './json-ranges.js';
+
 export type BodyShapeRefusal = 'body-bom' | 'duplicate-keys' | 'too-deep';
 
 /** Objects and arrays nested deeper than this are refused (tool schemas and tool results stay far below it). */
 export const MAX_BODY_DEPTH = 128;
 
 const QUOTE = 0x22;
-const BACKSLASH = 0x5c;
 const COMMA = 0x2c;
 
 /**
@@ -26,19 +27,11 @@ function scan(b: Buffer): BodyShapeRefusal | null {
     const c = b[i] as number;
     if (c === QUOTE) {
       const start = i;
-      let escaped = false;
-      i++;
-      while (i < b.length && b[i] !== QUOTE) {
-        if (b[i] === BACKSLASH) {
-          escaped = true;
-          i++;
-        }
-        i++;
-      }
-      i++;
+      i = skipString(b, i);
       const top = stack.at(-1);
       if (expectKey && top) {
         const rawKey = b.toString('utf8', start, i);
+        const escaped = rawKey.includes('\\');
         let key: string;
         try {
           key = escaped ? (JSON.parse(rawKey) as string) : rawKey.slice(1, -1);

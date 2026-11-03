@@ -30707,6 +30707,159 @@ var init_decide = __esm({
   }
 });
 
+// src/surfaces/json-ranges.ts
+function skipWs(b, i) {
+  while (i < b.length && (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13)) i++;
+  return i;
+}
+function skipString(b, i) {
+  const open5 = i;
+  let from = i + 1;
+  for (; ; ) {
+    const q = b.indexOf(QUOTE, from);
+    if (q < 0) return skipStringTail(b, open5);
+    let k = q - 1;
+    while (k > open5 && b[k] === BACKSLASH) k--;
+    if ((q - 1 - k) % 2 === 0) return q + 1;
+    from = q + 1;
+  }
+}
+function skipStringTail(b, i) {
+  i++;
+  while (i < b.length) {
+    const c = b[i];
+    if (c === BACKSLASH) i += 2;
+    else if (c === QUOTE) return i + 1;
+    else i++;
+  }
+  return i;
+}
+function skipValue(b, i) {
+  const c = b[i];
+  if (c === QUOTE) return skipString(b, i);
+  if (c === 123 || c === 91) {
+    let depth = 0;
+    while (i < b.length) {
+      const d = b[i];
+      if (d === QUOTE) {
+        i = skipString(b, i);
+        continue;
+      }
+      if (d === 123 || d === 91) depth++;
+      else if (d === 125 || d === 93) depth--;
+      i++;
+      if (depth === 0) return i;
+    }
+    return i;
+  }
+  while (i < b.length && b[i] !== 44 && b[i] !== 125 && b[i] !== 93 && b[i] !== 32 && b[i] !== 10 && b[i] !== 13 && b[i] !== 9) i++;
+  return i;
+}
+function arrayElementRanges(b, name2) {
+  let i = skipWs(b, 0);
+  if (b[i] !== 123) return null;
+  i++;
+  let result = null;
+  for (; ; ) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] === 125) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString("utf8", keyStart, i);
+    const key = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+    i = skipWs(b, i) + 1;
+    i = skipWs(b, i);
+    if (key === name2 && b[i] === 91) {
+      i++;
+      const all = [];
+      for (; ; ) {
+        i = skipWs(b, i);
+        if (i >= b.length) break;
+        if (b[i] === 93) {
+          i++;
+          break;
+        }
+        const start = i;
+        i = skipValue(b, i);
+        all.push({ start, end: i });
+        i = skipWs(b, i);
+        if (b[i] === 44) i++;
+      }
+      result = all;
+    } else {
+      i = skipValue(b, i);
+    }
+    i = skipWs(b, i);
+    if (b[i] === 44) i++;
+  }
+  return result;
+}
+function topLevelValueRanges(b, key) {
+  const out = [];
+  let i = skipWs(b, 0);
+  if (b[i] !== 123) return out;
+  i++;
+  for (; ; ) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] !== QUOTE) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString("utf8", keyStart, i);
+    let k;
+    try {
+      k = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+    } catch {
+      return [];
+    }
+    i = skipWs(b, i) + 1;
+    i = skipWs(b, i);
+    const start = i;
+    i = skipValue(b, i);
+    if (k === key) out.push({ start, end: i });
+    i = skipWs(b, i);
+    if (b[i] === 44) i++;
+  }
+  return out;
+}
+function duplicateTopLevelKey(b, keys2) {
+  const seen = /* @__PURE__ */ new Set();
+  let dup = false;
+  let i = skipWs(b, 0);
+  if (b[i] !== 123) return false;
+  i++;
+  for (; ; ) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] !== QUOTE) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString("utf8", keyStart, i);
+    let k;
+    try {
+      k = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
+    } catch {
+      return false;
+    }
+    if (keys2.includes(k)) {
+      if (seen.has(k)) dup = true;
+      seen.add(k);
+    }
+    i = skipWs(b, i) + 1;
+    i = skipWs(b, i);
+    i = skipValue(b, i);
+    i = skipWs(b, i);
+    if (b[i] === 44) i++;
+  }
+  return dup;
+}
+var QUOTE, BACKSLASH;
+var init_json_ranges = __esm({
+  "src/surfaces/json-ranges.ts"() {
+    "use strict";
+    QUOTE = 34;
+    BACKSLASH = 92;
+  }
+});
+
 // src/surfaces/body-shape.ts
 function scan(b) {
   const stack = [];
@@ -30714,21 +30867,13 @@ function scan(b) {
   let i = 0;
   while (i < b.length) {
     const c = b[i];
-    if (c === QUOTE) {
+    if (c === QUOTE2) {
       const start = i;
-      let escaped = false;
-      i++;
-      while (i < b.length && b[i] !== QUOTE) {
-        if (b[i] === BACKSLASH) {
-          escaped = true;
-          i++;
-        }
-        i++;
-      }
-      i++;
+      i = skipString(b, i);
       const top = stack.at(-1);
       if (expectKey && top) {
         const rawKey = b.toString("utf8", start, i);
+        const escaped = rawKey.includes("\\");
         let key;
         try {
           key = escaped ? JSON.parse(rawKey) : rawKey.slice(1, -1);
@@ -30760,13 +30905,13 @@ function bodyShapeRefusal(body, parsed) {
   if (!parsed) return null;
   return scan(body);
 }
-var MAX_BODY_DEPTH, QUOTE, BACKSLASH, COMMA;
+var MAX_BODY_DEPTH, QUOTE2, COMMA;
 var init_body_shape = __esm({
   "src/surfaces/body-shape.ts"() {
     "use strict";
+    init_json_ranges();
     MAX_BODY_DEPTH = 128;
-    QUOTE = 34;
-    BACKSLASH = 92;
+    QUOTE2 = 34;
     COMMA = 44;
   }
 });
@@ -31299,117 +31444,6 @@ var init_tee = __esm({
   }
 });
 
-// src/surfaces/json-ranges.ts
-function skipWs(b, i) {
-  while (i < b.length && (b[i] === 32 || b[i] === 9 || b[i] === 10 || b[i] === 13)) i++;
-  return i;
-}
-function skipString(b, i) {
-  i++;
-  while (i < b.length) {
-    const c = b[i];
-    if (c === BACKSLASH2) i += 2;
-    else if (c === QUOTE2) return i + 1;
-    else i++;
-  }
-  return i;
-}
-function skipValue(b, i) {
-  const c = b[i];
-  if (c === QUOTE2) return skipString(b, i);
-  if (c === 123 || c === 91) {
-    let depth = 0;
-    while (i < b.length) {
-      const d = b[i];
-      if (d === QUOTE2) {
-        i = skipString(b, i);
-        continue;
-      }
-      if (d === 123 || d === 91) depth++;
-      else if (d === 125 || d === 93) depth--;
-      i++;
-      if (depth === 0) return i;
-    }
-    return i;
-  }
-  while (i < b.length && b[i] !== 44 && b[i] !== 125 && b[i] !== 93 && b[i] !== 32 && b[i] !== 10 && b[i] !== 13 && b[i] !== 9) i++;
-  return i;
-}
-function arrayElementRanges(b, name2) {
-  let i = skipWs(b, 0);
-  if (b[i] !== 123) return null;
-  i++;
-  let result = null;
-  for (; ; ) {
-    i = skipWs(b, i);
-    if (i >= b.length || b[i] === 125) break;
-    const keyStart = i;
-    i = skipString(b, i);
-    const rawKey = b.toString("utf8", keyStart, i);
-    const key = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
-    i = skipWs(b, i) + 1;
-    i = skipWs(b, i);
-    if (key === name2 && b[i] === 91) {
-      i++;
-      const all = [];
-      for (; ; ) {
-        i = skipWs(b, i);
-        if (i >= b.length) break;
-        if (b[i] === 93) {
-          i++;
-          break;
-        }
-        const start = i;
-        i = skipValue(b, i);
-        all.push({ start, end: i });
-        i = skipWs(b, i);
-        if (b[i] === 44) i++;
-      }
-      result = all;
-    } else {
-      i = skipValue(b, i);
-    }
-    i = skipWs(b, i);
-    if (b[i] === 44) i++;
-  }
-  return result;
-}
-function topLevelValueRanges(b, key) {
-  const out = [];
-  let i = skipWs(b, 0);
-  if (b[i] !== 123) return out;
-  i++;
-  for (; ; ) {
-    i = skipWs(b, i);
-    if (i >= b.length || b[i] !== QUOTE2) break;
-    const keyStart = i;
-    i = skipString(b, i);
-    const rawKey = b.toString("utf8", keyStart, i);
-    let k;
-    try {
-      k = rawKey.includes("\\") ? JSON.parse(rawKey) : rawKey.slice(1, -1);
-    } catch {
-      return [];
-    }
-    i = skipWs(b, i) + 1;
-    i = skipWs(b, i);
-    const start = i;
-    i = skipValue(b, i);
-    if (k === key) out.push({ start, end: i });
-    i = skipWs(b, i);
-    if (b[i] === 44) i++;
-  }
-  return out;
-}
-var QUOTE2, BACKSLASH2;
-var init_json_ranges = __esm({
-  "src/surfaces/json-ranges.ts"() {
-    "use strict";
-    QUOTE2 = 34;
-    BACKSLASH2 = 92;
-  }
-});
-
 // src/surfaces/anthropic-messages.ts
 import { createHash as createHash5 } from "node:crypto";
 function hasExpandingField(parsed, tools) {
@@ -31482,6 +31516,7 @@ function extractAnthropicFeatures(body) {
   const hasPrefix = parsed.tools !== void 0 || parsed.system !== void 0;
   const prefixHash = hasPrefix ? createHash5("sha256").update(JSON.stringify([parsed.tools ?? null, parsed.system ?? null])).digest("hex") : null;
   const thinking = parsed.thinking;
+  const messageRanges = arrayElementRanges(body, "messages");
   return {
     model: typeof parsed.model === "string" ? parsed.model : null,
     stream: parsed.stream === true,
@@ -31497,22 +31532,20 @@ function extractAnthropicFeatures(body) {
     ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
     ...hasCompaction(parsed.context_management) ? { compaction: true } : {},
     parseError: false,
-    ...turnRanges(body, messages),
-    ...hasAmbiguousKeys(body) ? { ambiguousKeys: true } : {}
+    ...turnRanges(messages, messageRanges),
+    ...hasAmbiguousKeys(body, messageRanges) ? { ambiguousKeys: true } : {}
   };
 }
-function hasAmbiguousKeys(body) {
-  if (topLevelValueRanges(body, "messages").length > 1) return true;
-  for (const r of arrayElementRanges(body, "messages") ?? []) {
+function hasAmbiguousKeys(body, messageRanges) {
+  if (duplicateTopLevelKey(body, ["messages"])) return true;
+  for (const r of messageRanges ?? []) {
     if (body[r.start] !== 123) continue;
-    const m = body.subarray(r.start, r.end);
-    if (topLevelValueRanges(m, "role").length > 1 || topLevelValueRanges(m, "content").length > 1) return true;
+    if (duplicateTopLevelKey(body.subarray(r.start, r.end), ["role", "content"])) return true;
   }
   return false;
 }
-function turnRanges(body, messages) {
+function turnRanges(messages, ranges) {
   if (messages.length === 0) return { lastTurn: null };
-  const ranges = arrayElementRanges(body, "messages");
   if (ranges === null || ranges.length !== messages.length) return { lastTurn: null };
   let index = -1;
   for (let i = messages.length - 1; i >= 0 && index < 0; i--) {
@@ -31532,7 +31565,7 @@ function rewriteTopLevelModel(b, model) {
   if (!isObj4(parsed) || typeof parsed.model !== "string") return null;
   const ranges = topLevelValueRanges(b, "model");
   const r = ranges[0];
-  if (ranges.length !== 1 || r === void 0 || b[r.start] !== QUOTE2) return null;
+  if (ranges.length !== 1 || r === void 0 || b[r.start] !== QUOTE) return null;
   try {
     if (JSON.parse(b.toString("utf8", r.start, r.end)) !== parsed.model) return null;
   } catch {
@@ -31725,11 +31758,10 @@ function turnRanges2(body, input3) {
   return { lastTurn: null, messages: ranges };
 }
 function hasAmbiguousKeys2(body) {
-  for (const k of ["input", "instructions", "model", "tools"]) if (topLevelValueRanges(body, k).length > 1) return true;
+  if (duplicateTopLevelKey(body, ["input", "instructions", "model", "tools"])) return true;
   for (const r of arrayElementRanges(body, "input") ?? []) {
     if (body[r.start] !== 123) continue;
-    const item = body.subarray(r.start, r.end);
-    for (const k of ["type", "role", "content", "output", "arguments", "input"]) if (topLevelValueRanges(item, k).length > 1) return true;
+    if (duplicateTopLevelKey(body.subarray(r.start, r.end), ["type", "role", "content", "output", "arguments", "input"])) return true;
   }
   return false;
 }

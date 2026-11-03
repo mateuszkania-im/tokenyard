@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { arrayElementRanges, topLevelValueRanges } from './json-ranges.js';
+import { arrayElementRanges, duplicateTopLevelKey, topLevelValueRanges } from './json-ranges.js';
 import { serviceTierLabel, toolTypeLabel } from './labels.js';
 import type { ExtractedFeatures } from './types.js';
 
@@ -133,11 +133,10 @@ function turnRanges(body: Buffer, input: unknown): Pick<ExtractedFeatures, 'last
 
 /** A duplicate top-level `input`, `instructions` or `model`, or an input item with a duplicate content-bearing key. */
 function hasAmbiguousKeys(body: Buffer): boolean {
-  for (const k of ['input', 'instructions', 'model', 'tools']) if (topLevelValueRanges(body, k).length > 1) return true;
+  if (duplicateTopLevelKey(body, ['input', 'instructions', 'model', 'tools'])) return true;
   for (const r of arrayElementRanges(body, 'input') ?? []) {
     if (body[r.start] !== 0x7b) continue;
-    const item = body.subarray(r.start, r.end);
-    for (const k of ['type', 'role', 'content', 'output', 'arguments', 'input']) if (topLevelValueRanges(item, k).length > 1) return true;
+    if (duplicateTopLevelKey(body.subarray(r.start, r.end), ['type', 'role', 'content', 'output', 'arguments', 'input'])) return true;
   }
   return false;
 }

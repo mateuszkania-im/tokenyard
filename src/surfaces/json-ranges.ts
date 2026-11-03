@@ -9,8 +9,25 @@ function skipWs(b: Buffer, i: number): number {
   return i;
 }
 
-/** `i` points at an opening quote; returns the index just past the closing quote. */
-function skipString(b: Buffer, i: number): number {
+/**
+ * `i` points at an opening quote; returns the index just past the closing quote. Quotes are found with indexOf (V1:
+ * a byte loop over every string was most of the walk on a long agent context): a quote closes the string when the
+ * run of backslashes just before it, inside the string, has even length. Without a closing quote, the byte loop.
+ */
+export function skipString(b: Buffer, i: number): number {
+  const open = i;
+  let from = i + 1;
+  for (;;) {
+    const q = b.indexOf(QUOTE, from);
+    if (q < 0) return skipStringTail(b, open);
+    let k = q - 1;
+    while (k > open && b[k] === BACKSLASH) k--;
+    if ((q - 1 - k) % 2 === 0) return q + 1;
+    from = q + 1;
+  }
+}
+
+function skipStringTail(b: Buffer, i: number): number {
   i++;
   while (i < b.length) {
     const c = b[i];
@@ -111,4 +128,39 @@ export function topLevelValueRanges(b: Buffer, key: string): Array<{ start: numb
     if (b[i] === 0x2c) i++;
   }
   return out;
+}
+
+/**
+ * True when any of `keys` occurs more than once at the top level of a JSON object body (keys compared after
+ * unescaping): `keys.some((k) => topLevelValueRanges(b, k).length > 1)` in one walk.
+ */
+export function duplicateTopLevelKey(b: Buffer, keys: readonly string[]): boolean {
+  const seen = new Set<string>();
+  let dup = false;
+  let i = skipWs(b, 0);
+  if (b[i] !== 0x7b) return false;
+  i++;
+  for (;;) {
+    i = skipWs(b, i);
+    if (i >= b.length || b[i] !== QUOTE) break;
+    const keyStart = i;
+    i = skipString(b, i);
+    const rawKey = b.toString('utf8', keyStart, i);
+    let k: string;
+    try {
+      k = rawKey.includes('\\') ? (JSON.parse(rawKey) as string) : rawKey.slice(1, -1);
+    } catch {
+      return false; // topLevelValueRanges finds nothing in such a body
+    }
+    if (keys.includes(k)) {
+      if (seen.has(k)) dup = true;
+      seen.add(k);
+    }
+    i = skipWs(b, i) + 1; // colon
+    i = skipWs(b, i);
+    i = skipValue(b, i);
+    i = skipWs(b, i);
+    if (b[i] === 0x2c) i++;
+  }
+  return dup;
 }

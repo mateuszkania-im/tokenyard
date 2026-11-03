@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { arrayElementRanges, QUOTE, topLevelValueRanges } from './json-ranges.js';
+import { arrayElementRanges, duplicateTopLevelKey, QUOTE, topLevelValueRanges } from './json-ranges.js';
 import { toolTypeLabel } from './labels.js';
 import type { ExtractedFeatures } from './types.js';
 
@@ -129,6 +129,8 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     : null;
 
   const thinking = parsed.thinking;
+  // Walked once, for the newest turn and the ambiguous-key check (V1).
+  const messageRanges = arrayElementRanges(body, 'messages');
   return {
     model: typeof parsed.model === 'string' ? parsed.model : null,
     stream: parsed.stream === true,
@@ -144,18 +146,17 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     ...(typeof parsed.inference_geo === 'string' ? { inferenceGeo: parsed.inference_geo } : {}),
     ...(hasCompaction(parsed.context_management) ? { compaction: true as const } : {}),
     parseError: false,
-    ...turnRanges(body, messages),
-    ...(hasAmbiguousKeys(body) ? { ambiguousKeys: true as const } : {}),
+    ...turnRanges(messages, messageRanges),
+    ...(hasAmbiguousKeys(body, messageRanges) ? { ambiguousKeys: true as const } : {}),
   };
 }
 
 /** A duplicate top-level `messages`, or a message object with a duplicate `role` or `content` (keys compared unescaped). */
-function hasAmbiguousKeys(body: Buffer): boolean {
-  if (topLevelValueRanges(body, 'messages').length > 1) return true;
-  for (const r of arrayElementRanges(body, 'messages') ?? []) {
+function hasAmbiguousKeys(body: Buffer, messageRanges: ReturnType<typeof arrayElementRanges>): boolean {
+  if (duplicateTopLevelKey(body, ['messages'])) return true;
+  for (const r of messageRanges ?? []) {
     if (body[r.start] !== 0x7b) continue;
-    const m = body.subarray(r.start, r.end);
-    if (topLevelValueRanges(m, 'role').length > 1 || topLevelValueRanges(m, 'content').length > 1) return true;
+    if (duplicateTopLevelKey(body.subarray(r.start, r.end), ['role', 'content'])) return true;
   }
   return false;
 }
@@ -164,9 +165,8 @@ function hasAmbiguousKeys(body: Buffer): boolean {
  * Byte ranges of the messages and of the newest user-role message (spec 5.3 step 5): an assistant prefill after it is
  * not the last turn. No user message, or ranges that do not line up with the parsed array: no last turn.
  */
-function turnRanges(body: Buffer, messages: unknown[]): Pick<ExtractedFeatures, 'lastTurn' | 'messages'> {
+function turnRanges(messages: unknown[], ranges: ReturnType<typeof arrayElementRanges>): Pick<ExtractedFeatures, 'lastTurn' | 'messages'> {
   if (messages.length === 0) return { lastTurn: null };
-  const ranges = arrayElementRanges(body, 'messages');
   if (ranges === null || ranges.length !== messages.length) return { lastTurn: null };
   let index = -1;
   for (let i = messages.length - 1; i >= 0 && index < 0; i--) {
