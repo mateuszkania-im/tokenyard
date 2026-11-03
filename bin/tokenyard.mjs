@@ -48,6 +48,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/fsutil/safe-path.ts
 var safe_path_exports = {};
@@ -73,10 +74,10 @@ function cliRoot(target, cwd = process.cwd()) {
   if (process.platform !== "win32") return parse(abs).root;
   return inside(resolve(cwd), abs) ? resolve(cwd) : dirname(abs);
 }
-function rootOwnedChain(dir, fs2, lenientFirst) {
+function rootOwnedChain(dir, fs3, lenientFirst) {
   let cur = dir;
   for (let first2 = true; ; first2 = false) {
-    const st = fs2.stat(cur);
+    const st = fs3.stat(cur);
     if (st.uid !== 0) return false;
     if ((st.mode & GROUP_OR_WORLD_WRITABLE) !== 0 && !(first2 && lenientFirst && (st.mode & STICKY) !== 0)) return false;
     const up = dirname(cur);
@@ -84,13 +85,13 @@ function rootOwnedChain(dir, fs2, lenientFirst) {
     cur = up;
   }
 }
-function trustedSystemLink(link, fs2 = realProbe) {
+function trustedSystemLink(link, fs3 = realProbe) {
   try {
-    if (fs2.lstat(link).uid !== 0) return false;
-    if (!rootOwnedChain(fs2.realpath(dirname(link)), fs2, false)) return false;
-    const target = fs2.realpath(link);
-    const targetDir = fs2.stat(target).isDirectory() ? target : dirname(target);
-    return rootOwnedChain(targetDir, fs2, true);
+    if (fs3.lstat(link).uid !== 0) return false;
+    if (!rootOwnedChain(fs3.realpath(dirname(link)), fs3, false)) return false;
+    const target = fs3.realpath(link);
+    const targetDir = fs3.stat(target).isDirectory() ? target : dirname(target);
+    return rootOwnedChain(targetDir, fs3, true);
   } catch {
     return false;
   }
@@ -102,18 +103,18 @@ function inside(root, abs) {
   const rel = relative(root, abs);
   return rel === "" || rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
-function components(root, abs, label) {
-  if (!inside(root, abs)) throw new UnsafePathError(`${label} is outside ${root}`);
+function components(root, abs, label2) {
+  if (!inside(root, abs)) throw new UnsafePathError(`${label2} is outside ${root}`);
   const out = [];
   let cur = root;
   for (const part2 of relative(root, abs).split(sep).filter((p) => p !== "")) out.push(cur = join(cur, part2));
   return out;
 }
-function refuseLink(path2, label) {
-  throw new UnsafePathError(`${label} passes through a symbolic link (${path2}), which is refused; pass the real path instead`);
+function refuseLink(path3, label2) {
+  throw new UnsafePathError(`${label2} passes through a symbolic link (${path3}), which is refused; pass the real path instead`);
 }
-function underRealRoot(realRoot, realTarget, label) {
-  if (!inside(realRoot, realTarget)) throw new UnsafePathError(`${label} resolves outside ${realRoot}`);
+function underRealRoot(realRoot, realTarget, label2) {
+  if (!inside(realRoot, realTarget)) throw new UnsafePathError(`${label2} resolves outside ${realRoot}`);
 }
 async function checkPath(root, target, o = {}) {
   const absRoot = resolve(root);
@@ -291,7 +292,7 @@ var init_safe_path = __esm({
     GROUP_OR_WORLD_WRITABLE = 18;
     STICKY = 512;
     systemLinksAllowed = (absRoot) => process.platform !== "win32" && parse(absRoot).root === absRoot;
-    allowedLink = (absRoot, path2, st) => st.isSymbolicLink() && systemLinksAllowed(absRoot) && trustedSystemLink(path2);
+    allowedLink = (absRoot, path3, st) => st.isSymbolicLink() && systemLinksAllowed(absRoot) && trustedSystemLink(path3);
     missing = (e2) => e2.code === "ENOENT" || e2.code === "ENOTDIR";
     tooLarge = (target, cap2) => new UnsafePathError(`${target} is larger than ${cap2} bytes`);
   }
@@ -353,14 +354,14 @@ import { open as open2 } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { createGunzip } from "node:zlib";
 async function* readLedger(paths) {
-  for (const path2 of paths) {
-    const fh = await open2(path2, constants2.O_RDONLY | (constants2.O_NOFOLLOW ?? 0) | (constants2.O_NONBLOCK ?? 0));
+  for (const path3 of paths) {
+    const fh = await open2(path3, constants2.O_RDONLY | (constants2.O_NOFOLLOW ?? 0) | (constants2.O_NONBLOCK ?? 0));
     if (!(await fh.stat()).isFile()) {
       await fh.close();
-      throw new Error(`${path2} is not a regular file`);
+      throw new Error(`${path3} is not a regular file`);
     }
     const file2 = fh.createReadStream();
-    const input3 = path2.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
+    const input3 = path3.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
     file2.on("error", (e2) => input3.destroy(e2));
     for await (const text2 of createInterface({ input: input3, crlfDelay: Infinity })) {
       if (text2 === "") continue;
@@ -586,8 +587,8 @@ function formatUsd(micro) {
 function renderReportTerminal(r) {
   const cols = r.by.length > 0 ? r.by.map(String) : ["all"];
   const header2 = [...cols, "requests", "cost", "share", "input", "output", "cache read", "cache write"];
-  const row = (label, x) => [
-    ...label,
+  const row = (label2, x) => [
+    ...label2,
     String(x.requests),
     formatUsd(x.costMicroUsd) + (x.unpriced > 0 ? `+${x.unpriced} unpriced` : ""),
     pct(x.costMicroUsd, r.totals.costMicroUsd),
@@ -822,14 +823,14 @@ async function startAnthropicMock(opts = {}) {
     return s2;
   };
   async function respond(rec, res) {
-    const path2 = rec.pathAndQuery.split("?")[0];
+    const path3 = rec.pathAndQuery.split("?")[0];
     const body = parseBody(rec.body);
     const sc = typeof scenario === "function" ? scenario(rec) : scenario;
-    if (rec.method !== "POST" || path2 !== "/v1/messages" && path2 !== "/v1/messages/count_tokens") {
+    if (rec.method !== "POST" || path3 !== "/v1/messages" && path3 !== "/v1/messages/count_tokens") {
       res.writeHead(404, { "content-type": "application/json" }).end('{"type":"error","error":{"type":"not_found_error","message":"not found"}}');
       return;
     }
-    if (path2 === "/v1/messages/count_tokens") {
+    if (path3 === "/v1/messages/count_tokens") {
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ input_tokens: countTokens(body) }));
       return;
     }
@@ -888,9 +889,9 @@ async function startAnthropicMock(opts = {}) {
     }
     let closed = false;
     res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve4) => {
-      if (closed || res.destroyed) return resolve4();
-      res.write(chunk, () => resolve4());
+    const write = (chunk) => new Promise((resolve5) => {
+      if (closed || res.destroyed) return resolve5();
+      res.write(chunk, () => resolve5());
     });
     const { head, deltas, tail } = scriptedEvents(id, model, usage);
     const all = [...head, ...deltas, ...tail];
@@ -938,7 +939,7 @@ async function startAnthropicMock(opts = {}) {
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve4) => server.listen(opts.port ?? 0, "127.0.0.1", resolve4));
+  await new Promise((resolve5) => server.listen(opts.port ?? 0, "127.0.0.1", resolve5));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -947,8 +948,8 @@ async function startAnthropicMock(opts = {}) {
       scenario = s2;
     },
     close() {
-      return new Promise((resolve4) => {
-        server.close(() => resolve4());
+      return new Promise((resolve5) => {
+        server.close(() => resolve5());
         server.closeAllConnections();
       });
     }
@@ -1048,19 +1049,19 @@ var init_writer = __esm({
           return false;
         }
         const at = this.o.clock();
-        const { path: path2 } = this.pathFor(r.tenant, at);
+        const { path: path3 } = this.pathFor(r.tenant, at);
         this.tenants.add(r.tenant);
         this.queuedRequests++;
-        this.queue.push({ path: path2, tenant: r.tenant, at, request: true, line: { ...r, instance: this.o.instanceId, seq } });
+        this.queue.push({ path: path3, tenant: r.tenant, at, request: true, line: { ...r, instance: this.o.instanceId, seq } });
         this.kick();
         return true;
       }
       control(kind) {
         const now = this.o.clock();
         for (const tenant of this.tenants) {
-          const { path: path2 } = this.pathFor(tenant, now);
+          const { path: path3 } = this.pathFor(tenant, now);
           const line = { v: 1, kind, instance: this.o.instanceId, ts: new Date(now).toISOString(), seq: this.seq };
-          this.queue.push({ path: path2, tenant, at: now, request: false, line: { ...line } });
+          this.queue.push({ path: path3, tenant, at: now, request: false, line: { ...line } });
         }
         this.kick();
       }
@@ -1085,11 +1086,11 @@ var init_writer = __esm({
           if (list3) list3.push(p);
           else byPath.set(p.path, [p]);
         }
-        for (const [path2, items] of byPath) {
+        for (const [path3, items] of byPath) {
           const first2 = items[0];
           if (!first2) continue;
           let text2 = "";
-          if (!this.opened.has(path2)) {
+          if (!this.opened.has(path3)) {
             const firstSeq = items.find((i) => i.request)?.line.seq;
             const seg = {
               v: 1,
@@ -1100,14 +1101,14 @@ var init_writer = __esm({
             };
             text2 += `${JSON.stringify(seg)}
 `;
-            this.opened.add(path2);
+            this.opened.add(path3);
           }
           text2 += items.map((i) => `${JSON.stringify(i.line)}
 `).join("");
           try {
-            await writeFileUnder(this.root, path2, text2, { append: true });
+            await writeFileUnder(this.root, path3, text2, { append: true });
           } catch {
-            this.opened.delete(path2);
+            this.opened.delete(path3);
             this.dropped += items.filter((i) => i.request).length;
           }
         }
@@ -1504,12 +1505,12 @@ function buildViews(body, start, end, messages, raw) {
   return { all, joined };
 }
 function globalOf(rule) {
-  let re = globalRegex.get(rule);
-  if (re === void 0) {
-    re = new RegExp(rule.regex.source, rule.regex.flags.includes("g") ? rule.regex.flags : `${rule.regex.flags}g`);
-    globalRegex.set(rule, re);
+  let re2 = globalRegex.get(rule);
+  if (re2 === void 0) {
+    re2 = new RegExp(rule.regex.source, rule.regex.flags.includes("g") ? rule.regex.flags : `${rule.regex.flags}g`);
+    globalRegex.set(rule, re2);
   }
-  return re;
+  return re2;
 }
 function bareNumberOk(body, rule, value, segments, quotedOnly) {
   if (quotedOnly || !rule.bareNumber || segments.length !== 1 || !/^\d+$/.test(value)) return false;
@@ -1519,11 +1520,11 @@ function bareNumberOk(body, rule, value, segments, quotedOnly) {
 function matchView(view, rule, crossingOnly, out, body, quotedOnly) {
   const text2 = view.text;
   if (rule.keywords.length > 0 && !rule.keywords.some((k) => text2.includes(k))) return;
-  const re = globalOf(rule);
-  re.lastIndex = 0;
-  for (let m = re.exec(text2); m !== null; m = re.exec(text2)) {
+  const re2 = globalOf(rule);
+  re2.lastIndex = 0;
+  for (let m = re2.exec(text2); m !== null; m = re2.exec(text2)) {
     if (m[0].length === 0) {
-      re.lastIndex++;
+      re2.lastIndex++;
       continue;
     }
     const value = m[1] ?? m[0];
@@ -1750,17 +1751,17 @@ var require_visit = __commonJS({
     visit3.BREAK = BREAK;
     visit3.SKIP = SKIP;
     visit3.REMOVE = REMOVE;
-    function visit_(key, node2, visitor, path2) {
-      const ctrl = callVisitor(key, node2, visitor, path2);
+    function visit_(key, node2, visitor, path3) {
+      const ctrl = callVisitor(key, node2, visitor, path3);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path2, ctrl);
-        return visit_(key, ctrl, visitor, path2);
+        replaceNode(key, path3, ctrl);
+        return visit_(key, ctrl, visitor, path3);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node2)) {
-          path2 = Object.freeze(path2.concat(node2));
+          path3 = Object.freeze(path3.concat(node2));
           for (let i = 0; i < node2.items.length; ++i) {
-            const ci2 = visit_(i, node2.items[i], visitor, path2);
+            const ci2 = visit_(i, node2.items[i], visitor, path3);
             if (typeof ci2 === "number")
               i = ci2 - 1;
             else if (ci2 === BREAK)
@@ -1771,13 +1772,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node2)) {
-          path2 = Object.freeze(path2.concat(node2));
-          const ck = visit_("key", node2.key, visitor, path2);
+          path3 = Object.freeze(path3.concat(node2));
+          const ck = visit_("key", node2.key, visitor, path3);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node2.key = null;
-          const cv = visit_("value", node2.value, visitor, path2);
+          const cv = visit_("value", node2.value, visitor, path3);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1798,17 +1799,17 @@ var require_visit = __commonJS({
     visitAsync.BREAK = BREAK;
     visitAsync.SKIP = SKIP;
     visitAsync.REMOVE = REMOVE;
-    async function visitAsync_(key, node2, visitor, path2) {
-      const ctrl = await callVisitor(key, node2, visitor, path2);
+    async function visitAsync_(key, node2, visitor, path3) {
+      const ctrl = await callVisitor(key, node2, visitor, path3);
       if (identity.isNode(ctrl) || identity.isPair(ctrl)) {
-        replaceNode(key, path2, ctrl);
-        return visitAsync_(key, ctrl, visitor, path2);
+        replaceNode(key, path3, ctrl);
+        return visitAsync_(key, ctrl, visitor, path3);
       }
       if (typeof ctrl !== "symbol") {
         if (identity.isCollection(node2)) {
-          path2 = Object.freeze(path2.concat(node2));
+          path3 = Object.freeze(path3.concat(node2));
           for (let i = 0; i < node2.items.length; ++i) {
-            const ci2 = await visitAsync_(i, node2.items[i], visitor, path2);
+            const ci2 = await visitAsync_(i, node2.items[i], visitor, path3);
             if (typeof ci2 === "number")
               i = ci2 - 1;
             else if (ci2 === BREAK)
@@ -1819,13 +1820,13 @@ var require_visit = __commonJS({
             }
           }
         } else if (identity.isPair(node2)) {
-          path2 = Object.freeze(path2.concat(node2));
-          const ck = await visitAsync_("key", node2.key, visitor, path2);
+          path3 = Object.freeze(path3.concat(node2));
+          const ck = await visitAsync_("key", node2.key, visitor, path3);
           if (ck === BREAK)
             return BREAK;
           else if (ck === REMOVE)
             node2.key = null;
-          const cv = await visitAsync_("value", node2.value, visitor, path2);
+          const cv = await visitAsync_("value", node2.value, visitor, path3);
           if (cv === BREAK)
             return BREAK;
           else if (cv === REMOVE)
@@ -1852,23 +1853,23 @@ var require_visit = __commonJS({
       }
       return visitor;
     }
-    function callVisitor(key, node2, visitor, path2) {
+    function callVisitor(key, node2, visitor, path3) {
       if (typeof visitor === "function")
-        return visitor(key, node2, path2);
+        return visitor(key, node2, path3);
       if (identity.isMap(node2))
-        return visitor.Map?.(key, node2, path2);
+        return visitor.Map?.(key, node2, path3);
       if (identity.isSeq(node2))
-        return visitor.Seq?.(key, node2, path2);
+        return visitor.Seq?.(key, node2, path3);
       if (identity.isPair(node2))
-        return visitor.Pair?.(key, node2, path2);
+        return visitor.Pair?.(key, node2, path3);
       if (identity.isScalar(node2))
-        return visitor.Scalar?.(key, node2, path2);
+        return visitor.Scalar?.(key, node2, path3);
       if (identity.isAlias(node2))
-        return visitor.Alias?.(key, node2, path2);
+        return visitor.Alias?.(key, node2, path3);
       return void 0;
     }
-    function replaceNode(key, path2, node2) {
-      const parent = path2[path2.length - 1];
+    function replaceNode(key, path3, node2) {
+      const parent = path3[path3.length - 1];
       if (identity.isCollection(parent)) {
         parent.items[key] = node2;
       } else if (identity.isPair(parent)) {
@@ -2480,10 +2481,10 @@ var require_Collection = __commonJS({
     var createNode = require_createNode();
     var identity = require_identity();
     var Node = require_Node();
-    function collectionFromPath(schema, path2, value) {
+    function collectionFromPath(schema, path3, value) {
       let v = value;
-      for (let i = path2.length - 1; i >= 0; --i) {
-        const k = path2[i];
+      for (let i = path3.length - 1; i >= 0; --i) {
+        const k = path3[i];
         if (typeof k === "number" && Number.isInteger(k) && k >= 0) {
           const a = [];
           a[k] = v;
@@ -2502,7 +2503,7 @@ var require_Collection = __commonJS({
         sourceObjects: /* @__PURE__ */ new Map()
       });
     }
-    var isEmptyPath = (path2) => path2 == null || typeof path2 === "object" && !!path2[Symbol.iterator]().next().done;
+    var isEmptyPath = (path3) => path3 == null || typeof path3 === "object" && !!path3[Symbol.iterator]().next().done;
     var Collection = class extends Node.NodeBase {
       constructor(type, schema) {
         super(type);
@@ -2532,11 +2533,11 @@ var require_Collection = __commonJS({
        * be a Pair instance or a `{ key, value }` object, which may not have a key
        * that already exists in the map.
        */
-      addIn(path2, value) {
-        if (isEmptyPath(path2))
+      addIn(path3, value) {
+        if (isEmptyPath(path3))
           this.add(value);
         else {
-          const [key, ...rest] = path2;
+          const [key, ...rest] = path3;
           const node2 = this.get(key, true);
           if (identity.isCollection(node2))
             node2.addIn(rest, value);
@@ -2550,8 +2551,8 @@ var require_Collection = __commonJS({
        * Removes a value from the collection.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path2) {
-        const [key, ...rest] = path2;
+      deleteIn(path3) {
+        const [key, ...rest] = path3;
         if (rest.length === 0)
           return this.delete(key);
         const node2 = this.get(key, true);
@@ -2565,8 +2566,8 @@ var require_Collection = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path2, keepScalar) {
-        const [key, ...rest] = path2;
+      getIn(path3, keepScalar) {
+        const [key, ...rest] = path3;
         const node2 = this.get(key, true);
         if (rest.length === 0)
           return !keepScalar && identity.isScalar(node2) ? node2.value : node2;
@@ -2584,8 +2585,8 @@ var require_Collection = __commonJS({
       /**
        * Checks if the collection includes a value with the key `key`.
        */
-      hasIn(path2) {
-        const [key, ...rest] = path2;
+      hasIn(path3) {
+        const [key, ...rest] = path3;
         if (rest.length === 0)
           return this.has(key);
         const node2 = this.get(key, true);
@@ -2595,8 +2596,8 @@ var require_Collection = __commonJS({
        * Sets a value in this collection. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path2, value) {
-        const [key, ...rest] = path2;
+      setIn(path3, value) {
+        const [key, ...rest] = path3;
         if (rest.length === 0) {
           this.set(key, value);
         } else {
@@ -4018,9 +4019,9 @@ var require_stringifyNumber = __commonJS({
     function stringifyNumber({ format, minFractionDigits, tag, value }) {
       if (typeof value === "bigint")
         return String(value);
-      const num3 = typeof value === "number" ? value : Number(value);
-      if (!isFinite(num3))
-        return isNaN(num3) ? ".nan" : num3 < 0 ? "-.inf" : ".inf";
+      const num4 = typeof value === "number" ? value : Number(value);
+      if (!isFinite(num4))
+        return isNaN(num4) ? ".nan" : num4 < 0 ? "-.inf" : ".inf";
       let n2 = Object.is(value, -0) ? "-0" : JSON.stringify(value);
       if (!format && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n2) && !n2.includes("e")) {
         let i = n2.indexOf(".");
@@ -4060,8 +4061,8 @@ var require_float = __commonJS({
       test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str),
       stringify(node2) {
-        const num3 = Number(node2.value);
-        return isFinite(num3) ? num3.toExponential() : stringifyNumber.stringifyNumber(node2);
+        const num4 = Number(node2.value);
+        return isFinite(num4) ? num4.toExponential() : stringifyNumber.stringifyNumber(node2);
       }
     };
     var float = {
@@ -4500,8 +4501,8 @@ var require_float2 = __commonJS({
       test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str.replace(/_/g, "")),
       stringify(node2) {
-        const num3 = Number(node2.value);
-        return isFinite(num3) ? num3.toExponential() : stringifyNumber.stringifyNumber(node2);
+        const num4 = Number(node2.value);
+        return isFinite(num4) ? num4.toExponential() : stringifyNumber.stringifyNumber(node2);
       }
     };
     var float = {
@@ -4703,23 +4704,23 @@ var require_timestamp = __commonJS({
     function parseSexagesimal(str, asBigInt) {
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
-      const num3 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
-      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num3(60) + num3(p), num3(0));
-      return sign === "-" ? num3(-1) * res : res;
+      const num4 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
+      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num4(60) + num4(p), num4(0));
+      return sign === "-" ? num4(-1) * res : res;
     }
     function stringifySexagesimal(node2) {
       let { value } = node2;
-      let num3 = (n2) => n2;
+      let num4 = (n2) => n2;
       if (typeof value === "bigint")
-        num3 = (n2) => BigInt(n2);
+        num4 = (n2) => BigInt(n2);
       else if (isNaN(value) || !isFinite(value))
         return stringifyNumber.stringifyNumber(node2);
       let sign = "";
       if (value < 0) {
         sign = "-";
-        value *= num3(-1);
+        value *= num4(-1);
       }
-      const _60 = num3(60);
+      const _60 = num4(60);
       const parts = [value % _60];
       if (value < 60) {
         parts.unshift(0);
@@ -5111,9 +5112,9 @@ var require_Document = __commonJS({
           this.contents.add(value);
       }
       /** Adds a value to the document. */
-      addIn(path2, value) {
+      addIn(path3, value) {
         if (assertCollection(this.contents))
-          this.contents.addIn(path2, value);
+          this.contents.addIn(path3, value);
       }
       /**
        * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
@@ -5188,14 +5189,14 @@ var require_Document = __commonJS({
        * Removes a value from the document.
        * @returns `true` if the item was found and removed.
        */
-      deleteIn(path2) {
-        if (Collection.isEmptyPath(path2)) {
+      deleteIn(path3) {
+        if (Collection.isEmptyPath(path3)) {
           if (this.contents == null)
             return false;
           this.contents = null;
           return true;
         }
-        return assertCollection(this.contents) ? this.contents.deleteIn(path2) : false;
+        return assertCollection(this.contents) ? this.contents.deleteIn(path3) : false;
       }
       /**
        * Returns item at `key`, or `undefined` if not found. By default unwraps
@@ -5210,10 +5211,10 @@ var require_Document = __commonJS({
        * scalar values from their surrounding node; to disable set `keepScalar` to
        * `true` (collections are always returned intact).
        */
-      getIn(path2, keepScalar) {
-        if (Collection.isEmptyPath(path2))
+      getIn(path3, keepScalar) {
+        if (Collection.isEmptyPath(path3))
           return !keepScalar && identity.isScalar(this.contents) ? this.contents.value : this.contents;
-        return identity.isCollection(this.contents) ? this.contents.getIn(path2, keepScalar) : void 0;
+        return identity.isCollection(this.contents) ? this.contents.getIn(path3, keepScalar) : void 0;
       }
       /**
        * Checks if the document includes a value with the key `key`.
@@ -5224,10 +5225,10 @@ var require_Document = __commonJS({
       /**
        * Checks if the document includes a value at `path`.
        */
-      hasIn(path2) {
-        if (Collection.isEmptyPath(path2))
+      hasIn(path3) {
+        if (Collection.isEmptyPath(path3))
           return this.contents !== void 0;
-        return identity.isCollection(this.contents) ? this.contents.hasIn(path2) : false;
+        return identity.isCollection(this.contents) ? this.contents.hasIn(path3) : false;
       }
       /**
        * Sets a value in this document. For `!!set`, `value` needs to be a
@@ -5244,13 +5245,13 @@ var require_Document = __commonJS({
        * Sets a value in this document. For `!!set`, `value` needs to be a
        * boolean to add/remove the item from the set.
        */
-      setIn(path2, value) {
-        if (Collection.isEmptyPath(path2)) {
+      setIn(path3, value) {
+        if (Collection.isEmptyPath(path3)) {
           this.contents = value;
         } else if (this.contents == null) {
-          this.contents = Collection.collectionFromPath(this.schema, Array.from(path2), value);
+          this.contents = Collection.collectionFromPath(this.schema, Array.from(path3), value);
         } else if (assertCollection(this.contents)) {
-          this.contents.setIn(path2, value);
+          this.contents.setIn(path3, value);
         }
       }
       /**
@@ -6296,12 +6297,12 @@ var require_resolve_flow_scalar = __commonJS({
           };
       }
       const valueEnd = offset + source.length;
-      const re = resolveEnd.resolveEnd(end, valueEnd, strict, onError);
+      const re2 = resolveEnd.resolveEnd(end, valueEnd, strict, onError);
       return {
         value,
         type: _type,
-        comment: re.comment,
-        range: [offset, valueEnd, re.offset]
+        comment: re2.comment,
+        range: [offset, valueEnd, re2.offset]
       };
     }
     function plainValue(source, onError) {
@@ -6688,10 +6689,10 @@ var require_compose_node = __commonJS({
       if (alias.source.endsWith(":"))
         onError(offset + source.length - 1, "BAD_ALIAS", "Alias ending in : is ambiguous", true);
       const valueEnd = offset + source.length;
-      const re = resolveEnd.resolveEnd(end, valueEnd, options.strict, onError);
-      alias.range = [offset, valueEnd, re.offset];
-      if (re.comment)
-        alias.comment = re.comment;
+      const re2 = resolveEnd.resolveEnd(end, valueEnd, options.strict, onError);
+      alias.range = [offset, valueEnd, re2.offset];
+      if (re2.comment)
+        alias.comment = re2.comment;
       return alias;
     }
     exports.composeEmptyNode = composeEmptyNode;
@@ -6732,10 +6733,10 @@ var require_compose_doc = __commonJS({
       }
       doc.contents = value ? composeNode.composeNode(ctx, value, props, onError) : composeNode.composeEmptyNode(ctx, props.end, start, null, props, onError);
       const contentEnd = doc.contents.range[2];
-      const re = resolveEnd.resolveEnd(end, contentEnd, false, onError);
-      if (re.comment)
-        doc.comment = re.comment;
-      doc.range = [offset, contentEnd, re.offset];
+      const re2 = resolveEnd.resolveEnd(end, contentEnd, false, onError);
+      if (re2.comment)
+        doc.comment = re2.comment;
+      doc.range = [offset, contentEnd, re2.offset];
       return doc;
     }
     exports.composeDoc = composeDoc;
@@ -6978,15 +6979,15 @@ var require_cst_scalar = __commonJS({
       }
       return null;
     }
-    function createScalarToken(value, context) {
-      const { implicitKey = false, indent, inFlow = false, offset = -1, type = "PLAIN" } = context;
+    function createScalarToken(value, context2) {
+      const { implicitKey = false, indent, inFlow = false, offset = -1, type = "PLAIN" } = context2;
       const source = stringifyString.stringifyString({ type, value }, {
         implicitKey,
         indent: indent > 0 ? " ".repeat(indent) : "",
         inFlow,
         options: { blockQuote: true, lineWidth: -1 }
       });
-      const end = context.end ?? [
+      const end = context2.end ?? [
         { type: "newline", offset: -1, indent, source: "\n" }
       ];
       switch (source[0]) {
@@ -7010,8 +7011,8 @@ var require_cst_scalar = __commonJS({
           return { type: "scalar", offset, indent, source, end };
       }
     }
-    function setScalarValue(token, value, context = {}) {
-      let { afterKey = false, implicitKey = false, inFlow = false, type } = context;
+    function setScalarValue(token, value, context2 = {}) {
+      let { afterKey = false, implicitKey = false, inFlow = false, type } = context2;
       let indent = "indent" in token ? token.indent : null;
       if (afterKey && typeof indent === "number")
         indent += 2;
@@ -7211,9 +7212,9 @@ var require_cst_visit = __commonJS({
     visit3.BREAK = BREAK;
     visit3.SKIP = SKIP;
     visit3.REMOVE = REMOVE;
-    visit3.itemAtPath = (cst, path2) => {
+    visit3.itemAtPath = (cst, path3) => {
       let item = cst;
-      for (const [field, index] of path2) {
+      for (const [field, index] of path3) {
         const tok = item?.[field];
         if (tok && "items" in tok) {
           item = tok.items[index];
@@ -7222,23 +7223,23 @@ var require_cst_visit = __commonJS({
       }
       return item;
     };
-    visit3.parentCollection = (cst, path2) => {
-      const parent = visit3.itemAtPath(cst, path2.slice(0, -1));
-      const field = path2[path2.length - 1][0];
+    visit3.parentCollection = (cst, path3) => {
+      const parent = visit3.itemAtPath(cst, path3.slice(0, -1));
+      const field = path3[path3.length - 1][0];
       const coll = parent?.[field];
       if (coll && "items" in coll)
         return coll;
       throw new Error("Parent collection not found");
     };
-    function _visit(path2, item, visitor) {
-      let ctrl = visitor(item, path2);
+    function _visit(path3, item, visitor) {
+      let ctrl = visitor(item, path3);
       if (typeof ctrl === "symbol")
         return ctrl;
       for (const field of ["key", "value"]) {
         const token = item[field];
         if (token && "items" in token) {
           for (let i = 0; i < token.items.length; ++i) {
-            const ci2 = _visit(Object.freeze(path2.concat([[field, i]])), token.items[i], visitor);
+            const ci2 = _visit(Object.freeze(path3.concat([[field, i]])), token.items[i], visitor);
             if (typeof ci2 === "number")
               i = ci2 - 1;
             else if (ci2 === BREAK)
@@ -7249,10 +7250,10 @@ var require_cst_visit = __commonJS({
             }
           }
           if (typeof ctrl === "function" && field === "key")
-            ctrl = ctrl(item, path2);
+            ctrl = ctrl(item, path3);
         }
       }
-      return typeof ctrl === "function" ? ctrl(item, path2) : ctrl;
+      return typeof ctrl === "function" ? ctrl(item, path3) : ctrl;
     }
     exports.visit = visit3;
   }
@@ -8554,14 +8555,14 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs2 = this.flowScalar(this.type);
+              const fs3 = this.flowScalar(this.type);
               if (atNextItem || it.value) {
-                map2.items.push({ start, key: fs2, sep: [] });
+                map2.items.push({ start, key: fs3, sep: [] });
                 this.onKeyLine = true;
               } else if (it.sep) {
-                this.stack.push(fs2);
+                this.stack.push(fs3);
               } else {
-                Object.assign(it, { key: fs2, sep: [] });
+                Object.assign(it, { key: fs3, sep: [] });
                 this.onKeyLine = true;
               }
               return;
@@ -8689,13 +8690,13 @@ var require_parser = __commonJS({
             case "scalar":
             case "single-quoted-scalar":
             case "double-quoted-scalar": {
-              const fs2 = this.flowScalar(this.type);
+              const fs3 = this.flowScalar(this.type);
               if (!it || it.value)
-                fc.items.push({ start: [], key: fs2, sep: [] });
+                fc.items.push({ start: [], key: fs3, sep: [] });
               else if (it.sep)
-                this.stack.push(fs2);
+                this.stack.push(fs3);
               else
-                Object.assign(it, { key: fs2, sep: [] });
+                Object.assign(it, { key: fs3, sep: [] });
               return;
             }
             case "flow-map-end":
@@ -9268,10 +9269,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path2) {
-  if (!path2)
+function getElementAtPath(obj, path3) {
+  if (!path3)
     return obj;
-  return path2.reduce((acc, key) => acc?.[key], obj);
+  return path3.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys2 = Object.keys(promisesObj);
@@ -9530,11 +9531,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path2, issues) {
+function prefixIssues(path3, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path2);
+    iss.path.unshift(path3);
     return iss;
   });
 }
@@ -10067,16 +10068,16 @@ function flattenError(error62, mapper = (issue2) => issue2.message) {
 }
 function formatError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error63, path2 = []) => {
+  const processError = (error63, path3 = []) => {
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path2, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path2, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -10115,17 +10116,17 @@ function formatError(error62, mapper = (issue2) => issue2.message) {
 }
 function treeifyError(error62, mapper = (issue2) => issue2.message) {
   const result = { errors: [] };
-  const processError = (error63, path2 = []) => {
+  const processError = (error63, path3 = []) => {
     var _a3;
     for (const issue2 of error63.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path2, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path2, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
       } else {
-        const fullpath = [...path2, ...issue2.path];
+        const fullpath = [...path3, ...issue2.path];
         if (fullpath.length === 0) {
           result.errors.push(mapper(issue2));
           continue;
@@ -10164,8 +10165,8 @@ function treeifyError(error62, mapper = (issue2) => issue2.message) {
 }
 function toDotPath(_path) {
   const segs = [];
-  const path2 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
-  for (const seg of path2) {
+  const path3 = _path.map((seg) => typeof seg === "object" ? seg.key : seg);
+  for (const seg of path3) {
     if (typeof seg === "number")
       segs.push(`[${seg}]`);
     else if (typeof seg === "symbol")
@@ -13583,7 +13584,7 @@ function isRef(value) {
 function cloneIssues(issues) {
   return issues.map((iss) => iss.path ? { ...iss, path: iss.path.slice() } : { ...iss });
 }
-function isRecursive(inst, stack, resolve4) {
+function isRecursive(inst, stack, resolve5) {
   const cached2 = recursive.get(inst);
   if (cached2 !== void 0)
     return cached2 ? PROVEN : NONE2;
@@ -13593,7 +13594,7 @@ function isRecursive(inst, stack, resolve4) {
   let result = NONE2;
   const check2 = (child) => {
     if (result !== PROVEN && child?._zod) {
-      const answer = isRecursive(child, stack, resolve4);
+      const answer = isRecursive(child, stack, resolve5);
       if (answer > result)
         result = answer;
     }
@@ -13604,7 +13605,7 @@ function isRecursive(inst, stack, resolve4) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
       if (spread && !desc.enumerable)
         continue;
-      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve4) : NONE2;
+      const child = desc.get ? ASSUMED : desc.value?._zod ? isRecursive(desc.value, stack, resolve5) : NONE2;
       if (child > answer)
         answer = child;
     }
@@ -13668,7 +13669,7 @@ function isRecursive(inst, stack, resolve4) {
       break;
     // `$ZodLazy` caches its inner on the def, so a resolved edge is followed exactly
     case "lazy": {
-      const inner = def._cachedInner ?? (resolve4 ? inst._zod.innerType : void 0);
+      const inner = def._cachedInner ?? (resolve5 ? inst._zod.innerType : void 0);
       merge2(inner ? isRecursive(inner, stack, false) : ASSUMED);
       break;
     }
@@ -22178,9 +22179,9 @@ function codePointLengthVar(doc, ctx, accessor, inDoubt) {
   doc.write(`const ${v} = typeof ${accessor} === "string" && ${inDoubt} ? ${cpLen}(${accessor}) : ${accessor}.length;`);
   return v;
 }
-function numericOperand(value, label) {
+function numericOperand(value, label2) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new ZodCompileUnsupportedError(`${label} bound of type ${typeof value}`);
+    throw new ZodCompileUnsupportedError(`${label2} bound of type ${typeof value}`);
   }
   return `${value}`;
 }
@@ -26406,15 +26407,15 @@ var init_errors2 = __esm({
       if (_installedErrorProtos.has(proto))
         return;
       _installedErrorProtos.add(proto);
-      _lazyMethod(proto, "format", (self) => (mapper) => formatError(self, mapper));
-      _lazyMethod(proto, "flatten", (self) => (mapper) => flattenError(self, mapper));
-      _lazyMethod(proto, "addIssue", (self) => (issue2) => {
-        self.issues.push(issue2);
-        self.message = JSON.stringify(self.issues, jsonStringifyReplacer, 2);
+      _lazyMethod(proto, "format", (self2) => (mapper) => formatError(self2, mapper));
+      _lazyMethod(proto, "flatten", (self2) => (mapper) => flattenError(self2, mapper));
+      _lazyMethod(proto, "addIssue", (self2) => (issue2) => {
+        self2.issues.push(issue2);
+        self2.message = JSON.stringify(self2.issues, jsonStringifyReplacer, 2);
       });
-      _lazyMethod(proto, "addIssues", (self) => (issues2) => {
-        self.issues.push(...issues2);
-        self.message = JSON.stringify(self.issues, jsonStringifyReplacer, 2);
+      _lazyMethod(proto, "addIssues", (self2) => (issues2) => {
+        self2.issues.push(...issues2);
+        self2.message = JSON.stringify(self2.issues, jsonStringifyReplacer, 2);
       });
       Object.defineProperty(proto, "isEmpty", {
         configurable: true,
@@ -27778,7 +27779,7 @@ var init_schemas2 = __esm({
       $ZodObjectJIT.init(inst, def);
       ZodType.init(inst, def);
       inst._zod.processJSONSchema = (ctx, json2, params) => objectProcessor(inst, ctx, json2, params);
-      util_exports.installLazyProp(inst, "shape", (self) => self._zod.def.shape, false);
+      util_exports.installLazyProp(inst, "shape", (self2) => self2._zod.def.shape, false);
     }, {
       keyof() {
         return _enum2(Object.keys(this._zod.def.shape));
@@ -28197,13 +28198,13 @@ function resolveRef(ref, ctx) {
   if (!ref.startsWith("#")) {
     throw new Error("External $ref is not supported, only local refs (#/...) are allowed");
   }
-  const path2 = ref.slice(1).split("/").filter(Boolean);
-  if (path2.length === 0) {
+  const path3 = ref.slice(1).split("/").filter(Boolean);
+  if (path3.length === 0) {
     return ctx.rootSchema;
   }
   const defsKey = ctx.version === "draft-2020-12" ? "$defs" : "definitions";
-  if (path2[0] === defsKey) {
-    const key = path2[1] === void 0 ? void 0 : decodeJSONPointerSegment(path2[1]);
+  if (path3[0] === defsKey) {
+    const key = path3[1] === void 0 ? void 0 : decodeJSONPointerSegment(path3[1]);
     if (!key || !ctx.defs[key]) {
       throw new Error(`Reference not found: ${ref}`);
     }
@@ -29621,7 +29622,7 @@ function roundUp(micro, what) {
 }
 function worstCaseMicroUsd(f, m, t, o) {
   const fast = f.fastMode && m.fast !== void 0;
-  let inputTokens = f.inputTokensBound;
+  let inputTokens2 = f.inputTokensBound;
   let outputTokens2 = outputTokenBound(f, m, o.reserveOutputTokens);
   let feeMicro = 0;
   let unpriced = false;
@@ -29643,11 +29644,11 @@ function worstCaseMicroUsd(f, m, t, o) {
       }
       feeMicro += Math.max(0, Math.ceil(uses)) * price2.perUseUsd * 1e6;
     }
-    inputTokens = iterations * m.maxContextTokens;
+    inputTokens2 = iterations * m.maxContextTokens;
     outputTokens2 = iterations * m.maxOutputTokens;
   }
   const tier = f.serviceTier ?? null;
-  const tokenMicro = (inputTokens * inputTokenRate(f, m, fast, tier) + outputTokens2 * maxOutputRate(m, fast, tier)) * modifierProduct(t);
+  const tokenMicro = (inputTokens2 * inputTokenRate(f, m, fast, tier) + outputTokens2 * maxOutputRate(m, fast, tier)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);
   const block2 = unpriced ? "unpriced-server-tool" : withoutMaxUses && o.serverToolsWithoutMaxUses === "block" ? "server-tool-no-max-uses" : null;
   return { micro, boundAssumed: unpriced || withoutMaxUses, block: block2 };
@@ -29735,8 +29736,8 @@ function globToRegExp(glob) {
   const body = glob.replace(/\*+/g, "*").split("*").map((lit) => lit.replace(/[.*+?^${}()|[\]\\/-]/g, "\\$&")).join(".*");
   return new RegExp(`^${body}$`, "s");
 }
-function globTest(re, value) {
-  return value.length <= MAX_GLOB_INPUT && re.test(value);
+function globTest(re2, value) {
+  return value.length <= MAX_GLOB_INPUT && re2.test(value);
 }
 function routeMatches(r, f, surface) {
   const m = r.match;
@@ -29954,17 +29955,17 @@ function buildFeatures(x, key, attr, hits, prices, id, ts, surface, o = {}) {
     guardrail: { hits: hits.map((h) => ({ ...h })) }
   };
 }
-function windowOf(window, ts) {
+function windowOf(window2, ts) {
   const d = new Date(ts);
   const y = d.getUTCFullYear();
   const m = d.getUTCMonth();
   const day = d.getUTCDate();
   let start;
   let end;
-  if (window === "day") {
+  if (window2 === "day") {
     start = Date.UTC(y, m, day);
     end = start + DAY_MS2;
-  } else if (window === "week") {
+  } else if (window2 === "week") {
     start = Date.UTC(y, m, day - (d.getUTCDay() + 6) % 7);
     end = start + 7 * DAY_MS2;
   } else {
@@ -30038,7 +30039,7 @@ function decide(policy2, f) {
   plan.route = route2.name;
   const authz = route2.match.requestClass === null && route2.match.agentType === null && route2.match.repo === null && route2.match.feature === null ? route2 : findAuthzRoute(policy2, f);
   if (authz === null) return { ...plan, preBlock: "no-route" };
-  const allows = (r, model) => r.allowModels === null || r.allowModels.some((re) => globTest(re, model));
+  const allows = (r, model) => r.allowModels === null || r.allowModels.some((re2) => globTest(re2, model));
   if (!allows(route2, f.model) || !allows(authz, f.model)) return { ...plan, preBlock: "model-not-allowed" };
   const lists = (r, type) => (r.serverTools ?? []).includes(serverToolKey(type));
   const refused2 = f.serverTools.filter((tool) => !lists(route2, tool.type) || !lists(authz, tool.type));
@@ -31083,12 +31084,14 @@ var init_breaker = __esm({
   "src/upstream/breaker.ts"() {
     "use strict";
     Breaker = class {
-      constructor(o, clock) {
+      constructor(o, clock, onOpen) {
         this.o = o;
         this.clock = clock;
+        this.onOpen = onOpen;
       }
       o;
       clock;
+      onOpen;
       states = /* @__PURE__ */ new Map();
       state(provider2) {
         let s2 = this.states.get(provider2);
@@ -31122,8 +31125,12 @@ var init_breaker = __esm({
         }
       }
       /** Opens the breaker until `untilMs` (a spend-cap 429 does this for `openSeconds`). */
-      open(provider2, untilMs) {
+      open(provider2, untilMs, scope = "provider") {
         const s2 = this.state(provider2);
+        try {
+          this.onOpen?.(scope);
+        } catch {
+        }
         s2.openUntil = untilMs;
         s2.halfOpen = false;
         s2.events = [];
@@ -32241,14 +32248,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path2 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path3 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path2 && path2[0] !== "/") {
-          path2 = `/${path2}`;
+        if (path3 && path3[0] !== "/") {
+          path3 = `/${path3}`;
         }
-        return new URL(`${origin}${path2}`);
+        return new URL(`${origin}${path3}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError2("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -33069,9 +33076,9 @@ var require_diagnostics = __commonJS({
         "undici:client:sendHeaders",
         (evt) => {
           const {
-            request: { method, path: path2, origin }
+            request: { method, path: path3, origin }
           } = evt;
-          debugLog("sending request to %s %s%s", method, origin, path2);
+          debugLog("sending request to %s %s%s", method, origin, path3);
         }
       );
     }
@@ -33089,14 +33096,14 @@ var require_diagnostics = __commonJS({
         "undici:request:headers",
         (evt) => {
           const {
-            request: { method, path: path2, origin },
+            request: { method, path: path3, origin },
             response: { statusCode }
           } = evt;
           debugLog(
             "received response to %s %s%s - HTTP %d",
             method,
             origin,
-            path2,
+            path3,
             statusCode
           );
         }
@@ -33105,23 +33112,23 @@ var require_diagnostics = __commonJS({
         "undici:request:trailers",
         (evt) => {
           const {
-            request: { method, path: path2, origin }
+            request: { method, path: path3, origin }
           } = evt;
-          debugLog("trailers received from %s %s%s", method, origin, path2);
+          debugLog("trailers received from %s %s%s", method, origin, path3);
         }
       );
       diagnosticsChannel.subscribe(
         "undici:request:error",
         (evt) => {
           const {
-            request: { method, path: path2, origin },
+            request: { method, path: path3, origin },
             error: error62
           } = evt;
           debugLog(
             "request to %s %s%s errored - %s",
             method,
             origin,
-            path2,
+            path3,
             error62.message
           );
         }
@@ -33236,7 +33243,7 @@ var require_request = __commonJS({
     var kHandler = /* @__PURE__ */ Symbol("handler");
     var Request = class {
       constructor(origin, {
-        path: path2,
+        path: path3,
         method,
         body,
         headers,
@@ -33253,11 +33260,11 @@ var require_request = __commonJS({
         maxRedirections,
         typeOfService
       }, handler) {
-        if (typeof path2 !== "string") {
+        if (typeof path3 !== "string") {
           throw new InvalidArgumentError2("path must be a string");
-        } else if (path2[0] !== "/" && !(path2.startsWith("http://") || path2.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path3[0] !== "/" && !(path3.startsWith("http://") || path3.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError2("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path2)) {
+        } else if (invalidPathRegex.test(path3)) {
           throw new InvalidArgumentError2("invalid request path");
         }
         if (typeof method !== "string") {
@@ -33332,7 +33339,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? serializePathWithQuery(path2, query) : path2;
+        this.path = query ? serializePathWithQuery(path3, query) : path3;
         this.origin = origin;
         this.protocol = getProtocolFromUrlString(origin);
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
@@ -33603,8 +33610,8 @@ var require_wrap_handler = __commonJS({
         return handler.onRequestStart ? handler : new WrapHandler(handler);
       }
       // Unwrap Interface
-      onConnect(abort, context) {
-        return this.#handler.onConnect?.(abort, context);
+      onConnect(abort, context2) {
+        return this.#handler.onConnect?.(abort, context2);
       }
       onResponseStarted() {
         return this.#handler.onResponseStarted?.();
@@ -33628,8 +33635,8 @@ var require_wrap_handler = __commonJS({
         return this.#handler.onError?.(err);
       }
       // Wrap Interface
-      onRequestStart(controller, context) {
-        this.#handler.onConnect?.((reason) => controller.abort(reason), context);
+      onRequestStart(controller, context2) {
+        this.#handler.onConnect?.((reason) => controller.abort(reason), context2);
       }
       onRequestUpgrade(controller, statusCode, headers, socket) {
         const rawHeaders = [];
@@ -33767,9 +33774,9 @@ var require_unwrap_handler = __commonJS({
       static unwrap(handler) {
         return !handler.onRequestStart ? handler : new UnwrapHandler(handler);
       }
-      onConnect(abort, context) {
+      onConnect(abort, context2) {
         this.#controller = new UnwrapController(abort);
-        this.#handler.onRequestStart?.(this.#controller, context);
+        this.#handler.onRequestStart?.(this.#controller, context2);
       }
       onResponseStarted() {
         return this.#handler.onResponseStarted?.();
@@ -33864,9 +33871,9 @@ var require_dispatcher_base = __commonJS({
       }
       close(callback) {
         if (callback === void 0) {
-          return new Promise((resolve4, reject) => {
+          return new Promise((resolve5, reject) => {
             this.close((err, data) => {
-              return err ? reject(err) : resolve4(data);
+              return err ? reject(err) : resolve5(data);
             });
           });
         }
@@ -33904,9 +33911,9 @@ var require_dispatcher_base = __commonJS({
           err = null;
         }
         if (callback === void 0) {
-          return new Promise((resolve4, reject) => {
+          return new Promise((resolve5, reject) => {
             this.destroy(err, (err2, data) => {
-              return err2 ? reject(err2) : resolve4(data);
+              return err2 ? reject(err2) : resolve5(data);
             });
           });
         }
@@ -35577,10 +35584,10 @@ var require_webidl = __commonJS({
         message
       });
     };
-    webidl.errors.invalidArgument = function(context) {
+    webidl.errors.invalidArgument = function(context2) {
       return webidl.errors.exception({
-        header: context.prefix,
-        message: `"${context.value}" is an invalid ${context.type}.`
+        header: context2.prefix,
+        message: `"${context2.value}" is an invalid ${context2.type}.`
       });
     };
     webidl.brandCheck = function(V, I) {
@@ -36151,7 +36158,7 @@ var require_util2 = __commonJS({
   "node_modules/undici/lib/web/fetch/util.js"(exports, module) {
     "use strict";
     var { Transform: Transform3 } = __require("node:stream");
-    var zlib = __require("node:zlib");
+    var zlib2 = __require("node:zlib");
     var { redirectStatusSet, referrerPolicyTokens, badPortsSet } = require_constants3();
     var { getGlobalOrigin } = require_global();
     var { collectAnHTTPQuotedString, parseMIMEType } = require_data_url();
@@ -36754,7 +36761,7 @@ var require_util2 = __commonJS({
             callback();
             return;
           }
-          this._inflateStream = (chunk[0] & 15) === 8 ? zlib.createInflate(this.#zlibOptions) : zlib.createInflateRaw(this.#zlibOptions);
+          this._inflateStream = (chunk[0] & 15) === 8 ? zlib2.createInflate(this.#zlibOptions) : zlib2.createInflateRaw(this.#zlibOptions);
           this._inflateStream.on("data", this.push.bind(this));
           this._inflateStream.on("end", () => this.push(null));
           this._inflateStream.on("error", (err) => this.destroy(err));
@@ -37412,8 +37419,8 @@ var require_promise = __commonJS({
     function createDeferredPromise() {
       let res;
       let rej;
-      const promise2 = new Promise((resolve4, reject) => {
-        res = resolve4;
+      const promise2 = new Promise((resolve5, reject) => {
+        res = resolve5;
         rej = reject;
       });
       return { promise: promise2, resolve: res, reject: rej };
@@ -37775,8 +37782,8 @@ var require_client_h1 = __commonJS({
       let mod;
       let useWasmSIMD = true;
       if (process.arch === "ppc64") {
-        const [major, minor] = process.versions.node.split(".").map((n2) => parseInt(n2, 10));
-        if (major < 24 || major === 24 && minor < 12) {
+        const [major2, minor] = process.versions.node.split(".").map((n2) => parseInt(n2, 10));
+        if (major2 < 24 || major2 === 24 && minor < 12) {
           useWasmSIMD = false;
         }
       }
@@ -38557,7 +38564,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client, request2) {
-      const { method, path: path2, host, upgrade, blocking, reset } = request2;
+      const { method, path: path3, host, upgrade, blocking, reset } = request2;
       let { body, headers, contentLength } = request2;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util.isFormDataLike(body)) {
@@ -38635,7 +38642,7 @@ var require_client_h1 = __commonJS({
       if (socket.setTypeOfService) {
         socket.setTypeOfService(request2.typeOfService);
       }
-      let header2 = `${method} ${path2} HTTP/1.1\r
+      let header2 = `${method} ${path3} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header2 += `host: ${host}\r
@@ -38822,12 +38829,12 @@ upgrade: ${upgrade}\r
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve4, reject) => {
+      const waitForDrain = () => new Promise((resolve5, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve4;
+          callback = resolve5;
         }
       });
       socket.on("close", onDrain).on("drain", onDrain);
@@ -39312,7 +39319,7 @@ var require_client_h2 = __commonJS({
       const headersTimeout = request2.headersTimeout ?? client[kHeadersTimeout];
       const bodyTimeout = request2.bodyTimeout ?? client[kBodyTimeout];
       const session = client[kHTTP2Session];
-      const { method, path: path2, host, upgrade, expectContinue, signal, protocol, headers: reqHeaders } = request2;
+      const { method, path: path3, host, upgrade, expectContinue, signal, protocol, headers: reqHeaders } = request2;
       let { body } = request2;
       if (upgrade != null && upgrade !== "websocket") {
         util.errorRequest(client, request2, new InvalidArgumentError2(`Custom upgrade "${upgrade}" not supported over HTTP/2`));
@@ -39381,7 +39388,7 @@ var require_client_h2 = __commonJS({
           }
           headers[HTTP2_HEADER_METHOD] = "CONNECT";
           headers[HTTP2_HEADER_PROTOCOL] = "websocket";
-          headers[HTTP2_HEADER_PATH] = path2;
+          headers[HTTP2_HEADER_PATH] = path3;
           if (protocol === "ws:" || protocol === "wss:") {
             headers[HTTP2_HEADER_SCHEME] = protocol === "ws:" ? "http" : "https";
           } else {
@@ -39433,7 +39440,7 @@ var require_client_h2 = __commonJS({
         stream.setTimeout(headersTimeout);
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path2;
+      headers[HTTP2_HEADER_PATH] = path3;
       headers[HTTP2_HEADER_SCHEME] = protocol === "http:" ? "http" : "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body && typeof body.read === "function") {
@@ -39711,12 +39718,12 @@ var require_client_h2 = __commonJS({
           cb();
         }
       }
-      const waitForDrain = () => new Promise((resolve4, reject) => {
+      const waitForDrain = () => new Promise((resolve5, reject) => {
         assert2(callback === null);
         if (socket[kError]) {
           reject(socket[kError]);
         } else {
-          callback = resolve4;
+          callback = resolve5;
         }
       });
       h2stream.on("close", onDrain).on("drain", onDrain);
@@ -40033,16 +40040,16 @@ var require_client = __commonJS({
         return this[kNeedDrain] < 2;
       }
       [kClose]() {
-        return new Promise((resolve4) => {
+        return new Promise((resolve5) => {
           if (this[kSize]) {
-            this[kClosedResolve] = resolve4;
+            this[kClosedResolve] = resolve5;
           } else {
-            resolve4(null);
+            resolve5(null);
           }
         });
       }
       [kDestroy](err) {
-        return new Promise((resolve4) => {
+        return new Promise((resolve5) => {
           const requests = this[kQueue].splice(this[kPendingIdx]);
           for (let i = 0; i < requests.length; i++) {
             const request2 = requests[i];
@@ -40055,7 +40062,7 @@ var require_client = __commonJS({
               this[kClosedResolve]();
               this[kClosedResolve] = null;
             }
-            resolve4(null);
+            resolve5(null);
           };
           if (this[kHTTPContext]) {
             this[kHTTPContext].destroy(err, callback);
@@ -40462,8 +40469,8 @@ var require_pool_base = __commonJS({
           }
           return Promise.all(closeAll);
         } else {
-          return new Promise((resolve4) => {
-            this[kClosedResolve] = resolve4;
+          return new Promise((resolve5) => {
+            this[kClosedResolve] = resolve5;
           });
         }
       }
@@ -41585,7 +41592,7 @@ var require_socks5_proxy_agent = __commonJS({
         const proxyHost = this[kProxyUrl].hostname;
         const proxyPort = parseInt(this[kProxyUrl].port) || 1080;
         debug("creating SOCKS5 connection to", proxyHost, proxyPort);
-        const socket = await new Promise((resolve4, reject) => {
+        const socket = await new Promise((resolve5, reject) => {
           this[kConnector]({
             hostname: proxyHost,
             host: proxyHost,
@@ -41595,7 +41602,7 @@ var require_socks5_proxy_agent = __commonJS({
             if (err) {
               reject(err);
             } else {
-              resolve4(socket2);
+              resolve5(socket2);
             }
           });
         });
@@ -41605,14 +41612,14 @@ var require_socks5_proxy_agent = __commonJS({
           socket.destroy();
         });
         await socks5Client.handshake();
-        await new Promise((resolve4, reject) => {
+        await new Promise((resolve5, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 authentication timeout"));
           }, 5e3);
           const onAuthenticated = () => {
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve4();
+            resolve5();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -41621,14 +41628,14 @@ var require_socks5_proxy_agent = __commonJS({
           };
           if (socks5Client.state === STATES.AUTHENTICATED) {
             clearTimeout(timeout);
-            resolve4();
+            resolve5();
           } else {
             socks5Client.once("authenticated", onAuthenticated);
             socks5Client.once("error", onError);
           }
         });
         await socks5Client.connect(targetHost, targetPort);
-        await new Promise((resolve4, reject) => {
+        await new Promise((resolve5, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("SOCKS5 connection timeout"));
           }, 5e3);
@@ -41636,7 +41643,7 @@ var require_socks5_proxy_agent = __commonJS({
             debug("SOCKS5 tunnel established to", targetHost, targetPort, "via", info);
             clearTimeout(timeout);
             socks5Client.removeListener("error", onError);
-            resolve4();
+            resolve5();
           };
           const onError = (err) => {
             clearTimeout(timeout);
@@ -41679,8 +41686,8 @@ var require_socks5_proxy_agent = __commonJS({
                       socket,
                       servername: this[kRequestTls]?.servername || targetHost
                     });
-                    await new Promise((resolve4, reject) => {
-                      finalSocket.once("secureConnect", resolve4);
+                    await new Promise((resolve5, reject) => {
+                      finalSocket.once("secureConnect", resolve5);
                       finalSocket.once("error", reject);
                     });
                   }
@@ -41789,10 +41796,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path2 = "/",
+          path: path3 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path2;
+        opts.path = origin + path3;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL(origin);
           headers.host = host;
@@ -42304,10 +42311,10 @@ var require_retry_handler = __commonJS({
           this.resume = this.end != null;
         }
       }
-      onRequestStart(controller, context) {
+      onRequestStart(controller, context2) {
         this.controllerProxy.target = controller;
         if (!this.headersSent) {
-          this.handler.onRequestStart?.(this.controllerProxy, context);
+          this.handler.onRequestStart?.(this.controllerProxy, context2);
         }
       }
       onRequestUpgrade(_controller, statusCode, headers, socket) {
@@ -42596,7 +42603,7 @@ var require_readable = __commonJS({
   "node_modules/undici/lib/api/readable.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable: Readable3 } = __require("node:stream");
+    var { Readable: Readable4 } = __require("node:stream");
     var { RequestAbortedError, NotSupportedError, InvalidArgumentError: InvalidArgumentError2, AbortError } = require_errors2();
     var util = require_util();
     var { ReadableStreamFrom } = require_util();
@@ -42610,7 +42617,7 @@ var require_readable = __commonJS({
     var kBytesRead = /* @__PURE__ */ Symbol("kBytesRead");
     var noop = () => {
     };
-    var BodyReadable = class extends Readable3 {
+    var BodyReadable = class extends Readable4 {
       /**
        * @param {object} opts
        * @param {(this: Readable, size: number) => void} opts.resume
@@ -42813,7 +42820,7 @@ var require_readable = __commonJS({
         if (this._readableState.closeEmitted) {
           return Promise.resolve(null);
         }
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           if (this[kContentLength] && this[kContentLength] > limit || this[kBytesRead] > limit) {
             this.destroy(new AbortError());
           }
@@ -42827,11 +42834,11 @@ var require_readable = __commonJS({
               if (signal.aborted) {
                 reject(signal.reason ?? new AbortError());
               } else {
-                resolve4(null);
+                resolve5(null);
               }
             });
           } else {
-            this.on("close", resolve4);
+            this.on("close", resolve5);
           }
           this.on("error", noop).on("data", () => {
             if (this[kBytesRead] > limit) {
@@ -42859,7 +42866,7 @@ var require_readable = __commonJS({
     }
     function consume(stream, type) {
       assert2(!stream[kConsume]);
-      return new Promise((resolve4, reject) => {
+      return new Promise((resolve5, reject) => {
         if (isUnusable(stream)) {
           const rState = stream._readableState;
           if (rState.destroyed && rState.closeEmitted === false) {
@@ -42874,7 +42881,7 @@ var require_readable = __commonJS({
             stream[kConsume] = {
               type,
               stream,
-              resolve: resolve4,
+              resolve: resolve5,
               reject,
               length: 0,
               body: []
@@ -42948,18 +42955,18 @@ var require_readable = __commonJS({
       return buffer;
     }
     function consumeEnd(consume2, encoding) {
-      const { type, body, resolve: resolve4, stream, length } = consume2;
+      const { type, body, resolve: resolve5, stream, length } = consume2;
       try {
         if (type === "text") {
-          resolve4(chunksDecode(body, length, encoding));
+          resolve5(chunksDecode(body, length, encoding));
         } else if (type === "json") {
-          resolve4(JSON.parse(chunksDecode(body, length, encoding)));
+          resolve5(JSON.parse(chunksDecode(body, length, encoding)));
         } else if (type === "arrayBuffer") {
-          resolve4(chunksConcat(body, length).buffer);
+          resolve5(chunksConcat(body, length).buffer);
         } else if (type === "blob") {
-          resolve4(new Blob(body, { type: stream[kContentType] }));
+          resolve5(new Blob(body, { type: stream[kContentType] }));
         } else if (type === "bytes") {
-          resolve4(chunksConcat(body, length));
+          resolve5(chunksConcat(body, length));
         }
         consumeFinish(consume2);
       } catch (err) {
@@ -42999,7 +43006,7 @@ var require_api_request = __commonJS({
     "use strict";
     var assert2 = __require("node:assert");
     var { AsyncResource } = __require("node:async_hooks");
-    var { Readable: Readable3 } = require_readable();
+    var { Readable: Readable4 } = require_readable();
     var { InvalidArgumentError: InvalidArgumentError2, RequestAbortedError } = require_errors2();
     var util = require_util();
     function noop() {
@@ -43059,17 +43066,17 @@ var require_api_request = __commonJS({
           });
         }
       }
-      onConnect(abort, context) {
+      onConnect(abort, context2) {
         if (this.reason) {
           abort(this.reason);
           return;
         }
         assert2(this.callback);
         this.abort = abort;
-        this.context = context;
+        this.context = context2;
       }
       onHeaders(statusCode, rawHeaders, resume, statusMessage) {
-        const { callback, opaque, abort, context, responseHeaders, highWaterMark } = this;
+        const { callback, opaque, abort, context: context2, responseHeaders, highWaterMark } = this;
         const headers = responseHeaders === "raw" ? util.parseRawHeaders(rawHeaders) : util.parseHeaders(rawHeaders);
         if (statusCode < 200) {
           if (this.onInfo) {
@@ -43080,7 +43087,7 @@ var require_api_request = __commonJS({
         const parsedHeaders = responseHeaders === "raw" ? util.parseHeaders(rawHeaders) : headers;
         const contentType = parsedHeaders["content-type"];
         const contentLength = parsedHeaders["content-length"];
-        const res = new Readable3({
+        const res = new Readable4({
           resume,
           abort,
           contentType,
@@ -43102,7 +43109,7 @@ var require_api_request = __commonJS({
               trailers: this.trailers,
               opaque,
               body: res,
-              context
+              context: context2
             });
           } catch (err) {
             this.res = null;
@@ -43149,9 +43156,9 @@ var require_api_request = __commonJS({
     };
     function request2(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           request2.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve4(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -43179,42 +43186,42 @@ var require_abort_signal = __commonJS({
     var { RequestAbortedError } = require_errors2();
     var kListener = /* @__PURE__ */ Symbol("kListener");
     var kSignal = /* @__PURE__ */ Symbol("kSignal");
-    function abort(self) {
-      if (self.abort) {
-        self.abort(self[kSignal]?.reason);
+    function abort(self2) {
+      if (self2.abort) {
+        self2.abort(self2[kSignal]?.reason);
       } else {
-        self.reason = self[kSignal]?.reason ?? new RequestAbortedError();
+        self2.reason = self2[kSignal]?.reason ?? new RequestAbortedError();
       }
-      removeSignal(self);
+      removeSignal(self2);
     }
-    function addSignal(self, signal) {
-      self.reason = null;
-      self[kSignal] = null;
-      self[kListener] = null;
+    function addSignal(self2, signal) {
+      self2.reason = null;
+      self2[kSignal] = null;
+      self2[kListener] = null;
       if (!signal) {
         return;
       }
       if (signal.aborted) {
-        abort(self);
+        abort(self2);
         return;
       }
-      self[kSignal] = signal;
-      self[kListener] = () => {
-        abort(self);
+      self2[kSignal] = signal;
+      self2[kListener] = () => {
+        abort(self2);
       };
-      addAbortListener(self[kSignal], self[kListener]);
+      addAbortListener(self2[kSignal], self2[kListener]);
     }
-    function removeSignal(self) {
-      if (!self[kSignal]) {
+    function removeSignal(self2) {
+      if (!self2[kSignal]) {
         return;
       }
-      if ("removeEventListener" in self[kSignal]) {
-        self[kSignal].removeEventListener("abort", self[kListener]);
+      if ("removeEventListener" in self2[kSignal]) {
+        self2[kSignal].removeEventListener("abort", self2[kListener]);
       } else {
-        self[kSignal].removeListener("abort", self[kListener]);
+        self2[kSignal].removeListener("abort", self2[kListener]);
       }
-      self[kSignal] = null;
-      self[kListener] = null;
+      self2[kSignal] = null;
+      self2[kListener] = null;
     }
     module.exports = {
       addSignal,
@@ -43281,17 +43288,17 @@ var require_api_stream = __commonJS({
         }
         addSignal(this, signal);
       }
-      onConnect(abort, context) {
+      onConnect(abort, context2) {
         if (this.reason) {
           abort(this.reason);
           return;
         }
         assert2(this.callback);
         this.abort = abort;
-        this.context = context;
+        this.context = context2;
       }
       onHeaders(statusCode, rawHeaders, resume, statusMessage) {
-        const { factory, opaque, context, responseHeaders } = this;
+        const { factory, opaque, context: context2, responseHeaders } = this;
         const headers = responseHeaders === "raw" ? util.parseRawHeaders(rawHeaders) : util.parseHeaders(rawHeaders);
         if (statusCode < 200) {
           if (this.onInfo) {
@@ -43307,7 +43314,7 @@ var require_api_stream = __commonJS({
           statusCode,
           headers,
           opaque,
-          context
+          context: context2
         });
         if (!res || typeof res.write !== "function" || typeof res.end !== "function" || typeof res.on !== "function") {
           throw new InvalidReturnValueError("expected Writable");
@@ -43363,9 +43370,9 @@ var require_api_stream = __commonJS({
     };
     function stream(opts, factory, callback) {
       if (callback === void 0) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           stream.call(this, opts, factory, (err, data) => {
-            return err ? reject(err) : resolve4(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -43389,7 +43396,7 @@ var require_api_pipeline = __commonJS({
   "node_modules/undici/lib/api/api-pipeline.js"(exports, module) {
     "use strict";
     var {
-      Readable: Readable3,
+      Readable: Readable4,
       Duplex,
       PassThrough
     } = __require("node:stream");
@@ -43405,7 +43412,7 @@ var require_api_pipeline = __commonJS({
     function noop() {
     }
     var kResume = /* @__PURE__ */ Symbol("resume");
-    var PipelineRequest = class extends Readable3 {
+    var PipelineRequest = class extends Readable4 {
       constructor() {
         super({ autoDestroy: true });
         this[kResume] = null;
@@ -43422,7 +43429,7 @@ var require_api_pipeline = __commonJS({
         callback(err);
       }
     };
-    var PipelineResponse = class extends Readable3 {
+    var PipelineResponse = class extends Readable4 {
       constructor(resume) {
         super({ autoDestroy: true });
         this[kResume] = resume;
@@ -43501,7 +43508,7 @@ var require_api_pipeline = __commonJS({
         this.res = null;
         addSignal(this, signal);
       }
-      onConnect(abort, context) {
+      onConnect(abort, context2) {
         const { res } = this;
         if (this.reason) {
           abort(this.reason);
@@ -43509,10 +43516,10 @@ var require_api_pipeline = __commonJS({
         }
         assert2(!res, "pipeline cannot be retried");
         this.abort = abort;
-        this.context = context;
+        this.context = context2;
       }
       onHeaders(statusCode, rawHeaders, resume) {
-        const { opaque, handler, context } = this;
+        const { opaque, handler, context: context2 } = this;
         if (statusCode < 200) {
           if (this.onInfo) {
             const headers = this.responseHeaders === "raw" ? util.parseRawHeaders(rawHeaders) : util.parseHeaders(rawHeaders);
@@ -43530,7 +43537,7 @@ var require_api_pipeline = __commonJS({
             headers,
             opaque,
             body: this.res,
-            context
+            context: context2
           });
         } catch (err) {
           this.res.on("error", noop);
@@ -43615,7 +43622,7 @@ var require_api_upgrade = __commonJS({
         this.context = null;
         addSignal(this, signal);
       }
-      onConnect(abort, context) {
+      onConnect(abort, context2) {
         if (this.reason) {
           abort(this.reason);
           return;
@@ -43629,7 +43636,7 @@ var require_api_upgrade = __commonJS({
       }
       onUpgrade(statusCode, rawHeaders, socket) {
         assert2(socket[kHTTP2Stream] === true ? statusCode === 200 : statusCode === 101);
-        const { callback, opaque, context } = this;
+        const { callback, opaque, context: context2 } = this;
         removeSignal(this);
         this.callback = null;
         const headers = this.responseHeaders === "raw" ? util.parseRawHeaders(rawHeaders) : util.parseHeaders(rawHeaders);
@@ -43637,7 +43644,7 @@ var require_api_upgrade = __commonJS({
           headers,
           socket,
           opaque,
-          context
+          context: context2
         });
       }
       onError(err) {
@@ -43653,9 +43660,9 @@ var require_api_upgrade = __commonJS({
     };
     function upgrade(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           upgrade.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve4(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -43707,20 +43714,20 @@ var require_api_connect = __commonJS({
         this.abort = null;
         addSignal(this, signal);
       }
-      onConnect(abort, context) {
+      onConnect(abort, context2) {
         if (this.reason) {
           abort(this.reason);
           return;
         }
         assert2(this.callback);
         this.abort = abort;
-        this.context = context;
+        this.context = context2;
       }
       onHeaders() {
         throw new SocketError("bad connect", null);
       }
       onUpgrade(statusCode, rawHeaders, socket) {
-        const { callback, opaque, context } = this;
+        const { callback, opaque, context: context2 } = this;
         removeSignal(this);
         this.callback = null;
         let headers = rawHeaders;
@@ -43732,7 +43739,7 @@ var require_api_connect = __commonJS({
           headers,
           socket,
           opaque,
-          context
+          context: context2
         });
       }
       onError(err) {
@@ -43748,9 +43755,9 @@ var require_api_connect = __commonJS({
     };
     function connect(opts, callback) {
       if (callback === void 0) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           connect.call(this, opts, (err, data) => {
-            return err ? reject(err) : resolve4(data);
+            return err ? reject(err) : resolve5(data);
           });
         });
       }
@@ -43952,20 +43959,20 @@ var require_mock_utils = __commonJS({
       }
       return normalizedQp;
     }
-    function safeUrl(path2) {
-      if (typeof path2 !== "string") {
-        return path2;
+    function safeUrl(path3) {
+      if (typeof path3 !== "string") {
+        return path3;
       }
-      const pathSegments = path2.split("?", 3);
+      const pathSegments = path3.split("?", 3);
       if (pathSegments.length !== 2) {
-        return path2;
+        return path3;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path2, method, body, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path2);
+    function matchKey(mockDispatch2, { path: path3, method, body, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path3);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -43990,8 +43997,8 @@ var require_mock_utils = __commonJS({
       const basePath = key.query ? serializePathWithQuery(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
       const resolvedPathWithoutTrailingSlash = removeTrailingSlash(resolvedPath);
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path2, ignoreTrailingSlash }) => {
-        return ignoreTrailingSlash ? matchValue(removeTrailingSlash(safeUrl(path2)), resolvedPathWithoutTrailingSlash) : matchValue(safeUrl(path2), resolvedPath);
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path3, ignoreTrailingSlash }) => {
+        return ignoreTrailingSlash ? matchValue(removeTrailingSlash(safeUrl(path3)), resolvedPathWithoutTrailingSlash) : matchValue(safeUrl(path3), resolvedPath);
       });
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
@@ -44030,19 +44037,19 @@ var require_mock_utils = __commonJS({
         mockDispatches.splice(index, 1);
       }
     }
-    function removeTrailingSlash(path2) {
-      while (path2.endsWith("/")) {
-        path2 = path2.slice(0, -1);
+    function removeTrailingSlash(path3) {
+      while (path3.endsWith("/")) {
+        path3 = path3.slice(0, -1);
       }
-      if (path2.length === 0) {
-        path2 = "/";
+      if (path3.length === 0) {
+        path3 = "/";
       }
-      return path2;
+      return path3;
     }
     function buildKey(opts) {
-      const { path: path2, method, body, headers, query } = opts;
+      const { path: path3, method, body, headers, query } = opts;
       return {
-        path: path2,
+        path: path3,
         method,
         body,
         headers,
@@ -44732,10 +44739,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path2, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path3, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path2,
+            Path: path3,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -44817,9 +44824,9 @@ var require_mock_agent = __commonJS({
         const acceptNonStandardSearchParameters = this[kMockAgentAcceptsNonStandardSearchParameters];
         const dispatchOpts = { ...opts };
         if (acceptNonStandardSearchParameters && dispatchOpts.path) {
-          const [path2, searchParams] = dispatchOpts.path.split("?");
+          const [path3, searchParams] = dispatchOpts.path.split("?");
           const normalizedSearchParams = normalizeSearchParams(searchParams, acceptNonStandardSearchParameters);
-          dispatchOpts.path = `${path2}?${normalizedSearchParams}`;
+          dispatchOpts.path = `${path3}?${normalizedSearchParams}`;
         }
         return this[kAgent].dispatch(dispatchOpts, handler);
       }
@@ -45024,7 +45031,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile, readFile: readFile3, mkdir: mkdir2 } = __require("node:fs/promises");
-    var { dirname: dirname4, resolve: resolve4 } = __require("node:path");
+    var { dirname: dirname4, resolve: resolve5 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError: InvalidArgumentError2, UndiciError } = require_errors2();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -45220,12 +45227,12 @@ var require_snapshot_recorder = __commonJS({
        * @return {Promise<void>} - Resolves when snapshots are loaded
        */
       async loadSnapshots(filePath) {
-        const path2 = filePath || this.#snapshotPath;
-        if (!path2) {
+        const path3 = filePath || this.#snapshotPath;
+        if (!path3) {
           throw new InvalidArgumentError2("Snapshot path is required");
         }
         try {
-          const data = await readFile3(resolve4(path2), "utf8");
+          const data = await readFile3(resolve5(path3), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -45239,7 +45246,7 @@ var require_snapshot_recorder = __commonJS({
           if (error62.code === "ENOENT") {
             this.#snapshots.clear();
           } else {
-            throw new UndiciError(`Failed to load snapshots from ${path2}`, { cause: error62 });
+            throw new UndiciError(`Failed to load snapshots from ${path3}`, { cause: error62 });
           }
         }
       }
@@ -45250,11 +45257,11 @@ var require_snapshot_recorder = __commonJS({
        * @returns {Promise<void>} - Resolves when snapshots are saved
        */
       async saveSnapshots(filePath) {
-        const path2 = filePath || this.#snapshotPath;
-        if (!path2) {
+        const path3 = filePath || this.#snapshotPath;
+        if (!path3) {
           throw new InvalidArgumentError2("Snapshot path is required");
         }
-        const resolvedPath = resolve4(path2);
+        const resolvedPath = resolve5(path3);
         await mkdir2(dirname4(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash2, snapshot]) => ({
           hash: hash2,
@@ -45501,10 +45508,10 @@ var require_snapshot_agent = __commonJS({
           trailers: {},
           body: []
         };
-        const self = this;
+        const self2 = this;
         const recordingHandler = {
-          onRequestStart(controller, context) {
-            return handler.onRequestStart(controller, { ...context, history: this.history });
+          onRequestStart(controller, context2) {
+            return handler.onRequestStart(controller, { ...context2, history: this.history });
           },
           onRequestUpgrade(controller, statusCode, headers, socket) {
             return handler.onRequestUpgrade(controller, statusCode, headers, socket);
@@ -45521,7 +45528,7 @@ var require_snapshot_agent = __commonJS({
           onResponseEnd(controller, trailers) {
             responseData.trailers = trailers;
             const responseBody = Buffer.concat(responseData.body);
-            self[kSnapshotRecorder].record(opts, {
+            self2[kSnapshotRecorder].record(opts, {
               statusCode: responseData.statusCode,
               headers: responseData.headers,
               body: responseBody,
@@ -45857,8 +45864,8 @@ var require_redirect_handler = __commonJS({
           this.opts.body = new BodyAsyncIterable(this.opts.body);
         }
       }
-      onRequestStart(controller, context) {
-        this.handler.onRequestStart?.(controller, { ...context, history: this.history });
+      onRequestStart(controller, context2) {
+        this.handler.onRequestStart?.(controller, { ...context2, history: this.history });
       }
       onRequestUpgrade(controller, statusCode, headers, socket) {
         this.handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
@@ -45891,15 +45898,15 @@ var require_redirect_handler = __commonJS({
         }
         this.history[kRedirectCacheControl].push(headers["cache-control"]);
         const { origin, pathname, search } = util.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path2 = search ? `${pathname}${search}` : pathname;
-        const redirectUrlString = `${origin}${path2}`;
+        const path3 = search ? `${pathname}${search}` : pathname;
+        const redirectUrlString = `${origin}${path3}`;
         for (const historyUrl of this.history) {
           if (historyUrl.toString() === redirectUrlString) {
             throw new InvalidArgumentError2(`Redirect loop detected. Cannot redirect to ${origin}. This typically happens when using a Client or Pool with cross-origin redirects. Use an Agent for cross-origin redirects.`);
           }
         }
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path2;
+        this.opts.path = path3;
         this.opts.origin = origin;
         this.opts.query = null;
       }
@@ -45997,13 +46004,13 @@ var require_response_error = __commonJS({
       #checkContentType(contentType) {
         return (this.#contentType ?? "").indexOf(contentType) === 0;
       }
-      onRequestStart(controller, context) {
+      onRequestStart(controller, context2) {
         this.#statusCode = 0;
         this.#contentType = null;
         this.#decoder = null;
         this.#headers = null;
         this.#body = "";
-        return super.onRequestStart(controller, context);
+        return super.onRequestStart(controller, context2);
       }
       onResponseStart(controller, statusCode, headers, statusMessage) {
         this.#statusCode = statusCode;
@@ -46108,9 +46115,9 @@ var require_dump = __commonJS({
         this.aborted = true;
         this.reason = reason;
       }
-      onRequestStart(controller, context) {
+      onRequestStart(controller, context2) {
         controller.abort = this.#abort.bind(this);
-        return super.onRequestStart(controller, context);
+        return super.onRequestStart(controller, context2);
       }
       onResponseStart(controller, statusCode, headers, statusMessage) {
         const contentLength = headers["content-length"];
@@ -47667,10 +47674,10 @@ var require_cache_handler = __commonJS({
       }
       return locationUrl.pathname + locationUrl.search;
     }
-    function deleteCachedUri(store, cacheKey, path2) {
+    function deleteCachedUri(store, cacheKey, path3) {
       deleteCachedValue(store, {
         ...cacheKey,
-        path: path2
+        path: path3
       });
       for (let i = 0; i < util.safeHTTPMethods.length; i++) {
         const method = util.safeHTTPMethods[i];
@@ -47678,7 +47685,7 @@ var require_cache_handler = __commonJS({
           deleteCachedValue(store, {
             ...cacheKey,
             method,
-            path: path2
+            path: path3
           });
         }
       }
@@ -47689,9 +47696,9 @@ var require_cache_handler = __commonJS({
       }
       const values = Array.isArray(headerValue) ? headerValue : [headerValue];
       for (let i = 0; i < values.length; i++) {
-        const path2 = getSameOriginPath(cacheKey, values[i]);
-        if (path2 !== void 0) {
-          deleteCachedUri(store, cacheKey, path2);
+        const path3 = getSameOriginPath(cacheKey, values[i]);
+        if (path3 !== void 0) {
+          deleteCachedUri(store, cacheKey, path3);
         }
       }
     }
@@ -47744,11 +47751,11 @@ var require_cache_handler = __commonJS({
         this.#cacheKey = cacheKey;
         this.#handler = handler;
       }
-      onRequestStart(controller, context) {
+      onRequestStart(controller, context2) {
         this.#writeStream?.destroy();
         this.#writeStream = void 0;
-        this.#history = context?.history;
-        this.#handler.onRequestStart?.(controller, context);
+        this.#history = context2?.history;
+        this.#handler.onRequestStart?.(controller, context2);
       }
       onRequestUpgrade(controller, statusCode, headers, socket) {
         this.#handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
@@ -48381,9 +48388,9 @@ var require_cache_revalidation_handler = __commonJS({
         this.#handler = handler;
         this.#allowErrorStatusCodes = allowErrorStatusCodes;
       }
-      onRequestStart(_, context) {
+      onRequestStart(_, context2) {
         this.#successful = false;
-        this.#context = context;
+        this.#context = context2;
       }
       onRequestUpgrade(controller, statusCode, headers, socket) {
         this.#handler.onRequestUpgrade?.(controller, statusCode, headers, socket);
@@ -48440,7 +48447,7 @@ var require_cache2 = __commonJS({
   "node_modules/undici/lib/interceptor/cache.js"(exports, module) {
     "use strict";
     var assert2 = __require("node:assert");
-    var { Readable: Readable3 } = __require("node:stream");
+    var { Readable: Readable4 } = __require("node:stream");
     var util = require_util();
     var CacheHandler = require_cache_handler();
     var MemoryCacheStore = require_memory_cache_store();
@@ -48608,8 +48615,8 @@ var require_cache2 = __commonJS({
       }
       return dispatch(opts, new CacheHandler(globalOpts, cacheKey, handler));
     }
-    function sendCachedValue(handler, opts, result, age, context, isStale2) {
-      const stream = util.isStream(result.body) ? result.body : Readable3.from(result.body ?? []);
+    function sendCachedValue(handler, opts, result, age, context2, isStale2) {
+      const stream = util.isStream(result.body) ? result.body : Readable4.from(result.body ?? []);
       assert2(!stream.destroyed, "stream should not be destroyed");
       assert2(!stream.readableDidRead, "stream should not be readableDidRead");
       const controller = {
@@ -48645,7 +48652,7 @@ var require_cache2 = __commonJS({
           handler.onResponseEnd?.(controller, {});
         }
       });
-      handler.onRequestStart?.(controller, context);
+      handler.onRequestStart?.(controller, context2);
       if (stream.destroyed) {
         return;
       }
@@ -48727,7 +48734,7 @@ var require_cache2 = __commonJS({
             headers
           },
           new CacheRevalidationHandler(
-            (success2, context, statusCode, headers2) => {
+            (success2, context2, statusCode, headers2) => {
               if (success2) {
                 if (statusCode === 304) {
                   if (revalidationResponseDisallowsCachedReuse(globalOpts.type, headers2)) {
@@ -48741,7 +48748,7 @@ var require_cache2 = __commonJS({
                     deleteCachedValue(globalOpts.store, cacheKey);
                   }
                 }
-                sendCachedValue(handler, opts, result, age, context, stale);
+                sendCachedValue(handler, opts, result, age, context2, stale);
               } else if (util.isStream(result.body)) {
                 result.body.on("error", nop).destroy();
               }
@@ -49207,9 +49214,9 @@ var require_decompress = __commonJS({
         this.#decompressors.length = 0;
         this.#finalDecompressor = void 0;
       }
-      onRequestStart(controller, context) {
+      onRequestStart(controller, context2) {
         this.#controller.target = controller;
-        return super.onRequestStart(this.#controller, context);
+        return super.onRequestStart(this.#controller, context2);
       }
       onRequestUpgrade(controller, statusCode, headers, socket) {
         return super.onRequestUpgrade(this.#controller, statusCode, headers, socket);
@@ -49450,16 +49457,16 @@ var require_deduplication_handler = __commonJS({
        * @param {import('../../types/dispatcher.d.ts').default.DispatchController} controller
        * @param {any} context
        */
-      onRequestStart(controller, context) {
+      onRequestStart(controller, context2) {
         this.#controller = controller;
         if (!this.#requestStarted) {
           this.#requestStarted = true;
-          this.#context = context;
+          this.#context = context2;
           for (const waitingHandler of this.#waitingHandlers) {
             if (waitingHandler.pendingStart && !waitingHandler.done && !waitingHandler.controller.aborted) {
               waitingHandler.pendingStart = false;
               try {
-                waitingHandler.handler.onRequestStart?.(waitingHandler.controller, context);
+                waitingHandler.handler.onRequestStart?.(waitingHandler.controller, context2);
               } catch {
                 waitingHandler.done = true;
               }
@@ -49467,7 +49474,7 @@ var require_deduplication_handler = __commonJS({
           }
           this.#pruneDoneWaitingHandlers();
         }
-        this.#primaryHandler.onRequestStart?.(controller, context);
+        this.#primaryHandler.onRequestStart?.(controller, context2);
       }
       /**
        * @param {import('../../types/dispatcher.d.ts').default.DispatchController} controller
@@ -49812,7 +49819,7 @@ var require_sqlite_cache_store = __commonJS({
     var { Writable } = __require("node:stream");
     var { assertCacheKey, assertCacheValue } = require_cache();
     var DatabaseSync;
-    var VERSION = 3;
+    var VERSION3 = 3;
     var MAX_ENTRY_SIZE = 2 * 1e3 * 1e3 * 1e3;
     module.exports = class SqliteCacheStore {
       #maxEntrySize = MAX_ENTRY_SIZE;
@@ -49883,7 +49890,7 @@ var require_sqlite_cache_store = __commonJS({
       PRAGMA temp_store = memory;
       PRAGMA optimize;
 
-      CREATE TABLE IF NOT EXISTS cacheInterceptorV${VERSION} (
+      CREATE TABLE IF NOT EXISTS cacheInterceptorV${VERSION3} (
         -- Data specific to us
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         url TEXT NOT NULL,
@@ -49902,8 +49909,8 @@ var require_sqlite_cache_store = __commonJS({
         staleAt INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION}_getValuesQuery ON cacheInterceptorV${VERSION}(url, method, deleteAt);
-      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION}_deleteByUrlQuery ON cacheInterceptorV${VERSION}(deleteAt);
+      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION3}_getValuesQuery ON cacheInterceptorV${VERSION3}(url, method, deleteAt);
+      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION3}_deleteByUrlQuery ON cacheInterceptorV${VERSION3}(deleteAt);
     `);
         this.#getValuesQuery = this.#db.prepare(`
       SELECT
@@ -49918,7 +49925,7 @@ var require_sqlite_cache_store = __commonJS({
         vary,
         cachedAt,
         staleAt
-      FROM cacheInterceptorV${VERSION}
+      FROM cacheInterceptorV${VERSION3}
       WHERE
         url = ?
         AND method = ?
@@ -49926,7 +49933,7 @@ var require_sqlite_cache_store = __commonJS({
         deleteAt ASC
     `);
         this.#updateValueQuery = this.#db.prepare(`
-      UPDATE cacheInterceptorV${VERSION} SET
+      UPDATE cacheInterceptorV${VERSION3} SET
         body = ?,
         deleteAt = ?,
         statusCode = ?,
@@ -49940,7 +49947,7 @@ var require_sqlite_cache_store = __commonJS({
         id = ?
     `);
         this.#insertValueQuery = this.#db.prepare(`
-      INSERT INTO cacheInterceptorV${VERSION} (
+      INSERT INTO cacheInterceptorV${VERSION3} (
         url,
         method,
         body,
@@ -49956,20 +49963,20 @@ var require_sqlite_cache_store = __commonJS({
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         this.#deleteByUrlQuery = this.#db.prepare(
-          `DELETE FROM cacheInterceptorV${VERSION} WHERE url = ?`
+          `DELETE FROM cacheInterceptorV${VERSION3} WHERE url = ?`
         );
         this.#countEntriesQuery = this.#db.prepare(
-          `SELECT COUNT(*) AS total FROM cacheInterceptorV${VERSION}`
+          `SELECT COUNT(*) AS total FROM cacheInterceptorV${VERSION3}`
         );
         this.#deleteExpiredValuesQuery = this.#db.prepare(
-          `DELETE FROM cacheInterceptorV${VERSION} WHERE deleteAt <= ?`
+          `DELETE FROM cacheInterceptorV${VERSION3} WHERE deleteAt <= ?`
         );
         this.#deleteOldValuesQuery = this.#maxCount === Infinity ? null : this.#db.prepare(`
-        DELETE FROM cacheInterceptorV${VERSION}
+        DELETE FROM cacheInterceptorV${VERSION3}
         WHERE id IN (
           SELECT
             id
-          FROM cacheInterceptorV${VERSION}
+          FROM cacheInterceptorV${VERSION3}
           ORDER BY cachedAt ASC
           LIMIT ?
         )
@@ -51161,15 +51168,15 @@ var require_request2 = __commonJS({
           this.#dispatcher = init.dispatcher || input3.#dispatcher;
         }
         const origin = environmentSettingsObject.settingsObject.origin;
-        let window = "client";
+        let window2 = "client";
         if (request2.window?.constructor?.name === "EnvironmentSettingsObject" && sameOrigin(request2.window, origin)) {
-          window = request2.window;
+          window2 = request2.window;
         }
         if (init.window != null) {
-          throw new TypeError(`'window' option '${window}' must be null`);
+          throw new TypeError(`'window' option '${window2}' must be null`);
         }
         if ("window" in init) {
-          window = "no-window";
+          window2 = "no-window";
         }
         request2 = makeRequest({
           // URL request’s URL.
@@ -51184,7 +51191,7 @@ var require_request2 = __commonJS({
           // client This’s relevant settings object.
           client: environmentSettingsObject.settingsObject,
           // window window.
-          window,
+          window: window2,
           // priority request’s priority.
           priority: request2.priority,
           // origin request’s origin. The propagation of the origin is only significant for navigation requests
@@ -51960,7 +51967,7 @@ var require_fetch = __commonJS({
     } = require_response();
     var { HeadersList } = require_headers();
     var { Request, cloneRequest, getRequestDispatcher, getRequestState } = require_request2();
-    var zlib = __require("node:zlib");
+    var zlib2 = __require("node:zlib");
     var {
       makePolicyContainer,
       clonePolicyContainer,
@@ -52005,7 +52012,7 @@ var require_fetch = __commonJS({
       subresourceSet
     } = require_constants3();
     var EE = __require("node:events");
-    var { Readable: Readable3, pipeline: pipeline3, finished, isErrored, isReadable } = __require("node:stream");
+    var { Readable: Readable4, pipeline: pipeline3, finished, isErrored, isReadable } = __require("node:stream");
     var { addAbortListener, bufferToLowerCasedHeaderName } = require_util();
     var { dataURLProcessor, serializeAMimeType, minimizeSupportedMimeType } = require_data_url();
     var { getGlobalDispatcher } = require_global2();
@@ -52902,11 +52909,11 @@ var require_fetch = __commonJS({
       function dispatch({ body }) {
         const url2 = requestCurrentURL(request2);
         const agent2 = fetchParams.controller.dispatcher;
-        const path2 = url2.pathname + url2.search;
+        const path3 = url2.pathname + url2.search;
         const hasTrailingQuestionMark = url2.search.length === 0 && url2.href[url2.href.length - url2.hash.length - 1] === "?";
-        return new Promise((resolve4, reject) => agent2.dispatch(
+        return new Promise((resolve5, reject) => agent2.dispatch(
           {
-            path: hasTrailingQuestionMark ? `${path2}?` : path2,
+            path: hasTrailingQuestionMark ? `${path3}?` : path3,
             origin: url2.origin,
             method: request2.method,
             body: agent2.isMockActive ? request2.body && (request2.body.source || request2.body.stream) : body,
@@ -52961,28 +52968,28 @@ var require_fetch = __commonJS({
                 for (let i = codings.length - 1; i >= 0; --i) {
                   const coding = codings[i].trim();
                   if (coding === "x-gzip" || coding === "gzip") {
-                    decoders.push(zlib.createGunzip({
+                    decoders.push(zlib2.createGunzip({
                       // Be less strict when decoding compressed responses, since sometimes
                       // servers send slightly invalid responses that are still accepted
                       // by common browsers.
                       // Always using Z_SYNC_FLUSH is what cURL does.
-                      flush: zlib.constants.Z_SYNC_FLUSH,
-                      finishFlush: zlib.constants.Z_SYNC_FLUSH
+                      flush: zlib2.constants.Z_SYNC_FLUSH,
+                      finishFlush: zlib2.constants.Z_SYNC_FLUSH
                     }));
                   } else if (coding === "deflate") {
                     decoders.push(createInflate({
-                      flush: zlib.constants.Z_SYNC_FLUSH,
-                      finishFlush: zlib.constants.Z_SYNC_FLUSH
+                      flush: zlib2.constants.Z_SYNC_FLUSH,
+                      finishFlush: zlib2.constants.Z_SYNC_FLUSH
                     }));
                   } else if (coding === "br") {
-                    decoders.push(zlib.createBrotliDecompress({
-                      flush: zlib.constants.BROTLI_OPERATION_FLUSH,
-                      finishFlush: zlib.constants.BROTLI_OPERATION_FLUSH
+                    decoders.push(zlib2.createBrotliDecompress({
+                      flush: zlib2.constants.BROTLI_OPERATION_FLUSH,
+                      finishFlush: zlib2.constants.BROTLI_OPERATION_FLUSH
                     }));
                   } else if (coding === "zstd" && hasZstd) {
-                    decoders.push(zlib.createZstdDecompress({
-                      flush: zlib.constants.ZSTD_e_continue,
-                      finishFlush: zlib.constants.ZSTD_e_end
+                    decoders.push(zlib2.createZstdDecompress({
+                      flush: zlib2.constants.ZSTD_e_continue,
+                      finishFlush: zlib2.constants.ZSTD_e_end
                     }));
                   } else {
                     decoders.length = 0;
@@ -52990,9 +52997,9 @@ var require_fetch = __commonJS({
                   }
                 }
               }
-              this.body = new Readable3({ read: resume });
+              this.body = new Readable4({ read: resume });
               const onError = this.onError.bind(this);
-              resolve4({
+              resolve5({
                 status,
                 statusText,
                 headersList,
@@ -53045,7 +53052,7 @@ var require_fetch = __commonJS({
                   headersList.append(headerName, String(value), true);
                 }
               }
-              resolve4({
+              resolve5({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -53069,7 +53076,7 @@ var require_fetch = __commonJS({
                   headersList.append(nameStr, value.toString("latin1"), true);
                 }
               }
-              resolve4({
+              resolve5({
                 status,
                 statusText: STATUS_CODES[status],
                 headersList,
@@ -53853,9 +53860,9 @@ var require_util4 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path2) {
-      for (let i = 0; i < path2.length; ++i) {
-        const code2 = path2.charCodeAt(i);
+    function validateCookiePath(path3) {
+      for (let i = 0; i < path3.length; ++i) {
+        const code2 = path3.charCodeAt(i);
         if (code2 < 32 || // exclude CTLs (0-31)
         code2 > 126 || // exclude DEL and non-ascii
         code2 === 59) {
@@ -54706,8 +54713,8 @@ var require_util5 = __commonJS({
           return false;
         }
       }
-      const num3 = Number.parseInt(value, 10);
-      return num3 >= 8 && num3 <= 15;
+      const num4 = Number.parseInt(value, 10);
+      return num4 >= 8 && num4 <= 15;
     }
     function getURLRecord(url2, baseURL) {
       let urlRecord;
@@ -57291,11 +57298,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError2("invalid opts.path");
           }
-          let path2 = opts.path;
+          let path3 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path2 = `/${path2}`;
+            path3 = `/${path3}`;
           }
-          url2 = new URL(util.parseOrigin(url2).origin + path2);
+          url2 = new URL(util.parseOrigin(url2).origin + path3);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -57464,6 +57471,12 @@ async function runChain(plan, policy2, req, signal, deps) {
   const { breaker: breaker2, retry, tenant, clock } = deps;
   const fallbackOn429 = policy2.routes.find((r) => r.name === plan.route)?.fallbackOn429 === true;
   const openMs = policy2.failure.breaker.openSeconds * 1e3;
+  const note = (a) => {
+    try {
+      deps.onAttempt?.(a);
+    } catch {
+    }
+  };
   retry.request(tenant);
   let attempts = 0;
   let held = null;
@@ -57484,9 +57497,11 @@ async function runChain(plan, policy2, req, signal, deps) {
     attempts++;
     lastProvider = provider2.name;
     let res;
+    const startMs = Date.now();
     try {
       res = await forward(provider2, { ...req, headers }, signal);
     } catch (err) {
+      note({ provider: provider2.name, startMs, endMs: Date.now(), status: null, errorType: signal.aborted ? "client_abort" : "upstream_unreachable" });
       if (signal.aborted) {
         if (held) discard(held.response);
         throw new ChainError(attempts, provider2.name, err);
@@ -57495,11 +57510,12 @@ async function runChain(plan, policy2, req, signal, deps) {
       lastError = err;
       continue;
     }
+    note({ provider: provider2.name, startMs, endMs: Date.now(), status: res.status });
     const checked = await checkSpendCap(res);
     res = checked.response;
     let retryable2 = RETRYABLE.has(res.status);
     if (checked.spendCap) {
-      breaker2.open(credKey, clock() + openMs);
+      breaker2.open(credKey, clock() + openMs, "credential");
       retryable2 = true;
     } else if (res.status === 429 && fallbackOn429) {
       retryable2 = true;
@@ -57637,7 +57653,7 @@ var init_auth = __esm({
 
 // src/edge/body.ts
 function readBody(req, capBytes) {
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     const declared = Number(req.headers["content-length"]);
     if (Number.isFinite(declared) && declared > capBytes) {
       req.resume();
@@ -57654,7 +57670,7 @@ function readBody(req, capBytes) {
       if (err) {
         req.resume();
         reject(err);
-      } else resolve4(Buffer.concat(chunks, size));
+      } else resolve5(Buffer.concat(chunks, size));
     };
     const onData = (c) => {
       size += c.length;
@@ -57798,18 +57814,238 @@ var init_headers = __esm({
   }
 });
 
+// src/telemetry/metrics.ts
+var metrics_exports = {};
+__export(metrics_exports, {
+  MAX_VALUES_PER_LABEL: () => MAX_VALUES_PER_LABEL,
+  METRIC_DEFS: () => METRIC_DEFS,
+  createMetrics: () => createMetrics,
+  createRequestRecorder: () => createRequestRecorder,
+  modelLabel: () => modelLabel,
+  registerCollectors: () => registerCollectors
+});
+function createMetrics() {
+  const series = /* @__PURE__ */ new Map();
+  const seen = /* @__PURE__ */ new Map();
+  const collectors = [];
+  const seriesFor = (name2, labels) => {
+    const def = METRIC_DEFS[name2];
+    if (!Object.hasOwn(METRIC_DEFS, name2)) throw new Error(`unknown metric ${String(name2)}`);
+    const values = def.labels.map((l) => {
+      const raw = labels && Object.hasOwn(labels, l) ? String(labels[l]) : "";
+      const v = sanitizeHeaderValue(raw).value;
+      let kept = seen.get(l);
+      if (!kept) seen.set(l, kept = /* @__PURE__ */ new Set());
+      if (kept.has(v)) return v;
+      if (kept.size >= MAX_VALUES_PER_LABEL) return "other";
+      kept.add(v);
+      return v;
+    });
+    let byKey = series.get(name2);
+    if (!byKey) series.set(name2, byKey = /* @__PURE__ */ new Map());
+    const k = JSON.stringify(values);
+    let s2 = byKey.get(k);
+    if (!s2) {
+      s2 = { values, value: 0, ...def.kind === "histogram" ? { buckets: Array.from({ length: (def.buckets ?? []).length }, () => 0), sum: 0, count: 0 } : {} };
+      byKey.set(k, s2);
+    }
+    return s2;
+  };
+  return {
+    inc(name2, labels, v = 1) {
+      if (!Number.isFinite(v)) return;
+      if (METRIC_DEFS[name2].kind === "counter" && v < 0) return;
+      seriesFor(name2, labels).value += v;
+    },
+    observe(name2, v, labels) {
+      if (!Number.isFinite(v) || v < 0) return;
+      const def = METRIC_DEFS[name2];
+      const s2 = seriesFor(name2, labels);
+      def.buckets?.forEach((b, i) => {
+        if (v <= b && s2.buckets) s2.buckets[i] = (s2.buckets[i] ?? 0) + 1;
+      });
+      s2.sum = (s2.sum ?? 0) + v;
+      s2.count = (s2.count ?? 0) + 1;
+    },
+    set(name2, v, labels) {
+      if (!Number.isFinite(v)) return;
+      seriesFor(name2, labels).value = v;
+    },
+    reset(name2) {
+      series.delete(name2);
+    },
+    addCollector(fn) {
+      collectors.push(fn);
+    },
+    render() {
+      for (const c of collectors) {
+        try {
+          c();
+        } catch {
+        }
+      }
+      const out = [];
+      for (const [name2, byKey] of series) {
+        if (byKey.size === 0) continue;
+        const def = METRIC_DEFS[name2];
+        out.push(`# HELP ${name2} ${escapeHelp(def.help)}`, `# TYPE ${name2} ${def.kind}`);
+        for (const s2 of byKey.values()) {
+          const pairs = def.labels.map((l, i) => `${l}="${escapeLabel(s2.values[i] ?? "")}"`);
+          const braces = (extra = []) => pairs.length + extra.length === 0 ? "" : `{${[...pairs, ...extra].join(",")}}`;
+          if (def.kind !== "histogram") {
+            out.push(`${name2}${braces()} ${num3(s2.value)}`);
+            continue;
+          }
+          (def.buckets ?? []).forEach((b, i) => out.push(`${name2}_bucket${braces([`le="${b}"`])} ${s2.buckets?.[i] ?? 0}`));
+          out.push(`${name2}_bucket${braces(['le="+Inf"'])} ${s2.count ?? 0}`, `${name2}_sum${braces()} ${num3(s2.sum ?? 0)}`, `${name2}_count${braces()} ${s2.count ?? 0}`);
+        }
+      }
+      return out.length === 0 ? "" : `${out.join("\n")}
+`;
+    }
+  };
+}
+function createRequestRecorder(metrics2) {
+  let cacheRead = 0;
+  let totalInput2 = 0;
+  return (r, prices) => {
+    const o = r.outcome;
+    const route2 = r.decision.route ?? "none";
+    metrics2.inc("tokenyard_requests_total", { route: route2, decision: r.decision.action, status_class: `${Math.floor(o.status / 100)}xx` });
+    if (o.addedTtfbMs !== null) metrics2.observe("tokenyard_added_ttfb_seconds", o.addedTtfbMs / 1e3);
+    if (o.costMicroUsd !== null && o.costMicroUsd > 0) {
+      metrics2.inc("tokenyard_cost_usd_total", { tenant: r.tenant, team: r.team ?? "", route: route2, request_class: r.attribution.requestClass ?? "" }, o.costMicroUsd / 1e6);
+    }
+    if (o.provider === null) return;
+    const model = modelLabel(prices, o.upstreamModel ?? r.features.model);
+    const labels = { provider: o.provider, model };
+    metrics2.observe("tokenyard_inference_duration_seconds", o.totalMs / 1e3, labels);
+    if (o.ttfbMs !== null) metrics2.observe("tokenyard_time_to_first_chunk_seconds", o.ttfbMs / 1e3, labels);
+    const u = o.usage;
+    if (!u) return;
+    const write = u.cacheWrite5m + u.cacheWrite1h;
+    metrics2.inc("tokenyard_tokens_total", { type: "input", model }, u.input);
+    metrics2.inc("tokenyard_tokens_total", { type: "output", model }, u.output);
+    metrics2.inc("tokenyard_tokens_total", { type: "cache_read", model }, u.cacheRead);
+    metrics2.inc("tokenyard_tokens_total", { type: "cache_write", model }, write);
+    cacheRead += u.cacheRead;
+    totalInput2 += u.input + u.cacheRead + write;
+    if (totalInput2 > 0) metrics2.set("tokenyard_cache_hit_ratio", cacheRead / totalInput2);
+  };
+}
+function registerCollectors(metrics2, src) {
+  metrics2.addCollector(() => {
+    metrics2.reset("tokenyard_policy_revision_info");
+    metrics2.set("tokenyard_policy_revision_info", 1, { revision: src.revision() });
+  });
+  metrics2.addCollector(() => metrics2.set("tokenyard_policy_load_errors_total", src.loadErrors?.() ?? 0));
+  if (src.traceDrops) metrics2.addCollector(() => metrics2.set("tokenyard_traces_dropped_total", src.traceDrops()));
+}
+var SECONDS, TTFB_SECONDS, METRIC_DEFS, MAX_VALUES_PER_LABEL, escapeLabel, escapeHelp, num3, modelLabel;
+var init_metrics = __esm({
+  "src/telemetry/metrics.ts"() {
+    "use strict";
+    init_sanitize();
+    init_prices();
+    SECONDS = [5e-3, 0.025, 0.1, 0.5, 1, 2.5, 10, 30, 120, 600];
+    TTFB_SECONDS = [1e-3, 25e-4, 5e-3, 0.01, 0.025, 0.05, 0.1, 0.25, 1];
+    METRIC_DEFS = {
+      tokenyard_requests_total: { kind: "counter", help: "Requests by route, decision (forward or block) and status class.", labels: ["route", "decision", "status_class"] },
+      tokenyard_cost_usd_total: { kind: "counter", help: "Cost in USD (api-equivalent for subscription keys).", labels: ["tenant", "team", "route", "request_class"] },
+      tokenyard_tokens_total: { kind: "counter", help: "Tokens by type (input, output, cache_read, cache_write) and priced model.", labels: ["type", "model"] },
+      tokenyard_added_ttfb_seconds: { kind: "histogram", help: "Time to first byte added by the gateway.", labels: [], buckets: TTFB_SECONDS },
+      tokenyard_inference_duration_seconds: { kind: "histogram", help: "Request duration by provider and priced model.", labels: ["provider", "model"], buckets: SECONDS },
+      tokenyard_time_to_first_chunk_seconds: { kind: "histogram", help: "Time to the first response byte by provider and priced model.", labels: ["provider", "model"], buckets: SECONDS },
+      tokenyard_cache_hit_ratio: { kind: "gauge", help: "Cache read tokens over all input tokens since start.", labels: [] },
+      tokenyard_policy_revision_info: { kind: "gauge", help: "The active policy revision (value 1).", labels: ["revision"] },
+      tokenyard_policy_load_errors_total: { kind: "counter", help: "Policy bundles that failed to load.", labels: [] },
+      tokenyard_traces_dropped_total: { kind: "counter", help: "Trace records dropped (queue full or write failed).", labels: [] },
+      tokenyard_reservations_open: { kind: "gauge", help: "Admitted requests of this process not yet settled.", labels: [] },
+      tokenyard_bound_violations_total: { kind: "counter", help: "Requests whose billed input exceeded their bytes bound (R11).", labels: [] },
+      tokenyard_store_down_total: { kind: "counter", help: "Counter store calls that failed or timed out.", labels: ["op"] },
+      tokenyard_sweeper_errors_total: { kind: "counter", help: "Sweeper ticks that failed.", labels: [] },
+      tokenyard_swept_total: { kind: "counter", help: "Reservations the sweeper settled at their estimate.", labels: [] },
+      tokenyard_breaker_opens_total: { kind: "counter", help: "Circuit breaker openings by scope (provider or credential).", labels: ["scope"] },
+      tokenyard_should_retry_refusals_total: { kind: "counter", help: "Own errors sent with x-should-retry: false, by reason.", labels: ["reason"] }
+    };
+    MAX_VALUES_PER_LABEL = 100;
+    escapeLabel = (v) => v.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n");
+    escapeHelp = (v) => v.replaceAll("\\", "\\\\").replaceAll("\n", "\\n");
+    num3 = (v) => Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(15)));
+    modelLabel = (prices, model) => model ? lookupModel(prices, model)?.id ?? "other" : "other";
+  }
+});
+
+// src/edge/ops.ts
+function matchOps(method, rawUrl, basePath) {
+  if (method !== "GET" && method !== "HEAD") return null;
+  let path3 = rawUrl.split("?")[0] ?? "";
+  const base = basePath?.replace(/\/+$/, "") ?? "";
+  if (base !== "") {
+    if (!path3.startsWith(`${base}/`)) return null;
+    path3 = path3.slice(base.length);
+  }
+  return path3 === "/metrics" ? "metrics" : path3 === "/healthz" ? "healthz" : path3 === "/readyz" ? "readyz" : null;
+}
+async function readiness(d) {
+  let policy2;
+  try {
+    policy2 = d.policy();
+  } catch {
+    return { ok: false, reason: "policy not loaded" };
+  }
+  if (d.store === null) return { ok: true, reason: "ready" };
+  let timer;
+  try {
+    await Promise.race([
+      d.store.snapshot([PROBE_KEY]),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), d.admitTimeoutMs ?? 1e3);
+      })
+    ]);
+    return { ok: true, reason: "ready" };
+  } catch {
+    const down = policy2.failure.counterStoreDown;
+    if (down.budgets === "closed" || down.rateLimits === "closed") return { ok: false, reason: "counter store unreachable and the policy fails closed" };
+    return { ok: true, reason: "counter store unreachable, the policy fails open" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function serveOps(d, kind, req, res) {
+  req.resume();
+  const send = (status, type, body) => {
+    res.writeHead(status, { "content-type": type, "content-length": String(Buffer.byteLength(body)), "cache-control": "no-store" });
+    res.end(req.method === "HEAD" ? void 0 : body);
+  };
+  if (kind === "healthz") return send(200, "application/json", '{"status":"ok"}');
+  if (kind === "readyz") {
+    const r = await readiness(d);
+    return send(r.ok ? 200 : 503, "application/json", JSON.stringify({ status: r.ok ? "ready" : "not ready", reason: r.reason }));
+  }
+  if (!d.metrics) return send(404, "application/json", '{"error":"metrics are not enabled"}');
+  send(200, "text/plain; version=0.0.4; charset=utf-8", d.metrics.render());
+}
+var PROBE_KEY;
+var init_ops = __esm({
+  "src/edge/ops.ts"() {
+    "use strict";
+    PROBE_KEY = "ty:{tokenyard-health}:probe";
+  }
+});
+
 // src/edge/paths.ts
 function matchRoute(method, rawUrl, basePath) {
   const q = rawUrl.indexOf("?");
-  let path2 = q === -1 ? rawUrl : rawUrl.slice(0, q);
+  let path3 = q === -1 ? rawUrl : rawUrl.slice(0, q);
   const query = q === -1 ? "" : rawUrl.slice(q);
   const base = basePath?.replace(/\/+$/, "") ?? "";
   if (base !== "") {
-    if (path2 !== base && !path2.startsWith(`${base}/`)) return null;
-    path2 = path2.slice(base.length);
+    if (path3 !== base && !path3.startsWith(`${base}/`)) return null;
+    path3 = path3.slice(base.length);
   }
-  if ((method === "HEAD" || method === "GET") && path2 === "/api/hello") return { surface: "hello", pathAndQuery: path2 + query };
-  const bare2 = path2.startsWith("/v1/") ? path2.slice(3) : path2;
+  if ((method === "HEAD" || method === "GET") && path3 === "/api/hello") return { surface: "hello", pathAndQuery: path3 + query };
+  const bare2 = path3.startsWith("/v1/") ? path3.slice(3) : path3;
   const r = ROUTES.find((x) => x.path === bare2 && x.methods.includes(method));
   return r ? { surface: r.surface, pathAndQuery: r.canonical + query } : null;
 }
@@ -57964,6 +58200,17 @@ __export(handler_exports, {
 });
 import { randomBytes as randomBytes3 } from "node:crypto";
 import { pipeline } from "node:stream/promises";
+function emitTelemetry(deps, policy2, rec, attempts) {
+  try {
+    if (deps.metrics) {
+      let record2 = recorders.get(deps.metrics);
+      if (!record2) recorders.set(deps.metrics, record2 = createRequestRecorder(deps.metrics));
+      record2(rec, policy2.prices);
+    }
+    deps.spans?.requestSpan(rec, attempts);
+  } catch {
+  }
+}
 function withDeadline(p, ms) {
   let timer;
   const deadline = new Promise((_, reject) => {
@@ -58083,6 +58330,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   }
   if (held.admitted) {
     held.settled = true;
+    deps.metrics?.inc("tokenyard_reservations_open", {}, -1);
     let actual = cost ?? 0;
     if (costFailed) {
       actual = held.est;
@@ -58095,6 +58343,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
       result = await withDeadline(deps.store.settle(o.id, actual), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
       result = "failed";
+      deps.metrics?.inc("tokenyard_store_down_total", { op: "settle" });
     }
     const swept = runtime.takeSwept(o.id);
     o.settledBy = swept || result !== "settled" ? "sweeper" : "request";
@@ -58106,6 +58355,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   if (r?.usage && f?.boundKind === "bytes" && totalInput(r.usage, o.surface) > f.inputTokensBound) {
     o.boundExceeded = true;
     runtime.boundViolations++;
+    deps.metrics?.inc("tokenyard_bound_violations_total");
     if (!runtime.bytesBoundOff) {
       runtime.bytesBoundOff = true;
       console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) until restart`);
@@ -58113,7 +58363,11 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   }
   try {
     deps.onSettled?.(o);
-    if (deps.traces) deps.traces.write(buildTraceRecord(o, deps.traceSalt ?? ""));
+    if (deps.traces || deps.metrics || deps.spans) {
+      const rec = buildTraceRecord(o, deps.traceSalt ?? "");
+      emitTelemetry(deps, policy2, rec, o.attemptLog);
+      deps.traces?.write(rec);
+    }
   } catch {
   }
 }
@@ -58139,12 +58393,15 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   const method = req.method ?? "GET";
   const match = matchRoute(method, req.url ?? "/", deps.basePath);
   if (!match) {
-    const path2 = (req.url ?? "/").split("?")[0];
-    return sendError(req, res, anthropicError(404, "not_found_error", `no route for ${method} ${path2}`, null, id));
+    const path3 = (req.url ?? "/").split("?")[0];
+    return sendError(req, res, anthropicError(404, "not_found_error", `no route for ${method} ${path3}`, null, id));
   }
   const envelope = match.surface === "openai-responses" ? "openai" : "anthropic";
   held.envelope = envelope;
-  const own2 = (status, type, reason, message, retryAfterS = null, opts = {}) => ownError(envelope, status, type, reason, message, retryAfterS, id, opts);
+  const own2 = (status, type, reason, message, retryAfterS = null, opts = {}) => {
+    if (opts.shouldRetry === false) deps.metrics?.inc("tokenyard_should_retry_refusals_total", { reason });
+    return ownError(envelope, status, type, reason, message, retryAfterS, id, opts);
+  };
   if (match.surface === "hello") {
     req.resume();
     res.writeHead(200, { "content-length": "0" }).end();
@@ -58261,10 +58518,12 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     } catch {
       admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
       pending.then((late) => late.admitted ? store.settle(id, 0) : void 0).catch(() => void 0);
+      deps.metrics?.inc("tokenyard_store_down_total", { op: "admit" });
     }
   }
   held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? plan.reservations[0]?.estMicroUsd ?? 0 : 0;
+  if (held.admitted) deps.metrics?.inc("tokenyard_reservations_open", {}, 1);
   const admitted = {
     reservedMicroUsd: held.est,
     ...admission ? { audit: admission.audit } : {},
@@ -58303,25 +58562,27 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   let up;
   let answered = provider2;
   let attempts;
+  const attemptLog = [];
   const forwardedAt = deps.clock();
   try {
     const r = await runChain(plan, policy2, { method, pathAndQuery: match.pathAndQuery, headers: headersFor(provider2), body: upstreamBody }, ac.signal, {
       ...failure3,
       tenant: key.tenant,
       clock: deps.clock,
-      headersFor
+      headersFor,
+      onAttempt: (a) => attemptLog.push(a)
     });
     up = r.response;
     attempts = r.attempt;
     answered = policy2.providers.get(r.provider) ?? provider2;
   } catch (err) {
     const n2 = err instanceof ChainError ? err.attempts : 1;
-    const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n2 };
+    const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider2.name, attempts: n2, attemptLog };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: "client_abort" });
     sendError(req, res, own2(502, "api_error", "upstream-unreachable", `upstream ${common.provider} is unreachable`));
     return early({ ...common, status: 502, errorClass: "upstream_unreachable" });
   }
-  const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider2) };
+  const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider2), attemptLog };
   if (ac.signal.aborted) {
     up.body.on("error", () => void 0);
     up.body.destroy();
@@ -58367,7 +58628,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   });
 }
 function createHandler(deps) {
-  if (deps.traces && !deps.traceSalt) throw new Error("traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
+  if ((deps.traces || deps.spans) && !deps.traceSalt) throw new Error("traces and spans need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)");
   if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes3(16).toString("hex") };
   const runtime = deps.runtime ?? createGatewayRuntime();
   const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
@@ -58375,45 +58636,52 @@ function createHandler(deps) {
   const failureState = (policy2) => {
     const settings = JSON.stringify([policy2.failure.breaker, policy2.failure.retryBudgetRatio]);
     if (state?.settings !== settings) {
-      state = { settings, failure: { breaker: new Breaker(policy2.failure.breaker, deps.clock), retry: new RetryBudget(policy2.failure.retryBudgetRatio, deps.clock) } };
+      const onOpen = (scope) => deps.metrics?.inc("tokenyard_breaker_opens_total", { scope });
+      state = { settings, failure: { breaker: new Breaker(policy2.failure.breaker, deps.clock, onOpen), retry: new RetryBudget(policy2.failure.retryBudgetRatio, deps.clock) } };
     }
     return state.failure;
   };
   return (req, res) => {
+    const ops = matchOps(req.method ?? "GET", req.url ?? "/", deps.basePath);
+    if (ops !== null && !(ops === "metrics" && deps.metricsOnOtherPort)) {
+      serveOps({ ...deps, admitTimeoutMs }, ops, req, res).catch(() => res.destroy());
+      return;
+    }
     const id = deps.newId();
     const held = { plan: null, features: null, admitted: false, est: 0, settled: false, envelope: "anthropic", known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
+        deps.metrics?.inc("tokenyard_reservations_open", {}, -1);
         const known = held.known;
         void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
-          if (known === null || !deps.traces) return;
+          if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
           const swept = runtime.takeSwept(id) || !settled;
           let now = known.startedAt;
           try {
             now = deps.clock();
           } catch {
           }
-          deps.traces.write(
-            buildTraceRecord(
-              {
-                ...known,
-                status: 500,
-                usage: null,
-                aborted: false,
-                ttfbMs: null,
-                totalMs: Math.max(0, now - known.startedAt),
-                costMicroUsd: held.est,
-                addedTtfbMs: null,
-                errorClass: "internal_error",
-                settledAtEstimate: true,
-                settledBy: swept ? "sweeper" : "request",
-                chargedMicroUsd: held.est,
-                overrun: false
-              },
-              deps.traceSalt ?? ""
-            )
+          const rec = buildTraceRecord(
+            {
+              ...known,
+              status: 500,
+              usage: null,
+              aborted: false,
+              ttfbMs: null,
+              totalMs: Math.max(0, now - known.startedAt),
+              costMicroUsd: held.est,
+              addedTtfbMs: null,
+              errorClass: "internal_error",
+              settledAtEstimate: true,
+              settledBy: swept ? "sweeper" : "request",
+              chargedMicroUsd: held.est,
+              overrun: false
+            },
+            deps.traceSalt ?? ""
           );
+          emitTelemetry(deps, deps.policy(), rec);
+          deps.traces?.write(rec);
         }).catch(() => void 0);
       }
       try {
@@ -58425,7 +58693,7 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, StoreTimeoutError, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, StoreTimeoutError, recorders, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -58455,11 +58723,14 @@ var init_handler = __esm({
     init_body();
     init_errors3();
     init_headers();
+    init_metrics();
+    init_ops();
     init_paths();
     init_trace_record();
     DEFAULT_ADMIT_TIMEOUT_MS = 1e3;
     StoreTimeoutError = class extends Error {
     };
+    recorders = /* @__PURE__ */ new WeakMap();
     SWEPT_MAX = 1e5;
     summary = (d) => ({
       route: d.plan.route,
@@ -58501,25 +58772,40 @@ __export(server_exports, {
   createGateway: () => createGateway
 });
 import { createServer as createServer2 } from "node:http";
+function listenOn(server, port, host) {
+  return new Promise((resolve5, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, () => {
+      server.off("error", reject);
+      const a = server.address();
+      const h = a.family === "IPv6" ? `[${a.address}]` : a.address;
+      resolve5(`http://${h}:${a.port}`);
+    });
+  });
+}
 function createGateway(deps) {
   const server = createServer2(createHandler(deps));
+  let ops = null;
   return {
-    listen(port, host = "127.0.0.1") {
-      return new Promise((resolve4, reject) => {
-        server.once("error", reject);
-        server.listen(port, host, () => {
-          server.off("error", reject);
-          const a = server.address();
-          const h = a.family === "IPv6" ? `[${a.address}]` : a.address;
-          resolve4(`http://${h}:${a.port}`);
-        });
+    listen: (port, host = "127.0.0.1") => listenOn(server, port, host),
+    listenOps(port, host = "127.0.0.1") {
+      ops = createServer2((req, res) => {
+        const kind = matchOps(req.method ?? "GET", req.url ?? "/", deps.basePath);
+        if (kind === null) {
+          req.resume();
+          res.writeHead(404, { "content-type": "application/json" }).end('{"error":"not found"}');
+          return;
+        }
+        serveOps(deps, kind, req, res).catch(() => res.destroy());
       });
+      return listenOn(ops, port, host);
     },
     close() {
-      return new Promise((resolve4) => {
-        server.close(() => resolve4());
-        server.closeAllConnections();
+      const closing = (s2) => new Promise((resolve5) => {
+        s2.close(() => resolve5());
+        s2.closeAllConnections();
       });
+      return Promise.all([closing(server), ops ? closing(ops) : Promise.resolve()]).then(() => void 0);
     }
   };
 }
@@ -58528,6 +58814,7 @@ var init_server = __esm({
   "src/edge/server.ts"() {
     "use strict";
     init_handler();
+    init_ops();
     DEFAULT_BODY_CAP_BYTES = 32 * 1024 * 1024;
   }
 });
@@ -58567,8 +58854,8 @@ function covers(earlier, later) {
 function validatePolicy(src, o) {
   const errors = [];
   const warnings = [];
-  const err = (code2, path2, message) => void errors.push({ code: code2, path: path2, message });
-  const warn = (code2, path2, message) => void warnings.push({ code: code2, path: path2, message });
+  const err = (code2, path3, message) => void errors.push({ code: code2, path: path3, message });
+  const warn = (code2, path3, message) => void warnings.push({ code: code2, path: path3, message });
   const { policy: policy2, prices, keys: keys2 } = src;
   const flag = o.experimentalSubscription;
   const providers = new Map(Object.entries(policy2.providers).map(([n2, p]) => [n2, p.format]));
@@ -58754,7 +59041,7 @@ function deepFreeze(v) {
 function listedModels(r, priced) {
   if (r.allowModels !== void 0) {
     const res = r.allowModels.map(globToRegExp);
-    return priced.filter((id) => res.some((re) => re.test(id)));
+    return priced.filter((id) => res.some((re2) => re2.test(id)));
   }
   if (r.rewriteModel !== void 0) return [r.rewriteModel];
   return [...priced];
@@ -59109,7 +59396,7 @@ function fetchBundle(rawUrl, o) {
   const url2 = checkPolicyUrl(rawUrl);
   const maxBytes = o.maxBytes ?? MAX_BUNDLE_BYTES;
   const send = url2.protocol === "https:" ? httpsRequest : httpRequest;
-  return new Promise((resolve4, reject) => {
+  return new Promise((resolve5, reject) => {
     let settled = false;
     const done = (fn) => {
       if (settled) return;
@@ -59121,7 +59408,7 @@ function fetchBundle(rawUrl, o) {
       const status = res.statusCode ?? 0;
       if (status === 304) {
         res.resume();
-        return done(() => resolve4({ status: "not-modified" }));
+        return done(() => resolve5({ status: "not-modified" }));
       }
       if (status >= 300 && status < 400) {
         res.resume();
@@ -59154,7 +59441,7 @@ function fetchBundle(rawUrl, o) {
       });
       res.on("end", () => {
         const etag = res.headers.etag;
-        done(() => resolve4({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
+        done(() => resolve5({ status: "ok", text: Buffer.concat(chunks).toString("utf8"), etag: typeof etag === "string" ? etag : null }));
       });
       res.on("error", (e2) => done(() => reject(e2)));
       res.on("aborted", () => done(() => reject(new Error("policy response was cut off"))));
@@ -59187,17 +59474,17 @@ import { constants as constants3 } from "node:fs";
 import { lstat as lstat3, open as open4 } from "node:fs/promises";
 import { join as join4 } from "node:path";
 async function readOrMissing(dir, name2) {
-  const path2 = join4(dir, name2);
+  const path3 = join4(dir, name2);
   let st;
   try {
-    st = await lstat3(path2);
+    st = await lstat3(path3);
   } catch (e2) {
     if (e2.code === "ENOENT" || e2.code === "ENOTDIR") return void 0;
     throw e2;
   }
   if (!st.isFile()) throw new PolicyLoadError("E_YAML_UNSAFE", name2, [{ path: "", message: "must be a regular file (symbolic links and special files are refused)" }]);
   if (st.size > MAX_YAML_BYTES) throw new PolicyLoadError("E_YAML_UNSAFE", name2, [{ path: "", message: `file is larger than ${MAX_YAML_BYTES} bytes` }]);
-  const fh = await open4(path2, constants3.O_RDONLY | constants3.O_NOFOLLOW | constants3.O_NONBLOCK);
+  const fh = await open4(path3, constants3.O_RDONLY | constants3.O_NOFOLLOW | constants3.O_NONBLOCK);
   try {
     const buf = Buffer.alloc(MAX_YAML_BYTES + 1);
     const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
@@ -60935,21 +61222,21 @@ var require_generic_transformers = __commonJS({
       },
       3: void 0
     };
-    function transformDoubleArgument(num3) {
-      switch (num3) {
+    function transformDoubleArgument(num4) {
+      switch (num4) {
         case Infinity:
           return "+inf";
         case -Infinity:
           return "-inf";
         default:
-          return num3.toString();
+          return num4.toString();
       }
     }
     exports.transformDoubleArgument = transformDoubleArgument;
-    function transformStringDoubleArgument(num3) {
-      if (typeof num3 !== "number")
-        return num3;
-      return transformDoubleArgument(num3);
+    function transformStringDoubleArgument(num4) {
+      if (typeof num4 !== "number")
+        return num4;
+      return transformDoubleArgument(num4);
     }
     exports.transformStringDoubleArgument = transformStringDoubleArgument;
     exports.transformDoubleReply = {
@@ -67120,8 +67407,8 @@ var require_MODULE_LOAD = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = {
-      parseCommand(parser, path2, moduleArguments) {
-        parser.push("MODULE", "LOAD", path2);
+      parseCommand(parser, path3, moduleArguments) {
+        parser.push("MODULE", "LOAD", path3);
         if (moduleArguments) {
           parser.push(...moduleArguments);
         }
@@ -77191,14 +77478,14 @@ var require_tracing = __commonJS({
       return tracingChannels?.[name2];
     }
     exports.getTracingChannel = getTracingChannel;
-    function trace(name2, fn, contextFactory) {
+    function trace2(name2, fn, contextFactory) {
       const channel = tracingChannels?.[name2];
       if (channel && channel.hasSubscribers !== false) {
         return channel.tracePromise(fn, contextFactory());
       }
       return fn();
     }
-    exports.trace = trace;
+    exports.trace = trace2;
     var pointChannels = dc?.channel ? {
       [exports.CHANNELS.CONNECTION_READY]: dc.channel(exports.CHANNELS.CONNECTION_READY),
       [exports.CHANNELS.CONNECTION_CLOSED]: dc.channel(exports.CHANNELS.CONNECTION_CLOSED),
@@ -79335,11 +79622,11 @@ var require_commands_queue = __commonJS({
         if (this.#waitingForReply.length === 0) {
           return;
         }
-        return new Promise((resolve4) => {
+        return new Promise((resolve5) => {
           const onEmpty = () => {
             if (timeoutId)
               clearTimeout(timeoutId);
-            resolve4();
+            resolve5();
           };
           let timeoutId;
           const timeoutMs = options?.timeoutMs;
@@ -79352,7 +79639,7 @@ var require_commands_queue = __commonJS({
                 (0, enterprise_maintenance_manager_1.dbgMaintenance)(`Flushing ${pendingCount} commands that timed out waiting for reply`);
                 this.#flushWaitingForReply(new errors_1.TimeoutError());
               }
-              resolve4();
+              resolve5();
             }, timeoutMs);
           }
           this.#waitingForReply.events.once("empty", onEmpty);
@@ -79382,13 +79669,13 @@ var require_commands_queue = __commonJS({
         } else if (options?.abortSignal?.aborted) {
           return Promise.reject(new errors_1.AbortError());
         }
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const value = {
             args,
             chainId: options?.chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve4,
+            resolve: resolve5,
             reject,
             channelsCounter: void 0,
             typeMapping: options?.typeMapping
@@ -79427,7 +79714,7 @@ var require_commands_queue = __commonJS({
         });
       }
       #addPubSubCommand(command, asap = false, chainId) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           this.#toWrite.add({
             args: command.args,
             chainId,
@@ -79435,7 +79722,7 @@ var require_commands_queue = __commonJS({
             timeout: void 0,
             resolve() {
               command.resolve();
-              resolve4();
+              resolve5();
             },
             reject(err) {
               command.reject?.();
@@ -79455,8 +79742,8 @@ var require_commands_queue = __commonJS({
               return;
             const firstElement = typeof reply[0] === "string" ? Buffer.from(reply[0]) : reply[0];
             if (PONG.equals(firstElement)) {
-              const { resolve: resolve4, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
-              resolve4(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
+              const { resolve: resolve5, typeMapping } = this.#waitingForReply.shift(), buffer = reply[1].length === 0 ? reply[0] : reply[1];
+              resolve5(typeMapping?.[decoder_1.RESP_TYPES.SIMPLE_STRING] === Buffer ? buffer : buffer.toString());
               return;
             }
           }
@@ -79480,12 +79767,12 @@ var require_commands_queue = __commonJS({
         if (!command)
           return;
         if (command && this.#respVersion === 2) {
-          const { resolve: resolve4 } = command;
+          const { resolve: resolve5 } = command;
           command.resolve = () => {
             if (!this.#pubSub.isActive) {
               this.#resetDecoderCallbacks();
             }
-            resolve4();
+            resolve5();
           };
         }
         return this.#addPubSubCommand(command);
@@ -79521,7 +79808,7 @@ var require_commands_queue = __commonJS({
         return this.#pubSub.listeners[type];
       }
       monitor(callback, options) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const typeMapping = options?.typeMapping ?? {};
           this.#toWrite.add({
             args: ["MONITOR"],
@@ -79536,7 +79823,7 @@ var require_commands_queue = __commonJS({
                 this.decoder.onReply = callback;
               }
               this.decoder.getTypeMapping = () => typeMapping;
-              resolve4();
+              resolve5();
             },
             reject,
             channelsCounter: void 0,
@@ -79550,7 +79837,7 @@ var require_commands_queue = __commonJS({
       }
       #resetFallbackOnReply;
       async reset(chainId, typeMapping) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           this.#resetFallbackOnReply = this.decoder.onReply;
           this.decoder.onReply = ((reply) => {
             if (typeof reply === "string" && reply === "RESET" || reply instanceof Buffer && RESET.equals(reply)) {
@@ -79567,7 +79854,7 @@ var require_commands_queue = __commonJS({
             chainId,
             abort: void 0,
             timeout: void 0,
-            resolve: resolve4,
+            resolve: resolve5,
             reject,
             channelsCounter: void 0,
             typeMapping
@@ -87044,8 +87331,8 @@ var require_registry = __commonJS({
        */
       snapshot() {
         const out = /* @__PURE__ */ new Map();
-        for (const [name2, fs2] of this.#fieldsets)
-          out.set(name2, fs2.fields);
+        for (const [name2, fs3] of this.#fieldsets)
+          out.set(name2, fs3.fields);
         return out;
       }
       /**
@@ -87411,7 +87698,7 @@ var require_pool2 = __commonJS({
         this._self.#returnClient(node2);
       }
       execute(fn) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           if (this._self.isClosing || !this._self.#isOpen) {
             return reject(new errors_1.ClientClosedError());
           }
@@ -87428,7 +87715,7 @@ var require_pool2 = __commonJS({
             const task = this._self.#tasksQueue.push({
               timeout,
               // @ts-expect-error -- resolve generic variance
-              resolve: resolve4,
+              resolve: resolve5,
               reject,
               fn,
               waitStartTimestamp
@@ -87444,10 +87731,10 @@ var require_pool2 = __commonJS({
           }
           const node2 = this._self.#clientsInUse.push(client);
           (0, tracing_1.publish)(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, () => ({ clientId: client._clientId, waitStartTimestamp }));
-          this._self.#executeTask(node2, resolve4, reject, fn);
+          this._self.#executeTask(node2, resolve5, reject, fn);
         });
       }
-      #executeTask(node2, resolve4, reject, fn) {
+      #executeTask(node2, resolve5, reject, fn) {
         let result;
         try {
           result = fn(node2.value);
@@ -87457,11 +87744,11 @@ var require_pool2 = __commonJS({
           return;
         }
         if (result instanceof Promise) {
-          result.then(resolve4, reject).finally(() => {
+          result.then(resolve5, reject).finally(() => {
             this.#returnClient(node2);
           });
         } else {
-          resolve4(result);
+          resolve5(result);
           this.#returnClient(node2);
         }
       }
@@ -87515,8 +87802,8 @@ var require_pool2 = __commonJS({
       async #doClose() {
         try {
           if (this._self.#clientsInUse.length > 0) {
-            await new Promise((resolve4) => {
-              this._self.#drainResolve = resolve4;
+            await new Promise((resolve5) => {
+              this._self.#drainResolve = resolve5;
             });
           }
           const promises = [];
@@ -87982,22 +88269,22 @@ var require_utils2 = __commonJS({
     function noopFunction() {
     }
     exports.noopFunction = noopFunction;
-    var parseClientAttributes = (clientAttributes) => {
+    var parseClientAttributes = (clientAttributes2) => {
       return {
-        ...clientAttributes?.db === void 0 ? {} : {
-          [types_1.OTEL_ATTRIBUTES.dbNamespace]: clientAttributes.db.toString()
+        ...clientAttributes2?.db === void 0 ? {} : {
+          [types_1.OTEL_ATTRIBUTES.dbNamespace]: clientAttributes2.db.toString()
         },
-        ...clientAttributes?.host && {
-          [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes.host
+        ...clientAttributes2?.host && {
+          [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes2.host
         },
-        ...clientAttributes?.port && {
-          [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes.port.toString()
+        ...clientAttributes2?.port && {
+          [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes2.port.toString()
         },
-        ...clientAttributes?.clientId && {
-          [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes.clientId
+        ...clientAttributes2?.clientId && {
+          [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes2.clientId
         },
-        ...clientAttributes?.parentId && {
-          [types_1.OTEL_ATTRIBUTES.redisClientParentId]: clientAttributes.parentId
+        ...clientAttributes2?.parentId && {
+          [types_1.OTEL_ATTRIBUTES.redisClientParentId]: clientAttributes2.parentId
         }
       };
     };
@@ -88174,34 +88461,34 @@ var require_metrics = __commonJS({
       // -- Connection Basic --
       #subscribeConnectionBasic() {
         this.#sub(tracing_1.CHANNELS.CONNECTION_READY, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.dbClientConnectionCreateTime.record(ctx.createTimeMs / 1e3, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2)
           });
         });
         this.#sub(tracing_1.CHANNELS.CONNECTION_RELAXED_TIMEOUT, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientConnectionRelaxedTimeout.add(ctx.value, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2)
           });
         });
         this.#sub(tracing_1.CHANNELS.CONNECTION_HANDOFF, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientConnectionHandoff.add(1, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2)
           });
         });
       }
       // -- Connection Closed (advanced) --
       #subscribeConnectionClosed() {
         this.#sub(tracing_1.CHANNELS.CONNECTION_CLOSED, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientConnectionClosed.add(1, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes),
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2),
             [types_1.OTEL_ATTRIBUTES.redisClientConnectionCloseReason]: ctx.reason
           });
         });
@@ -88211,19 +88498,19 @@ var require_metrics = __commonJS({
         this.#sub(tracing_1.CHANNELS.POOL_CONNECTION_WAIT, (ctx) => {
           if (!ctx.waitStartTimestamp)
             return;
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.dbClientConnectionWaitTime.record((performance.now() - ctx.waitStartTimestamp) / 1e3, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes)
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2)
           });
         });
       }
       #recordError(error62, clientId, extra) {
-        const clientAttributes = resolveClientAttributes(clientId);
+        const clientAttributes2 = resolveClientAttributes(clientId);
         const errorInfo = (0, utils_1.getErrorInfo)(error62);
         this.#instruments.redisClientErrors.add(1, {
           ...this.#options.attributes,
-          ...(0, utils_1.parseClientAttributes)(clientAttributes),
+          ...(0, utils_1.parseClientAttributes)(clientAttributes2),
           [types_1.OTEL_ATTRIBUTES.errorType]: errorInfo.errorType,
           [types_1.OTEL_ATTRIBUTES.redisClientErrorsCategory]: errorInfo.category,
           ...errorInfo.statusCode !== void 0 && {
@@ -88256,10 +88543,10 @@ var require_metrics = __commonJS({
           this.#unsubscribers.push(subscribeCommandTC(commandTC, { error: onError }));
         }
         this.#sub(tracing_1.CHANNELS.MAINTENANCE, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientMaintenanceNotifications.add(1, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes),
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2),
             [types_1.OTEL_ATTRIBUTES.redisClientConnectionNotification]: ctx.notification
           });
         });
@@ -88267,22 +88554,22 @@ var require_metrics = __commonJS({
       // -- Client-Side Cache --
       #subscribeClientSideCache() {
         this.#sub(tracing_1.CHANNELS.CACHE_REQUEST, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientCscRequests.add(1, {
             ...this.#options.attributes,
-            [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes?.host,
-            [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes?.port?.toString(),
-            [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes?.clientId,
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes2?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes2?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes2?.clientId,
             [types_1.OTEL_ATTRIBUTES.redisClientCscResult]: ctx.result
           });
         });
         this.#sub(tracing_1.CHANNELS.CACHE_EVICTION, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientCscEvictions.add(ctx.count ?? 1, {
             ...this.#options.attributes,
-            [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes?.host,
-            [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes?.port?.toString(),
-            [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes?.clientId,
+            [types_1.OTEL_ATTRIBUTES.serverAddress]: clientAttributes2?.host,
+            [types_1.OTEL_ATTRIBUTES.serverPort]: clientAttributes2?.port?.toString(),
+            [types_1.OTEL_ATTRIBUTES.dbClientConnectionPoolName]: clientAttributes2?.clientId,
             [types_1.OTEL_ATTRIBUTES.redisClientCscReason]: ctx.reason
           });
         });
@@ -88290,10 +88577,10 @@ var require_metrics = __commonJS({
       // -- PubSub --
       #subscribePubSub() {
         this.#sub(tracing_1.CHANNELS.PUBSUB, (ctx) => {
-          const clientAttributes = resolveClientAttributes(ctx.clientId);
+          const clientAttributes2 = resolveClientAttributes(ctx.clientId);
           this.#instruments.redisClientPubsubMessages.add(1, {
             ...this.#options.attributes,
-            ...(0, utils_1.parseClientAttributes)(clientAttributes),
+            ...(0, utils_1.parseClientAttributes)(clientAttributes2),
             [types_1.OTEL_ATTRIBUTES.redisClientPubSubMessageDirection]: ctx.direction,
             [types_1.OTEL_ATTRIBUTES.redisClientPubSubSharded]: ctx.sharded ?? false,
             ...ctx.channel != null && !this.#options.hidePubSubChannelNames ? { [types_1.OTEL_ATTRIBUTES.redisClientPubSubChannel]: ctx.channel.toString() } : {}
@@ -88307,10 +88594,10 @@ var require_metrics = __commonJS({
         this.#sub(tracing_1.CHANNELS.COMMAND_REPLY, (ctx) => {
           const commandName = ctx.args[0]?.toString().toUpperCase();
           if (hasPubSub && (commandName === "PUBLISH" || commandName === "SPUBLISH")) {
-            const clientAttributes = resolveClientAttributes(ctx.clientId);
+            const clientAttributes2 = resolveClientAttributes(ctx.clientId);
             this.#instruments.redisClientPubsubMessages.add(1, {
               ...this.#options.attributes,
-              ...(0, utils_1.parseClientAttributes)(clientAttributes),
+              ...(0, utils_1.parseClientAttributes)(clientAttributes2),
               [types_1.OTEL_ATTRIBUTES.redisClientPubSubMessageDirection]: "out",
               [types_1.OTEL_ATTRIBUTES.redisClientPubSubSharded]: commandName === "SPUBLISH",
               ...ctx.args[1] != null && !this.#options.hidePubSubChannelNames ? { [types_1.OTEL_ATTRIBUTES.redisClientPubSubChannel]: ctx.args[1].toString() } : {}
@@ -88322,7 +88609,7 @@ var require_metrics = __commonJS({
             if (!reply || !Array.isArray(reply) || reply.length === 0)
               return;
             const now = Date.now();
-            const clientAttributes = resolveClientAttributes(ctx.clientId);
+            const clientAttributes2 = resolveClientAttributes(ctx.clientId);
             const isXReadGroup = commandName === "XREADGROUP" && ctx.args[1]?.toString().toUpperCase() === "GROUP";
             const consumerGroup = isXReadGroup ? ctx.args[2]?.toString() : void 0;
             for (const streamData of reply) {
@@ -88333,7 +88620,7 @@ var require_metrics = __commonJS({
                 continue;
               const streamAttributes = {
                 ...this.#options.attributes,
-                ...(0, utils_1.parseClientAttributes)(clientAttributes),
+                ...(0, utils_1.parseClientAttributes)(clientAttributes2),
                 ...!this.#options.hideStreamNames ? { [types_1.OTEL_ATTRIBUTES.redisClientStreamName]: stream } : {},
                 ...consumerGroup !== void 0 ? { [types_1.OTEL_ATTRIBUTES.redisClientConsumerGroup]: consumerGroup } : {}
               };
@@ -88598,6 +88885,1544 @@ var require_metrics = __commonJS({
   }
 });
 
+// node_modules/@opentelemetry/api/build/esm/version.js
+var VERSION;
+var init_version = __esm({
+  "node_modules/@opentelemetry/api/build/esm/version.js"() {
+    VERSION = "1.9.1";
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/internal/semver.js
+function _makeCompatibilityCheck(ownVersion) {
+  const acceptedVersions = /* @__PURE__ */ new Set([ownVersion]);
+  const rejectedVersions = /* @__PURE__ */ new Set();
+  const myVersionMatch = ownVersion.match(re);
+  if (!myVersionMatch) {
+    return () => false;
+  }
+  const ownVersionParsed = {
+    major: +myVersionMatch[1],
+    minor: +myVersionMatch[2],
+    patch: +myVersionMatch[3],
+    prerelease: myVersionMatch[4]
+  };
+  if (ownVersionParsed.prerelease != null) {
+    return function isExactmatch(globalVersion) {
+      return globalVersion === ownVersion;
+    };
+  }
+  function _reject(v) {
+    rejectedVersions.add(v);
+    return false;
+  }
+  function _accept(v) {
+    acceptedVersions.add(v);
+    return true;
+  }
+  return function isCompatible2(globalVersion) {
+    if (acceptedVersions.has(globalVersion)) {
+      return true;
+    }
+    if (rejectedVersions.has(globalVersion)) {
+      return false;
+    }
+    const globalVersionMatch = globalVersion.match(re);
+    if (!globalVersionMatch) {
+      return _reject(globalVersion);
+    }
+    const globalVersionParsed = {
+      major: +globalVersionMatch[1],
+      minor: +globalVersionMatch[2],
+      patch: +globalVersionMatch[3],
+      prerelease: globalVersionMatch[4]
+    };
+    if (globalVersionParsed.prerelease != null) {
+      return _reject(globalVersion);
+    }
+    if (ownVersionParsed.major !== globalVersionParsed.major) {
+      return _reject(globalVersion);
+    }
+    if (ownVersionParsed.major === 0) {
+      if (ownVersionParsed.minor === globalVersionParsed.minor && ownVersionParsed.patch <= globalVersionParsed.patch) {
+        return _accept(globalVersion);
+      }
+      return _reject(globalVersion);
+    }
+    if (ownVersionParsed.minor <= globalVersionParsed.minor) {
+      return _accept(globalVersion);
+    }
+    return _reject(globalVersion);
+  };
+}
+var re, isCompatible;
+var init_semver = __esm({
+  "node_modules/@opentelemetry/api/build/esm/internal/semver.js"() {
+    init_version();
+    re = /^(\d+)\.(\d+)\.(\d+)(-(.+))?$/;
+    isCompatible = _makeCompatibilityCheck(VERSION);
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/internal/global-utils.js
+function registerGlobal(type, instance, diag3, allowOverride = false) {
+  var _a3;
+  const api = _global[GLOBAL_OPENTELEMETRY_API_KEY] = (_a3 = _global[GLOBAL_OPENTELEMETRY_API_KEY]) !== null && _a3 !== void 0 ? _a3 : {
+    version: VERSION
+  };
+  if (!allowOverride && api[type]) {
+    const err = new Error(`@opentelemetry/api: Attempted duplicate registration of API: ${type}`);
+    diag3.error(err.stack || err.message);
+    return false;
+  }
+  if (api.version !== VERSION) {
+    const err = new Error(`@opentelemetry/api: Registration of version v${api.version} for ${type} does not match previously registered API v${VERSION}`);
+    diag3.error(err.stack || err.message);
+    return false;
+  }
+  api[type] = instance;
+  diag3.debug(`@opentelemetry/api: Registered a global for ${type} v${VERSION}.`);
+  return true;
+}
+function getGlobal(type) {
+  var _a3, _b;
+  const globalVersion = (_a3 = _global[GLOBAL_OPENTELEMETRY_API_KEY]) === null || _a3 === void 0 ? void 0 : _a3.version;
+  if (!globalVersion || !isCompatible(globalVersion)) {
+    return;
+  }
+  return (_b = _global[GLOBAL_OPENTELEMETRY_API_KEY]) === null || _b === void 0 ? void 0 : _b[type];
+}
+function unregisterGlobal(type, diag3) {
+  diag3.debug(`@opentelemetry/api: Unregistering a global for ${type} v${VERSION}.`);
+  const api = _global[GLOBAL_OPENTELEMETRY_API_KEY];
+  if (api) {
+    delete api[type];
+  }
+}
+var major, GLOBAL_OPENTELEMETRY_API_KEY, _global;
+var init_global_utils = __esm({
+  "node_modules/@opentelemetry/api/build/esm/internal/global-utils.js"() {
+    init_version();
+    init_semver();
+    major = VERSION.split(".")[0];
+    GLOBAL_OPENTELEMETRY_API_KEY = /* @__PURE__ */ Symbol.for(`opentelemetry.js.api.${major}`);
+    _global = typeof globalThis === "object" ? globalThis : typeof self === "object" ? self : typeof window === "object" ? window : typeof global === "object" ? global : {};
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/diag/ComponentLogger.js
+function logProxy(funcName, namespace, args) {
+  const logger = getGlobal("diag");
+  if (!logger) {
+    return;
+  }
+  return logger[funcName](namespace, ...args);
+}
+var DiagComponentLogger;
+var init_ComponentLogger = __esm({
+  "node_modules/@opentelemetry/api/build/esm/diag/ComponentLogger.js"() {
+    init_global_utils();
+    DiagComponentLogger = class {
+      constructor(props) {
+        this._namespace = props.namespace || "DiagComponentLogger";
+      }
+      debug(...args) {
+        return logProxy("debug", this._namespace, args);
+      }
+      error(...args) {
+        return logProxy("error", this._namespace, args);
+      }
+      info(...args) {
+        return logProxy("info", this._namespace, args);
+      }
+      warn(...args) {
+        return logProxy("warn", this._namespace, args);
+      }
+      verbose(...args) {
+        return logProxy("verbose", this._namespace, args);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/diag/types.js
+var DiagLogLevel;
+var init_types = __esm({
+  "node_modules/@opentelemetry/api/build/esm/diag/types.js"() {
+    (function(DiagLogLevel2) {
+      DiagLogLevel2[DiagLogLevel2["NONE"] = 0] = "NONE";
+      DiagLogLevel2[DiagLogLevel2["ERROR"] = 30] = "ERROR";
+      DiagLogLevel2[DiagLogLevel2["WARN"] = 50] = "WARN";
+      DiagLogLevel2[DiagLogLevel2["INFO"] = 60] = "INFO";
+      DiagLogLevel2[DiagLogLevel2["DEBUG"] = 70] = "DEBUG";
+      DiagLogLevel2[DiagLogLevel2["VERBOSE"] = 80] = "VERBOSE";
+      DiagLogLevel2[DiagLogLevel2["ALL"] = 9999] = "ALL";
+    })(DiagLogLevel || (DiagLogLevel = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/diag/internal/logLevelLogger.js
+function createLogLevelDiagLogger(maxLevel, logger) {
+  if (maxLevel < DiagLogLevel.NONE) {
+    maxLevel = DiagLogLevel.NONE;
+  } else if (maxLevel > DiagLogLevel.ALL) {
+    maxLevel = DiagLogLevel.ALL;
+  }
+  logger = logger || {};
+  function _filterFunc(funcName, theLevel) {
+    const theFunc = logger[funcName];
+    if (typeof theFunc === "function" && maxLevel >= theLevel) {
+      return theFunc.bind(logger);
+    }
+    return function() {
+    };
+  }
+  return {
+    error: _filterFunc("error", DiagLogLevel.ERROR),
+    warn: _filterFunc("warn", DiagLogLevel.WARN),
+    info: _filterFunc("info", DiagLogLevel.INFO),
+    debug: _filterFunc("debug", DiagLogLevel.DEBUG),
+    verbose: _filterFunc("verbose", DiagLogLevel.VERBOSE)
+  };
+}
+var init_logLevelLogger = __esm({
+  "node_modules/@opentelemetry/api/build/esm/diag/internal/logLevelLogger.js"() {
+    init_types();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/api/diag.js
+var API_NAME, DiagAPI;
+var init_diag = __esm({
+  "node_modules/@opentelemetry/api/build/esm/api/diag.js"() {
+    init_ComponentLogger();
+    init_logLevelLogger();
+    init_types();
+    init_global_utils();
+    API_NAME = "diag";
+    DiagAPI = class _DiagAPI {
+      /** Get the singleton instance of the DiagAPI API */
+      static instance() {
+        if (!this._instance) {
+          this._instance = new _DiagAPI();
+        }
+        return this._instance;
+      }
+      /**
+       * Private internal constructor
+       * @private
+       */
+      constructor() {
+        function _logProxy(funcName) {
+          return function(...args) {
+            const logger = getGlobal("diag");
+            if (!logger)
+              return;
+            return logger[funcName](...args);
+          };
+        }
+        const self2 = this;
+        const setLogger = (logger, optionsOrLogLevel = { logLevel: DiagLogLevel.INFO }) => {
+          var _a3, _b, _c;
+          if (logger === self2) {
+            const err = new Error("Cannot use diag as the logger for itself. Please use a DiagLogger implementation like ConsoleDiagLogger or a custom implementation");
+            self2.error((_a3 = err.stack) !== null && _a3 !== void 0 ? _a3 : err.message);
+            return false;
+          }
+          if (typeof optionsOrLogLevel === "number") {
+            optionsOrLogLevel = {
+              logLevel: optionsOrLogLevel
+            };
+          }
+          const oldLogger = getGlobal("diag");
+          const newLogger = createLogLevelDiagLogger((_b = optionsOrLogLevel.logLevel) !== null && _b !== void 0 ? _b : DiagLogLevel.INFO, logger);
+          if (oldLogger && !optionsOrLogLevel.suppressOverrideMessage) {
+            const stack = (_c = new Error().stack) !== null && _c !== void 0 ? _c : "<failed to generate stacktrace>";
+            oldLogger.warn(`Current logger will be overwritten from ${stack}`);
+            newLogger.warn(`Current logger will overwrite one already registered from ${stack}`);
+          }
+          return registerGlobal("diag", newLogger, self2, true);
+        };
+        self2.setLogger = setLogger;
+        self2.disable = () => {
+          unregisterGlobal(API_NAME, self2);
+        };
+        self2.createComponentLogger = (options) => {
+          return new DiagComponentLogger(options);
+        };
+        self2.verbose = _logProxy("verbose");
+        self2.debug = _logProxy("debug");
+        self2.info = _logProxy("info");
+        self2.warn = _logProxy("warn");
+        self2.error = _logProxy("error");
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/baggage/internal/baggage-impl.js
+var BaggageImpl;
+var init_baggage_impl = __esm({
+  "node_modules/@opentelemetry/api/build/esm/baggage/internal/baggage-impl.js"() {
+    BaggageImpl = class _BaggageImpl {
+      constructor(entries) {
+        this._entries = entries ? new Map(entries) : /* @__PURE__ */ new Map();
+      }
+      getEntry(key) {
+        const entry = this._entries.get(key);
+        if (!entry) {
+          return void 0;
+        }
+        return Object.assign({}, entry);
+      }
+      getAllEntries() {
+        return Array.from(this._entries.entries());
+      }
+      setEntry(key, entry) {
+        const newBaggage = new _BaggageImpl(this._entries);
+        newBaggage._entries.set(key, entry);
+        return newBaggage;
+      }
+      removeEntry(key) {
+        const newBaggage = new _BaggageImpl(this._entries);
+        newBaggage._entries.delete(key);
+        return newBaggage;
+      }
+      removeEntries(...keys2) {
+        const newBaggage = new _BaggageImpl(this._entries);
+        for (const key of keys2) {
+          newBaggage._entries.delete(key);
+        }
+        return newBaggage;
+      }
+      clear() {
+        return new _BaggageImpl();
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/baggage/internal/symbol.js
+var baggageEntryMetadataSymbol;
+var init_symbol = __esm({
+  "node_modules/@opentelemetry/api/build/esm/baggage/internal/symbol.js"() {
+    baggageEntryMetadataSymbol = /* @__PURE__ */ Symbol("BaggageEntryMetadata");
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/baggage/utils.js
+function createBaggage(entries = {}) {
+  return new BaggageImpl(new Map(Object.entries(entries)));
+}
+function baggageEntryMetadataFromString(str) {
+  if (typeof str !== "string") {
+    diag.error(`Cannot create baggage metadata from unknown type: ${typeof str}`);
+    str = "";
+  }
+  return {
+    __TYPE__: baggageEntryMetadataSymbol,
+    toString() {
+      return str;
+    }
+  };
+}
+var diag;
+var init_utils = __esm({
+  "node_modules/@opentelemetry/api/build/esm/baggage/utils.js"() {
+    init_diag();
+    init_baggage_impl();
+    init_symbol();
+    diag = DiagAPI.instance();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/context/context.js
+function createContextKey(description) {
+  return Symbol.for(description);
+}
+var BaseContext, ROOT_CONTEXT;
+var init_context = __esm({
+  "node_modules/@opentelemetry/api/build/esm/context/context.js"() {
+    BaseContext = class _BaseContext {
+      /**
+       * Construct a new context which inherits values from an optional parent context.
+       *
+       * @param parentContext a context from which to inherit values
+       */
+      constructor(parentContext) {
+        const self2 = this;
+        self2._currentContext = parentContext ? new Map(parentContext) : /* @__PURE__ */ new Map();
+        self2.getValue = (key) => self2._currentContext.get(key);
+        self2.setValue = (key, value) => {
+          const context2 = new _BaseContext(self2._currentContext);
+          context2._currentContext.set(key, value);
+          return context2;
+        };
+        self2.deleteValue = (key) => {
+          const context2 = new _BaseContext(self2._currentContext);
+          context2._currentContext.delete(key);
+          return context2;
+        };
+      }
+    };
+    ROOT_CONTEXT = new BaseContext();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/diag/consoleLogger.js
+var consoleMap, _originalConsoleMethods, DiagConsoleLogger;
+var init_consoleLogger = __esm({
+  "node_modules/@opentelemetry/api/build/esm/diag/consoleLogger.js"() {
+    consoleMap = [
+      { n: "error", c: "error" },
+      { n: "warn", c: "warn" },
+      { n: "info", c: "info" },
+      { n: "debug", c: "debug" },
+      { n: "verbose", c: "trace" }
+    ];
+    _originalConsoleMethods = {};
+    if (typeof console !== "undefined") {
+      const keys2 = [
+        "error",
+        "warn",
+        "info",
+        "debug",
+        "trace",
+        "log"
+      ];
+      for (const key of keys2) {
+        if (typeof console[key] === "function") {
+          _originalConsoleMethods[key] = console[key];
+        }
+      }
+    }
+    DiagConsoleLogger = class {
+      constructor() {
+        function _consoleFunc(funcName) {
+          return function(...args) {
+            let theFunc = _originalConsoleMethods[funcName];
+            if (typeof theFunc !== "function") {
+              theFunc = _originalConsoleMethods["log"];
+            }
+            if (typeof theFunc !== "function" && console) {
+              theFunc = console[funcName];
+              if (typeof theFunc !== "function") {
+                theFunc = console.log;
+              }
+            }
+            if (typeof theFunc === "function") {
+              return theFunc.apply(console, args);
+            }
+          };
+        }
+        for (let i = 0; i < consoleMap.length; i++) {
+          this[consoleMap[i].n] = _consoleFunc(consoleMap[i].c);
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/metrics/NoopMeter.js
+function createNoopMeter() {
+  return NOOP_METER;
+}
+var NoopMeter, NoopMetric, NoopCounterMetric, NoopUpDownCounterMetric, NoopGaugeMetric, NoopHistogramMetric, NoopObservableMetric, NoopObservableCounterMetric, NoopObservableGaugeMetric, NoopObservableUpDownCounterMetric, NOOP_METER, NOOP_COUNTER_METRIC, NOOP_GAUGE_METRIC, NOOP_HISTOGRAM_METRIC, NOOP_UP_DOWN_COUNTER_METRIC, NOOP_OBSERVABLE_COUNTER_METRIC, NOOP_OBSERVABLE_GAUGE_METRIC, NOOP_OBSERVABLE_UP_DOWN_COUNTER_METRIC;
+var init_NoopMeter = __esm({
+  "node_modules/@opentelemetry/api/build/esm/metrics/NoopMeter.js"() {
+    NoopMeter = class {
+      constructor() {
+      }
+      /**
+       * @see {@link Meter.createGauge}
+       */
+      createGauge(_name, _options) {
+        return NOOP_GAUGE_METRIC;
+      }
+      /**
+       * @see {@link Meter.createHistogram}
+       */
+      createHistogram(_name, _options) {
+        return NOOP_HISTOGRAM_METRIC;
+      }
+      /**
+       * @see {@link Meter.createCounter}
+       */
+      createCounter(_name, _options) {
+        return NOOP_COUNTER_METRIC;
+      }
+      /**
+       * @see {@link Meter.createUpDownCounter}
+       */
+      createUpDownCounter(_name, _options) {
+        return NOOP_UP_DOWN_COUNTER_METRIC;
+      }
+      /**
+       * @see {@link Meter.createObservableGauge}
+       */
+      createObservableGauge(_name, _options) {
+        return NOOP_OBSERVABLE_GAUGE_METRIC;
+      }
+      /**
+       * @see {@link Meter.createObservableCounter}
+       */
+      createObservableCounter(_name, _options) {
+        return NOOP_OBSERVABLE_COUNTER_METRIC;
+      }
+      /**
+       * @see {@link Meter.createObservableUpDownCounter}
+       */
+      createObservableUpDownCounter(_name, _options) {
+        return NOOP_OBSERVABLE_UP_DOWN_COUNTER_METRIC;
+      }
+      /**
+       * @see {@link Meter.addBatchObservableCallback}
+       */
+      addBatchObservableCallback(_callback, _observables) {
+      }
+      /**
+       * @see {@link Meter.removeBatchObservableCallback}
+       */
+      removeBatchObservableCallback(_callback) {
+      }
+    };
+    NoopMetric = class {
+    };
+    NoopCounterMetric = class extends NoopMetric {
+      add(_value, _attributes) {
+      }
+    };
+    NoopUpDownCounterMetric = class extends NoopMetric {
+      add(_value, _attributes) {
+      }
+    };
+    NoopGaugeMetric = class extends NoopMetric {
+      record(_value, _attributes) {
+      }
+    };
+    NoopHistogramMetric = class extends NoopMetric {
+      record(_value, _attributes) {
+      }
+    };
+    NoopObservableMetric = class {
+      addCallback(_callback) {
+      }
+      removeCallback(_callback) {
+      }
+    };
+    NoopObservableCounterMetric = class extends NoopObservableMetric {
+    };
+    NoopObservableGaugeMetric = class extends NoopObservableMetric {
+    };
+    NoopObservableUpDownCounterMetric = class extends NoopObservableMetric {
+    };
+    NOOP_METER = new NoopMeter();
+    NOOP_COUNTER_METRIC = new NoopCounterMetric();
+    NOOP_GAUGE_METRIC = new NoopGaugeMetric();
+    NOOP_HISTOGRAM_METRIC = new NoopHistogramMetric();
+    NOOP_UP_DOWN_COUNTER_METRIC = new NoopUpDownCounterMetric();
+    NOOP_OBSERVABLE_COUNTER_METRIC = new NoopObservableCounterMetric();
+    NOOP_OBSERVABLE_GAUGE_METRIC = new NoopObservableGaugeMetric();
+    NOOP_OBSERVABLE_UP_DOWN_COUNTER_METRIC = new NoopObservableUpDownCounterMetric();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/metrics/Metric.js
+var ValueType;
+var init_Metric = __esm({
+  "node_modules/@opentelemetry/api/build/esm/metrics/Metric.js"() {
+    (function(ValueType2) {
+      ValueType2[ValueType2["INT"] = 0] = "INT";
+      ValueType2[ValueType2["DOUBLE"] = 1] = "DOUBLE";
+    })(ValueType || (ValueType = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/propagation/TextMapPropagator.js
+var defaultTextMapGetter, defaultTextMapSetter;
+var init_TextMapPropagator = __esm({
+  "node_modules/@opentelemetry/api/build/esm/propagation/TextMapPropagator.js"() {
+    defaultTextMapGetter = {
+      get(carrier, key) {
+        if (carrier == null) {
+          return void 0;
+        }
+        return carrier[key];
+      },
+      keys(carrier) {
+        if (carrier == null) {
+          return [];
+        }
+        return Object.keys(carrier);
+      }
+    };
+    defaultTextMapSetter = {
+      set(carrier, key, value) {
+        if (carrier == null) {
+          return;
+        }
+        carrier[key] = value;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/context/NoopContextManager.js
+var NoopContextManager;
+var init_NoopContextManager = __esm({
+  "node_modules/@opentelemetry/api/build/esm/context/NoopContextManager.js"() {
+    init_context();
+    NoopContextManager = class {
+      active() {
+        return ROOT_CONTEXT;
+      }
+      with(_context, fn, thisArg, ...args) {
+        return fn.call(thisArg, ...args);
+      }
+      bind(_context, target) {
+        return target;
+      }
+      enable() {
+        return this;
+      }
+      disable() {
+        return this;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/api/context.js
+var API_NAME2, NOOP_CONTEXT_MANAGER, ContextAPI;
+var init_context2 = __esm({
+  "node_modules/@opentelemetry/api/build/esm/api/context.js"() {
+    init_NoopContextManager();
+    init_global_utils();
+    init_diag();
+    API_NAME2 = "context";
+    NOOP_CONTEXT_MANAGER = new NoopContextManager();
+    ContextAPI = class _ContextAPI {
+      /** Empty private constructor prevents end users from constructing a new instance of the API */
+      constructor() {
+      }
+      /** Get the singleton instance of the Context API */
+      static getInstance() {
+        if (!this._instance) {
+          this._instance = new _ContextAPI();
+        }
+        return this._instance;
+      }
+      /**
+       * Set the current context manager.
+       *
+       * @returns true if the context manager was successfully registered, else false
+       */
+      setGlobalContextManager(contextManager) {
+        return registerGlobal(API_NAME2, contextManager, DiagAPI.instance());
+      }
+      /**
+       * Get the currently active context
+       */
+      active() {
+        return this._getContextManager().active();
+      }
+      /**
+       * Execute a function with an active context
+       *
+       * @param context context to be active during function execution
+       * @param fn function to execute in a context
+       * @param thisArg optional receiver to be used for calling fn
+       * @param args optional arguments forwarded to fn
+       */
+      with(context2, fn, thisArg, ...args) {
+        return this._getContextManager().with(context2, fn, thisArg, ...args);
+      }
+      /**
+       * Bind a context to a target function or event emitter
+       *
+       * @param context context to bind to the event emitter or function. Defaults to the currently active context
+       * @param target function or event emitter to bind
+       */
+      bind(context2, target) {
+        return this._getContextManager().bind(context2, target);
+      }
+      _getContextManager() {
+        return getGlobal(API_NAME2) || NOOP_CONTEXT_MANAGER;
+      }
+      /** Disable and remove the global context manager */
+      disable() {
+        this._getContextManager().disable();
+        unregisterGlobal(API_NAME2, DiagAPI.instance());
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/trace_flags.js
+var TraceFlags;
+var init_trace_flags = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/trace_flags.js"() {
+    (function(TraceFlags2) {
+      TraceFlags2[TraceFlags2["NONE"] = 0] = "NONE";
+      TraceFlags2[TraceFlags2["SAMPLED"] = 1] = "SAMPLED";
+    })(TraceFlags || (TraceFlags = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/invalid-span-constants.js
+var INVALID_SPANID, INVALID_TRACEID, INVALID_SPAN_CONTEXT;
+var init_invalid_span_constants = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/invalid-span-constants.js"() {
+    init_trace_flags();
+    INVALID_SPANID = "0000000000000000";
+    INVALID_TRACEID = "00000000000000000000000000000000";
+    INVALID_SPAN_CONTEXT = {
+      traceId: INVALID_TRACEID,
+      spanId: INVALID_SPANID,
+      traceFlags: TraceFlags.NONE
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/NonRecordingSpan.js
+var NonRecordingSpan;
+var init_NonRecordingSpan = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/NonRecordingSpan.js"() {
+    init_invalid_span_constants();
+    NonRecordingSpan = class {
+      constructor(spanContext = INVALID_SPAN_CONTEXT) {
+        this._spanContext = spanContext;
+      }
+      // Returns a SpanContext.
+      spanContext() {
+        return this._spanContext;
+      }
+      // By default does nothing
+      setAttribute(_key, _value) {
+        return this;
+      }
+      // By default does nothing
+      setAttributes(_attributes) {
+        return this;
+      }
+      // By default does nothing
+      addEvent(_name, _attributes) {
+        return this;
+      }
+      addLink(_link) {
+        return this;
+      }
+      addLinks(_links) {
+        return this;
+      }
+      // By default does nothing
+      setStatus(_status) {
+        return this;
+      }
+      // By default does nothing
+      updateName(_name) {
+        return this;
+      }
+      // By default does nothing
+      end(_endTime) {
+      }
+      // isRecording always returns false for NonRecordingSpan.
+      isRecording() {
+        return false;
+      }
+      // By default does nothing
+      recordException(_exception, _time) {
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/context-utils.js
+function getSpan(context2) {
+  return context2.getValue(SPAN_KEY) || void 0;
+}
+function getActiveSpan() {
+  return getSpan(ContextAPI.getInstance().active());
+}
+function setSpan(context2, span) {
+  return context2.setValue(SPAN_KEY, span);
+}
+function deleteSpan(context2) {
+  return context2.deleteValue(SPAN_KEY);
+}
+function setSpanContext(context2, spanContext) {
+  return setSpan(context2, new NonRecordingSpan(spanContext));
+}
+function getSpanContext(context2) {
+  var _a3;
+  return (_a3 = getSpan(context2)) === null || _a3 === void 0 ? void 0 : _a3.spanContext();
+}
+var SPAN_KEY;
+var init_context_utils = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/context-utils.js"() {
+    init_context();
+    init_NonRecordingSpan();
+    init_context2();
+    SPAN_KEY = createContextKey("OpenTelemetry Context Key SPAN");
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/spancontext-utils.js
+function isValidHex(id, length) {
+  if (typeof id !== "string" || id.length !== length)
+    return false;
+  let r = 0;
+  for (let i = 0; i < id.length; i += 4) {
+    r += (isHex[id.charCodeAt(i)] | 0) + (isHex[id.charCodeAt(i + 1)] | 0) + (isHex[id.charCodeAt(i + 2)] | 0) + (isHex[id.charCodeAt(i + 3)] | 0);
+  }
+  return r === length;
+}
+function isValidTraceId(traceId) {
+  return isValidHex(traceId, 32) && traceId !== INVALID_TRACEID;
+}
+function isValidSpanId(spanId) {
+  return isValidHex(spanId, 16) && spanId !== INVALID_SPANID;
+}
+function isSpanContextValid(spanContext) {
+  return isValidTraceId(spanContext.traceId) && isValidSpanId(spanContext.spanId);
+}
+function wrapSpanContext(spanContext) {
+  return new NonRecordingSpan(spanContext);
+}
+var isHex;
+var init_spancontext_utils = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/spancontext-utils.js"() {
+    init_invalid_span_constants();
+    init_NonRecordingSpan();
+    isHex = new Uint8Array([
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]);
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/NoopTracer.js
+function isSpanContext(spanContext) {
+  return spanContext !== null && typeof spanContext === "object" && "spanId" in spanContext && typeof spanContext["spanId"] === "string" && "traceId" in spanContext && typeof spanContext["traceId"] === "string" && "traceFlags" in spanContext && typeof spanContext["traceFlags"] === "number";
+}
+var contextApi, NoopTracer;
+var init_NoopTracer = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/NoopTracer.js"() {
+    init_context2();
+    init_context_utils();
+    init_NonRecordingSpan();
+    init_spancontext_utils();
+    contextApi = ContextAPI.getInstance();
+    NoopTracer = class {
+      // startSpan starts a noop span.
+      startSpan(name2, options, context2 = contextApi.active()) {
+        const root = Boolean(options === null || options === void 0 ? void 0 : options.root);
+        if (root) {
+          return new NonRecordingSpan();
+        }
+        const parentFromContext = context2 && getSpanContext(context2);
+        if (isSpanContext(parentFromContext) && isSpanContextValid(parentFromContext)) {
+          return new NonRecordingSpan(parentFromContext);
+        } else {
+          return new NonRecordingSpan();
+        }
+      }
+      startActiveSpan(name2, arg2, arg3, arg4) {
+        let opts;
+        let ctx;
+        let fn;
+        if (arguments.length < 2) {
+          return;
+        } else if (arguments.length === 2) {
+          fn = arg2;
+        } else if (arguments.length === 3) {
+          opts = arg2;
+          fn = arg3;
+        } else {
+          opts = arg2;
+          ctx = arg3;
+          fn = arg4;
+        }
+        const parentContext = ctx !== null && ctx !== void 0 ? ctx : contextApi.active();
+        const span = this.startSpan(name2, opts, parentContext);
+        const contextWithSpanSet = setSpan(parentContext, span);
+        return contextApi.with(contextWithSpanSet, fn, void 0, span);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/ProxyTracer.js
+var NOOP_TRACER, ProxyTracer;
+var init_ProxyTracer = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/ProxyTracer.js"() {
+    init_NoopTracer();
+    NOOP_TRACER = new NoopTracer();
+    ProxyTracer = class {
+      constructor(provider2, name2, version2, options) {
+        this._provider = provider2;
+        this.name = name2;
+        this.version = version2;
+        this.options = options;
+      }
+      startSpan(name2, options, context2) {
+        return this._getTracer().startSpan(name2, options, context2);
+      }
+      startActiveSpan(_name, _options, _context, _fn) {
+        const tracer = this._getTracer();
+        return Reflect.apply(tracer.startActiveSpan, tracer, arguments);
+      }
+      /**
+       * Try to get a tracer from the proxy tracer provider.
+       * If the proxy tracer provider has no delegate, return a noop tracer.
+       */
+      _getTracer() {
+        if (this._delegate) {
+          return this._delegate;
+        }
+        const tracer = this._provider.getDelegateTracer(this.name, this.version, this.options);
+        if (!tracer) {
+          return NOOP_TRACER;
+        }
+        this._delegate = tracer;
+        return this._delegate;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/NoopTracerProvider.js
+var NoopTracerProvider;
+var init_NoopTracerProvider = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/NoopTracerProvider.js"() {
+    init_NoopTracer();
+    NoopTracerProvider = class {
+      getTracer(_name, _version, _options) {
+        return new NoopTracer();
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/ProxyTracerProvider.js
+var NOOP_TRACER_PROVIDER, ProxyTracerProvider;
+var init_ProxyTracerProvider = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/ProxyTracerProvider.js"() {
+    init_ProxyTracer();
+    init_NoopTracerProvider();
+    NOOP_TRACER_PROVIDER = new NoopTracerProvider();
+    ProxyTracerProvider = class {
+      /**
+       * Get a {@link ProxyTracer}
+       */
+      getTracer(name2, version2, options) {
+        var _a3;
+        return (_a3 = this.getDelegateTracer(name2, version2, options)) !== null && _a3 !== void 0 ? _a3 : new ProxyTracer(this, name2, version2, options);
+      }
+      getDelegate() {
+        var _a3;
+        return (_a3 = this._delegate) !== null && _a3 !== void 0 ? _a3 : NOOP_TRACER_PROVIDER;
+      }
+      /**
+       * Set the delegate tracer provider
+       */
+      setDelegate(delegate) {
+        this._delegate = delegate;
+      }
+      getDelegateTracer(name2, version2, options) {
+        var _a3;
+        return (_a3 = this._delegate) === null || _a3 === void 0 ? void 0 : _a3.getTracer(name2, version2, options);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/SamplingResult.js
+var SamplingDecision;
+var init_SamplingResult = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/SamplingResult.js"() {
+    (function(SamplingDecision2) {
+      SamplingDecision2[SamplingDecision2["NOT_RECORD"] = 0] = "NOT_RECORD";
+      SamplingDecision2[SamplingDecision2["RECORD"] = 1] = "RECORD";
+      SamplingDecision2[SamplingDecision2["RECORD_AND_SAMPLED"] = 2] = "RECORD_AND_SAMPLED";
+    })(SamplingDecision || (SamplingDecision = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/span_kind.js
+var SpanKind;
+var init_span_kind = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/span_kind.js"() {
+    (function(SpanKind2) {
+      SpanKind2[SpanKind2["INTERNAL"] = 0] = "INTERNAL";
+      SpanKind2[SpanKind2["SERVER"] = 1] = "SERVER";
+      SpanKind2[SpanKind2["CLIENT"] = 2] = "CLIENT";
+      SpanKind2[SpanKind2["PRODUCER"] = 3] = "PRODUCER";
+      SpanKind2[SpanKind2["CONSUMER"] = 4] = "CONSUMER";
+    })(SpanKind || (SpanKind = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/status.js
+var SpanStatusCode;
+var init_status = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/status.js"() {
+    (function(SpanStatusCode2) {
+      SpanStatusCode2[SpanStatusCode2["UNSET"] = 0] = "UNSET";
+      SpanStatusCode2[SpanStatusCode2["OK"] = 1] = "OK";
+      SpanStatusCode2[SpanStatusCode2["ERROR"] = 2] = "ERROR";
+    })(SpanStatusCode || (SpanStatusCode = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/internal/tracestate-validators.js
+function validateKey(key) {
+  return VALID_KEY_REGEX.test(key);
+}
+function validateValue(value) {
+  return VALID_VALUE_BASE_REGEX.test(value) && !INVALID_VALUE_COMMA_EQUAL_REGEX.test(value);
+}
+var VALID_KEY_CHAR_RANGE, VALID_KEY, VALID_VENDOR_KEY, VALID_KEY_REGEX, VALID_VALUE_BASE_REGEX, INVALID_VALUE_COMMA_EQUAL_REGEX;
+var init_tracestate_validators = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/internal/tracestate-validators.js"() {
+    VALID_KEY_CHAR_RANGE = "[_0-9a-z-*/]";
+    VALID_KEY = `[a-z]${VALID_KEY_CHAR_RANGE}{0,255}`;
+    VALID_VENDOR_KEY = `[a-z0-9]${VALID_KEY_CHAR_RANGE}{0,240}@[a-z]${VALID_KEY_CHAR_RANGE}{0,13}`;
+    VALID_KEY_REGEX = new RegExp(`^(?:${VALID_KEY}|${VALID_VENDOR_KEY})$`);
+    VALID_VALUE_BASE_REGEX = /^[ -~]{0,255}[!-~]$/;
+    INVALID_VALUE_COMMA_EQUAL_REGEX = /,|=/;
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/internal/tracestate-impl.js
+var MAX_TRACE_STATE_ITEMS, MAX_TRACE_STATE_LEN, LIST_MEMBERS_SEPARATOR, LIST_MEMBER_KEY_VALUE_SPLITTER, TraceStateImpl;
+var init_tracestate_impl = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/internal/tracestate-impl.js"() {
+    init_tracestate_validators();
+    MAX_TRACE_STATE_ITEMS = 32;
+    MAX_TRACE_STATE_LEN = 512;
+    LIST_MEMBERS_SEPARATOR = ",";
+    LIST_MEMBER_KEY_VALUE_SPLITTER = "=";
+    TraceStateImpl = class _TraceStateImpl {
+      constructor(rawTraceState) {
+        this._internalState = /* @__PURE__ */ new Map();
+        if (rawTraceState)
+          this._parse(rawTraceState);
+      }
+      set(key, value) {
+        const traceState = this._clone();
+        if (traceState._internalState.has(key)) {
+          traceState._internalState.delete(key);
+        }
+        traceState._internalState.set(key, value);
+        return traceState;
+      }
+      unset(key) {
+        const traceState = this._clone();
+        traceState._internalState.delete(key);
+        return traceState;
+      }
+      get(key) {
+        return this._internalState.get(key);
+      }
+      serialize() {
+        return Array.from(this._internalState.keys()).reduceRight((agg, key) => {
+          agg.push(key + LIST_MEMBER_KEY_VALUE_SPLITTER + this.get(key));
+          return agg;
+        }, []).join(LIST_MEMBERS_SEPARATOR);
+      }
+      _parse(rawTraceState) {
+        if (rawTraceState.length > MAX_TRACE_STATE_LEN)
+          return;
+        this._internalState = rawTraceState.split(LIST_MEMBERS_SEPARATOR).reduceRight((agg, part2) => {
+          const listMember = part2.trim();
+          const i = listMember.indexOf(LIST_MEMBER_KEY_VALUE_SPLITTER);
+          if (i !== -1) {
+            const key = listMember.slice(0, i);
+            const value = listMember.slice(i + 1, part2.length);
+            if (validateKey(key) && validateValue(value)) {
+              agg.set(key, value);
+            } else {
+            }
+          }
+          return agg;
+        }, /* @__PURE__ */ new Map());
+        if (this._internalState.size > MAX_TRACE_STATE_ITEMS) {
+          this._internalState = new Map(Array.from(this._internalState.entries()).reverse().slice(0, MAX_TRACE_STATE_ITEMS));
+        }
+      }
+      // @ts-expect-error TS6133 Accessed in tests only.
+      _keys() {
+        return Array.from(this._internalState.keys()).reverse();
+      }
+      _clone() {
+        const traceState = new _TraceStateImpl();
+        traceState._internalState = new Map(this._internalState);
+        return traceState;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace/internal/utils.js
+function createTraceState(rawTraceState) {
+  return new TraceStateImpl(rawTraceState);
+}
+var init_utils2 = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace/internal/utils.js"() {
+    init_tracestate_impl();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/context-api.js
+var context;
+var init_context_api = __esm({
+  "node_modules/@opentelemetry/api/build/esm/context-api.js"() {
+    init_context2();
+    context = ContextAPI.getInstance();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/diag-api.js
+var diag2;
+var init_diag_api = __esm({
+  "node_modules/@opentelemetry/api/build/esm/diag-api.js"() {
+    init_diag();
+    diag2 = DiagAPI.instance();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/metrics/NoopMeterProvider.js
+var NoopMeterProvider, NOOP_METER_PROVIDER;
+var init_NoopMeterProvider = __esm({
+  "node_modules/@opentelemetry/api/build/esm/metrics/NoopMeterProvider.js"() {
+    init_NoopMeter();
+    NoopMeterProvider = class {
+      getMeter(_name, _version, _options) {
+        return NOOP_METER;
+      }
+    };
+    NOOP_METER_PROVIDER = new NoopMeterProvider();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/api/metrics.js
+var API_NAME3, MetricsAPI;
+var init_metrics2 = __esm({
+  "node_modules/@opentelemetry/api/build/esm/api/metrics.js"() {
+    init_NoopMeterProvider();
+    init_global_utils();
+    init_diag();
+    API_NAME3 = "metrics";
+    MetricsAPI = class _MetricsAPI {
+      /** Empty private constructor prevents end users from constructing a new instance of the API */
+      constructor() {
+      }
+      /** Get the singleton instance of the Metrics API */
+      static getInstance() {
+        if (!this._instance) {
+          this._instance = new _MetricsAPI();
+        }
+        return this._instance;
+      }
+      /**
+       * Set the current global meter provider.
+       * Returns true if the meter provider was successfully registered, else false.
+       */
+      setGlobalMeterProvider(provider2) {
+        return registerGlobal(API_NAME3, provider2, DiagAPI.instance());
+      }
+      /**
+       * Returns the global meter provider.
+       */
+      getMeterProvider() {
+        return getGlobal(API_NAME3) || NOOP_METER_PROVIDER;
+      }
+      /**
+       * Returns a meter from the global meter provider.
+       */
+      getMeter(name2, version2, options) {
+        return this.getMeterProvider().getMeter(name2, version2, options);
+      }
+      /** Remove the global meter provider */
+      disable() {
+        unregisterGlobal(API_NAME3, DiagAPI.instance());
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/metrics-api.js
+var metrics;
+var init_metrics_api = __esm({
+  "node_modules/@opentelemetry/api/build/esm/metrics-api.js"() {
+    init_metrics2();
+    metrics = MetricsAPI.getInstance();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/propagation/NoopTextMapPropagator.js
+var NoopTextMapPropagator;
+var init_NoopTextMapPropagator = __esm({
+  "node_modules/@opentelemetry/api/build/esm/propagation/NoopTextMapPropagator.js"() {
+    NoopTextMapPropagator = class {
+      /** Noop inject function does nothing */
+      inject(_context, _carrier) {
+      }
+      /** Noop extract function does nothing and returns the input context */
+      extract(context2, _carrier) {
+        return context2;
+      }
+      fields() {
+        return [];
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/baggage/context-helpers.js
+function getBaggage(context2) {
+  return context2.getValue(BAGGAGE_KEY) || void 0;
+}
+function getActiveBaggage() {
+  return getBaggage(ContextAPI.getInstance().active());
+}
+function setBaggage(context2, baggage) {
+  return context2.setValue(BAGGAGE_KEY, baggage);
+}
+function deleteBaggage(context2) {
+  return context2.deleteValue(BAGGAGE_KEY);
+}
+var BAGGAGE_KEY;
+var init_context_helpers = __esm({
+  "node_modules/@opentelemetry/api/build/esm/baggage/context-helpers.js"() {
+    init_context2();
+    init_context();
+    BAGGAGE_KEY = createContextKey("OpenTelemetry Baggage Key");
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/api/propagation.js
+var API_NAME4, NOOP_TEXT_MAP_PROPAGATOR, PropagationAPI;
+var init_propagation = __esm({
+  "node_modules/@opentelemetry/api/build/esm/api/propagation.js"() {
+    init_global_utils();
+    init_NoopTextMapPropagator();
+    init_TextMapPropagator();
+    init_context_helpers();
+    init_utils();
+    init_diag();
+    API_NAME4 = "propagation";
+    NOOP_TEXT_MAP_PROPAGATOR = new NoopTextMapPropagator();
+    PropagationAPI = class _PropagationAPI {
+      /** Empty private constructor prevents end users from constructing a new instance of the API */
+      constructor() {
+        this.createBaggage = createBaggage;
+        this.getBaggage = getBaggage;
+        this.getActiveBaggage = getActiveBaggage;
+        this.setBaggage = setBaggage;
+        this.deleteBaggage = deleteBaggage;
+      }
+      /** Get the singleton instance of the Propagator API */
+      static getInstance() {
+        if (!this._instance) {
+          this._instance = new _PropagationAPI();
+        }
+        return this._instance;
+      }
+      /**
+       * Set the current propagator.
+       *
+       * @returns true if the propagator was successfully registered, else false
+       */
+      setGlobalPropagator(propagator) {
+        return registerGlobal(API_NAME4, propagator, DiagAPI.instance());
+      }
+      /**
+       * Inject context into a carrier to be propagated inter-process
+       *
+       * @param context Context carrying tracing data to inject
+       * @param carrier carrier to inject context into
+       * @param setter Function used to set values on the carrier
+       */
+      inject(context2, carrier, setter = defaultTextMapSetter) {
+        return this._getGlobalPropagator().inject(context2, carrier, setter);
+      }
+      /**
+       * Extract context from a carrier
+       *
+       * @param context Context which the newly created context will inherit from
+       * @param carrier Carrier to extract context from
+       * @param getter Function used to extract keys from a carrier
+       */
+      extract(context2, carrier, getter = defaultTextMapGetter) {
+        return this._getGlobalPropagator().extract(context2, carrier, getter);
+      }
+      /**
+       * Return a list of all fields which may be used by the propagator.
+       */
+      fields() {
+        return this._getGlobalPropagator().fields();
+      }
+      /** Remove the global propagator */
+      disable() {
+        unregisterGlobal(API_NAME4, DiagAPI.instance());
+      }
+      _getGlobalPropagator() {
+        return getGlobal(API_NAME4) || NOOP_TEXT_MAP_PROPAGATOR;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/propagation-api.js
+var propagation;
+var init_propagation_api = __esm({
+  "node_modules/@opentelemetry/api/build/esm/propagation-api.js"() {
+    init_propagation();
+    propagation = PropagationAPI.getInstance();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/api/trace.js
+var API_NAME5, TraceAPI;
+var init_trace = __esm({
+  "node_modules/@opentelemetry/api/build/esm/api/trace.js"() {
+    init_global_utils();
+    init_ProxyTracerProvider();
+    init_spancontext_utils();
+    init_context_utils();
+    init_diag();
+    API_NAME5 = "trace";
+    TraceAPI = class _TraceAPI {
+      /** Empty private constructor prevents end users from constructing a new instance of the API */
+      constructor() {
+        this._proxyTracerProvider = new ProxyTracerProvider();
+        this.wrapSpanContext = wrapSpanContext;
+        this.isSpanContextValid = isSpanContextValid;
+        this.deleteSpan = deleteSpan;
+        this.getSpan = getSpan;
+        this.getActiveSpan = getActiveSpan;
+        this.getSpanContext = getSpanContext;
+        this.setSpan = setSpan;
+        this.setSpanContext = setSpanContext;
+      }
+      /** Get the singleton instance of the Trace API */
+      static getInstance() {
+        if (!this._instance) {
+          this._instance = new _TraceAPI();
+        }
+        return this._instance;
+      }
+      /**
+       * Set the current global tracer.
+       *
+       * @returns true if the tracer provider was successfully registered, else false
+       */
+      setGlobalTracerProvider(provider2) {
+        const success2 = registerGlobal(API_NAME5, this._proxyTracerProvider, DiagAPI.instance());
+        if (success2) {
+          this._proxyTracerProvider.setDelegate(provider2);
+        }
+        return success2;
+      }
+      /**
+       * Returns the global tracer provider.
+       */
+      getTracerProvider() {
+        return getGlobal(API_NAME5) || this._proxyTracerProvider;
+      }
+      /**
+       * Returns a tracer from the global tracer provider.
+       */
+      getTracer(name2, version2) {
+        return this.getTracerProvider().getTracer(name2, version2);
+      }
+      /** Remove the global tracer provider */
+      disable() {
+        unregisterGlobal(API_NAME5, DiagAPI.instance());
+        this._proxyTracerProvider = new ProxyTracerProvider();
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/trace-api.js
+var trace;
+var init_trace_api = __esm({
+  "node_modules/@opentelemetry/api/build/esm/trace-api.js"() {
+    init_trace();
+    trace = TraceAPI.getInstance();
+  }
+});
+
+// node_modules/@opentelemetry/api/build/esm/index.js
+var esm_exports = {};
+__export(esm_exports, {
+  DiagConsoleLogger: () => DiagConsoleLogger,
+  DiagLogLevel: () => DiagLogLevel,
+  INVALID_SPANID: () => INVALID_SPANID,
+  INVALID_SPAN_CONTEXT: () => INVALID_SPAN_CONTEXT,
+  INVALID_TRACEID: () => INVALID_TRACEID,
+  ProxyTracer: () => ProxyTracer,
+  ProxyTracerProvider: () => ProxyTracerProvider,
+  ROOT_CONTEXT: () => ROOT_CONTEXT,
+  SamplingDecision: () => SamplingDecision,
+  SpanKind: () => SpanKind,
+  SpanStatusCode: () => SpanStatusCode,
+  TraceFlags: () => TraceFlags,
+  ValueType: () => ValueType,
+  baggageEntryMetadataFromString: () => baggageEntryMetadataFromString,
+  context: () => context,
+  createContextKey: () => createContextKey,
+  createNoopMeter: () => createNoopMeter,
+  createTraceState: () => createTraceState,
+  default: () => esm_default,
+  defaultTextMapGetter: () => defaultTextMapGetter,
+  defaultTextMapSetter: () => defaultTextMapSetter,
+  diag: () => diag2,
+  isSpanContextValid: () => isSpanContextValid,
+  isValidSpanId: () => isValidSpanId,
+  isValidTraceId: () => isValidTraceId,
+  metrics: () => metrics,
+  propagation: () => propagation,
+  trace: () => trace
+});
+var esm_default;
+var init_esm = __esm({
+  "node_modules/@opentelemetry/api/build/esm/index.js"() {
+    init_utils();
+    init_context();
+    init_consoleLogger();
+    init_types();
+    init_NoopMeter();
+    init_Metric();
+    init_TextMapPropagator();
+    init_ProxyTracer();
+    init_ProxyTracerProvider();
+    init_SamplingResult();
+    init_span_kind();
+    init_status();
+    init_trace_flags();
+    init_utils2();
+    init_spancontext_utils();
+    init_invalid_span_constants();
+    init_context_api();
+    init_diag_api();
+    init_metrics_api();
+    init_propagation_api();
+    init_trace_api();
+    esm_default = {
+      context,
+      diag: diag2,
+      metrics,
+      propagation,
+      trace
+    };
+  }
+});
+
 // node_modules/@redis/client/dist/lib/opentelemetry/index.js
 var require_opentelemetry = __commonJS({
   "node_modules/@redis/client/dist/lib/opentelemetry/index.js"(exports) {
@@ -88661,7 +90486,7 @@ var require_opentelemetry = __commonJS({
         }
         const api = (() => {
           try {
-            return __require("@opentelemetry/api");
+            return init_esm(), __toCommonJS(esm_exports);
           } catch {
             throw new errors_1.OpenTelemetryError("@opentelemetry/api not found");
           }
@@ -90028,7 +91853,7 @@ var require_client2 = __commonJS({
        * Close the client. Wait for pending commands.
        */
       close() {
-        return new Promise((resolve4) => {
+        return new Promise((resolve5) => {
           clearTimeout(this._self.#pingTimer);
           this._self.#socket.close();
           if (this._self.#socket.socketEpoch > 0) {
@@ -90039,12 +91864,12 @@ var require_client2 = __commonJS({
           if (this._self.#queue.isEmpty()) {
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            return resolve4();
+            return resolve5();
           }
           const onEnd = () => {
             this._self.#socket.off("data", maybeClose);
             this._self.#unregisterFromMetrics();
-            resolve4();
+            resolve5();
           };
           const maybeClose = () => {
             if (!this._self.#queue.isEmpty())
@@ -90053,7 +91878,7 @@ var require_client2 = __commonJS({
             this._self.#socket.off("end", onEnd);
             this._self.#unregisterFromMetrics();
             this._self.#socket.destroySocket();
-            resolve4();
+            resolve5();
           };
           this._self.#socket.on("data", maybeClose);
           this._self.#socket.once("end", onEnd);
@@ -90989,10 +92814,10 @@ var require_cluster_slots = __commonJS({
           }
         }
       }
-      bindScanCursor(token, address, cursor, visited, label) {
+      bindScanCursor(token, address, cursor, visited, label2) {
         const now = Date.now();
         this.#sweepStaleScanCursors(now);
-        this.scanCursors.set(token, { address, cursor, visited, createdAt: now, label });
+        this.scanCursors.set(token, { address, cursor, visited, createdAt: now, label: label2 });
       }
       lookupScanCursor(token) {
         return this.scanCursors.get(token);
@@ -91238,16 +93063,16 @@ var require_multi_shard_splitter = __commonJS({
     exports.splitMultiShardCommand = void 0;
     var calculate_slot_1 = __importDefault(require_calculate_slot());
     function splitMultiShardCommand(args, keySpecs) {
-      const label = args.length > 0 ? args[0].toString() : "<empty>";
+      const label2 = args.length > 0 ? args[0].toString() : "<empty>";
       if (!keySpecs || keySpecs.length === 0) {
-        throw new Error(`Cannot split ${label}: command has no key specification`);
+        throw new Error(`Cannot split ${label2}: command has no key specification`);
       }
       if (keySpecs.length > 1) {
-        throw new Error(`Cannot split ${label}: multiple key specifications are not supported`);
+        throw new Error(`Cannot split ${label2}: multiple key specifications are not supported`);
       }
       const { beginSearch, findKeys } = keySpecs[0];
       if (beginSearch.type !== "index") {
-        throw new Error(`Cannot split ${label}: unsupported begin_search type '${beginSearch.type}'`);
+        throw new Error(`Cannot split ${label2}: unsupported begin_search type '${beginSearch.type}'`);
       }
       const start = beginSearch.index;
       let keyRegionStart;
@@ -91257,7 +93082,7 @@ var require_multi_shard_splitter = __commonJS({
       switch (findKeys.type) {
         case "range": {
           if (findKeys.lastKey !== -1 || findKeys.limit !== 0) {
-            throw new Error(`Cannot split ${label}: unsupported find_keys range (lastkey ${findKeys.lastKey}, limit ${findKeys.limit})`);
+            throw new Error(`Cannot split ${label2}: unsupported find_keys range (lastkey ${findKeys.lastKey}, limit ${findKeys.limit})`);
           }
           keyStep = findKeys.keyStep;
           keyRegionStart = start;
@@ -91269,27 +93094,27 @@ var require_multi_shard_splitter = __commonJS({
           keyNumIdx = start + findKeys.keyNumIdx;
           keyRegionStart = start + findKeys.firstKey;
           if (keyNumIdx >= keyRegionStart) {
-            throw new Error(`Cannot split ${label}: numkeys argument inside the key region`);
+            throw new Error(`Cannot split ${label2}: numkeys argument inside the key region`);
           }
           const numKeys2 = parsePositiveInteger(args[keyNumIdx]);
           if (numKeys2 === void 0) {
-            throw new Error(`Cannot split ${label}: malformed numkeys argument '${args[keyNumIdx]}'`);
+            throw new Error(`Cannot split ${label2}: malformed numkeys argument '${args[keyNumIdx]}'`);
           }
           keyRegionEnd = keyRegionStart + numKeys2 * keyStep;
           break;
         }
         default:
-          throw new Error(`Cannot split ${label}: unsupported find_keys type '${findKeys.type}'`);
+          throw new Error(`Cannot split ${label2}: unsupported find_keys type '${findKeys.type}'`);
       }
       if (keyStep < 1) {
-        throw new Error(`Cannot split ${label}: invalid keystep ${keyStep}`);
+        throw new Error(`Cannot split ${label2}: invalid keystep ${keyStep}`);
       }
       if (keyRegionStart < 1 || keyRegionEnd > args.length) {
-        throw new Error(`Cannot split ${label}: key region overruns the arguments`);
+        throw new Error(`Cannot split ${label2}: key region overruns the arguments`);
       }
       const regionLength = keyRegionEnd - keyRegionStart;
       if (regionLength <= 0 || regionLength % keyStep !== 0) {
-        throw new Error(`Cannot split ${label}: key region does not align with keystep ${keyStep}`);
+        throw new Error(`Cannot split ${label2}: key region does not align with keystep ${keyStep}`);
       }
       const groupCount = regionLength / keyStep;
       const slotGroups = /* @__PURE__ */ new Map();
@@ -91374,10 +93199,10 @@ var require_generic_aggregators = __commonJS({
       return result;
     };
     exports.aggregateLogicalOr = aggregateLogicalOr;
-    var aggregateElementwise = (replies, reduce, label) => {
+    var aggregateElementwise = (replies, reduce, label2) => {
       const length = replies[0].length;
       if (!replies.every((reply) => Array.isArray(reply) && reply.length === length && reply.every((value) => typeof value === "number"))) {
-        throw new Error(`All replies must be number arrays of equal length for ${label} aggregation`);
+        throw new Error(`All replies must be number arrays of equal length for ${label2} aggregation`);
       }
       const result = replies[0].slice();
       for (let r = 1; r < replies.length; r++) {
@@ -91611,10 +93436,10 @@ var require_scan_cursor = __commonJS({
       const command = (0, ft_cursor_1.upperCommand)(parser);
       const { subcommand } = parser.commandIdentifier;
       if (subcommand !== void 0) {
-        const label = `${command} ${subcommand.toUpperCase()}`;
-        const cursorIndex2 = SCAN_CURSOR_ARG_INDEX.get(label);
+        const label2 = `${command} ${subcommand.toUpperCase()}`;
+        const cursorIndex2 = SCAN_CURSOR_ARG_INDEX.get(label2);
         if (cursorIndex2 !== void 0)
-          return { label, cursorIndex: cursorIndex2 };
+          return { label: label2, cursorIndex: cursorIndex2 };
       }
       const cursorIndex = SCAN_CURSOR_ARG_INDEX.get(command);
       return cursorIndex === void 0 ? void 0 : { label: command, cursorIndex };
@@ -91623,7 +93448,7 @@ var require_scan_cursor = __commonJS({
       const resolved = resolveScanCommand(parser);
       if (!resolved)
         return [{ client: await slots.nodeClient(slots.getRandomNode()) }];
-      const { label, cursorIndex } = resolved;
+      const { label: label2, cursorIndex } = resolved;
       if (parser.redisArgs.length <= cursorIndex) {
         return [{ client: await slots.nodeClient(slots.getRandomNode()) }];
       }
@@ -91631,24 +93456,24 @@ var require_scan_cursor = __commonJS({
       if (cursorArg === "0") {
         const address = slots.nextScanTarget(EMPTY_VISITED);
         if (!address)
-          throw new Error(`${label}: no master nodes available`);
-        return [{ client: await pinnedMaster(slots, address, label) }];
+          throw new Error(`${label2}: no master nodes available`);
+        return [{ client: await pinnedMaster(slots, address, label2) }];
       }
       const entry = slots.lookupScanCursor(cursorArg);
-      if (!entry || entry.label !== label) {
-        throw new Error(`${label}: unknown cursor "${cursorArg}". Cluster-wide ${label} cursors are minted per client instance and expire when idle \u2014 restart the scan from 0.`);
+      if (!entry || entry.label !== label2) {
+        throw new Error(`${label2}: unknown cursor "${cursorArg}". Cluster-wide ${label2} cursors are minted per client instance and expire when idle \u2014 restart the scan from 0.`);
       }
       return [{
-        client: await pinnedMaster(slots, entry.address, label),
+        client: await pinnedMaster(slots, entry.address, label2),
         parser: withCursor(parser, cursorIndex, entry.cursor)
       }];
     };
     exports.routeScan = routeScan;
     var EMPTY_VISITED = /* @__PURE__ */ new Set();
-    async function pinnedMaster(slots, address, label) {
+    async function pinnedMaster(slots, address, label2) {
       const client = await slots.getMasterByAddress(address);
       if (!client) {
-        throw new Error(`${label}: node ${address} serving this cursor has left the cluster \u2014 restart the scan from 0.`);
+        throw new Error(`${label2}: node ${address} serving this cursor has left the cluster \u2014 restart the scan from 0.`);
       }
       return client;
     }
@@ -91664,7 +93489,7 @@ var require_scan_cursor = __commonJS({
       const resolved = resolveScanCommand(parser);
       if (!resolved)
         return reply;
-      const { label, cursorIndex } = resolved;
+      const { label: label2, cursorIndex } = resolved;
       if (plan.length !== 1 || !plan[0].client)
         return reply;
       const serverCursor = extractScanCursor(reply);
@@ -91675,10 +93500,10 @@ var require_scan_cursor = __commonJS({
         return reply;
       const callerCursor = (0, ft_cursor_1.argToString)(parser.redisArgs[cursorIndex]);
       const chain = callerCursor === "0" ? void 0 : slots.lookupScanCursor(callerCursor);
-      const visited = chain?.label === label ? chain.visited : /* @__PURE__ */ new Set();
+      const visited = chain?.label === label2 ? chain.visited : /* @__PURE__ */ new Set();
       if ((0, ft_cursor_1.argToString)(serverCursor) !== "0") {
         const token2 = callerCursor === "0" ? slots.mintCursorToken() : callerCursor;
-        slots.bindScanCursor(token2, address, (0, ft_cursor_1.argToString)(serverCursor), visited, label);
+        slots.bindScanCursor(token2, address, (0, ft_cursor_1.argToString)(serverCursor), visited, label2);
         return withReplyCursor(reply, token2, serverCursor);
       }
       visited.add(address);
@@ -91689,7 +93514,7 @@ var require_scan_cursor = __commonJS({
         return reply;
       }
       const token = callerCursor === "0" ? slots.mintCursorToken() : callerCursor;
-      slots.bindScanCursor(token, next, "0", visited, label);
+      slots.bindScanCursor(token, next, "0", visited, label2);
       return withReplyCursor(reply, token, serverCursor);
     }
     exports.finalizeScanCursor = finalizeScanCursor;
@@ -93016,9 +94841,9 @@ var require_wait_queue = __commonJS({
       #list = new linked_list_1.SinglyLinkedList();
       #queue = new linked_list_1.SinglyLinkedList();
       push(value) {
-        const resolve4 = this.#queue.shift();
-        if (resolve4 !== void 0) {
-          resolve4(value);
+        const resolve5 = this.#queue.shift();
+        if (resolve5 !== void 0) {
+          resolve5(value);
           return;
         }
         this.#list.push(value);
@@ -93027,7 +94852,7 @@ var require_wait_queue = __commonJS({
         return this.#list.shift();
       }
       wait() {
-        return new Promise((resolve4) => this.#queue.push(resolve4));
+        return new Promise((resolve5) => this.#queue.push(resolve5));
       }
     };
     exports.WaitQueue = WaitQueue;
@@ -93685,10 +95510,10 @@ var require_sentinel = __commonJS({
        * `passthroughClientErrorEvents`), unchanged.
        */
       #connectOrFail(client) {
-        return new Promise((resolve4, reject) => {
+        return new Promise((resolve5, reject) => {
           const onError = (err) => reject(err);
           client.once("error", onError);
-          client.connect().then(resolve4, reject).finally(() => client.off("error", onError));
+          client.connect().then(resolve5, reject).finally(() => client.off("error", onError));
         });
       }
       /**
@@ -93943,7 +95768,7 @@ var require_sentinel = __commonJS({
           }
         }
         this.#replicaClients = [];
-        await new Promise((resolve4) => {
+        await new Promise((resolve5) => {
           let settled = false;
           const forceDestroy = () => {
             if (settled)
@@ -93956,7 +95781,7 @@ var require_sentinel = __commonJS({
               } catch {
               }
             }
-            resolve4();
+            resolve5();
           };
           if (this.#teardownKind === "destroy") {
             forceDestroy();
@@ -93968,7 +95793,7 @@ var require_sentinel = __commonJS({
               return;
             settled = true;
             this.#escalateToDestroy = void 0;
-            resolve4();
+            resolve5();
           });
         });
         this.#pubSubProxy.destroy();
@@ -96493,10 +98318,10 @@ var require_ARRAPPEND = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
     exports.default = {
-      parseCommand(parser, key, path2, json2, ...jsons) {
+      parseCommand(parser, key, path3, json2, ...jsons) {
         parser.push("JSON.ARRAPPEND");
         parser.pushKey(key);
-        parser.push(path2, (0, generic_transformers_1.transformRedisJsonArgument)(json2));
+        parser.push(path3, (0, generic_transformers_1.transformRedisJsonArgument)(json2));
         for (let i = 0; i < jsons.length; i++) {
           parser.push((0, generic_transformers_1.transformRedisJsonArgument)(jsons[i]));
         }
@@ -96513,10 +98338,10 @@ var require_ARRINDEX = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
     exports.default = {
-      parseCommand(parser, key, path2, json2, options) {
+      parseCommand(parser, key, path3, json2, options) {
         parser.push("JSON.ARRINDEX");
         parser.pushKey(key);
-        parser.push(path2, (0, generic_transformers_1.transformRedisJsonArgument)(json2));
+        parser.push(path3, (0, generic_transformers_1.transformRedisJsonArgument)(json2));
         if (options?.range) {
           parser.push(options.range.start.toString());
           if (options.range.stop !== void 0) {
@@ -96536,10 +98361,10 @@ var require_ARRINSERT = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
     exports.default = {
-      parseCommand(parser, key, path2, index, json2, ...jsons) {
+      parseCommand(parser, key, path3, index, json2, ...jsons) {
         parser.push("JSON.ARRINSERT");
         parser.pushKey(key);
-        parser.push(path2, index.toString(), (0, generic_transformers_1.transformRedisJsonArgument)(json2));
+        parser.push(path3, index.toString(), (0, generic_transformers_1.transformRedisJsonArgument)(json2));
         for (let i = 0; i < jsons.length; i++) {
           parser.push((0, generic_transformers_1.transformRedisJsonArgument)(jsons[i]));
         }
@@ -96600,10 +98425,10 @@ var require_ARRTRIM = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = {
-      parseCommand(parser, key, path2, start, stop) {
+      parseCommand(parser, key, path3, start, stop) {
         parser.push("JSON.ARRTRIM");
         parser.pushKey(key);
-        parser.push(path2, start.toString(), stop.toString());
+        parser.push(path3, start.toString(), stop.toString());
       },
       transformReply: void 0
     };
@@ -96709,10 +98534,10 @@ var require_MERGE3 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
     exports.default = {
-      parseCommand(parser, key, path2, value) {
+      parseCommand(parser, key, path3, value) {
         parser.push("JSON.MERGE");
         parser.pushKey(key);
-        parser.push(path2, (0, generic_transformers_1.transformRedisJsonArgument)(value));
+        parser.push(path3, (0, generic_transformers_1.transformRedisJsonArgument)(value));
       },
       transformReply: void 0
     };
@@ -96726,10 +98551,10 @@ var require_MGET2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
     exports.default = {
-      parseCommand(parser, keys2, path2, reviver) {
+      parseCommand(parser, keys2, path3, reviver) {
         parser.push("JSON.MGET");
         parser.pushKeys(keys2);
-        parser.push(path2);
+        parser.push(path3);
         parser.preserve = reviver;
       },
       transformReply(reply, reviver) {
@@ -96764,10 +98589,10 @@ var require_NUMINCRBY = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = {
-      parseCommand(parser, key, path2, by) {
+      parseCommand(parser, key, path3, by) {
         parser.push("JSON.NUMINCRBY");
         parser.pushKey(key);
-        parser.push(path2, by.toString());
+        parser.push(path3, by.toString());
       },
       transformReply: {
         2: (reply) => {
@@ -96789,10 +98614,10 @@ var require_NUMMULTBY = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var NUMINCRBY_1 = __importDefault(require_NUMINCRBY());
     exports.default = {
-      parseCommand(parser, key, path2, by) {
+      parseCommand(parser, key, path3, by) {
         parser.push("JSON.NUMMULTBY");
         parser.pushKey(key);
-        parser.push(path2, by.toString());
+        parser.push(path3, by.toString());
       },
       transformReply: NUMINCRBY_1.default.transformReply
     };
@@ -96842,10 +98667,10 @@ var require_SET2 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     var generic_transformers_1 = require_generic_transformers();
     exports.default = {
-      parseCommand(parser, key, path2, json2, options) {
+      parseCommand(parser, key, path3, json2, options) {
         parser.push("JSON.SET");
         parser.pushKey(key);
-        parser.push(path2, (0, generic_transformers_1.transformRedisJsonArgument)(json2));
+        parser.push(path3, (0, generic_transformers_1.transformRedisJsonArgument)(json2));
         if (options?.condition) {
           parser.push(options?.condition);
         } else if (options?.NX) {
@@ -96906,10 +98731,10 @@ var require_TOGGLE = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = {
-      parseCommand(parser, key, path2) {
+      parseCommand(parser, key, path3) {
         parser.push("JSON.TOGGLE");
         parser.pushKey(key);
-        parser.push(path2);
+        parser.push(path3);
       },
       transformReply: void 0
     };
@@ -100364,8 +102189,8 @@ var require_helpers2 = __commonJS({
     function parseLabelsArgument(parser, labels) {
       if (labels) {
         parser.push("LABELS");
-        for (const [label, value] of Object.entries(labels)) {
-          parser.push(label, value);
+        for (const [label2, value] of Object.entries(labels)) {
+          parser.push(label2, value);
         }
       }
     }
@@ -100862,8 +102687,8 @@ var require_INFO8 = __commonJS({
         if (labels.every((item) => Array.isArray(item) && item.length >= 2)) {
           return labels.map((item) => [item[0], item[1]]);
         }
-        const normalized = labels.map((label) => {
-          const object2 = (0, reply_utils_1.mapLikeToObject)(label);
+        const normalized = labels.map((label2) => {
+          const object2 = (0, reply_utils_1.mapLikeToObject)(label2);
           return [
             (0, reply_utils_1.getMapValue)(object2, ["name", "label"]),
             (0, reply_utils_1.getMapValue)(object2, ["value"])
@@ -102152,8 +103977,8 @@ var require_QUERYLABELS_VALUES = __commonJS({
     exports.default = {
       NOT_KEYED_COMMAND: true,
       IS_READ_ONLY: true,
-      parseCommand(parser, label, filter) {
-        parser.push("TS.QUERYLABELS", "VALUES", label);
+      parseCommand(parser, label2, filter) {
+        parser.push("TS.QUERYLABELS", "VALUES", label2);
         (0, helpers_1.parseQueryLabelsFilterArgument)(parser, filter);
       },
       transformReply: {
@@ -103579,6 +105404,14612 @@ var init_sweeper = __esm({
   }
 });
 
+// src/telemetry/semconv.ts
+var GEN_AI, TOKENYARD2;
+var init_semconv = __esm({
+  "src/telemetry/semconv.ts"() {
+    "use strict";
+    GEN_AI = {
+      operationName: "gen_ai.operation.name",
+      providerName: "gen_ai.provider.name",
+      requestModel: "gen_ai.request.model",
+      responseModel: "gen_ai.response.model",
+      requestStream: "gen_ai.request.stream",
+      conversationId: "gen_ai.conversation.id",
+      responseFinishReasons: "gen_ai.response.finish_reasons",
+      responseTimeToFirstChunk: "gen_ai.response.time_to_first_chunk",
+      usageInputTokens: "gen_ai.usage.input_tokens",
+      usageOutputTokens: "gen_ai.usage.output_tokens",
+      usageCacheReadInputTokens: "gen_ai.usage.cache_read.input_tokens",
+      usageCacheWriteInputTokens: "gen_ai.usage.cache_write.input_tokens",
+      errorType: "error.type"
+    };
+    TOKENYARD2 = {
+      costUsd: "tokenyard.cost.usd",
+      costBasis: "tokenyard.cost.basis",
+      priceTable: "tokenyard.price_table",
+      policyRevision: "tokenyard.policy.revision",
+      route: "tokenyard.route",
+      requestClass: "tokenyard.request_class",
+      agentId: "tokenyard.agent.id",
+      decision: "tokenyard.decision",
+      addedTtfbMs: "tokenyard.added_ttfb_ms",
+      tenant: "tokenyard.tenant",
+      team: "tokenyard.team",
+      provider: "tokenyard.provider",
+      attempt: "tokenyard.attempt"
+    };
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/trace/suppress-tracing.js
+var require_suppress_tracing = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/trace/suppress-tracing.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isTracingSuppressed = exports.unsuppressTracing = exports.suppressTracing = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var SUPPRESS_TRACING_KEY = (0, api_1.createContextKey)("OpenTelemetry SDK Context Key SUPPRESS_TRACING");
+    function suppressTracing(context2) {
+      return context2.setValue(SUPPRESS_TRACING_KEY, true);
+    }
+    exports.suppressTracing = suppressTracing;
+    function unsuppressTracing(context2) {
+      return context2.deleteValue(SUPPRESS_TRACING_KEY);
+    }
+    exports.unsuppressTracing = unsuppressTracing;
+    function isTracingSuppressed(context2) {
+      return context2.getValue(SUPPRESS_TRACING_KEY) === true;
+    }
+    exports.isTracingSuppressed = isTracingSuppressed;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/baggage/constants.js
+var require_constants6 = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/baggage/constants.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BAGGAGE_MAX_TOTAL_LENGTH = exports.BAGGAGE_MAX_PER_NAME_VALUE_PAIRS = exports.BAGGAGE_MAX_NAME_VALUE_PAIRS = exports.BAGGAGE_HEADER = exports.BAGGAGE_ITEMS_SEPARATOR = exports.BAGGAGE_PROPERTIES_SEPARATOR = exports.BAGGAGE_KEY_PAIR_SEPARATOR = void 0;
+    exports.BAGGAGE_KEY_PAIR_SEPARATOR = "=";
+    exports.BAGGAGE_PROPERTIES_SEPARATOR = ";";
+    exports.BAGGAGE_ITEMS_SEPARATOR = ",";
+    exports.BAGGAGE_HEADER = "baggage";
+    exports.BAGGAGE_MAX_NAME_VALUE_PAIRS = 180;
+    exports.BAGGAGE_MAX_PER_NAME_VALUE_PAIRS = 4096;
+    exports.BAGGAGE_MAX_TOTAL_LENGTH = 8192;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/baggage/utils.js
+var require_utils4 = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/baggage/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.parseKeyPairsIntoRecord = exports.parseBaggageHeaderString = exports.parsePairKeyValue = exports.getKeyPairs = exports.serializeKeyPairs = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var constants_1 = require_constants6();
+    function serializeKeyPairs(keyPairs) {
+      return keyPairs.reduce((hValue, current) => {
+        const value = `${hValue}${hValue !== "" ? constants_1.BAGGAGE_ITEMS_SEPARATOR : ""}${current}`;
+        return value.length > constants_1.BAGGAGE_MAX_TOTAL_LENGTH ? hValue : value;
+      }, "");
+    }
+    exports.serializeKeyPairs = serializeKeyPairs;
+    function getKeyPairs(baggage) {
+      return baggage.getAllEntries().map(([key, value]) => {
+        let entry = `${encodeURIComponent(key)}=${encodeURIComponent(value.value)}`;
+        if (value.metadata !== void 0) {
+          entry += constants_1.BAGGAGE_PROPERTIES_SEPARATOR + value.metadata.toString();
+        }
+        return entry;
+      });
+    }
+    exports.getKeyPairs = getKeyPairs;
+    function parsePairKeyValue(entry) {
+      if (!entry)
+        return;
+      const metadataSeparatorIndex = entry.indexOf(constants_1.BAGGAGE_PROPERTIES_SEPARATOR);
+      const keyPairPart = metadataSeparatorIndex === -1 ? entry : entry.substring(0, metadataSeparatorIndex);
+      const separatorIndex = keyPairPart.indexOf(constants_1.BAGGAGE_KEY_PAIR_SEPARATOR);
+      if (separatorIndex <= 0)
+        return;
+      const rawKey = keyPairPart.substring(0, separatorIndex).trim();
+      const rawValue = keyPairPart.substring(separatorIndex + 1).trim();
+      if (!rawKey || !rawValue)
+        return;
+      let key;
+      let value;
+      try {
+        key = decodeURIComponent(rawKey);
+        value = decodeURIComponent(rawValue);
+      } catch {
+        return;
+      }
+      let metadata;
+      if (metadataSeparatorIndex !== -1 && metadataSeparatorIndex < entry.length - 1) {
+        const metadataString = entry.substring(metadataSeparatorIndex + 1);
+        metadata = (0, api_1.baggageEntryMetadataFromString)(metadataString);
+      }
+      return { key, value, metadata };
+    }
+    exports.parsePairKeyValue = parsePairKeyValue;
+    function parseBaggageHeaderString(value, baggage, count, totalSize) {
+      let start = 0;
+      while (start < value.length && count < constants_1.BAGGAGE_MAX_NAME_VALUE_PAIRS) {
+        const end = value.indexOf(constants_1.BAGGAGE_ITEMS_SEPARATOR, start);
+        const entryEnd = end === -1 ? value.length : end;
+        const entryLength = entryEnd - start;
+        if (entryLength <= constants_1.BAGGAGE_MAX_PER_NAME_VALUE_PAIRS) {
+          const keyPair = parsePairKeyValue(value.substring(start, entryEnd));
+          if (keyPair) {
+            const entrySize = (count === 0 ? 0 : 1) + entryLength;
+            if (totalSize + entrySize > constants_1.BAGGAGE_MAX_TOTAL_LENGTH)
+              break;
+            baggage[keyPair.key] = keyPair.metadata ? { value: keyPair.value, metadata: keyPair.metadata } : { value: keyPair.value };
+            count++;
+            totalSize += entrySize;
+          }
+        }
+        if (end === -1)
+          break;
+        start = end + 1;
+      }
+      return [count, totalSize];
+    }
+    exports.parseBaggageHeaderString = parseBaggageHeaderString;
+    function parseKeyPairsIntoRecord2(value) {
+      const result = {};
+      if (typeof value === "string" && value.length > 0) {
+        value.split(constants_1.BAGGAGE_ITEMS_SEPARATOR).forEach((entry) => {
+          const keyPair = parsePairKeyValue(entry);
+          if (keyPair !== void 0 && keyPair.value.length > 0) {
+            result[keyPair.key] = keyPair.value;
+          }
+        });
+      }
+      return result;
+    }
+    exports.parseKeyPairsIntoRecord = parseKeyPairsIntoRecord2;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/baggage/propagation/W3CBaggagePropagator.js
+var require_W3CBaggagePropagator = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/baggage/propagation/W3CBaggagePropagator.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.W3CBaggagePropagator = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var suppress_tracing_1 = require_suppress_tracing();
+    var constants_1 = require_constants6();
+    var utils_1 = require_utils4();
+    var W3CBaggagePropagator = class {
+      inject(context2, carrier, setter) {
+        const baggage = api_1.propagation.getBaggage(context2);
+        if (!baggage || (0, suppress_tracing_1.isTracingSuppressed)(context2))
+          return;
+        const keyPairs = (0, utils_1.getKeyPairs)(baggage).filter((pair) => {
+          return pair.length <= constants_1.BAGGAGE_MAX_PER_NAME_VALUE_PAIRS;
+        }).slice(0, constants_1.BAGGAGE_MAX_NAME_VALUE_PAIRS);
+        const headerValue = (0, utils_1.serializeKeyPairs)(keyPairs);
+        if (headerValue.length > 0) {
+          setter.set(carrier, constants_1.BAGGAGE_HEADER, headerValue);
+        }
+      }
+      extract(context2, carrier, getter) {
+        const headerValue = getter.get(carrier, constants_1.BAGGAGE_HEADER);
+        if (!headerValue) {
+          return context2;
+        }
+        const baggage = {};
+        let count = 0;
+        let totalSize = 0;
+        if (Array.isArray(headerValue)) {
+          for (let i = 0; i < headerValue.length; i++) {
+            [count, totalSize] = (0, utils_1.parseBaggageHeaderString)(headerValue[i], baggage, count, totalSize);
+          }
+        } else {
+          [count] = (0, utils_1.parseBaggageHeaderString)(headerValue, baggage, count, totalSize);
+        }
+        if (count === 0) {
+          return context2;
+        }
+        return api_1.propagation.setBaggage(context2, api_1.propagation.createBaggage(baggage));
+      }
+      fields() {
+        return [constants_1.BAGGAGE_HEADER];
+      }
+    };
+    exports.W3CBaggagePropagator = W3CBaggagePropagator;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/anchored-clock.js
+var require_anchored_clock = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/anchored-clock.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AnchoredClock = void 0;
+    var AnchoredClock = class {
+      _monotonicClock;
+      _epochMillis;
+      _performanceMillis;
+      /**
+       * Create a new AnchoredClock anchored to the current time returned by systemClock.
+       *
+       * @param systemClock should be a clock that returns the number of milliseconds since January 1 1970 such as Date
+       * @param monotonicClock should be a clock that counts milliseconds monotonically such as window.performance or perf_hooks.performance
+       */
+      constructor(systemClock, monotonicClock) {
+        this._monotonicClock = monotonicClock;
+        this._epochMillis = systemClock.now();
+        this._performanceMillis = monotonicClock.now();
+      }
+      /**
+       * Returns the current time by adding the number of milliseconds since the
+       * AnchoredClock was created to the creation epoch time
+       */
+      now() {
+        const delta = this._monotonicClock.now() - this._performanceMillis;
+        return this._epochMillis + delta;
+      }
+    };
+    exports.AnchoredClock = AnchoredClock;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/attributes.js
+var require_attributes = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/attributes.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isAttributeValue = exports.isAttributeKey = exports.sanitizeAttributes = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    function sanitizeAttributes(attributes) {
+      const out = {};
+      if (typeof attributes !== "object" || attributes == null) {
+        return out;
+      }
+      for (const key in attributes) {
+        if (!Object.prototype.hasOwnProperty.call(attributes, key)) {
+          continue;
+        }
+        if (!isAttributeKey(key)) {
+          api_1.diag.warn(`Invalid attribute key: ${key}`);
+          continue;
+        }
+        const val = attributes[key];
+        if (!isAttributeValue(val)) {
+          api_1.diag.warn(`Invalid attribute value set for key: ${key}`);
+          continue;
+        }
+        if (Array.isArray(val)) {
+          out[key] = val.slice();
+        } else {
+          out[key] = val;
+        }
+      }
+      return out;
+    }
+    exports.sanitizeAttributes = sanitizeAttributes;
+    function isAttributeKey(key) {
+      return typeof key === "string" && key !== "";
+    }
+    exports.isAttributeKey = isAttributeKey;
+    function isAttributeValue(val) {
+      if (val == null) {
+        return true;
+      }
+      if (Array.isArray(val)) {
+        return isHomogeneousAttributeValueArray(val);
+      }
+      return isValidPrimitiveAttributeValueType(typeof val);
+    }
+    exports.isAttributeValue = isAttributeValue;
+    function isHomogeneousAttributeValueArray(arr) {
+      let type;
+      for (const element of arr) {
+        if (element == null)
+          continue;
+        const elementType = typeof element;
+        if (elementType === type) {
+          continue;
+        }
+        if (!type) {
+          if (isValidPrimitiveAttributeValueType(elementType)) {
+            type = elementType;
+            continue;
+          }
+          return false;
+        }
+        return false;
+      }
+      return true;
+    }
+    function isValidPrimitiveAttributeValueType(valType) {
+      switch (valType) {
+        case "number":
+        case "boolean":
+        case "string":
+          return true;
+      }
+      return false;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/logging-error-handler.js
+var require_logging_error_handler = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/logging-error-handler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.loggingErrorHandler = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    function loggingErrorHandler() {
+      return (ex) => {
+        api_1.diag.error(stringifyException(ex));
+      };
+    }
+    exports.loggingErrorHandler = loggingErrorHandler;
+    function stringifyException(ex) {
+      if (typeof ex === "string") {
+        return ex;
+      } else {
+        return JSON.stringify(flattenException(ex));
+      }
+    }
+    function flattenException(ex) {
+      const result = {};
+      let current = ex;
+      while (current !== null) {
+        Object.getOwnPropertyNames(current).forEach((propertyName) => {
+          if (result[propertyName])
+            return;
+          const value = current[propertyName];
+          if (value) {
+            result[propertyName] = String(value);
+          }
+        });
+        current = Object.getPrototypeOf(current);
+      }
+      return result;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/global-error-handler.js
+var require_global_error_handler = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/global-error-handler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.globalErrorHandler = exports.setGlobalErrorHandler = void 0;
+    var logging_error_handler_1 = require_logging_error_handler();
+    var delegateHandler = (0, logging_error_handler_1.loggingErrorHandler)();
+    function setGlobalErrorHandler(handler) {
+      delegateHandler = handler;
+    }
+    exports.setGlobalErrorHandler = setGlobalErrorHandler;
+    function globalErrorHandler(ex) {
+      try {
+        delegateHandler(ex);
+      } catch {
+      }
+    }
+    exports.globalErrorHandler = globalErrorHandler;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/platform/node/environment.js
+var require_environment = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/platform/node/environment.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getStringListFromEnv = exports.getBooleanFromEnv = exports.getStringFromEnv = exports.getNumberFromEnv = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var util_1 = __require("util");
+    function getNumberFromEnv2(key) {
+      const raw = process.env[key];
+      if (raw == null || raw.trim() === "") {
+        return void 0;
+      }
+      const value = Number(raw);
+      if (isNaN(value)) {
+        api_1.diag.warn(`Unknown value ${(0, util_1.inspect)(raw)} for ${key}, expected a number, using defaults`);
+        return void 0;
+      }
+      return value;
+    }
+    exports.getNumberFromEnv = getNumberFromEnv2;
+    function getStringFromEnv3(key) {
+      const raw = process.env[key];
+      if (raw == null || raw.trim() === "") {
+        return void 0;
+      }
+      return raw;
+    }
+    exports.getStringFromEnv = getStringFromEnv3;
+    function getBooleanFromEnv(key) {
+      const raw = process.env[key]?.trim().toLowerCase();
+      if (raw == null || raw === "") {
+        return false;
+      }
+      if (raw === "true") {
+        return true;
+      } else if (raw === "false") {
+        return false;
+      } else {
+        api_1.diag.warn(`Unknown value ${(0, util_1.inspect)(raw)} for ${key}, expected 'true' or 'false', falling back to 'false' (default)`);
+        return false;
+      }
+    }
+    exports.getBooleanFromEnv = getBooleanFromEnv;
+    function getStringListFromEnv(key) {
+      return getStringFromEnv3(key)?.split(",").map((v) => v.trim()).filter((s2) => s2 !== "");
+    }
+    exports.getStringListFromEnv = getStringListFromEnv;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/globalThis.js
+var require_globalThis = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/globalThis.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports._globalThis = void 0;
+    exports._globalThis = globalThis;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/version.js
+var require_version = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/version.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.VERSION = void 0;
+    exports.VERSION = "2.12.0";
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/internal/utils.cjs
+var require_utils5 = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/internal/utils.cjs"(exports) {
+    // @__NO_SIDE_EFFECTS__
+    function createConstMap(values) {
+      let res = {};
+      const len = values.length;
+      for (let lp = 0; lp < len; lp++) {
+        const val = values[lp];
+        if (val) res[String(val).toUpperCase().replace(/[-.]/g, "_")] = val;
+      }
+      return res;
+    }
+    exports.createConstMap = createConstMap;
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/trace/SemanticAttributes.cjs
+var require_SemanticAttributes = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/trace/SemanticAttributes.cjs"(exports) {
+    var require_utils11 = require_utils5();
+    var TMP_AWS_LAMBDA_INVOKED_ARN = "aws.lambda.invoked_arn";
+    var TMP_DB_SYSTEM = "db.system";
+    var TMP_DB_CONNECTION_STRING = "db.connection_string";
+    var TMP_DB_USER = "db.user";
+    var TMP_DB_JDBC_DRIVER_CLASSNAME = "db.jdbc.driver_classname";
+    var TMP_DB_NAME = "db.name";
+    var TMP_DB_STATEMENT = "db.statement";
+    var TMP_DB_OPERATION = "db.operation";
+    var TMP_DB_MSSQL_INSTANCE_NAME = "db.mssql.instance_name";
+    var TMP_DB_CASSANDRA_KEYSPACE = "db.cassandra.keyspace";
+    var TMP_DB_CASSANDRA_PAGE_SIZE = "db.cassandra.page_size";
+    var TMP_DB_CASSANDRA_CONSISTENCY_LEVEL = "db.cassandra.consistency_level";
+    var TMP_DB_CASSANDRA_TABLE = "db.cassandra.table";
+    var TMP_DB_CASSANDRA_IDEMPOTENCE = "db.cassandra.idempotence";
+    var TMP_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT = "db.cassandra.speculative_execution_count";
+    var TMP_DB_CASSANDRA_COORDINATOR_ID = "db.cassandra.coordinator.id";
+    var TMP_DB_CASSANDRA_COORDINATOR_DC = "db.cassandra.coordinator.dc";
+    var TMP_DB_HBASE_NAMESPACE = "db.hbase.namespace";
+    var TMP_DB_REDIS_DATABASE_INDEX = "db.redis.database_index";
+    var TMP_DB_MONGODB_COLLECTION = "db.mongodb.collection";
+    var TMP_DB_SQL_TABLE = "db.sql.table";
+    var TMP_EXCEPTION_TYPE = "exception.type";
+    var TMP_EXCEPTION_MESSAGE = "exception.message";
+    var TMP_EXCEPTION_STACKTRACE = "exception.stacktrace";
+    var TMP_EXCEPTION_ESCAPED = "exception.escaped";
+    var TMP_FAAS_TRIGGER = "faas.trigger";
+    var TMP_FAAS_EXECUTION = "faas.execution";
+    var TMP_FAAS_DOCUMENT_COLLECTION = "faas.document.collection";
+    var TMP_FAAS_DOCUMENT_OPERATION = "faas.document.operation";
+    var TMP_FAAS_DOCUMENT_TIME = "faas.document.time";
+    var TMP_FAAS_DOCUMENT_NAME = "faas.document.name";
+    var TMP_FAAS_TIME = "faas.time";
+    var TMP_FAAS_CRON = "faas.cron";
+    var TMP_FAAS_COLDSTART = "faas.coldstart";
+    var TMP_FAAS_INVOKED_NAME = "faas.invoked_name";
+    var TMP_FAAS_INVOKED_PROVIDER = "faas.invoked_provider";
+    var TMP_FAAS_INVOKED_REGION = "faas.invoked_region";
+    var TMP_NET_TRANSPORT = "net.transport";
+    var TMP_NET_PEER_IP = "net.peer.ip";
+    var TMP_NET_PEER_PORT = "net.peer.port";
+    var TMP_NET_PEER_NAME = "net.peer.name";
+    var TMP_NET_HOST_IP = "net.host.ip";
+    var TMP_NET_HOST_PORT = "net.host.port";
+    var TMP_NET_HOST_NAME = "net.host.name";
+    var TMP_NET_HOST_CONNECTION_TYPE = "net.host.connection.type";
+    var TMP_NET_HOST_CONNECTION_SUBTYPE = "net.host.connection.subtype";
+    var TMP_NET_HOST_CARRIER_NAME = "net.host.carrier.name";
+    var TMP_NET_HOST_CARRIER_MCC = "net.host.carrier.mcc";
+    var TMP_NET_HOST_CARRIER_MNC = "net.host.carrier.mnc";
+    var TMP_NET_HOST_CARRIER_ICC = "net.host.carrier.icc";
+    var TMP_PEER_SERVICE = "peer.service";
+    var TMP_ENDUSER_ID = "enduser.id";
+    var TMP_ENDUSER_ROLE = "enduser.role";
+    var TMP_ENDUSER_SCOPE = "enduser.scope";
+    var TMP_THREAD_ID = "thread.id";
+    var TMP_THREAD_NAME = "thread.name";
+    var TMP_CODE_FUNCTION = "code.function";
+    var TMP_CODE_NAMESPACE = "code.namespace";
+    var TMP_CODE_FILEPATH = "code.filepath";
+    var TMP_CODE_LINENO = "code.lineno";
+    var TMP_HTTP_METHOD = "http.method";
+    var TMP_HTTP_URL = "http.url";
+    var TMP_HTTP_TARGET = "http.target";
+    var TMP_HTTP_HOST = "http.host";
+    var TMP_HTTP_SCHEME = "http.scheme";
+    var TMP_HTTP_STATUS_CODE = "http.status_code";
+    var TMP_HTTP_FLAVOR = "http.flavor";
+    var TMP_HTTP_USER_AGENT = "http.user_agent";
+    var TMP_HTTP_REQUEST_CONTENT_LENGTH = "http.request_content_length";
+    var TMP_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED = "http.request_content_length_uncompressed";
+    var TMP_HTTP_RESPONSE_CONTENT_LENGTH = "http.response_content_length";
+    var TMP_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED = "http.response_content_length_uncompressed";
+    var TMP_HTTP_SERVER_NAME = "http.server_name";
+    var TMP_HTTP_ROUTE = "http.route";
+    var TMP_HTTP_CLIENT_IP = "http.client_ip";
+    var TMP_AWS_DYNAMODB_TABLE_NAMES = "aws.dynamodb.table_names";
+    var TMP_AWS_DYNAMODB_CONSUMED_CAPACITY = "aws.dynamodb.consumed_capacity";
+    var TMP_AWS_DYNAMODB_ITEM_COLLECTION_METRICS = "aws.dynamodb.item_collection_metrics";
+    var TMP_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY = "aws.dynamodb.provisioned_read_capacity";
+    var TMP_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY = "aws.dynamodb.provisioned_write_capacity";
+    var TMP_AWS_DYNAMODB_CONSISTENT_READ = "aws.dynamodb.consistent_read";
+    var TMP_AWS_DYNAMODB_PROJECTION = "aws.dynamodb.projection";
+    var TMP_AWS_DYNAMODB_LIMIT = "aws.dynamodb.limit";
+    var TMP_AWS_DYNAMODB_ATTRIBUTES_TO_GET = "aws.dynamodb.attributes_to_get";
+    var TMP_AWS_DYNAMODB_INDEX_NAME = "aws.dynamodb.index_name";
+    var TMP_AWS_DYNAMODB_SELECT = "aws.dynamodb.select";
+    var TMP_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES = "aws.dynamodb.global_secondary_indexes";
+    var TMP_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES = "aws.dynamodb.local_secondary_indexes";
+    var TMP_AWS_DYNAMODB_EXCLUSIVE_START_TABLE = "aws.dynamodb.exclusive_start_table";
+    var TMP_AWS_DYNAMODB_TABLE_COUNT = "aws.dynamodb.table_count";
+    var TMP_AWS_DYNAMODB_SCAN_FORWARD = "aws.dynamodb.scan_forward";
+    var TMP_AWS_DYNAMODB_SEGMENT = "aws.dynamodb.segment";
+    var TMP_AWS_DYNAMODB_TOTAL_SEGMENTS = "aws.dynamodb.total_segments";
+    var TMP_AWS_DYNAMODB_COUNT = "aws.dynamodb.count";
+    var TMP_AWS_DYNAMODB_SCANNED_COUNT = "aws.dynamodb.scanned_count";
+    var TMP_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS = "aws.dynamodb.attribute_definitions";
+    var TMP_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES = "aws.dynamodb.global_secondary_index_updates";
+    var TMP_MESSAGING_SYSTEM = "messaging.system";
+    var TMP_MESSAGING_DESTINATION = "messaging.destination";
+    var TMP_MESSAGING_DESTINATION_KIND = "messaging.destination_kind";
+    var TMP_MESSAGING_TEMP_DESTINATION = "messaging.temp_destination";
+    var TMP_MESSAGING_PROTOCOL = "messaging.protocol";
+    var TMP_MESSAGING_PROTOCOL_VERSION = "messaging.protocol_version";
+    var TMP_MESSAGING_URL = "messaging.url";
+    var TMP_MESSAGING_MESSAGE_ID = "messaging.message_id";
+    var TMP_MESSAGING_CONVERSATION_ID = "messaging.conversation_id";
+    var TMP_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES = "messaging.message_payload_size_bytes";
+    var TMP_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES = "messaging.message_payload_compressed_size_bytes";
+    var TMP_MESSAGING_OPERATION = "messaging.operation";
+    var TMP_MESSAGING_CONSUMER_ID = "messaging.consumer_id";
+    var TMP_MESSAGING_RABBITMQ_ROUTING_KEY = "messaging.rabbitmq.routing_key";
+    var TMP_MESSAGING_KAFKA_MESSAGE_KEY = "messaging.kafka.message_key";
+    var TMP_MESSAGING_KAFKA_CONSUMER_GROUP = "messaging.kafka.consumer_group";
+    var TMP_MESSAGING_KAFKA_CLIENT_ID = "messaging.kafka.client_id";
+    var TMP_MESSAGING_KAFKA_PARTITION = "messaging.kafka.partition";
+    var TMP_MESSAGING_KAFKA_TOMBSTONE = "messaging.kafka.tombstone";
+    var TMP_RPC_SYSTEM = "rpc.system";
+    var TMP_RPC_SERVICE = "rpc.service";
+    var TMP_RPC_METHOD = "rpc.method";
+    var TMP_RPC_GRPC_STATUS_CODE = "rpc.grpc.status_code";
+    var TMP_RPC_JSONRPC_VERSION = "rpc.jsonrpc.version";
+    var TMP_RPC_JSONRPC_REQUEST_ID = "rpc.jsonrpc.request_id";
+    var TMP_RPC_JSONRPC_ERROR_CODE = "rpc.jsonrpc.error_code";
+    var TMP_RPC_JSONRPC_ERROR_MESSAGE = "rpc.jsonrpc.error_message";
+    var TMP_MESSAGE_TYPE = "message.type";
+    var TMP_MESSAGE_ID = "message.id";
+    var TMP_MESSAGE_COMPRESSED_SIZE = "message.compressed_size";
+    var TMP_MESSAGE_UNCOMPRESSED_SIZE = "message.uncompressed_size";
+    var SEMATTRS_AWS_LAMBDA_INVOKED_ARN = TMP_AWS_LAMBDA_INVOKED_ARN;
+    var SEMATTRS_DB_SYSTEM = TMP_DB_SYSTEM;
+    var SEMATTRS_DB_CONNECTION_STRING = TMP_DB_CONNECTION_STRING;
+    var SEMATTRS_DB_USER = TMP_DB_USER;
+    var SEMATTRS_DB_JDBC_DRIVER_CLASSNAME = TMP_DB_JDBC_DRIVER_CLASSNAME;
+    var SEMATTRS_DB_NAME = TMP_DB_NAME;
+    var SEMATTRS_DB_STATEMENT = TMP_DB_STATEMENT;
+    var SEMATTRS_DB_OPERATION = TMP_DB_OPERATION;
+    var SEMATTRS_DB_MSSQL_INSTANCE_NAME = TMP_DB_MSSQL_INSTANCE_NAME;
+    var SEMATTRS_DB_CASSANDRA_KEYSPACE = TMP_DB_CASSANDRA_KEYSPACE;
+    var SEMATTRS_DB_CASSANDRA_PAGE_SIZE = TMP_DB_CASSANDRA_PAGE_SIZE;
+    var SEMATTRS_DB_CASSANDRA_CONSISTENCY_LEVEL = TMP_DB_CASSANDRA_CONSISTENCY_LEVEL;
+    var SEMATTRS_DB_CASSANDRA_TABLE = TMP_DB_CASSANDRA_TABLE;
+    var SEMATTRS_DB_CASSANDRA_IDEMPOTENCE = TMP_DB_CASSANDRA_IDEMPOTENCE;
+    var SEMATTRS_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT = TMP_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT;
+    var SEMATTRS_DB_CASSANDRA_COORDINATOR_ID = TMP_DB_CASSANDRA_COORDINATOR_ID;
+    var SEMATTRS_DB_CASSANDRA_COORDINATOR_DC = TMP_DB_CASSANDRA_COORDINATOR_DC;
+    var SEMATTRS_DB_HBASE_NAMESPACE = TMP_DB_HBASE_NAMESPACE;
+    var SEMATTRS_DB_REDIS_DATABASE_INDEX = TMP_DB_REDIS_DATABASE_INDEX;
+    var SEMATTRS_DB_MONGODB_COLLECTION = TMP_DB_MONGODB_COLLECTION;
+    var SEMATTRS_DB_SQL_TABLE = TMP_DB_SQL_TABLE;
+    var SEMATTRS_EXCEPTION_TYPE = TMP_EXCEPTION_TYPE;
+    var SEMATTRS_EXCEPTION_MESSAGE = TMP_EXCEPTION_MESSAGE;
+    var SEMATTRS_EXCEPTION_STACKTRACE = TMP_EXCEPTION_STACKTRACE;
+    var SEMATTRS_EXCEPTION_ESCAPED = TMP_EXCEPTION_ESCAPED;
+    var SEMATTRS_FAAS_TRIGGER = TMP_FAAS_TRIGGER;
+    var SEMATTRS_FAAS_EXECUTION = TMP_FAAS_EXECUTION;
+    var SEMATTRS_FAAS_DOCUMENT_COLLECTION = TMP_FAAS_DOCUMENT_COLLECTION;
+    var SEMATTRS_FAAS_DOCUMENT_OPERATION = TMP_FAAS_DOCUMENT_OPERATION;
+    var SEMATTRS_FAAS_DOCUMENT_TIME = TMP_FAAS_DOCUMENT_TIME;
+    var SEMATTRS_FAAS_DOCUMENT_NAME = TMP_FAAS_DOCUMENT_NAME;
+    var SEMATTRS_FAAS_TIME = TMP_FAAS_TIME;
+    var SEMATTRS_FAAS_CRON = TMP_FAAS_CRON;
+    var SEMATTRS_FAAS_COLDSTART = TMP_FAAS_COLDSTART;
+    var SEMATTRS_FAAS_INVOKED_NAME = TMP_FAAS_INVOKED_NAME;
+    var SEMATTRS_FAAS_INVOKED_PROVIDER = TMP_FAAS_INVOKED_PROVIDER;
+    var SEMATTRS_FAAS_INVOKED_REGION = TMP_FAAS_INVOKED_REGION;
+    var SEMATTRS_NET_TRANSPORT = TMP_NET_TRANSPORT;
+    var SEMATTRS_NET_PEER_IP = TMP_NET_PEER_IP;
+    var SEMATTRS_NET_PEER_PORT = TMP_NET_PEER_PORT;
+    var SEMATTRS_NET_PEER_NAME = TMP_NET_PEER_NAME;
+    var SEMATTRS_NET_HOST_IP = TMP_NET_HOST_IP;
+    var SEMATTRS_NET_HOST_PORT = TMP_NET_HOST_PORT;
+    var SEMATTRS_NET_HOST_NAME = TMP_NET_HOST_NAME;
+    var SEMATTRS_NET_HOST_CONNECTION_TYPE = TMP_NET_HOST_CONNECTION_TYPE;
+    var SEMATTRS_NET_HOST_CONNECTION_SUBTYPE = TMP_NET_HOST_CONNECTION_SUBTYPE;
+    var SEMATTRS_NET_HOST_CARRIER_NAME = TMP_NET_HOST_CARRIER_NAME;
+    var SEMATTRS_NET_HOST_CARRIER_MCC = TMP_NET_HOST_CARRIER_MCC;
+    var SEMATTRS_NET_HOST_CARRIER_MNC = TMP_NET_HOST_CARRIER_MNC;
+    var SEMATTRS_NET_HOST_CARRIER_ICC = TMP_NET_HOST_CARRIER_ICC;
+    var SEMATTRS_PEER_SERVICE = TMP_PEER_SERVICE;
+    var SEMATTRS_ENDUSER_ID = TMP_ENDUSER_ID;
+    var SEMATTRS_ENDUSER_ROLE = TMP_ENDUSER_ROLE;
+    var SEMATTRS_ENDUSER_SCOPE = TMP_ENDUSER_SCOPE;
+    var SEMATTRS_THREAD_ID = TMP_THREAD_ID;
+    var SEMATTRS_THREAD_NAME = TMP_THREAD_NAME;
+    var SEMATTRS_CODE_FUNCTION = TMP_CODE_FUNCTION;
+    var SEMATTRS_CODE_NAMESPACE = TMP_CODE_NAMESPACE;
+    var SEMATTRS_CODE_FILEPATH = TMP_CODE_FILEPATH;
+    var SEMATTRS_CODE_LINENO = TMP_CODE_LINENO;
+    var SEMATTRS_HTTP_METHOD = TMP_HTTP_METHOD;
+    var SEMATTRS_HTTP_URL = TMP_HTTP_URL;
+    var SEMATTRS_HTTP_TARGET = TMP_HTTP_TARGET;
+    var SEMATTRS_HTTP_HOST = TMP_HTTP_HOST;
+    var SEMATTRS_HTTP_SCHEME = TMP_HTTP_SCHEME;
+    var SEMATTRS_HTTP_STATUS_CODE = TMP_HTTP_STATUS_CODE;
+    var SEMATTRS_HTTP_FLAVOR = TMP_HTTP_FLAVOR;
+    var SEMATTRS_HTTP_USER_AGENT = TMP_HTTP_USER_AGENT;
+    var SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH = TMP_HTTP_REQUEST_CONTENT_LENGTH;
+    var SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED = TMP_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED;
+    var SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH = TMP_HTTP_RESPONSE_CONTENT_LENGTH;
+    var SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED = TMP_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED;
+    var SEMATTRS_HTTP_SERVER_NAME = TMP_HTTP_SERVER_NAME;
+    var SEMATTRS_HTTP_ROUTE = TMP_HTTP_ROUTE;
+    var SEMATTRS_HTTP_CLIENT_IP = TMP_HTTP_CLIENT_IP;
+    var SEMATTRS_AWS_DYNAMODB_TABLE_NAMES = TMP_AWS_DYNAMODB_TABLE_NAMES;
+    var SEMATTRS_AWS_DYNAMODB_CONSUMED_CAPACITY = TMP_AWS_DYNAMODB_CONSUMED_CAPACITY;
+    var SEMATTRS_AWS_DYNAMODB_ITEM_COLLECTION_METRICS = TMP_AWS_DYNAMODB_ITEM_COLLECTION_METRICS;
+    var SEMATTRS_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY = TMP_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY;
+    var SEMATTRS_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY = TMP_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY;
+    var SEMATTRS_AWS_DYNAMODB_CONSISTENT_READ = TMP_AWS_DYNAMODB_CONSISTENT_READ;
+    var SEMATTRS_AWS_DYNAMODB_PROJECTION = TMP_AWS_DYNAMODB_PROJECTION;
+    var SEMATTRS_AWS_DYNAMODB_LIMIT = TMP_AWS_DYNAMODB_LIMIT;
+    var SEMATTRS_AWS_DYNAMODB_ATTRIBUTES_TO_GET = TMP_AWS_DYNAMODB_ATTRIBUTES_TO_GET;
+    var SEMATTRS_AWS_DYNAMODB_INDEX_NAME = TMP_AWS_DYNAMODB_INDEX_NAME;
+    var SEMATTRS_AWS_DYNAMODB_SELECT = TMP_AWS_DYNAMODB_SELECT;
+    var SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES = TMP_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES;
+    var SEMATTRS_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES = TMP_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES;
+    var SEMATTRS_AWS_DYNAMODB_EXCLUSIVE_START_TABLE = TMP_AWS_DYNAMODB_EXCLUSIVE_START_TABLE;
+    var SEMATTRS_AWS_DYNAMODB_TABLE_COUNT = TMP_AWS_DYNAMODB_TABLE_COUNT;
+    var SEMATTRS_AWS_DYNAMODB_SCAN_FORWARD = TMP_AWS_DYNAMODB_SCAN_FORWARD;
+    var SEMATTRS_AWS_DYNAMODB_SEGMENT = TMP_AWS_DYNAMODB_SEGMENT;
+    var SEMATTRS_AWS_DYNAMODB_TOTAL_SEGMENTS = TMP_AWS_DYNAMODB_TOTAL_SEGMENTS;
+    var SEMATTRS_AWS_DYNAMODB_COUNT = TMP_AWS_DYNAMODB_COUNT;
+    var SEMATTRS_AWS_DYNAMODB_SCANNED_COUNT = TMP_AWS_DYNAMODB_SCANNED_COUNT;
+    var SEMATTRS_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS = TMP_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS;
+    var SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES = TMP_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES;
+    var SEMATTRS_MESSAGING_SYSTEM = TMP_MESSAGING_SYSTEM;
+    var SEMATTRS_MESSAGING_DESTINATION = TMP_MESSAGING_DESTINATION;
+    var SEMATTRS_MESSAGING_DESTINATION_KIND = TMP_MESSAGING_DESTINATION_KIND;
+    var SEMATTRS_MESSAGING_TEMP_DESTINATION = TMP_MESSAGING_TEMP_DESTINATION;
+    var SEMATTRS_MESSAGING_PROTOCOL = TMP_MESSAGING_PROTOCOL;
+    var SEMATTRS_MESSAGING_PROTOCOL_VERSION = TMP_MESSAGING_PROTOCOL_VERSION;
+    var SEMATTRS_MESSAGING_URL = TMP_MESSAGING_URL;
+    var SEMATTRS_MESSAGING_MESSAGE_ID = TMP_MESSAGING_MESSAGE_ID;
+    var SEMATTRS_MESSAGING_CONVERSATION_ID = TMP_MESSAGING_CONVERSATION_ID;
+    var SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES = TMP_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES;
+    var SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES = TMP_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES;
+    var SEMATTRS_MESSAGING_OPERATION = TMP_MESSAGING_OPERATION;
+    var SEMATTRS_MESSAGING_CONSUMER_ID = TMP_MESSAGING_CONSUMER_ID;
+    var SEMATTRS_MESSAGING_RABBITMQ_ROUTING_KEY = TMP_MESSAGING_RABBITMQ_ROUTING_KEY;
+    var SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY = TMP_MESSAGING_KAFKA_MESSAGE_KEY;
+    var SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP = TMP_MESSAGING_KAFKA_CONSUMER_GROUP;
+    var SEMATTRS_MESSAGING_KAFKA_CLIENT_ID = TMP_MESSAGING_KAFKA_CLIENT_ID;
+    var SEMATTRS_MESSAGING_KAFKA_PARTITION = TMP_MESSAGING_KAFKA_PARTITION;
+    var SEMATTRS_MESSAGING_KAFKA_TOMBSTONE = TMP_MESSAGING_KAFKA_TOMBSTONE;
+    var SEMATTRS_RPC_SYSTEM = TMP_RPC_SYSTEM;
+    var SEMATTRS_RPC_SERVICE = TMP_RPC_SERVICE;
+    var SEMATTRS_RPC_METHOD = TMP_RPC_METHOD;
+    var SEMATTRS_RPC_GRPC_STATUS_CODE = TMP_RPC_GRPC_STATUS_CODE;
+    var SEMATTRS_RPC_JSONRPC_VERSION = TMP_RPC_JSONRPC_VERSION;
+    var SEMATTRS_RPC_JSONRPC_REQUEST_ID = TMP_RPC_JSONRPC_REQUEST_ID;
+    var SEMATTRS_RPC_JSONRPC_ERROR_CODE = TMP_RPC_JSONRPC_ERROR_CODE;
+    var SEMATTRS_RPC_JSONRPC_ERROR_MESSAGE = TMP_RPC_JSONRPC_ERROR_MESSAGE;
+    var SEMATTRS_MESSAGE_TYPE = TMP_MESSAGE_TYPE;
+    var SEMATTRS_MESSAGE_ID = TMP_MESSAGE_ID;
+    var SEMATTRS_MESSAGE_COMPRESSED_SIZE = TMP_MESSAGE_COMPRESSED_SIZE;
+    var SEMATTRS_MESSAGE_UNCOMPRESSED_SIZE = TMP_MESSAGE_UNCOMPRESSED_SIZE;
+    var SemanticAttributes = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_AWS_LAMBDA_INVOKED_ARN,
+      TMP_DB_SYSTEM,
+      TMP_DB_CONNECTION_STRING,
+      TMP_DB_USER,
+      TMP_DB_JDBC_DRIVER_CLASSNAME,
+      TMP_DB_NAME,
+      TMP_DB_STATEMENT,
+      TMP_DB_OPERATION,
+      TMP_DB_MSSQL_INSTANCE_NAME,
+      TMP_DB_CASSANDRA_KEYSPACE,
+      TMP_DB_CASSANDRA_PAGE_SIZE,
+      TMP_DB_CASSANDRA_CONSISTENCY_LEVEL,
+      TMP_DB_CASSANDRA_TABLE,
+      TMP_DB_CASSANDRA_IDEMPOTENCE,
+      TMP_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT,
+      TMP_DB_CASSANDRA_COORDINATOR_ID,
+      TMP_DB_CASSANDRA_COORDINATOR_DC,
+      TMP_DB_HBASE_NAMESPACE,
+      TMP_DB_REDIS_DATABASE_INDEX,
+      TMP_DB_MONGODB_COLLECTION,
+      TMP_DB_SQL_TABLE,
+      TMP_EXCEPTION_TYPE,
+      TMP_EXCEPTION_MESSAGE,
+      TMP_EXCEPTION_STACKTRACE,
+      TMP_EXCEPTION_ESCAPED,
+      TMP_FAAS_TRIGGER,
+      TMP_FAAS_EXECUTION,
+      TMP_FAAS_DOCUMENT_COLLECTION,
+      TMP_FAAS_DOCUMENT_OPERATION,
+      TMP_FAAS_DOCUMENT_TIME,
+      TMP_FAAS_DOCUMENT_NAME,
+      TMP_FAAS_TIME,
+      TMP_FAAS_CRON,
+      TMP_FAAS_COLDSTART,
+      TMP_FAAS_INVOKED_NAME,
+      TMP_FAAS_INVOKED_PROVIDER,
+      TMP_FAAS_INVOKED_REGION,
+      TMP_NET_TRANSPORT,
+      TMP_NET_PEER_IP,
+      TMP_NET_PEER_PORT,
+      TMP_NET_PEER_NAME,
+      TMP_NET_HOST_IP,
+      TMP_NET_HOST_PORT,
+      TMP_NET_HOST_NAME,
+      TMP_NET_HOST_CONNECTION_TYPE,
+      TMP_NET_HOST_CONNECTION_SUBTYPE,
+      TMP_NET_HOST_CARRIER_NAME,
+      TMP_NET_HOST_CARRIER_MCC,
+      TMP_NET_HOST_CARRIER_MNC,
+      TMP_NET_HOST_CARRIER_ICC,
+      TMP_PEER_SERVICE,
+      TMP_ENDUSER_ID,
+      TMP_ENDUSER_ROLE,
+      TMP_ENDUSER_SCOPE,
+      TMP_THREAD_ID,
+      TMP_THREAD_NAME,
+      TMP_CODE_FUNCTION,
+      TMP_CODE_NAMESPACE,
+      TMP_CODE_FILEPATH,
+      TMP_CODE_LINENO,
+      TMP_HTTP_METHOD,
+      TMP_HTTP_URL,
+      TMP_HTTP_TARGET,
+      TMP_HTTP_HOST,
+      TMP_HTTP_SCHEME,
+      TMP_HTTP_STATUS_CODE,
+      TMP_HTTP_FLAVOR,
+      TMP_HTTP_USER_AGENT,
+      TMP_HTTP_REQUEST_CONTENT_LENGTH,
+      TMP_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED,
+      TMP_HTTP_RESPONSE_CONTENT_LENGTH,
+      TMP_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED,
+      TMP_HTTP_SERVER_NAME,
+      TMP_HTTP_ROUTE,
+      TMP_HTTP_CLIENT_IP,
+      TMP_AWS_DYNAMODB_TABLE_NAMES,
+      TMP_AWS_DYNAMODB_CONSUMED_CAPACITY,
+      TMP_AWS_DYNAMODB_ITEM_COLLECTION_METRICS,
+      TMP_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY,
+      TMP_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY,
+      TMP_AWS_DYNAMODB_CONSISTENT_READ,
+      TMP_AWS_DYNAMODB_PROJECTION,
+      TMP_AWS_DYNAMODB_LIMIT,
+      TMP_AWS_DYNAMODB_ATTRIBUTES_TO_GET,
+      TMP_AWS_DYNAMODB_INDEX_NAME,
+      TMP_AWS_DYNAMODB_SELECT,
+      TMP_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES,
+      TMP_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES,
+      TMP_AWS_DYNAMODB_EXCLUSIVE_START_TABLE,
+      TMP_AWS_DYNAMODB_TABLE_COUNT,
+      TMP_AWS_DYNAMODB_SCAN_FORWARD,
+      TMP_AWS_DYNAMODB_SEGMENT,
+      TMP_AWS_DYNAMODB_TOTAL_SEGMENTS,
+      TMP_AWS_DYNAMODB_COUNT,
+      TMP_AWS_DYNAMODB_SCANNED_COUNT,
+      TMP_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS,
+      TMP_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES,
+      TMP_MESSAGING_SYSTEM,
+      TMP_MESSAGING_DESTINATION,
+      TMP_MESSAGING_DESTINATION_KIND,
+      TMP_MESSAGING_TEMP_DESTINATION,
+      TMP_MESSAGING_PROTOCOL,
+      TMP_MESSAGING_PROTOCOL_VERSION,
+      TMP_MESSAGING_URL,
+      TMP_MESSAGING_MESSAGE_ID,
+      TMP_MESSAGING_CONVERSATION_ID,
+      TMP_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES,
+      TMP_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES,
+      TMP_MESSAGING_OPERATION,
+      TMP_MESSAGING_CONSUMER_ID,
+      TMP_MESSAGING_RABBITMQ_ROUTING_KEY,
+      TMP_MESSAGING_KAFKA_MESSAGE_KEY,
+      TMP_MESSAGING_KAFKA_CONSUMER_GROUP,
+      TMP_MESSAGING_KAFKA_CLIENT_ID,
+      TMP_MESSAGING_KAFKA_PARTITION,
+      TMP_MESSAGING_KAFKA_TOMBSTONE,
+      TMP_RPC_SYSTEM,
+      TMP_RPC_SERVICE,
+      TMP_RPC_METHOD,
+      TMP_RPC_GRPC_STATUS_CODE,
+      TMP_RPC_JSONRPC_VERSION,
+      TMP_RPC_JSONRPC_REQUEST_ID,
+      TMP_RPC_JSONRPC_ERROR_CODE,
+      TMP_RPC_JSONRPC_ERROR_MESSAGE,
+      TMP_MESSAGE_TYPE,
+      TMP_MESSAGE_ID,
+      TMP_MESSAGE_COMPRESSED_SIZE,
+      TMP_MESSAGE_UNCOMPRESSED_SIZE
+    ]);
+    var TMP_DBSYSTEMVALUES_OTHER_SQL = "other_sql";
+    var TMP_DBSYSTEMVALUES_MSSQL = "mssql";
+    var TMP_DBSYSTEMVALUES_MYSQL = "mysql";
+    var TMP_DBSYSTEMVALUES_ORACLE = "oracle";
+    var TMP_DBSYSTEMVALUES_DB2 = "db2";
+    var TMP_DBSYSTEMVALUES_POSTGRESQL = "postgresql";
+    var TMP_DBSYSTEMVALUES_REDSHIFT = "redshift";
+    var TMP_DBSYSTEMVALUES_HIVE = "hive";
+    var TMP_DBSYSTEMVALUES_CLOUDSCAPE = "cloudscape";
+    var TMP_DBSYSTEMVALUES_HSQLDB = "hsqldb";
+    var TMP_DBSYSTEMVALUES_PROGRESS = "progress";
+    var TMP_DBSYSTEMVALUES_MAXDB = "maxdb";
+    var TMP_DBSYSTEMVALUES_HANADB = "hanadb";
+    var TMP_DBSYSTEMVALUES_INGRES = "ingres";
+    var TMP_DBSYSTEMVALUES_FIRSTSQL = "firstsql";
+    var TMP_DBSYSTEMVALUES_EDB = "edb";
+    var TMP_DBSYSTEMVALUES_CACHE = "cache";
+    var TMP_DBSYSTEMVALUES_ADABAS = "adabas";
+    var TMP_DBSYSTEMVALUES_FIREBIRD = "firebird";
+    var TMP_DBSYSTEMVALUES_DERBY = "derby";
+    var TMP_DBSYSTEMVALUES_FILEMAKER = "filemaker";
+    var TMP_DBSYSTEMVALUES_INFORMIX = "informix";
+    var TMP_DBSYSTEMVALUES_INSTANTDB = "instantdb";
+    var TMP_DBSYSTEMVALUES_INTERBASE = "interbase";
+    var TMP_DBSYSTEMVALUES_MARIADB = "mariadb";
+    var TMP_DBSYSTEMVALUES_NETEZZA = "netezza";
+    var TMP_DBSYSTEMVALUES_PERVASIVE = "pervasive";
+    var TMP_DBSYSTEMVALUES_POINTBASE = "pointbase";
+    var TMP_DBSYSTEMVALUES_SQLITE = "sqlite";
+    var TMP_DBSYSTEMVALUES_SYBASE = "sybase";
+    var TMP_DBSYSTEMVALUES_TERADATA = "teradata";
+    var TMP_DBSYSTEMVALUES_VERTICA = "vertica";
+    var TMP_DBSYSTEMVALUES_H2 = "h2";
+    var TMP_DBSYSTEMVALUES_COLDFUSION = "coldfusion";
+    var TMP_DBSYSTEMVALUES_CASSANDRA = "cassandra";
+    var TMP_DBSYSTEMVALUES_HBASE = "hbase";
+    var TMP_DBSYSTEMVALUES_MONGODB = "mongodb";
+    var TMP_DBSYSTEMVALUES_REDIS = "redis";
+    var TMP_DBSYSTEMVALUES_COUCHBASE = "couchbase";
+    var TMP_DBSYSTEMVALUES_COUCHDB = "couchdb";
+    var TMP_DBSYSTEMVALUES_COSMOSDB = "cosmosdb";
+    var TMP_DBSYSTEMVALUES_DYNAMODB = "dynamodb";
+    var TMP_DBSYSTEMVALUES_NEO4J = "neo4j";
+    var TMP_DBSYSTEMVALUES_GEODE = "geode";
+    var TMP_DBSYSTEMVALUES_ELASTICSEARCH = "elasticsearch";
+    var TMP_DBSYSTEMVALUES_MEMCACHED = "memcached";
+    var TMP_DBSYSTEMVALUES_COCKROACHDB = "cockroachdb";
+    var DBSYSTEMVALUES_OTHER_SQL = TMP_DBSYSTEMVALUES_OTHER_SQL;
+    var DBSYSTEMVALUES_MSSQL = TMP_DBSYSTEMVALUES_MSSQL;
+    var DBSYSTEMVALUES_MYSQL = TMP_DBSYSTEMVALUES_MYSQL;
+    var DBSYSTEMVALUES_ORACLE = TMP_DBSYSTEMVALUES_ORACLE;
+    var DBSYSTEMVALUES_DB2 = TMP_DBSYSTEMVALUES_DB2;
+    var DBSYSTEMVALUES_POSTGRESQL = TMP_DBSYSTEMVALUES_POSTGRESQL;
+    var DBSYSTEMVALUES_REDSHIFT = TMP_DBSYSTEMVALUES_REDSHIFT;
+    var DBSYSTEMVALUES_HIVE = TMP_DBSYSTEMVALUES_HIVE;
+    var DBSYSTEMVALUES_CLOUDSCAPE = TMP_DBSYSTEMVALUES_CLOUDSCAPE;
+    var DBSYSTEMVALUES_HSQLDB = TMP_DBSYSTEMVALUES_HSQLDB;
+    var DBSYSTEMVALUES_PROGRESS = TMP_DBSYSTEMVALUES_PROGRESS;
+    var DBSYSTEMVALUES_MAXDB = TMP_DBSYSTEMVALUES_MAXDB;
+    var DBSYSTEMVALUES_HANADB = TMP_DBSYSTEMVALUES_HANADB;
+    var DBSYSTEMVALUES_INGRES = TMP_DBSYSTEMVALUES_INGRES;
+    var DBSYSTEMVALUES_FIRSTSQL = TMP_DBSYSTEMVALUES_FIRSTSQL;
+    var DBSYSTEMVALUES_EDB = TMP_DBSYSTEMVALUES_EDB;
+    var DBSYSTEMVALUES_CACHE = TMP_DBSYSTEMVALUES_CACHE;
+    var DBSYSTEMVALUES_ADABAS = TMP_DBSYSTEMVALUES_ADABAS;
+    var DBSYSTEMVALUES_FIREBIRD = TMP_DBSYSTEMVALUES_FIREBIRD;
+    var DBSYSTEMVALUES_DERBY = TMP_DBSYSTEMVALUES_DERBY;
+    var DBSYSTEMVALUES_FILEMAKER = TMP_DBSYSTEMVALUES_FILEMAKER;
+    var DBSYSTEMVALUES_INFORMIX = TMP_DBSYSTEMVALUES_INFORMIX;
+    var DBSYSTEMVALUES_INSTANTDB = TMP_DBSYSTEMVALUES_INSTANTDB;
+    var DBSYSTEMVALUES_INTERBASE = TMP_DBSYSTEMVALUES_INTERBASE;
+    var DBSYSTEMVALUES_MARIADB = TMP_DBSYSTEMVALUES_MARIADB;
+    var DBSYSTEMVALUES_NETEZZA = TMP_DBSYSTEMVALUES_NETEZZA;
+    var DBSYSTEMVALUES_PERVASIVE = TMP_DBSYSTEMVALUES_PERVASIVE;
+    var DBSYSTEMVALUES_POINTBASE = TMP_DBSYSTEMVALUES_POINTBASE;
+    var DBSYSTEMVALUES_SQLITE = TMP_DBSYSTEMVALUES_SQLITE;
+    var DBSYSTEMVALUES_SYBASE = TMP_DBSYSTEMVALUES_SYBASE;
+    var DBSYSTEMVALUES_TERADATA = TMP_DBSYSTEMVALUES_TERADATA;
+    var DBSYSTEMVALUES_VERTICA = TMP_DBSYSTEMVALUES_VERTICA;
+    var DBSYSTEMVALUES_H2 = TMP_DBSYSTEMVALUES_H2;
+    var DBSYSTEMVALUES_COLDFUSION = TMP_DBSYSTEMVALUES_COLDFUSION;
+    var DBSYSTEMVALUES_CASSANDRA = TMP_DBSYSTEMVALUES_CASSANDRA;
+    var DBSYSTEMVALUES_HBASE = TMP_DBSYSTEMVALUES_HBASE;
+    var DBSYSTEMVALUES_MONGODB = TMP_DBSYSTEMVALUES_MONGODB;
+    var DBSYSTEMVALUES_REDIS = TMP_DBSYSTEMVALUES_REDIS;
+    var DBSYSTEMVALUES_COUCHBASE = TMP_DBSYSTEMVALUES_COUCHBASE;
+    var DBSYSTEMVALUES_COUCHDB = TMP_DBSYSTEMVALUES_COUCHDB;
+    var DBSYSTEMVALUES_COSMOSDB = TMP_DBSYSTEMVALUES_COSMOSDB;
+    var DBSYSTEMVALUES_DYNAMODB = TMP_DBSYSTEMVALUES_DYNAMODB;
+    var DBSYSTEMVALUES_NEO4J = TMP_DBSYSTEMVALUES_NEO4J;
+    var DBSYSTEMVALUES_GEODE = TMP_DBSYSTEMVALUES_GEODE;
+    var DBSYSTEMVALUES_ELASTICSEARCH = TMP_DBSYSTEMVALUES_ELASTICSEARCH;
+    var DBSYSTEMVALUES_MEMCACHED = TMP_DBSYSTEMVALUES_MEMCACHED;
+    var DBSYSTEMVALUES_COCKROACHDB = TMP_DBSYSTEMVALUES_COCKROACHDB;
+    var DbSystemValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_DBSYSTEMVALUES_OTHER_SQL,
+      TMP_DBSYSTEMVALUES_MSSQL,
+      TMP_DBSYSTEMVALUES_MYSQL,
+      TMP_DBSYSTEMVALUES_ORACLE,
+      TMP_DBSYSTEMVALUES_DB2,
+      TMP_DBSYSTEMVALUES_POSTGRESQL,
+      TMP_DBSYSTEMVALUES_REDSHIFT,
+      TMP_DBSYSTEMVALUES_HIVE,
+      TMP_DBSYSTEMVALUES_CLOUDSCAPE,
+      TMP_DBSYSTEMVALUES_HSQLDB,
+      TMP_DBSYSTEMVALUES_PROGRESS,
+      TMP_DBSYSTEMVALUES_MAXDB,
+      TMP_DBSYSTEMVALUES_HANADB,
+      TMP_DBSYSTEMVALUES_INGRES,
+      TMP_DBSYSTEMVALUES_FIRSTSQL,
+      TMP_DBSYSTEMVALUES_EDB,
+      TMP_DBSYSTEMVALUES_CACHE,
+      TMP_DBSYSTEMVALUES_ADABAS,
+      TMP_DBSYSTEMVALUES_FIREBIRD,
+      TMP_DBSYSTEMVALUES_DERBY,
+      TMP_DBSYSTEMVALUES_FILEMAKER,
+      TMP_DBSYSTEMVALUES_INFORMIX,
+      TMP_DBSYSTEMVALUES_INSTANTDB,
+      TMP_DBSYSTEMVALUES_INTERBASE,
+      TMP_DBSYSTEMVALUES_MARIADB,
+      TMP_DBSYSTEMVALUES_NETEZZA,
+      TMP_DBSYSTEMVALUES_PERVASIVE,
+      TMP_DBSYSTEMVALUES_POINTBASE,
+      TMP_DBSYSTEMVALUES_SQLITE,
+      TMP_DBSYSTEMVALUES_SYBASE,
+      TMP_DBSYSTEMVALUES_TERADATA,
+      TMP_DBSYSTEMVALUES_VERTICA,
+      TMP_DBSYSTEMVALUES_H2,
+      TMP_DBSYSTEMVALUES_COLDFUSION,
+      TMP_DBSYSTEMVALUES_CASSANDRA,
+      TMP_DBSYSTEMVALUES_HBASE,
+      TMP_DBSYSTEMVALUES_MONGODB,
+      TMP_DBSYSTEMVALUES_REDIS,
+      TMP_DBSYSTEMVALUES_COUCHBASE,
+      TMP_DBSYSTEMVALUES_COUCHDB,
+      TMP_DBSYSTEMVALUES_COSMOSDB,
+      TMP_DBSYSTEMVALUES_DYNAMODB,
+      TMP_DBSYSTEMVALUES_NEO4J,
+      TMP_DBSYSTEMVALUES_GEODE,
+      TMP_DBSYSTEMVALUES_ELASTICSEARCH,
+      TMP_DBSYSTEMVALUES_MEMCACHED,
+      TMP_DBSYSTEMVALUES_COCKROACHDB
+    ]);
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ALL = "all";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM = "each_quorum";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM = "quorum";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM = "local_quorum";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ONE = "one";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_TWO = "two";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_THREE = "three";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE = "local_one";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ANY = "any";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL = "serial";
+    var TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL = "local_serial";
+    var DBCASSANDRACONSISTENCYLEVELVALUES_ALL = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ALL;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_ONE = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ONE;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_TWO = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_TWO;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_THREE = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_THREE;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_ANY = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ANY;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL;
+    var DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL = TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL;
+    var DbCassandraConsistencyLevelValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ALL,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ONE,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_TWO,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_THREE,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_ANY,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL,
+      TMP_DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL
+    ]);
+    var TMP_FAASTRIGGERVALUES_DATASOURCE = "datasource";
+    var TMP_FAASTRIGGERVALUES_HTTP = "http";
+    var TMP_FAASTRIGGERVALUES_PUBSUB = "pubsub";
+    var TMP_FAASTRIGGERVALUES_TIMER = "timer";
+    var TMP_FAASTRIGGERVALUES_OTHER = "other";
+    var FAASTRIGGERVALUES_DATASOURCE = TMP_FAASTRIGGERVALUES_DATASOURCE;
+    var FAASTRIGGERVALUES_HTTP = TMP_FAASTRIGGERVALUES_HTTP;
+    var FAASTRIGGERVALUES_PUBSUB = TMP_FAASTRIGGERVALUES_PUBSUB;
+    var FAASTRIGGERVALUES_TIMER = TMP_FAASTRIGGERVALUES_TIMER;
+    var FAASTRIGGERVALUES_OTHER = TMP_FAASTRIGGERVALUES_OTHER;
+    var FaasTriggerValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_FAASTRIGGERVALUES_DATASOURCE,
+      TMP_FAASTRIGGERVALUES_HTTP,
+      TMP_FAASTRIGGERVALUES_PUBSUB,
+      TMP_FAASTRIGGERVALUES_TIMER,
+      TMP_FAASTRIGGERVALUES_OTHER
+    ]);
+    var TMP_FAASDOCUMENTOPERATIONVALUES_INSERT = "insert";
+    var TMP_FAASDOCUMENTOPERATIONVALUES_EDIT = "edit";
+    var TMP_FAASDOCUMENTOPERATIONVALUES_DELETE = "delete";
+    var FAASDOCUMENTOPERATIONVALUES_INSERT = TMP_FAASDOCUMENTOPERATIONVALUES_INSERT;
+    var FAASDOCUMENTOPERATIONVALUES_EDIT = TMP_FAASDOCUMENTOPERATIONVALUES_EDIT;
+    var FAASDOCUMENTOPERATIONVALUES_DELETE = TMP_FAASDOCUMENTOPERATIONVALUES_DELETE;
+    var FaasDocumentOperationValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_FAASDOCUMENTOPERATIONVALUES_INSERT,
+      TMP_FAASDOCUMENTOPERATIONVALUES_EDIT,
+      TMP_FAASDOCUMENTOPERATIONVALUES_DELETE
+    ]);
+    var TMP_FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD = "alibaba_cloud";
+    var TMP_FAASINVOKEDPROVIDERVALUES_AWS = "aws";
+    var TMP_FAASINVOKEDPROVIDERVALUES_AZURE = "azure";
+    var TMP_FAASINVOKEDPROVIDERVALUES_GCP = "gcp";
+    var FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD = TMP_FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD;
+    var FAASINVOKEDPROVIDERVALUES_AWS = TMP_FAASINVOKEDPROVIDERVALUES_AWS;
+    var FAASINVOKEDPROVIDERVALUES_AZURE = TMP_FAASINVOKEDPROVIDERVALUES_AZURE;
+    var FAASINVOKEDPROVIDERVALUES_GCP = TMP_FAASINVOKEDPROVIDERVALUES_GCP;
+    var FaasInvokedProviderValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD,
+      TMP_FAASINVOKEDPROVIDERVALUES_AWS,
+      TMP_FAASINVOKEDPROVIDERVALUES_AZURE,
+      TMP_FAASINVOKEDPROVIDERVALUES_GCP
+    ]);
+    var TMP_NETTRANSPORTVALUES_IP_TCP = "ip_tcp";
+    var TMP_NETTRANSPORTVALUES_IP_UDP = "ip_udp";
+    var TMP_NETTRANSPORTVALUES_IP = "ip";
+    var TMP_NETTRANSPORTVALUES_UNIX = "unix";
+    var TMP_NETTRANSPORTVALUES_PIPE = "pipe";
+    var TMP_NETTRANSPORTVALUES_INPROC = "inproc";
+    var TMP_NETTRANSPORTVALUES_OTHER = "other";
+    var NETTRANSPORTVALUES_IP_TCP = TMP_NETTRANSPORTVALUES_IP_TCP;
+    var NETTRANSPORTVALUES_IP_UDP = TMP_NETTRANSPORTVALUES_IP_UDP;
+    var NETTRANSPORTVALUES_IP = TMP_NETTRANSPORTVALUES_IP;
+    var NETTRANSPORTVALUES_UNIX = TMP_NETTRANSPORTVALUES_UNIX;
+    var NETTRANSPORTVALUES_PIPE = TMP_NETTRANSPORTVALUES_PIPE;
+    var NETTRANSPORTVALUES_INPROC = TMP_NETTRANSPORTVALUES_INPROC;
+    var NETTRANSPORTVALUES_OTHER = TMP_NETTRANSPORTVALUES_OTHER;
+    var NetTransportValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_NETTRANSPORTVALUES_IP_TCP,
+      TMP_NETTRANSPORTVALUES_IP_UDP,
+      TMP_NETTRANSPORTVALUES_IP,
+      TMP_NETTRANSPORTVALUES_UNIX,
+      TMP_NETTRANSPORTVALUES_PIPE,
+      TMP_NETTRANSPORTVALUES_INPROC,
+      TMP_NETTRANSPORTVALUES_OTHER
+    ]);
+    var TMP_NETHOSTCONNECTIONTYPEVALUES_WIFI = "wifi";
+    var TMP_NETHOSTCONNECTIONTYPEVALUES_WIRED = "wired";
+    var TMP_NETHOSTCONNECTIONTYPEVALUES_CELL = "cell";
+    var TMP_NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE = "unavailable";
+    var TMP_NETHOSTCONNECTIONTYPEVALUES_UNKNOWN = "unknown";
+    var NETHOSTCONNECTIONTYPEVALUES_WIFI = TMP_NETHOSTCONNECTIONTYPEVALUES_WIFI;
+    var NETHOSTCONNECTIONTYPEVALUES_WIRED = TMP_NETHOSTCONNECTIONTYPEVALUES_WIRED;
+    var NETHOSTCONNECTIONTYPEVALUES_CELL = TMP_NETHOSTCONNECTIONTYPEVALUES_CELL;
+    var NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE = TMP_NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE;
+    var NETHOSTCONNECTIONTYPEVALUES_UNKNOWN = TMP_NETHOSTCONNECTIONTYPEVALUES_UNKNOWN;
+    var NetHostConnectionTypeValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_NETHOSTCONNECTIONTYPEVALUES_WIFI,
+      TMP_NETHOSTCONNECTIONTYPEVALUES_WIRED,
+      TMP_NETHOSTCONNECTIONTYPEVALUES_CELL,
+      TMP_NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE,
+      TMP_NETHOSTCONNECTIONTYPEVALUES_UNKNOWN
+    ]);
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_GPRS = "gprs";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EDGE = "edge";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_UMTS = "umts";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_CDMA = "cdma";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0 = "evdo_0";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A = "evdo_a";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT = "cdma2000_1xrtt";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA = "hsdpa";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA = "hsupa";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSPA = "hspa";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_IDEN = "iden";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B = "evdo_b";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_LTE = "lte";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD = "ehrpd";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP = "hspap";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_GSM = "gsm";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA = "td_scdma";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN = "iwlan";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_NR = "nr";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA = "nrnsa";
+    var TMP_NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA = "lte_ca";
+    var NETHOSTCONNECTIONSUBTYPEVALUES_GPRS = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_GPRS;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_EDGE = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EDGE;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_UMTS = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_UMTS;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_CDMA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_CDMA;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0 = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_HSPA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSPA;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_IDEN = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_IDEN;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_LTE = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_LTE;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_GSM = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_GSM;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_NR = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_NR;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA;
+    var NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA = TMP_NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA;
+    var NetHostConnectionSubtypeValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_GPRS,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EDGE,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_UMTS,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_CDMA,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSPA,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_IDEN,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_LTE,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_GSM,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_NR,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA,
+      TMP_NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA
+    ]);
+    var TMP_HTTPFLAVORVALUES_HTTP_1_0 = "1.0";
+    var TMP_HTTPFLAVORVALUES_HTTP_1_1 = "1.1";
+    var TMP_HTTPFLAVORVALUES_HTTP_2_0 = "2.0";
+    var TMP_HTTPFLAVORVALUES_SPDY = "SPDY";
+    var TMP_HTTPFLAVORVALUES_QUIC = "QUIC";
+    var HTTPFLAVORVALUES_HTTP_1_0 = TMP_HTTPFLAVORVALUES_HTTP_1_0;
+    var HTTPFLAVORVALUES_HTTP_1_1 = TMP_HTTPFLAVORVALUES_HTTP_1_1;
+    var HTTPFLAVORVALUES_HTTP_2_0 = TMP_HTTPFLAVORVALUES_HTTP_2_0;
+    var HTTPFLAVORVALUES_SPDY = TMP_HTTPFLAVORVALUES_SPDY;
+    var HTTPFLAVORVALUES_QUIC = TMP_HTTPFLAVORVALUES_QUIC;
+    var HttpFlavorValues = {
+      HTTP_1_0: TMP_HTTPFLAVORVALUES_HTTP_1_0,
+      HTTP_1_1: TMP_HTTPFLAVORVALUES_HTTP_1_1,
+      HTTP_2_0: TMP_HTTPFLAVORVALUES_HTTP_2_0,
+      SPDY: TMP_HTTPFLAVORVALUES_SPDY,
+      QUIC: TMP_HTTPFLAVORVALUES_QUIC
+    };
+    var TMP_MESSAGINGDESTINATIONKINDVALUES_QUEUE = "queue";
+    var TMP_MESSAGINGDESTINATIONKINDVALUES_TOPIC = "topic";
+    var MESSAGINGDESTINATIONKINDVALUES_QUEUE = TMP_MESSAGINGDESTINATIONKINDVALUES_QUEUE;
+    var MESSAGINGDESTINATIONKINDVALUES_TOPIC = TMP_MESSAGINGDESTINATIONKINDVALUES_TOPIC;
+    var MessagingDestinationKindValues = /* @__PURE__ */ require_utils11.createConstMap([TMP_MESSAGINGDESTINATIONKINDVALUES_QUEUE, TMP_MESSAGINGDESTINATIONKINDVALUES_TOPIC]);
+    var TMP_MESSAGINGOPERATIONVALUES_RECEIVE = "receive";
+    var TMP_MESSAGINGOPERATIONVALUES_PROCESS = "process";
+    var MESSAGINGOPERATIONVALUES_RECEIVE = TMP_MESSAGINGOPERATIONVALUES_RECEIVE;
+    var MESSAGINGOPERATIONVALUES_PROCESS = TMP_MESSAGINGOPERATIONVALUES_PROCESS;
+    var MessagingOperationValues = /* @__PURE__ */ require_utils11.createConstMap([TMP_MESSAGINGOPERATIONVALUES_RECEIVE, TMP_MESSAGINGOPERATIONVALUES_PROCESS]);
+    var TMP_RPCGRPCSTATUSCODEVALUES_OK = 0;
+    var TMP_RPCGRPCSTATUSCODEVALUES_CANCELLED = 1;
+    var TMP_RPCGRPCSTATUSCODEVALUES_UNKNOWN = 2;
+    var TMP_RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT = 3;
+    var TMP_RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED = 4;
+    var TMP_RPCGRPCSTATUSCODEVALUES_NOT_FOUND = 5;
+    var TMP_RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS = 6;
+    var TMP_RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED = 7;
+    var TMP_RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED = 8;
+    var TMP_RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION = 9;
+    var TMP_RPCGRPCSTATUSCODEVALUES_ABORTED = 10;
+    var TMP_RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE = 11;
+    var TMP_RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED = 12;
+    var TMP_RPCGRPCSTATUSCODEVALUES_INTERNAL = 13;
+    var TMP_RPCGRPCSTATUSCODEVALUES_UNAVAILABLE = 14;
+    var TMP_RPCGRPCSTATUSCODEVALUES_DATA_LOSS = 15;
+    var TMP_RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED = 16;
+    var RPCGRPCSTATUSCODEVALUES_OK = TMP_RPCGRPCSTATUSCODEVALUES_OK;
+    var RPCGRPCSTATUSCODEVALUES_CANCELLED = TMP_RPCGRPCSTATUSCODEVALUES_CANCELLED;
+    var RPCGRPCSTATUSCODEVALUES_UNKNOWN = TMP_RPCGRPCSTATUSCODEVALUES_UNKNOWN;
+    var RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT = TMP_RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT;
+    var RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED = TMP_RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED;
+    var RPCGRPCSTATUSCODEVALUES_NOT_FOUND = TMP_RPCGRPCSTATUSCODEVALUES_NOT_FOUND;
+    var RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS = TMP_RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS;
+    var RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED = TMP_RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED;
+    var RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED = TMP_RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED;
+    var RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION = TMP_RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION;
+    var RPCGRPCSTATUSCODEVALUES_ABORTED = TMP_RPCGRPCSTATUSCODEVALUES_ABORTED;
+    var RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE = TMP_RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE;
+    var RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED = TMP_RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED;
+    var RPCGRPCSTATUSCODEVALUES_INTERNAL = TMP_RPCGRPCSTATUSCODEVALUES_INTERNAL;
+    var RPCGRPCSTATUSCODEVALUES_UNAVAILABLE = TMP_RPCGRPCSTATUSCODEVALUES_UNAVAILABLE;
+    var RPCGRPCSTATUSCODEVALUES_DATA_LOSS = TMP_RPCGRPCSTATUSCODEVALUES_DATA_LOSS;
+    var RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED = TMP_RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED;
+    var RpcGrpcStatusCodeValues = {
+      OK: TMP_RPCGRPCSTATUSCODEVALUES_OK,
+      CANCELLED: TMP_RPCGRPCSTATUSCODEVALUES_CANCELLED,
+      UNKNOWN: TMP_RPCGRPCSTATUSCODEVALUES_UNKNOWN,
+      INVALID_ARGUMENT: TMP_RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT,
+      DEADLINE_EXCEEDED: TMP_RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED,
+      NOT_FOUND: TMP_RPCGRPCSTATUSCODEVALUES_NOT_FOUND,
+      ALREADY_EXISTS: TMP_RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS,
+      PERMISSION_DENIED: TMP_RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED,
+      RESOURCE_EXHAUSTED: TMP_RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED,
+      FAILED_PRECONDITION: TMP_RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION,
+      ABORTED: TMP_RPCGRPCSTATUSCODEVALUES_ABORTED,
+      OUT_OF_RANGE: TMP_RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE,
+      UNIMPLEMENTED: TMP_RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED,
+      INTERNAL: TMP_RPCGRPCSTATUSCODEVALUES_INTERNAL,
+      UNAVAILABLE: TMP_RPCGRPCSTATUSCODEVALUES_UNAVAILABLE,
+      DATA_LOSS: TMP_RPCGRPCSTATUSCODEVALUES_DATA_LOSS,
+      UNAUTHENTICATED: TMP_RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED
+    };
+    var TMP_MESSAGETYPEVALUES_SENT = "SENT";
+    var TMP_MESSAGETYPEVALUES_RECEIVED = "RECEIVED";
+    var MESSAGETYPEVALUES_SENT = TMP_MESSAGETYPEVALUES_SENT;
+    var MESSAGETYPEVALUES_RECEIVED = TMP_MESSAGETYPEVALUES_RECEIVED;
+    var MessageTypeValues = /* @__PURE__ */ require_utils11.createConstMap([TMP_MESSAGETYPEVALUES_SENT, TMP_MESSAGETYPEVALUES_RECEIVED]);
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_ALL = DBCASSANDRACONSISTENCYLEVELVALUES_ALL;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_ANY = DBCASSANDRACONSISTENCYLEVELVALUES_ANY;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM = DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE = DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM = DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL = DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_ONE = DBCASSANDRACONSISTENCYLEVELVALUES_ONE;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM = DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL = DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_THREE = DBCASSANDRACONSISTENCYLEVELVALUES_THREE;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_TWO = DBCASSANDRACONSISTENCYLEVELVALUES_TWO;
+    exports.DBSYSTEMVALUES_ADABAS = DBSYSTEMVALUES_ADABAS;
+    exports.DBSYSTEMVALUES_CACHE = DBSYSTEMVALUES_CACHE;
+    exports.DBSYSTEMVALUES_CASSANDRA = DBSYSTEMVALUES_CASSANDRA;
+    exports.DBSYSTEMVALUES_CLOUDSCAPE = DBSYSTEMVALUES_CLOUDSCAPE;
+    exports.DBSYSTEMVALUES_COCKROACHDB = DBSYSTEMVALUES_COCKROACHDB;
+    exports.DBSYSTEMVALUES_COLDFUSION = DBSYSTEMVALUES_COLDFUSION;
+    exports.DBSYSTEMVALUES_COSMOSDB = DBSYSTEMVALUES_COSMOSDB;
+    exports.DBSYSTEMVALUES_COUCHBASE = DBSYSTEMVALUES_COUCHBASE;
+    exports.DBSYSTEMVALUES_COUCHDB = DBSYSTEMVALUES_COUCHDB;
+    exports.DBSYSTEMVALUES_DB2 = DBSYSTEMVALUES_DB2;
+    exports.DBSYSTEMVALUES_DERBY = DBSYSTEMVALUES_DERBY;
+    exports.DBSYSTEMVALUES_DYNAMODB = DBSYSTEMVALUES_DYNAMODB;
+    exports.DBSYSTEMVALUES_EDB = DBSYSTEMVALUES_EDB;
+    exports.DBSYSTEMVALUES_ELASTICSEARCH = DBSYSTEMVALUES_ELASTICSEARCH;
+    exports.DBSYSTEMVALUES_FILEMAKER = DBSYSTEMVALUES_FILEMAKER;
+    exports.DBSYSTEMVALUES_FIREBIRD = DBSYSTEMVALUES_FIREBIRD;
+    exports.DBSYSTEMVALUES_FIRSTSQL = DBSYSTEMVALUES_FIRSTSQL;
+    exports.DBSYSTEMVALUES_GEODE = DBSYSTEMVALUES_GEODE;
+    exports.DBSYSTEMVALUES_H2 = DBSYSTEMVALUES_H2;
+    exports.DBSYSTEMVALUES_HANADB = DBSYSTEMVALUES_HANADB;
+    exports.DBSYSTEMVALUES_HBASE = DBSYSTEMVALUES_HBASE;
+    exports.DBSYSTEMVALUES_HIVE = DBSYSTEMVALUES_HIVE;
+    exports.DBSYSTEMVALUES_HSQLDB = DBSYSTEMVALUES_HSQLDB;
+    exports.DBSYSTEMVALUES_INFORMIX = DBSYSTEMVALUES_INFORMIX;
+    exports.DBSYSTEMVALUES_INGRES = DBSYSTEMVALUES_INGRES;
+    exports.DBSYSTEMVALUES_INSTANTDB = DBSYSTEMVALUES_INSTANTDB;
+    exports.DBSYSTEMVALUES_INTERBASE = DBSYSTEMVALUES_INTERBASE;
+    exports.DBSYSTEMVALUES_MARIADB = DBSYSTEMVALUES_MARIADB;
+    exports.DBSYSTEMVALUES_MAXDB = DBSYSTEMVALUES_MAXDB;
+    exports.DBSYSTEMVALUES_MEMCACHED = DBSYSTEMVALUES_MEMCACHED;
+    exports.DBSYSTEMVALUES_MONGODB = DBSYSTEMVALUES_MONGODB;
+    exports.DBSYSTEMVALUES_MSSQL = DBSYSTEMVALUES_MSSQL;
+    exports.DBSYSTEMVALUES_MYSQL = DBSYSTEMVALUES_MYSQL;
+    exports.DBSYSTEMVALUES_NEO4J = DBSYSTEMVALUES_NEO4J;
+    exports.DBSYSTEMVALUES_NETEZZA = DBSYSTEMVALUES_NETEZZA;
+    exports.DBSYSTEMVALUES_ORACLE = DBSYSTEMVALUES_ORACLE;
+    exports.DBSYSTEMVALUES_OTHER_SQL = DBSYSTEMVALUES_OTHER_SQL;
+    exports.DBSYSTEMVALUES_PERVASIVE = DBSYSTEMVALUES_PERVASIVE;
+    exports.DBSYSTEMVALUES_POINTBASE = DBSYSTEMVALUES_POINTBASE;
+    exports.DBSYSTEMVALUES_POSTGRESQL = DBSYSTEMVALUES_POSTGRESQL;
+    exports.DBSYSTEMVALUES_PROGRESS = DBSYSTEMVALUES_PROGRESS;
+    exports.DBSYSTEMVALUES_REDIS = DBSYSTEMVALUES_REDIS;
+    exports.DBSYSTEMVALUES_REDSHIFT = DBSYSTEMVALUES_REDSHIFT;
+    exports.DBSYSTEMVALUES_SQLITE = DBSYSTEMVALUES_SQLITE;
+    exports.DBSYSTEMVALUES_SYBASE = DBSYSTEMVALUES_SYBASE;
+    exports.DBSYSTEMVALUES_TERADATA = DBSYSTEMVALUES_TERADATA;
+    exports.DBSYSTEMVALUES_VERTICA = DBSYSTEMVALUES_VERTICA;
+    exports.DbCassandraConsistencyLevelValues = DbCassandraConsistencyLevelValues;
+    exports.DbSystemValues = DbSystemValues;
+    exports.FAASDOCUMENTOPERATIONVALUES_DELETE = FAASDOCUMENTOPERATIONVALUES_DELETE;
+    exports.FAASDOCUMENTOPERATIONVALUES_EDIT = FAASDOCUMENTOPERATIONVALUES_EDIT;
+    exports.FAASDOCUMENTOPERATIONVALUES_INSERT = FAASDOCUMENTOPERATIONVALUES_INSERT;
+    exports.FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD = FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD;
+    exports.FAASINVOKEDPROVIDERVALUES_AWS = FAASINVOKEDPROVIDERVALUES_AWS;
+    exports.FAASINVOKEDPROVIDERVALUES_AZURE = FAASINVOKEDPROVIDERVALUES_AZURE;
+    exports.FAASINVOKEDPROVIDERVALUES_GCP = FAASINVOKEDPROVIDERVALUES_GCP;
+    exports.FAASTRIGGERVALUES_DATASOURCE = FAASTRIGGERVALUES_DATASOURCE;
+    exports.FAASTRIGGERVALUES_HTTP = FAASTRIGGERVALUES_HTTP;
+    exports.FAASTRIGGERVALUES_OTHER = FAASTRIGGERVALUES_OTHER;
+    exports.FAASTRIGGERVALUES_PUBSUB = FAASTRIGGERVALUES_PUBSUB;
+    exports.FAASTRIGGERVALUES_TIMER = FAASTRIGGERVALUES_TIMER;
+    exports.FaasDocumentOperationValues = FaasDocumentOperationValues;
+    exports.FaasInvokedProviderValues = FaasInvokedProviderValues;
+    exports.FaasTriggerValues = FaasTriggerValues;
+    exports.HTTPFLAVORVALUES_HTTP_1_0 = HTTPFLAVORVALUES_HTTP_1_0;
+    exports.HTTPFLAVORVALUES_HTTP_1_1 = HTTPFLAVORVALUES_HTTP_1_1;
+    exports.HTTPFLAVORVALUES_HTTP_2_0 = HTTPFLAVORVALUES_HTTP_2_0;
+    exports.HTTPFLAVORVALUES_QUIC = HTTPFLAVORVALUES_QUIC;
+    exports.HTTPFLAVORVALUES_SPDY = HTTPFLAVORVALUES_SPDY;
+    exports.HttpFlavorValues = HttpFlavorValues;
+    exports.MESSAGETYPEVALUES_RECEIVED = MESSAGETYPEVALUES_RECEIVED;
+    exports.MESSAGETYPEVALUES_SENT = MESSAGETYPEVALUES_SENT;
+    exports.MESSAGINGDESTINATIONKINDVALUES_QUEUE = MESSAGINGDESTINATIONKINDVALUES_QUEUE;
+    exports.MESSAGINGDESTINATIONKINDVALUES_TOPIC = MESSAGINGDESTINATIONKINDVALUES_TOPIC;
+    exports.MESSAGINGOPERATIONVALUES_PROCESS = MESSAGINGOPERATIONVALUES_PROCESS;
+    exports.MESSAGINGOPERATIONVALUES_RECEIVE = MESSAGINGOPERATIONVALUES_RECEIVE;
+    exports.MessageTypeValues = MessageTypeValues;
+    exports.MessagingDestinationKindValues = MessagingDestinationKindValues;
+    exports.MessagingOperationValues = MessagingOperationValues;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_CDMA = NETHOSTCONNECTIONSUBTYPEVALUES_CDMA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT = NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EDGE = NETHOSTCONNECTIONSUBTYPEVALUES_EDGE;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD = NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0 = NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A = NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B = NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_GPRS = NETHOSTCONNECTIONSUBTYPEVALUES_GPRS;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_GSM = NETHOSTCONNECTIONSUBTYPEVALUES_GSM;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA = NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSPA = NETHOSTCONNECTIONSUBTYPEVALUES_HSPA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP = NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA = NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_IDEN = NETHOSTCONNECTIONSUBTYPEVALUES_IDEN;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN = NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_LTE = NETHOSTCONNECTIONSUBTYPEVALUES_LTE;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA = NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_NR = NETHOSTCONNECTIONSUBTYPEVALUES_NR;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA = NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA = NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_UMTS = NETHOSTCONNECTIONSUBTYPEVALUES_UMTS;
+    exports.NETHOSTCONNECTIONTYPEVALUES_CELL = NETHOSTCONNECTIONTYPEVALUES_CELL;
+    exports.NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE = NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE;
+    exports.NETHOSTCONNECTIONTYPEVALUES_UNKNOWN = NETHOSTCONNECTIONTYPEVALUES_UNKNOWN;
+    exports.NETHOSTCONNECTIONTYPEVALUES_WIFI = NETHOSTCONNECTIONTYPEVALUES_WIFI;
+    exports.NETHOSTCONNECTIONTYPEVALUES_WIRED = NETHOSTCONNECTIONTYPEVALUES_WIRED;
+    exports.NETTRANSPORTVALUES_INPROC = NETTRANSPORTVALUES_INPROC;
+    exports.NETTRANSPORTVALUES_IP = NETTRANSPORTVALUES_IP;
+    exports.NETTRANSPORTVALUES_IP_TCP = NETTRANSPORTVALUES_IP_TCP;
+    exports.NETTRANSPORTVALUES_IP_UDP = NETTRANSPORTVALUES_IP_UDP;
+    exports.NETTRANSPORTVALUES_OTHER = NETTRANSPORTVALUES_OTHER;
+    exports.NETTRANSPORTVALUES_PIPE = NETTRANSPORTVALUES_PIPE;
+    exports.NETTRANSPORTVALUES_UNIX = NETTRANSPORTVALUES_UNIX;
+    exports.NetHostConnectionSubtypeValues = NetHostConnectionSubtypeValues;
+    exports.NetHostConnectionTypeValues = NetHostConnectionTypeValues;
+    exports.NetTransportValues = NetTransportValues;
+    exports.RPCGRPCSTATUSCODEVALUES_ABORTED = RPCGRPCSTATUSCODEVALUES_ABORTED;
+    exports.RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS = RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS;
+    exports.RPCGRPCSTATUSCODEVALUES_CANCELLED = RPCGRPCSTATUSCODEVALUES_CANCELLED;
+    exports.RPCGRPCSTATUSCODEVALUES_DATA_LOSS = RPCGRPCSTATUSCODEVALUES_DATA_LOSS;
+    exports.RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED = RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED;
+    exports.RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION = RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION;
+    exports.RPCGRPCSTATUSCODEVALUES_INTERNAL = RPCGRPCSTATUSCODEVALUES_INTERNAL;
+    exports.RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT = RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT;
+    exports.RPCGRPCSTATUSCODEVALUES_NOT_FOUND = RPCGRPCSTATUSCODEVALUES_NOT_FOUND;
+    exports.RPCGRPCSTATUSCODEVALUES_OK = RPCGRPCSTATUSCODEVALUES_OK;
+    exports.RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE = RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE;
+    exports.RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED = RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED;
+    exports.RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED = RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED;
+    exports.RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED = RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED;
+    exports.RPCGRPCSTATUSCODEVALUES_UNAVAILABLE = RPCGRPCSTATUSCODEVALUES_UNAVAILABLE;
+    exports.RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED = RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED;
+    exports.RPCGRPCSTATUSCODEVALUES_UNKNOWN = RPCGRPCSTATUSCODEVALUES_UNKNOWN;
+    exports.RpcGrpcStatusCodeValues = RpcGrpcStatusCodeValues;
+    exports.SEMATTRS_AWS_DYNAMODB_ATTRIBUTES_TO_GET = SEMATTRS_AWS_DYNAMODB_ATTRIBUTES_TO_GET;
+    exports.SEMATTRS_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS = SEMATTRS_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS;
+    exports.SEMATTRS_AWS_DYNAMODB_CONSISTENT_READ = SEMATTRS_AWS_DYNAMODB_CONSISTENT_READ;
+    exports.SEMATTRS_AWS_DYNAMODB_CONSUMED_CAPACITY = SEMATTRS_AWS_DYNAMODB_CONSUMED_CAPACITY;
+    exports.SEMATTRS_AWS_DYNAMODB_COUNT = SEMATTRS_AWS_DYNAMODB_COUNT;
+    exports.SEMATTRS_AWS_DYNAMODB_EXCLUSIVE_START_TABLE = SEMATTRS_AWS_DYNAMODB_EXCLUSIVE_START_TABLE;
+    exports.SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES = SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES;
+    exports.SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES = SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES;
+    exports.SEMATTRS_AWS_DYNAMODB_INDEX_NAME = SEMATTRS_AWS_DYNAMODB_INDEX_NAME;
+    exports.SEMATTRS_AWS_DYNAMODB_ITEM_COLLECTION_METRICS = SEMATTRS_AWS_DYNAMODB_ITEM_COLLECTION_METRICS;
+    exports.SEMATTRS_AWS_DYNAMODB_LIMIT = SEMATTRS_AWS_DYNAMODB_LIMIT;
+    exports.SEMATTRS_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES = SEMATTRS_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES;
+    exports.SEMATTRS_AWS_DYNAMODB_PROJECTION = SEMATTRS_AWS_DYNAMODB_PROJECTION;
+    exports.SEMATTRS_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY = SEMATTRS_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY;
+    exports.SEMATTRS_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY = SEMATTRS_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY;
+    exports.SEMATTRS_AWS_DYNAMODB_SCANNED_COUNT = SEMATTRS_AWS_DYNAMODB_SCANNED_COUNT;
+    exports.SEMATTRS_AWS_DYNAMODB_SCAN_FORWARD = SEMATTRS_AWS_DYNAMODB_SCAN_FORWARD;
+    exports.SEMATTRS_AWS_DYNAMODB_SEGMENT = SEMATTRS_AWS_DYNAMODB_SEGMENT;
+    exports.SEMATTRS_AWS_DYNAMODB_SELECT = SEMATTRS_AWS_DYNAMODB_SELECT;
+    exports.SEMATTRS_AWS_DYNAMODB_TABLE_COUNT = SEMATTRS_AWS_DYNAMODB_TABLE_COUNT;
+    exports.SEMATTRS_AWS_DYNAMODB_TABLE_NAMES = SEMATTRS_AWS_DYNAMODB_TABLE_NAMES;
+    exports.SEMATTRS_AWS_DYNAMODB_TOTAL_SEGMENTS = SEMATTRS_AWS_DYNAMODB_TOTAL_SEGMENTS;
+    exports.SEMATTRS_AWS_LAMBDA_INVOKED_ARN = SEMATTRS_AWS_LAMBDA_INVOKED_ARN;
+    exports.SEMATTRS_CODE_FILEPATH = SEMATTRS_CODE_FILEPATH;
+    exports.SEMATTRS_CODE_FUNCTION = SEMATTRS_CODE_FUNCTION;
+    exports.SEMATTRS_CODE_LINENO = SEMATTRS_CODE_LINENO;
+    exports.SEMATTRS_CODE_NAMESPACE = SEMATTRS_CODE_NAMESPACE;
+    exports.SEMATTRS_DB_CASSANDRA_CONSISTENCY_LEVEL = SEMATTRS_DB_CASSANDRA_CONSISTENCY_LEVEL;
+    exports.SEMATTRS_DB_CASSANDRA_COORDINATOR_DC = SEMATTRS_DB_CASSANDRA_COORDINATOR_DC;
+    exports.SEMATTRS_DB_CASSANDRA_COORDINATOR_ID = SEMATTRS_DB_CASSANDRA_COORDINATOR_ID;
+    exports.SEMATTRS_DB_CASSANDRA_IDEMPOTENCE = SEMATTRS_DB_CASSANDRA_IDEMPOTENCE;
+    exports.SEMATTRS_DB_CASSANDRA_KEYSPACE = SEMATTRS_DB_CASSANDRA_KEYSPACE;
+    exports.SEMATTRS_DB_CASSANDRA_PAGE_SIZE = SEMATTRS_DB_CASSANDRA_PAGE_SIZE;
+    exports.SEMATTRS_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT = SEMATTRS_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT;
+    exports.SEMATTRS_DB_CASSANDRA_TABLE = SEMATTRS_DB_CASSANDRA_TABLE;
+    exports.SEMATTRS_DB_CONNECTION_STRING = SEMATTRS_DB_CONNECTION_STRING;
+    exports.SEMATTRS_DB_HBASE_NAMESPACE = SEMATTRS_DB_HBASE_NAMESPACE;
+    exports.SEMATTRS_DB_JDBC_DRIVER_CLASSNAME = SEMATTRS_DB_JDBC_DRIVER_CLASSNAME;
+    exports.SEMATTRS_DB_MONGODB_COLLECTION = SEMATTRS_DB_MONGODB_COLLECTION;
+    exports.SEMATTRS_DB_MSSQL_INSTANCE_NAME = SEMATTRS_DB_MSSQL_INSTANCE_NAME;
+    exports.SEMATTRS_DB_NAME = SEMATTRS_DB_NAME;
+    exports.SEMATTRS_DB_OPERATION = SEMATTRS_DB_OPERATION;
+    exports.SEMATTRS_DB_REDIS_DATABASE_INDEX = SEMATTRS_DB_REDIS_DATABASE_INDEX;
+    exports.SEMATTRS_DB_SQL_TABLE = SEMATTRS_DB_SQL_TABLE;
+    exports.SEMATTRS_DB_STATEMENT = SEMATTRS_DB_STATEMENT;
+    exports.SEMATTRS_DB_SYSTEM = SEMATTRS_DB_SYSTEM;
+    exports.SEMATTRS_DB_USER = SEMATTRS_DB_USER;
+    exports.SEMATTRS_ENDUSER_ID = SEMATTRS_ENDUSER_ID;
+    exports.SEMATTRS_ENDUSER_ROLE = SEMATTRS_ENDUSER_ROLE;
+    exports.SEMATTRS_ENDUSER_SCOPE = SEMATTRS_ENDUSER_SCOPE;
+    exports.SEMATTRS_EXCEPTION_ESCAPED = SEMATTRS_EXCEPTION_ESCAPED;
+    exports.SEMATTRS_EXCEPTION_MESSAGE = SEMATTRS_EXCEPTION_MESSAGE;
+    exports.SEMATTRS_EXCEPTION_STACKTRACE = SEMATTRS_EXCEPTION_STACKTRACE;
+    exports.SEMATTRS_EXCEPTION_TYPE = SEMATTRS_EXCEPTION_TYPE;
+    exports.SEMATTRS_FAAS_COLDSTART = SEMATTRS_FAAS_COLDSTART;
+    exports.SEMATTRS_FAAS_CRON = SEMATTRS_FAAS_CRON;
+    exports.SEMATTRS_FAAS_DOCUMENT_COLLECTION = SEMATTRS_FAAS_DOCUMENT_COLLECTION;
+    exports.SEMATTRS_FAAS_DOCUMENT_NAME = SEMATTRS_FAAS_DOCUMENT_NAME;
+    exports.SEMATTRS_FAAS_DOCUMENT_OPERATION = SEMATTRS_FAAS_DOCUMENT_OPERATION;
+    exports.SEMATTRS_FAAS_DOCUMENT_TIME = SEMATTRS_FAAS_DOCUMENT_TIME;
+    exports.SEMATTRS_FAAS_EXECUTION = SEMATTRS_FAAS_EXECUTION;
+    exports.SEMATTRS_FAAS_INVOKED_NAME = SEMATTRS_FAAS_INVOKED_NAME;
+    exports.SEMATTRS_FAAS_INVOKED_PROVIDER = SEMATTRS_FAAS_INVOKED_PROVIDER;
+    exports.SEMATTRS_FAAS_INVOKED_REGION = SEMATTRS_FAAS_INVOKED_REGION;
+    exports.SEMATTRS_FAAS_TIME = SEMATTRS_FAAS_TIME;
+    exports.SEMATTRS_FAAS_TRIGGER = SEMATTRS_FAAS_TRIGGER;
+    exports.SEMATTRS_HTTP_CLIENT_IP = SEMATTRS_HTTP_CLIENT_IP;
+    exports.SEMATTRS_HTTP_FLAVOR = SEMATTRS_HTTP_FLAVOR;
+    exports.SEMATTRS_HTTP_HOST = SEMATTRS_HTTP_HOST;
+    exports.SEMATTRS_HTTP_METHOD = SEMATTRS_HTTP_METHOD;
+    exports.SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH = SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH;
+    exports.SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED = SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED;
+    exports.SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH = SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH;
+    exports.SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED = SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED;
+    exports.SEMATTRS_HTTP_ROUTE = SEMATTRS_HTTP_ROUTE;
+    exports.SEMATTRS_HTTP_SCHEME = SEMATTRS_HTTP_SCHEME;
+    exports.SEMATTRS_HTTP_SERVER_NAME = SEMATTRS_HTTP_SERVER_NAME;
+    exports.SEMATTRS_HTTP_STATUS_CODE = SEMATTRS_HTTP_STATUS_CODE;
+    exports.SEMATTRS_HTTP_TARGET = SEMATTRS_HTTP_TARGET;
+    exports.SEMATTRS_HTTP_URL = SEMATTRS_HTTP_URL;
+    exports.SEMATTRS_HTTP_USER_AGENT = SEMATTRS_HTTP_USER_AGENT;
+    exports.SEMATTRS_MESSAGE_COMPRESSED_SIZE = SEMATTRS_MESSAGE_COMPRESSED_SIZE;
+    exports.SEMATTRS_MESSAGE_ID = SEMATTRS_MESSAGE_ID;
+    exports.SEMATTRS_MESSAGE_TYPE = SEMATTRS_MESSAGE_TYPE;
+    exports.SEMATTRS_MESSAGE_UNCOMPRESSED_SIZE = SEMATTRS_MESSAGE_UNCOMPRESSED_SIZE;
+    exports.SEMATTRS_MESSAGING_CONSUMER_ID = SEMATTRS_MESSAGING_CONSUMER_ID;
+    exports.SEMATTRS_MESSAGING_CONVERSATION_ID = SEMATTRS_MESSAGING_CONVERSATION_ID;
+    exports.SEMATTRS_MESSAGING_DESTINATION = SEMATTRS_MESSAGING_DESTINATION;
+    exports.SEMATTRS_MESSAGING_DESTINATION_KIND = SEMATTRS_MESSAGING_DESTINATION_KIND;
+    exports.SEMATTRS_MESSAGING_KAFKA_CLIENT_ID = SEMATTRS_MESSAGING_KAFKA_CLIENT_ID;
+    exports.SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP = SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP;
+    exports.SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY = SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY;
+    exports.SEMATTRS_MESSAGING_KAFKA_PARTITION = SEMATTRS_MESSAGING_KAFKA_PARTITION;
+    exports.SEMATTRS_MESSAGING_KAFKA_TOMBSTONE = SEMATTRS_MESSAGING_KAFKA_TOMBSTONE;
+    exports.SEMATTRS_MESSAGING_MESSAGE_ID = SEMATTRS_MESSAGING_MESSAGE_ID;
+    exports.SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES = SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES;
+    exports.SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES = SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES;
+    exports.SEMATTRS_MESSAGING_OPERATION = SEMATTRS_MESSAGING_OPERATION;
+    exports.SEMATTRS_MESSAGING_PROTOCOL = SEMATTRS_MESSAGING_PROTOCOL;
+    exports.SEMATTRS_MESSAGING_PROTOCOL_VERSION = SEMATTRS_MESSAGING_PROTOCOL_VERSION;
+    exports.SEMATTRS_MESSAGING_RABBITMQ_ROUTING_KEY = SEMATTRS_MESSAGING_RABBITMQ_ROUTING_KEY;
+    exports.SEMATTRS_MESSAGING_SYSTEM = SEMATTRS_MESSAGING_SYSTEM;
+    exports.SEMATTRS_MESSAGING_TEMP_DESTINATION = SEMATTRS_MESSAGING_TEMP_DESTINATION;
+    exports.SEMATTRS_MESSAGING_URL = SEMATTRS_MESSAGING_URL;
+    exports.SEMATTRS_NET_HOST_CARRIER_ICC = SEMATTRS_NET_HOST_CARRIER_ICC;
+    exports.SEMATTRS_NET_HOST_CARRIER_MCC = SEMATTRS_NET_HOST_CARRIER_MCC;
+    exports.SEMATTRS_NET_HOST_CARRIER_MNC = SEMATTRS_NET_HOST_CARRIER_MNC;
+    exports.SEMATTRS_NET_HOST_CARRIER_NAME = SEMATTRS_NET_HOST_CARRIER_NAME;
+    exports.SEMATTRS_NET_HOST_CONNECTION_SUBTYPE = SEMATTRS_NET_HOST_CONNECTION_SUBTYPE;
+    exports.SEMATTRS_NET_HOST_CONNECTION_TYPE = SEMATTRS_NET_HOST_CONNECTION_TYPE;
+    exports.SEMATTRS_NET_HOST_IP = SEMATTRS_NET_HOST_IP;
+    exports.SEMATTRS_NET_HOST_NAME = SEMATTRS_NET_HOST_NAME;
+    exports.SEMATTRS_NET_HOST_PORT = SEMATTRS_NET_HOST_PORT;
+    exports.SEMATTRS_NET_PEER_IP = SEMATTRS_NET_PEER_IP;
+    exports.SEMATTRS_NET_PEER_NAME = SEMATTRS_NET_PEER_NAME;
+    exports.SEMATTRS_NET_PEER_PORT = SEMATTRS_NET_PEER_PORT;
+    exports.SEMATTRS_NET_TRANSPORT = SEMATTRS_NET_TRANSPORT;
+    exports.SEMATTRS_PEER_SERVICE = SEMATTRS_PEER_SERVICE;
+    exports.SEMATTRS_RPC_GRPC_STATUS_CODE = SEMATTRS_RPC_GRPC_STATUS_CODE;
+    exports.SEMATTRS_RPC_JSONRPC_ERROR_CODE = SEMATTRS_RPC_JSONRPC_ERROR_CODE;
+    exports.SEMATTRS_RPC_JSONRPC_ERROR_MESSAGE = SEMATTRS_RPC_JSONRPC_ERROR_MESSAGE;
+    exports.SEMATTRS_RPC_JSONRPC_REQUEST_ID = SEMATTRS_RPC_JSONRPC_REQUEST_ID;
+    exports.SEMATTRS_RPC_JSONRPC_VERSION = SEMATTRS_RPC_JSONRPC_VERSION;
+    exports.SEMATTRS_RPC_METHOD = SEMATTRS_RPC_METHOD;
+    exports.SEMATTRS_RPC_SERVICE = SEMATTRS_RPC_SERVICE;
+    exports.SEMATTRS_RPC_SYSTEM = SEMATTRS_RPC_SYSTEM;
+    exports.SEMATTRS_THREAD_ID = SEMATTRS_THREAD_ID;
+    exports.SEMATTRS_THREAD_NAME = SEMATTRS_THREAD_NAME;
+    exports.SemanticAttributes = SemanticAttributes;
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/resource/SemanticResourceAttributes.cjs
+var require_SemanticResourceAttributes = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/resource/SemanticResourceAttributes.cjs"(exports) {
+    var require_utils11 = require_utils5();
+    var TMP_CLOUD_PROVIDER = "cloud.provider";
+    var TMP_CLOUD_ACCOUNT_ID = "cloud.account.id";
+    var TMP_CLOUD_REGION = "cloud.region";
+    var TMP_CLOUD_AVAILABILITY_ZONE = "cloud.availability_zone";
+    var TMP_CLOUD_PLATFORM = "cloud.platform";
+    var TMP_AWS_ECS_CONTAINER_ARN = "aws.ecs.container.arn";
+    var TMP_AWS_ECS_CLUSTER_ARN = "aws.ecs.cluster.arn";
+    var TMP_AWS_ECS_LAUNCHTYPE = "aws.ecs.launchtype";
+    var TMP_AWS_ECS_TASK_ARN = "aws.ecs.task.arn";
+    var TMP_AWS_ECS_TASK_FAMILY = "aws.ecs.task.family";
+    var TMP_AWS_ECS_TASK_REVISION = "aws.ecs.task.revision";
+    var TMP_AWS_EKS_CLUSTER_ARN = "aws.eks.cluster.arn";
+    var TMP_AWS_LOG_GROUP_NAMES = "aws.log.group.names";
+    var TMP_AWS_LOG_GROUP_ARNS = "aws.log.group.arns";
+    var TMP_AWS_LOG_STREAM_NAMES = "aws.log.stream.names";
+    var TMP_AWS_LOG_STREAM_ARNS = "aws.log.stream.arns";
+    var TMP_CONTAINER_NAME = "container.name";
+    var TMP_CONTAINER_ID = "container.id";
+    var TMP_CONTAINER_RUNTIME = "container.runtime";
+    var TMP_CONTAINER_IMAGE_NAME = "container.image.name";
+    var TMP_CONTAINER_IMAGE_TAG = "container.image.tag";
+    var TMP_DEPLOYMENT_ENVIRONMENT = "deployment.environment";
+    var TMP_DEVICE_ID = "device.id";
+    var TMP_DEVICE_MODEL_IDENTIFIER = "device.model.identifier";
+    var TMP_DEVICE_MODEL_NAME = "device.model.name";
+    var TMP_FAAS_NAME = "faas.name";
+    var TMP_FAAS_ID = "faas.id";
+    var TMP_FAAS_VERSION = "faas.version";
+    var TMP_FAAS_INSTANCE = "faas.instance";
+    var TMP_FAAS_MAX_MEMORY = "faas.max_memory";
+    var TMP_HOST_ID = "host.id";
+    var TMP_HOST_NAME = "host.name";
+    var TMP_HOST_TYPE = "host.type";
+    var TMP_HOST_ARCH = "host.arch";
+    var TMP_HOST_IMAGE_NAME = "host.image.name";
+    var TMP_HOST_IMAGE_ID = "host.image.id";
+    var TMP_HOST_IMAGE_VERSION = "host.image.version";
+    var TMP_K8S_CLUSTER_NAME = "k8s.cluster.name";
+    var TMP_K8S_NODE_NAME = "k8s.node.name";
+    var TMP_K8S_NODE_UID = "k8s.node.uid";
+    var TMP_K8S_NAMESPACE_NAME = "k8s.namespace.name";
+    var TMP_K8S_POD_UID = "k8s.pod.uid";
+    var TMP_K8S_POD_NAME = "k8s.pod.name";
+    var TMP_K8S_CONTAINER_NAME = "k8s.container.name";
+    var TMP_K8S_REPLICASET_UID = "k8s.replicaset.uid";
+    var TMP_K8S_REPLICASET_NAME = "k8s.replicaset.name";
+    var TMP_K8S_DEPLOYMENT_UID = "k8s.deployment.uid";
+    var TMP_K8S_DEPLOYMENT_NAME = "k8s.deployment.name";
+    var TMP_K8S_STATEFULSET_UID = "k8s.statefulset.uid";
+    var TMP_K8S_STATEFULSET_NAME = "k8s.statefulset.name";
+    var TMP_K8S_DAEMONSET_UID = "k8s.daemonset.uid";
+    var TMP_K8S_DAEMONSET_NAME = "k8s.daemonset.name";
+    var TMP_K8S_JOB_UID = "k8s.job.uid";
+    var TMP_K8S_JOB_NAME = "k8s.job.name";
+    var TMP_K8S_CRONJOB_UID = "k8s.cronjob.uid";
+    var TMP_K8S_CRONJOB_NAME = "k8s.cronjob.name";
+    var TMP_OS_TYPE = "os.type";
+    var TMP_OS_DESCRIPTION = "os.description";
+    var TMP_OS_NAME = "os.name";
+    var TMP_OS_VERSION = "os.version";
+    var TMP_PROCESS_PID = "process.pid";
+    var TMP_PROCESS_EXECUTABLE_NAME = "process.executable.name";
+    var TMP_PROCESS_EXECUTABLE_PATH = "process.executable.path";
+    var TMP_PROCESS_COMMAND = "process.command";
+    var TMP_PROCESS_COMMAND_LINE = "process.command_line";
+    var TMP_PROCESS_COMMAND_ARGS = "process.command_args";
+    var TMP_PROCESS_OWNER = "process.owner";
+    var TMP_PROCESS_RUNTIME_NAME = "process.runtime.name";
+    var TMP_PROCESS_RUNTIME_VERSION = "process.runtime.version";
+    var TMP_PROCESS_RUNTIME_DESCRIPTION = "process.runtime.description";
+    var TMP_SERVICE_NAME = "service.name";
+    var TMP_SERVICE_NAMESPACE = "service.namespace";
+    var TMP_SERVICE_INSTANCE_ID = "service.instance.id";
+    var TMP_SERVICE_VERSION = "service.version";
+    var TMP_TELEMETRY_SDK_NAME = "telemetry.sdk.name";
+    var TMP_TELEMETRY_SDK_LANGUAGE = "telemetry.sdk.language";
+    var TMP_TELEMETRY_SDK_VERSION = "telemetry.sdk.version";
+    var TMP_TELEMETRY_AUTO_VERSION = "telemetry.auto.version";
+    var TMP_WEBENGINE_NAME = "webengine.name";
+    var TMP_WEBENGINE_VERSION = "webengine.version";
+    var TMP_WEBENGINE_DESCRIPTION = "webengine.description";
+    var SEMRESATTRS_CLOUD_PROVIDER = TMP_CLOUD_PROVIDER;
+    var SEMRESATTRS_CLOUD_ACCOUNT_ID = TMP_CLOUD_ACCOUNT_ID;
+    var SEMRESATTRS_CLOUD_REGION = TMP_CLOUD_REGION;
+    var SEMRESATTRS_CLOUD_AVAILABILITY_ZONE = TMP_CLOUD_AVAILABILITY_ZONE;
+    var SEMRESATTRS_CLOUD_PLATFORM = TMP_CLOUD_PLATFORM;
+    var SEMRESATTRS_AWS_ECS_CONTAINER_ARN = TMP_AWS_ECS_CONTAINER_ARN;
+    var SEMRESATTRS_AWS_ECS_CLUSTER_ARN = TMP_AWS_ECS_CLUSTER_ARN;
+    var SEMRESATTRS_AWS_ECS_LAUNCHTYPE = TMP_AWS_ECS_LAUNCHTYPE;
+    var SEMRESATTRS_AWS_ECS_TASK_ARN = TMP_AWS_ECS_TASK_ARN;
+    var SEMRESATTRS_AWS_ECS_TASK_FAMILY = TMP_AWS_ECS_TASK_FAMILY;
+    var SEMRESATTRS_AWS_ECS_TASK_REVISION = TMP_AWS_ECS_TASK_REVISION;
+    var SEMRESATTRS_AWS_EKS_CLUSTER_ARN = TMP_AWS_EKS_CLUSTER_ARN;
+    var SEMRESATTRS_AWS_LOG_GROUP_NAMES = TMP_AWS_LOG_GROUP_NAMES;
+    var SEMRESATTRS_AWS_LOG_GROUP_ARNS = TMP_AWS_LOG_GROUP_ARNS;
+    var SEMRESATTRS_AWS_LOG_STREAM_NAMES = TMP_AWS_LOG_STREAM_NAMES;
+    var SEMRESATTRS_AWS_LOG_STREAM_ARNS = TMP_AWS_LOG_STREAM_ARNS;
+    var SEMRESATTRS_CONTAINER_NAME = TMP_CONTAINER_NAME;
+    var SEMRESATTRS_CONTAINER_ID = TMP_CONTAINER_ID;
+    var SEMRESATTRS_CONTAINER_RUNTIME = TMP_CONTAINER_RUNTIME;
+    var SEMRESATTRS_CONTAINER_IMAGE_NAME = TMP_CONTAINER_IMAGE_NAME;
+    var SEMRESATTRS_CONTAINER_IMAGE_TAG = TMP_CONTAINER_IMAGE_TAG;
+    var SEMRESATTRS_DEPLOYMENT_ENVIRONMENT = TMP_DEPLOYMENT_ENVIRONMENT;
+    var SEMRESATTRS_DEVICE_ID = TMP_DEVICE_ID;
+    var SEMRESATTRS_DEVICE_MODEL_IDENTIFIER = TMP_DEVICE_MODEL_IDENTIFIER;
+    var SEMRESATTRS_DEVICE_MODEL_NAME = TMP_DEVICE_MODEL_NAME;
+    var SEMRESATTRS_FAAS_NAME = TMP_FAAS_NAME;
+    var SEMRESATTRS_FAAS_ID = TMP_FAAS_ID;
+    var SEMRESATTRS_FAAS_VERSION = TMP_FAAS_VERSION;
+    var SEMRESATTRS_FAAS_INSTANCE = TMP_FAAS_INSTANCE;
+    var SEMRESATTRS_FAAS_MAX_MEMORY = TMP_FAAS_MAX_MEMORY;
+    var SEMRESATTRS_HOST_ID = TMP_HOST_ID;
+    var SEMRESATTRS_HOST_NAME = TMP_HOST_NAME;
+    var SEMRESATTRS_HOST_TYPE = TMP_HOST_TYPE;
+    var SEMRESATTRS_HOST_ARCH = TMP_HOST_ARCH;
+    var SEMRESATTRS_HOST_IMAGE_NAME = TMP_HOST_IMAGE_NAME;
+    var SEMRESATTRS_HOST_IMAGE_ID = TMP_HOST_IMAGE_ID;
+    var SEMRESATTRS_HOST_IMAGE_VERSION = TMP_HOST_IMAGE_VERSION;
+    var SEMRESATTRS_K8S_CLUSTER_NAME = TMP_K8S_CLUSTER_NAME;
+    var SEMRESATTRS_K8S_NODE_NAME = TMP_K8S_NODE_NAME;
+    var SEMRESATTRS_K8S_NODE_UID = TMP_K8S_NODE_UID;
+    var SEMRESATTRS_K8S_NAMESPACE_NAME = TMP_K8S_NAMESPACE_NAME;
+    var SEMRESATTRS_K8S_POD_UID = TMP_K8S_POD_UID;
+    var SEMRESATTRS_K8S_POD_NAME = TMP_K8S_POD_NAME;
+    var SEMRESATTRS_K8S_CONTAINER_NAME = TMP_K8S_CONTAINER_NAME;
+    var SEMRESATTRS_K8S_REPLICASET_UID = TMP_K8S_REPLICASET_UID;
+    var SEMRESATTRS_K8S_REPLICASET_NAME = TMP_K8S_REPLICASET_NAME;
+    var SEMRESATTRS_K8S_DEPLOYMENT_UID = TMP_K8S_DEPLOYMENT_UID;
+    var SEMRESATTRS_K8S_DEPLOYMENT_NAME = TMP_K8S_DEPLOYMENT_NAME;
+    var SEMRESATTRS_K8S_STATEFULSET_UID = TMP_K8S_STATEFULSET_UID;
+    var SEMRESATTRS_K8S_STATEFULSET_NAME = TMP_K8S_STATEFULSET_NAME;
+    var SEMRESATTRS_K8S_DAEMONSET_UID = TMP_K8S_DAEMONSET_UID;
+    var SEMRESATTRS_K8S_DAEMONSET_NAME = TMP_K8S_DAEMONSET_NAME;
+    var SEMRESATTRS_K8S_JOB_UID = TMP_K8S_JOB_UID;
+    var SEMRESATTRS_K8S_JOB_NAME = TMP_K8S_JOB_NAME;
+    var SEMRESATTRS_K8S_CRONJOB_UID = TMP_K8S_CRONJOB_UID;
+    var SEMRESATTRS_K8S_CRONJOB_NAME = TMP_K8S_CRONJOB_NAME;
+    var SEMRESATTRS_OS_TYPE = TMP_OS_TYPE;
+    var SEMRESATTRS_OS_DESCRIPTION = TMP_OS_DESCRIPTION;
+    var SEMRESATTRS_OS_NAME = TMP_OS_NAME;
+    var SEMRESATTRS_OS_VERSION = TMP_OS_VERSION;
+    var SEMRESATTRS_PROCESS_PID = TMP_PROCESS_PID;
+    var SEMRESATTRS_PROCESS_EXECUTABLE_NAME = TMP_PROCESS_EXECUTABLE_NAME;
+    var SEMRESATTRS_PROCESS_EXECUTABLE_PATH = TMP_PROCESS_EXECUTABLE_PATH;
+    var SEMRESATTRS_PROCESS_COMMAND = TMP_PROCESS_COMMAND;
+    var SEMRESATTRS_PROCESS_COMMAND_LINE = TMP_PROCESS_COMMAND_LINE;
+    var SEMRESATTRS_PROCESS_COMMAND_ARGS = TMP_PROCESS_COMMAND_ARGS;
+    var SEMRESATTRS_PROCESS_OWNER = TMP_PROCESS_OWNER;
+    var SEMRESATTRS_PROCESS_RUNTIME_NAME = TMP_PROCESS_RUNTIME_NAME;
+    var SEMRESATTRS_PROCESS_RUNTIME_VERSION = TMP_PROCESS_RUNTIME_VERSION;
+    var SEMRESATTRS_PROCESS_RUNTIME_DESCRIPTION = TMP_PROCESS_RUNTIME_DESCRIPTION;
+    var SEMRESATTRS_SERVICE_NAME = TMP_SERVICE_NAME;
+    var SEMRESATTRS_SERVICE_NAMESPACE = TMP_SERVICE_NAMESPACE;
+    var SEMRESATTRS_SERVICE_INSTANCE_ID = TMP_SERVICE_INSTANCE_ID;
+    var SEMRESATTRS_SERVICE_VERSION = TMP_SERVICE_VERSION;
+    var SEMRESATTRS_TELEMETRY_SDK_NAME = TMP_TELEMETRY_SDK_NAME;
+    var SEMRESATTRS_TELEMETRY_SDK_LANGUAGE = TMP_TELEMETRY_SDK_LANGUAGE;
+    var SEMRESATTRS_TELEMETRY_SDK_VERSION = TMP_TELEMETRY_SDK_VERSION;
+    var SEMRESATTRS_TELEMETRY_AUTO_VERSION = TMP_TELEMETRY_AUTO_VERSION;
+    var SEMRESATTRS_WEBENGINE_NAME = TMP_WEBENGINE_NAME;
+    var SEMRESATTRS_WEBENGINE_VERSION = TMP_WEBENGINE_VERSION;
+    var SEMRESATTRS_WEBENGINE_DESCRIPTION = TMP_WEBENGINE_DESCRIPTION;
+    var SemanticResourceAttributes = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_CLOUD_PROVIDER,
+      TMP_CLOUD_ACCOUNT_ID,
+      TMP_CLOUD_REGION,
+      TMP_CLOUD_AVAILABILITY_ZONE,
+      TMP_CLOUD_PLATFORM,
+      TMP_AWS_ECS_CONTAINER_ARN,
+      TMP_AWS_ECS_CLUSTER_ARN,
+      TMP_AWS_ECS_LAUNCHTYPE,
+      TMP_AWS_ECS_TASK_ARN,
+      TMP_AWS_ECS_TASK_FAMILY,
+      TMP_AWS_ECS_TASK_REVISION,
+      TMP_AWS_EKS_CLUSTER_ARN,
+      TMP_AWS_LOG_GROUP_NAMES,
+      TMP_AWS_LOG_GROUP_ARNS,
+      TMP_AWS_LOG_STREAM_NAMES,
+      TMP_AWS_LOG_STREAM_ARNS,
+      TMP_CONTAINER_NAME,
+      TMP_CONTAINER_ID,
+      TMP_CONTAINER_RUNTIME,
+      TMP_CONTAINER_IMAGE_NAME,
+      TMP_CONTAINER_IMAGE_TAG,
+      TMP_DEPLOYMENT_ENVIRONMENT,
+      TMP_DEVICE_ID,
+      TMP_DEVICE_MODEL_IDENTIFIER,
+      TMP_DEVICE_MODEL_NAME,
+      TMP_FAAS_NAME,
+      TMP_FAAS_ID,
+      TMP_FAAS_VERSION,
+      TMP_FAAS_INSTANCE,
+      TMP_FAAS_MAX_MEMORY,
+      TMP_HOST_ID,
+      TMP_HOST_NAME,
+      TMP_HOST_TYPE,
+      TMP_HOST_ARCH,
+      TMP_HOST_IMAGE_NAME,
+      TMP_HOST_IMAGE_ID,
+      TMP_HOST_IMAGE_VERSION,
+      TMP_K8S_CLUSTER_NAME,
+      TMP_K8S_NODE_NAME,
+      TMP_K8S_NODE_UID,
+      TMP_K8S_NAMESPACE_NAME,
+      TMP_K8S_POD_UID,
+      TMP_K8S_POD_NAME,
+      TMP_K8S_CONTAINER_NAME,
+      TMP_K8S_REPLICASET_UID,
+      TMP_K8S_REPLICASET_NAME,
+      TMP_K8S_DEPLOYMENT_UID,
+      TMP_K8S_DEPLOYMENT_NAME,
+      TMP_K8S_STATEFULSET_UID,
+      TMP_K8S_STATEFULSET_NAME,
+      TMP_K8S_DAEMONSET_UID,
+      TMP_K8S_DAEMONSET_NAME,
+      TMP_K8S_JOB_UID,
+      TMP_K8S_JOB_NAME,
+      TMP_K8S_CRONJOB_UID,
+      TMP_K8S_CRONJOB_NAME,
+      TMP_OS_TYPE,
+      TMP_OS_DESCRIPTION,
+      TMP_OS_NAME,
+      TMP_OS_VERSION,
+      TMP_PROCESS_PID,
+      TMP_PROCESS_EXECUTABLE_NAME,
+      TMP_PROCESS_EXECUTABLE_PATH,
+      TMP_PROCESS_COMMAND,
+      TMP_PROCESS_COMMAND_LINE,
+      TMP_PROCESS_COMMAND_ARGS,
+      TMP_PROCESS_OWNER,
+      TMP_PROCESS_RUNTIME_NAME,
+      TMP_PROCESS_RUNTIME_VERSION,
+      TMP_PROCESS_RUNTIME_DESCRIPTION,
+      TMP_SERVICE_NAME,
+      TMP_SERVICE_NAMESPACE,
+      TMP_SERVICE_INSTANCE_ID,
+      TMP_SERVICE_VERSION,
+      TMP_TELEMETRY_SDK_NAME,
+      TMP_TELEMETRY_SDK_LANGUAGE,
+      TMP_TELEMETRY_SDK_VERSION,
+      TMP_TELEMETRY_AUTO_VERSION,
+      TMP_WEBENGINE_NAME,
+      TMP_WEBENGINE_VERSION,
+      TMP_WEBENGINE_DESCRIPTION
+    ]);
+    var TMP_CLOUDPROVIDERVALUES_ALIBABA_CLOUD = "alibaba_cloud";
+    var TMP_CLOUDPROVIDERVALUES_AWS = "aws";
+    var TMP_CLOUDPROVIDERVALUES_AZURE = "azure";
+    var TMP_CLOUDPROVIDERVALUES_GCP = "gcp";
+    var CLOUDPROVIDERVALUES_ALIBABA_CLOUD = TMP_CLOUDPROVIDERVALUES_ALIBABA_CLOUD;
+    var CLOUDPROVIDERVALUES_AWS = TMP_CLOUDPROVIDERVALUES_AWS;
+    var CLOUDPROVIDERVALUES_AZURE = TMP_CLOUDPROVIDERVALUES_AZURE;
+    var CLOUDPROVIDERVALUES_GCP = TMP_CLOUDPROVIDERVALUES_GCP;
+    var CloudProviderValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_CLOUDPROVIDERVALUES_ALIBABA_CLOUD,
+      TMP_CLOUDPROVIDERVALUES_AWS,
+      TMP_CLOUDPROVIDERVALUES_AZURE,
+      TMP_CLOUDPROVIDERVALUES_GCP
+    ]);
+    var TMP_CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS = "alibaba_cloud_ecs";
+    var TMP_CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC = "alibaba_cloud_fc";
+    var TMP_CLOUDPLATFORMVALUES_AWS_EC2 = "aws_ec2";
+    var TMP_CLOUDPLATFORMVALUES_AWS_ECS = "aws_ecs";
+    var TMP_CLOUDPLATFORMVALUES_AWS_EKS = "aws_eks";
+    var TMP_CLOUDPLATFORMVALUES_AWS_LAMBDA = "aws_lambda";
+    var TMP_CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK = "aws_elastic_beanstalk";
+    var TMP_CLOUDPLATFORMVALUES_AZURE_VM = "azure_vm";
+    var TMP_CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES = "azure_container_instances";
+    var TMP_CLOUDPLATFORMVALUES_AZURE_AKS = "azure_aks";
+    var TMP_CLOUDPLATFORMVALUES_AZURE_FUNCTIONS = "azure_functions";
+    var TMP_CLOUDPLATFORMVALUES_AZURE_APP_SERVICE = "azure_app_service";
+    var TMP_CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE = "gcp_compute_engine";
+    var TMP_CLOUDPLATFORMVALUES_GCP_CLOUD_RUN = "gcp_cloud_run";
+    var TMP_CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE = "gcp_kubernetes_engine";
+    var TMP_CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS = "gcp_cloud_functions";
+    var TMP_CLOUDPLATFORMVALUES_GCP_APP_ENGINE = "gcp_app_engine";
+    var CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS = TMP_CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS;
+    var CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC = TMP_CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC;
+    var CLOUDPLATFORMVALUES_AWS_EC2 = TMP_CLOUDPLATFORMVALUES_AWS_EC2;
+    var CLOUDPLATFORMVALUES_AWS_ECS = TMP_CLOUDPLATFORMVALUES_AWS_ECS;
+    var CLOUDPLATFORMVALUES_AWS_EKS = TMP_CLOUDPLATFORMVALUES_AWS_EKS;
+    var CLOUDPLATFORMVALUES_AWS_LAMBDA = TMP_CLOUDPLATFORMVALUES_AWS_LAMBDA;
+    var CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK = TMP_CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK;
+    var CLOUDPLATFORMVALUES_AZURE_VM = TMP_CLOUDPLATFORMVALUES_AZURE_VM;
+    var CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES = TMP_CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES;
+    var CLOUDPLATFORMVALUES_AZURE_AKS = TMP_CLOUDPLATFORMVALUES_AZURE_AKS;
+    var CLOUDPLATFORMVALUES_AZURE_FUNCTIONS = TMP_CLOUDPLATFORMVALUES_AZURE_FUNCTIONS;
+    var CLOUDPLATFORMVALUES_AZURE_APP_SERVICE = TMP_CLOUDPLATFORMVALUES_AZURE_APP_SERVICE;
+    var CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE = TMP_CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE;
+    var CLOUDPLATFORMVALUES_GCP_CLOUD_RUN = TMP_CLOUDPLATFORMVALUES_GCP_CLOUD_RUN;
+    var CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE = TMP_CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE;
+    var CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS = TMP_CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS;
+    var CLOUDPLATFORMVALUES_GCP_APP_ENGINE = TMP_CLOUDPLATFORMVALUES_GCP_APP_ENGINE;
+    var CloudPlatformValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS,
+      TMP_CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC,
+      TMP_CLOUDPLATFORMVALUES_AWS_EC2,
+      TMP_CLOUDPLATFORMVALUES_AWS_ECS,
+      TMP_CLOUDPLATFORMVALUES_AWS_EKS,
+      TMP_CLOUDPLATFORMVALUES_AWS_LAMBDA,
+      TMP_CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK,
+      TMP_CLOUDPLATFORMVALUES_AZURE_VM,
+      TMP_CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES,
+      TMP_CLOUDPLATFORMVALUES_AZURE_AKS,
+      TMP_CLOUDPLATFORMVALUES_AZURE_FUNCTIONS,
+      TMP_CLOUDPLATFORMVALUES_AZURE_APP_SERVICE,
+      TMP_CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE,
+      TMP_CLOUDPLATFORMVALUES_GCP_CLOUD_RUN,
+      TMP_CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE,
+      TMP_CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS,
+      TMP_CLOUDPLATFORMVALUES_GCP_APP_ENGINE
+    ]);
+    var TMP_AWSECSLAUNCHTYPEVALUES_EC2 = "ec2";
+    var TMP_AWSECSLAUNCHTYPEVALUES_FARGATE = "fargate";
+    var AWSECSLAUNCHTYPEVALUES_EC2 = TMP_AWSECSLAUNCHTYPEVALUES_EC2;
+    var AWSECSLAUNCHTYPEVALUES_FARGATE = TMP_AWSECSLAUNCHTYPEVALUES_FARGATE;
+    var AwsEcsLaunchtypeValues = /* @__PURE__ */ require_utils11.createConstMap([TMP_AWSECSLAUNCHTYPEVALUES_EC2, TMP_AWSECSLAUNCHTYPEVALUES_FARGATE]);
+    var TMP_HOSTARCHVALUES_AMD64 = "amd64";
+    var TMP_HOSTARCHVALUES_ARM32 = "arm32";
+    var TMP_HOSTARCHVALUES_ARM64 = "arm64";
+    var TMP_HOSTARCHVALUES_IA64 = "ia64";
+    var TMP_HOSTARCHVALUES_PPC32 = "ppc32";
+    var TMP_HOSTARCHVALUES_PPC64 = "ppc64";
+    var TMP_HOSTARCHVALUES_X86 = "x86";
+    var HOSTARCHVALUES_AMD64 = TMP_HOSTARCHVALUES_AMD64;
+    var HOSTARCHVALUES_ARM32 = TMP_HOSTARCHVALUES_ARM32;
+    var HOSTARCHVALUES_ARM64 = TMP_HOSTARCHVALUES_ARM64;
+    var HOSTARCHVALUES_IA64 = TMP_HOSTARCHVALUES_IA64;
+    var HOSTARCHVALUES_PPC32 = TMP_HOSTARCHVALUES_PPC32;
+    var HOSTARCHVALUES_PPC64 = TMP_HOSTARCHVALUES_PPC64;
+    var HOSTARCHVALUES_X86 = TMP_HOSTARCHVALUES_X86;
+    var HostArchValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_HOSTARCHVALUES_AMD64,
+      TMP_HOSTARCHVALUES_ARM32,
+      TMP_HOSTARCHVALUES_ARM64,
+      TMP_HOSTARCHVALUES_IA64,
+      TMP_HOSTARCHVALUES_PPC32,
+      TMP_HOSTARCHVALUES_PPC64,
+      TMP_HOSTARCHVALUES_X86
+    ]);
+    var TMP_OSTYPEVALUES_WINDOWS = "windows";
+    var TMP_OSTYPEVALUES_LINUX = "linux";
+    var TMP_OSTYPEVALUES_DARWIN = "darwin";
+    var TMP_OSTYPEVALUES_FREEBSD = "freebsd";
+    var TMP_OSTYPEVALUES_NETBSD = "netbsd";
+    var TMP_OSTYPEVALUES_OPENBSD = "openbsd";
+    var TMP_OSTYPEVALUES_DRAGONFLYBSD = "dragonflybsd";
+    var TMP_OSTYPEVALUES_HPUX = "hpux";
+    var TMP_OSTYPEVALUES_AIX = "aix";
+    var TMP_OSTYPEVALUES_SOLARIS = "solaris";
+    var TMP_OSTYPEVALUES_Z_OS = "z_os";
+    var OSTYPEVALUES_WINDOWS = TMP_OSTYPEVALUES_WINDOWS;
+    var OSTYPEVALUES_LINUX = TMP_OSTYPEVALUES_LINUX;
+    var OSTYPEVALUES_DARWIN = TMP_OSTYPEVALUES_DARWIN;
+    var OSTYPEVALUES_FREEBSD = TMP_OSTYPEVALUES_FREEBSD;
+    var OSTYPEVALUES_NETBSD = TMP_OSTYPEVALUES_NETBSD;
+    var OSTYPEVALUES_OPENBSD = TMP_OSTYPEVALUES_OPENBSD;
+    var OSTYPEVALUES_DRAGONFLYBSD = TMP_OSTYPEVALUES_DRAGONFLYBSD;
+    var OSTYPEVALUES_HPUX = TMP_OSTYPEVALUES_HPUX;
+    var OSTYPEVALUES_AIX = TMP_OSTYPEVALUES_AIX;
+    var OSTYPEVALUES_SOLARIS = TMP_OSTYPEVALUES_SOLARIS;
+    var OSTYPEVALUES_Z_OS = TMP_OSTYPEVALUES_Z_OS;
+    var OsTypeValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_OSTYPEVALUES_WINDOWS,
+      TMP_OSTYPEVALUES_LINUX,
+      TMP_OSTYPEVALUES_DARWIN,
+      TMP_OSTYPEVALUES_FREEBSD,
+      TMP_OSTYPEVALUES_NETBSD,
+      TMP_OSTYPEVALUES_OPENBSD,
+      TMP_OSTYPEVALUES_DRAGONFLYBSD,
+      TMP_OSTYPEVALUES_HPUX,
+      TMP_OSTYPEVALUES_AIX,
+      TMP_OSTYPEVALUES_SOLARIS,
+      TMP_OSTYPEVALUES_Z_OS
+    ]);
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_CPP = "cpp";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_DOTNET = "dotnet";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_ERLANG = "erlang";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_GO = "go";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_JAVA = "java";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_NODEJS = "nodejs";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_PHP = "php";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_PYTHON = "python";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_RUBY = "ruby";
+    var TMP_TELEMETRYSDKLANGUAGEVALUES_WEBJS = "webjs";
+    var TELEMETRYSDKLANGUAGEVALUES_CPP = TMP_TELEMETRYSDKLANGUAGEVALUES_CPP;
+    var TELEMETRYSDKLANGUAGEVALUES_DOTNET = TMP_TELEMETRYSDKLANGUAGEVALUES_DOTNET;
+    var TELEMETRYSDKLANGUAGEVALUES_ERLANG = TMP_TELEMETRYSDKLANGUAGEVALUES_ERLANG;
+    var TELEMETRYSDKLANGUAGEVALUES_GO = TMP_TELEMETRYSDKLANGUAGEVALUES_GO;
+    var TELEMETRYSDKLANGUAGEVALUES_JAVA = TMP_TELEMETRYSDKLANGUAGEVALUES_JAVA;
+    var TELEMETRYSDKLANGUAGEVALUES_NODEJS = TMP_TELEMETRYSDKLANGUAGEVALUES_NODEJS;
+    var TELEMETRYSDKLANGUAGEVALUES_PHP = TMP_TELEMETRYSDKLANGUAGEVALUES_PHP;
+    var TELEMETRYSDKLANGUAGEVALUES_PYTHON = TMP_TELEMETRYSDKLANGUAGEVALUES_PYTHON;
+    var TELEMETRYSDKLANGUAGEVALUES_RUBY = TMP_TELEMETRYSDKLANGUAGEVALUES_RUBY;
+    var TELEMETRYSDKLANGUAGEVALUES_WEBJS = TMP_TELEMETRYSDKLANGUAGEVALUES_WEBJS;
+    var TelemetrySdkLanguageValues = /* @__PURE__ */ require_utils11.createConstMap([
+      TMP_TELEMETRYSDKLANGUAGEVALUES_CPP,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_DOTNET,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_ERLANG,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_GO,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_JAVA,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_NODEJS,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_PHP,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_PYTHON,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_RUBY,
+      TMP_TELEMETRYSDKLANGUAGEVALUES_WEBJS
+    ]);
+    exports.AWSECSLAUNCHTYPEVALUES_EC2 = AWSECSLAUNCHTYPEVALUES_EC2;
+    exports.AWSECSLAUNCHTYPEVALUES_FARGATE = AWSECSLAUNCHTYPEVALUES_FARGATE;
+    exports.AwsEcsLaunchtypeValues = AwsEcsLaunchtypeValues;
+    exports.CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS = CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS;
+    exports.CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC = CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC;
+    exports.CLOUDPLATFORMVALUES_AWS_EC2 = CLOUDPLATFORMVALUES_AWS_EC2;
+    exports.CLOUDPLATFORMVALUES_AWS_ECS = CLOUDPLATFORMVALUES_AWS_ECS;
+    exports.CLOUDPLATFORMVALUES_AWS_EKS = CLOUDPLATFORMVALUES_AWS_EKS;
+    exports.CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK = CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK;
+    exports.CLOUDPLATFORMVALUES_AWS_LAMBDA = CLOUDPLATFORMVALUES_AWS_LAMBDA;
+    exports.CLOUDPLATFORMVALUES_AZURE_AKS = CLOUDPLATFORMVALUES_AZURE_AKS;
+    exports.CLOUDPLATFORMVALUES_AZURE_APP_SERVICE = CLOUDPLATFORMVALUES_AZURE_APP_SERVICE;
+    exports.CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES = CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES;
+    exports.CLOUDPLATFORMVALUES_AZURE_FUNCTIONS = CLOUDPLATFORMVALUES_AZURE_FUNCTIONS;
+    exports.CLOUDPLATFORMVALUES_AZURE_VM = CLOUDPLATFORMVALUES_AZURE_VM;
+    exports.CLOUDPLATFORMVALUES_GCP_APP_ENGINE = CLOUDPLATFORMVALUES_GCP_APP_ENGINE;
+    exports.CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS = CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS;
+    exports.CLOUDPLATFORMVALUES_GCP_CLOUD_RUN = CLOUDPLATFORMVALUES_GCP_CLOUD_RUN;
+    exports.CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE = CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE;
+    exports.CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE = CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE;
+    exports.CLOUDPROVIDERVALUES_ALIBABA_CLOUD = CLOUDPROVIDERVALUES_ALIBABA_CLOUD;
+    exports.CLOUDPROVIDERVALUES_AWS = CLOUDPROVIDERVALUES_AWS;
+    exports.CLOUDPROVIDERVALUES_AZURE = CLOUDPROVIDERVALUES_AZURE;
+    exports.CLOUDPROVIDERVALUES_GCP = CLOUDPROVIDERVALUES_GCP;
+    exports.CloudPlatformValues = CloudPlatformValues;
+    exports.CloudProviderValues = CloudProviderValues;
+    exports.HOSTARCHVALUES_AMD64 = HOSTARCHVALUES_AMD64;
+    exports.HOSTARCHVALUES_ARM32 = HOSTARCHVALUES_ARM32;
+    exports.HOSTARCHVALUES_ARM64 = HOSTARCHVALUES_ARM64;
+    exports.HOSTARCHVALUES_IA64 = HOSTARCHVALUES_IA64;
+    exports.HOSTARCHVALUES_PPC32 = HOSTARCHVALUES_PPC32;
+    exports.HOSTARCHVALUES_PPC64 = HOSTARCHVALUES_PPC64;
+    exports.HOSTARCHVALUES_X86 = HOSTARCHVALUES_X86;
+    exports.HostArchValues = HostArchValues;
+    exports.OSTYPEVALUES_AIX = OSTYPEVALUES_AIX;
+    exports.OSTYPEVALUES_DARWIN = OSTYPEVALUES_DARWIN;
+    exports.OSTYPEVALUES_DRAGONFLYBSD = OSTYPEVALUES_DRAGONFLYBSD;
+    exports.OSTYPEVALUES_FREEBSD = OSTYPEVALUES_FREEBSD;
+    exports.OSTYPEVALUES_HPUX = OSTYPEVALUES_HPUX;
+    exports.OSTYPEVALUES_LINUX = OSTYPEVALUES_LINUX;
+    exports.OSTYPEVALUES_NETBSD = OSTYPEVALUES_NETBSD;
+    exports.OSTYPEVALUES_OPENBSD = OSTYPEVALUES_OPENBSD;
+    exports.OSTYPEVALUES_SOLARIS = OSTYPEVALUES_SOLARIS;
+    exports.OSTYPEVALUES_WINDOWS = OSTYPEVALUES_WINDOWS;
+    exports.OSTYPEVALUES_Z_OS = OSTYPEVALUES_Z_OS;
+    exports.OsTypeValues = OsTypeValues;
+    exports.SEMRESATTRS_AWS_ECS_CLUSTER_ARN = SEMRESATTRS_AWS_ECS_CLUSTER_ARN;
+    exports.SEMRESATTRS_AWS_ECS_CONTAINER_ARN = SEMRESATTRS_AWS_ECS_CONTAINER_ARN;
+    exports.SEMRESATTRS_AWS_ECS_LAUNCHTYPE = SEMRESATTRS_AWS_ECS_LAUNCHTYPE;
+    exports.SEMRESATTRS_AWS_ECS_TASK_ARN = SEMRESATTRS_AWS_ECS_TASK_ARN;
+    exports.SEMRESATTRS_AWS_ECS_TASK_FAMILY = SEMRESATTRS_AWS_ECS_TASK_FAMILY;
+    exports.SEMRESATTRS_AWS_ECS_TASK_REVISION = SEMRESATTRS_AWS_ECS_TASK_REVISION;
+    exports.SEMRESATTRS_AWS_EKS_CLUSTER_ARN = SEMRESATTRS_AWS_EKS_CLUSTER_ARN;
+    exports.SEMRESATTRS_AWS_LOG_GROUP_ARNS = SEMRESATTRS_AWS_LOG_GROUP_ARNS;
+    exports.SEMRESATTRS_AWS_LOG_GROUP_NAMES = SEMRESATTRS_AWS_LOG_GROUP_NAMES;
+    exports.SEMRESATTRS_AWS_LOG_STREAM_ARNS = SEMRESATTRS_AWS_LOG_STREAM_ARNS;
+    exports.SEMRESATTRS_AWS_LOG_STREAM_NAMES = SEMRESATTRS_AWS_LOG_STREAM_NAMES;
+    exports.SEMRESATTRS_CLOUD_ACCOUNT_ID = SEMRESATTRS_CLOUD_ACCOUNT_ID;
+    exports.SEMRESATTRS_CLOUD_AVAILABILITY_ZONE = SEMRESATTRS_CLOUD_AVAILABILITY_ZONE;
+    exports.SEMRESATTRS_CLOUD_PLATFORM = SEMRESATTRS_CLOUD_PLATFORM;
+    exports.SEMRESATTRS_CLOUD_PROVIDER = SEMRESATTRS_CLOUD_PROVIDER;
+    exports.SEMRESATTRS_CLOUD_REGION = SEMRESATTRS_CLOUD_REGION;
+    exports.SEMRESATTRS_CONTAINER_ID = SEMRESATTRS_CONTAINER_ID;
+    exports.SEMRESATTRS_CONTAINER_IMAGE_NAME = SEMRESATTRS_CONTAINER_IMAGE_NAME;
+    exports.SEMRESATTRS_CONTAINER_IMAGE_TAG = SEMRESATTRS_CONTAINER_IMAGE_TAG;
+    exports.SEMRESATTRS_CONTAINER_NAME = SEMRESATTRS_CONTAINER_NAME;
+    exports.SEMRESATTRS_CONTAINER_RUNTIME = SEMRESATTRS_CONTAINER_RUNTIME;
+    exports.SEMRESATTRS_DEPLOYMENT_ENVIRONMENT = SEMRESATTRS_DEPLOYMENT_ENVIRONMENT;
+    exports.SEMRESATTRS_DEVICE_ID = SEMRESATTRS_DEVICE_ID;
+    exports.SEMRESATTRS_DEVICE_MODEL_IDENTIFIER = SEMRESATTRS_DEVICE_MODEL_IDENTIFIER;
+    exports.SEMRESATTRS_DEVICE_MODEL_NAME = SEMRESATTRS_DEVICE_MODEL_NAME;
+    exports.SEMRESATTRS_FAAS_ID = SEMRESATTRS_FAAS_ID;
+    exports.SEMRESATTRS_FAAS_INSTANCE = SEMRESATTRS_FAAS_INSTANCE;
+    exports.SEMRESATTRS_FAAS_MAX_MEMORY = SEMRESATTRS_FAAS_MAX_MEMORY;
+    exports.SEMRESATTRS_FAAS_NAME = SEMRESATTRS_FAAS_NAME;
+    exports.SEMRESATTRS_FAAS_VERSION = SEMRESATTRS_FAAS_VERSION;
+    exports.SEMRESATTRS_HOST_ARCH = SEMRESATTRS_HOST_ARCH;
+    exports.SEMRESATTRS_HOST_ID = SEMRESATTRS_HOST_ID;
+    exports.SEMRESATTRS_HOST_IMAGE_ID = SEMRESATTRS_HOST_IMAGE_ID;
+    exports.SEMRESATTRS_HOST_IMAGE_NAME = SEMRESATTRS_HOST_IMAGE_NAME;
+    exports.SEMRESATTRS_HOST_IMAGE_VERSION = SEMRESATTRS_HOST_IMAGE_VERSION;
+    exports.SEMRESATTRS_HOST_NAME = SEMRESATTRS_HOST_NAME;
+    exports.SEMRESATTRS_HOST_TYPE = SEMRESATTRS_HOST_TYPE;
+    exports.SEMRESATTRS_K8S_CLUSTER_NAME = SEMRESATTRS_K8S_CLUSTER_NAME;
+    exports.SEMRESATTRS_K8S_CONTAINER_NAME = SEMRESATTRS_K8S_CONTAINER_NAME;
+    exports.SEMRESATTRS_K8S_CRONJOB_NAME = SEMRESATTRS_K8S_CRONJOB_NAME;
+    exports.SEMRESATTRS_K8S_CRONJOB_UID = SEMRESATTRS_K8S_CRONJOB_UID;
+    exports.SEMRESATTRS_K8S_DAEMONSET_NAME = SEMRESATTRS_K8S_DAEMONSET_NAME;
+    exports.SEMRESATTRS_K8S_DAEMONSET_UID = SEMRESATTRS_K8S_DAEMONSET_UID;
+    exports.SEMRESATTRS_K8S_DEPLOYMENT_NAME = SEMRESATTRS_K8S_DEPLOYMENT_NAME;
+    exports.SEMRESATTRS_K8S_DEPLOYMENT_UID = SEMRESATTRS_K8S_DEPLOYMENT_UID;
+    exports.SEMRESATTRS_K8S_JOB_NAME = SEMRESATTRS_K8S_JOB_NAME;
+    exports.SEMRESATTRS_K8S_JOB_UID = SEMRESATTRS_K8S_JOB_UID;
+    exports.SEMRESATTRS_K8S_NAMESPACE_NAME = SEMRESATTRS_K8S_NAMESPACE_NAME;
+    exports.SEMRESATTRS_K8S_NODE_NAME = SEMRESATTRS_K8S_NODE_NAME;
+    exports.SEMRESATTRS_K8S_NODE_UID = SEMRESATTRS_K8S_NODE_UID;
+    exports.SEMRESATTRS_K8S_POD_NAME = SEMRESATTRS_K8S_POD_NAME;
+    exports.SEMRESATTRS_K8S_POD_UID = SEMRESATTRS_K8S_POD_UID;
+    exports.SEMRESATTRS_K8S_REPLICASET_NAME = SEMRESATTRS_K8S_REPLICASET_NAME;
+    exports.SEMRESATTRS_K8S_REPLICASET_UID = SEMRESATTRS_K8S_REPLICASET_UID;
+    exports.SEMRESATTRS_K8S_STATEFULSET_NAME = SEMRESATTRS_K8S_STATEFULSET_NAME;
+    exports.SEMRESATTRS_K8S_STATEFULSET_UID = SEMRESATTRS_K8S_STATEFULSET_UID;
+    exports.SEMRESATTRS_OS_DESCRIPTION = SEMRESATTRS_OS_DESCRIPTION;
+    exports.SEMRESATTRS_OS_NAME = SEMRESATTRS_OS_NAME;
+    exports.SEMRESATTRS_OS_TYPE = SEMRESATTRS_OS_TYPE;
+    exports.SEMRESATTRS_OS_VERSION = SEMRESATTRS_OS_VERSION;
+    exports.SEMRESATTRS_PROCESS_COMMAND = SEMRESATTRS_PROCESS_COMMAND;
+    exports.SEMRESATTRS_PROCESS_COMMAND_ARGS = SEMRESATTRS_PROCESS_COMMAND_ARGS;
+    exports.SEMRESATTRS_PROCESS_COMMAND_LINE = SEMRESATTRS_PROCESS_COMMAND_LINE;
+    exports.SEMRESATTRS_PROCESS_EXECUTABLE_NAME = SEMRESATTRS_PROCESS_EXECUTABLE_NAME;
+    exports.SEMRESATTRS_PROCESS_EXECUTABLE_PATH = SEMRESATTRS_PROCESS_EXECUTABLE_PATH;
+    exports.SEMRESATTRS_PROCESS_OWNER = SEMRESATTRS_PROCESS_OWNER;
+    exports.SEMRESATTRS_PROCESS_PID = SEMRESATTRS_PROCESS_PID;
+    exports.SEMRESATTRS_PROCESS_RUNTIME_DESCRIPTION = SEMRESATTRS_PROCESS_RUNTIME_DESCRIPTION;
+    exports.SEMRESATTRS_PROCESS_RUNTIME_NAME = SEMRESATTRS_PROCESS_RUNTIME_NAME;
+    exports.SEMRESATTRS_PROCESS_RUNTIME_VERSION = SEMRESATTRS_PROCESS_RUNTIME_VERSION;
+    exports.SEMRESATTRS_SERVICE_INSTANCE_ID = SEMRESATTRS_SERVICE_INSTANCE_ID;
+    exports.SEMRESATTRS_SERVICE_NAME = SEMRESATTRS_SERVICE_NAME;
+    exports.SEMRESATTRS_SERVICE_NAMESPACE = SEMRESATTRS_SERVICE_NAMESPACE;
+    exports.SEMRESATTRS_SERVICE_VERSION = SEMRESATTRS_SERVICE_VERSION;
+    exports.SEMRESATTRS_TELEMETRY_AUTO_VERSION = SEMRESATTRS_TELEMETRY_AUTO_VERSION;
+    exports.SEMRESATTRS_TELEMETRY_SDK_LANGUAGE = SEMRESATTRS_TELEMETRY_SDK_LANGUAGE;
+    exports.SEMRESATTRS_TELEMETRY_SDK_NAME = SEMRESATTRS_TELEMETRY_SDK_NAME;
+    exports.SEMRESATTRS_TELEMETRY_SDK_VERSION = SEMRESATTRS_TELEMETRY_SDK_VERSION;
+    exports.SEMRESATTRS_WEBENGINE_DESCRIPTION = SEMRESATTRS_WEBENGINE_DESCRIPTION;
+    exports.SEMRESATTRS_WEBENGINE_NAME = SEMRESATTRS_WEBENGINE_NAME;
+    exports.SEMRESATTRS_WEBENGINE_VERSION = SEMRESATTRS_WEBENGINE_VERSION;
+    exports.SemanticResourceAttributes = SemanticResourceAttributes;
+    exports.TELEMETRYSDKLANGUAGEVALUES_CPP = TELEMETRYSDKLANGUAGEVALUES_CPP;
+    exports.TELEMETRYSDKLANGUAGEVALUES_DOTNET = TELEMETRYSDKLANGUAGEVALUES_DOTNET;
+    exports.TELEMETRYSDKLANGUAGEVALUES_ERLANG = TELEMETRYSDKLANGUAGEVALUES_ERLANG;
+    exports.TELEMETRYSDKLANGUAGEVALUES_GO = TELEMETRYSDKLANGUAGEVALUES_GO;
+    exports.TELEMETRYSDKLANGUAGEVALUES_JAVA = TELEMETRYSDKLANGUAGEVALUES_JAVA;
+    exports.TELEMETRYSDKLANGUAGEVALUES_NODEJS = TELEMETRYSDKLANGUAGEVALUES_NODEJS;
+    exports.TELEMETRYSDKLANGUAGEVALUES_PHP = TELEMETRYSDKLANGUAGEVALUES_PHP;
+    exports.TELEMETRYSDKLANGUAGEVALUES_PYTHON = TELEMETRYSDKLANGUAGEVALUES_PYTHON;
+    exports.TELEMETRYSDKLANGUAGEVALUES_RUBY = TELEMETRYSDKLANGUAGEVALUES_RUBY;
+    exports.TELEMETRYSDKLANGUAGEVALUES_WEBJS = TELEMETRYSDKLANGUAGEVALUES_WEBJS;
+    exports.TelemetrySdkLanguageValues = TelemetrySdkLanguageValues;
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/stable_attributes.cjs
+var require_stable_attributes = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/stable_attributes.cjs"(exports) {
+    var ATTR_ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT = "aspnetcore.diagnostics.exception.result";
+    var ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_ABORTED = "aborted";
+    var ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_HANDLED = "handled";
+    var ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_SKIPPED = "skipped";
+    var ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_UNHANDLED = "unhandled";
+    var ATTR_ASPNETCORE_DIAGNOSTICS_HANDLER_TYPE = "aspnetcore.diagnostics.handler.type";
+    var ATTR_ASPNETCORE_RATE_LIMITING_POLICY = "aspnetcore.rate_limiting.policy";
+    var ATTR_ASPNETCORE_RATE_LIMITING_RESULT = "aspnetcore.rate_limiting.result";
+    var ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ACQUIRED = "acquired";
+    var ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ENDPOINT_LIMITER = "endpoint_limiter";
+    var ASPNETCORE_RATE_LIMITING_RESULT_VALUE_GLOBAL_LIMITER = "global_limiter";
+    var ASPNETCORE_RATE_LIMITING_RESULT_VALUE_REQUEST_CANCELED = "request_canceled";
+    var ATTR_ASPNETCORE_REQUEST_IS_UNHANDLED = "aspnetcore.request.is_unhandled";
+    var ATTR_ASPNETCORE_ROUTING_IS_FALLBACK = "aspnetcore.routing.is_fallback";
+    var ATTR_ASPNETCORE_ROUTING_MATCH_STATUS = "aspnetcore.routing.match_status";
+    var ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_FAILURE = "failure";
+    var ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_SUCCESS = "success";
+    var ATTR_ASPNETCORE_USER_IS_AUTHENTICATED = "aspnetcore.user.is_authenticated";
+    var ATTR_CLIENT_ADDRESS = "client.address";
+    var ATTR_CLIENT_PORT = "client.port";
+    var ATTR_CODE_COLUMN_NUMBER = "code.column.number";
+    var ATTR_CODE_FILE_PATH = "code.file.path";
+    var ATTR_CODE_FUNCTION_NAME = "code.function.name";
+    var ATTR_CODE_LINE_NUMBER = "code.line.number";
+    var ATTR_CODE_STACKTRACE = "code.stacktrace";
+    var ATTR_CONTAINER_ID = "container.id";
+    var ATTR_CONTAINER_IMAGE_NAME = "container.image.name";
+    var ATTR_CONTAINER_IMAGE_REPO_DIGESTS = "container.image.repo_digests";
+    var ATTR_CONTAINER_IMAGE_TAGS = "container.image.tags";
+    var ATTR_DB_COLLECTION_NAME = "db.collection.name";
+    var ATTR_DB_NAMESPACE = "db.namespace";
+    var ATTR_DB_OPERATION_BATCH_SIZE = "db.operation.batch.size";
+    var ATTR_DB_OPERATION_NAME = "db.operation.name";
+    var ATTR_DB_QUERY_SUMMARY = "db.query.summary";
+    var ATTR_DB_QUERY_TEXT = "db.query.text";
+    var ATTR_DB_RESPONSE_STATUS_CODE = "db.response.status_code";
+    var ATTR_DB_STORED_PROCEDURE_NAME = "db.stored_procedure.name";
+    var ATTR_DB_SYSTEM_NAME = "db.system.name";
+    var DB_SYSTEM_NAME_VALUE_MARIADB = "mariadb";
+    var DB_SYSTEM_NAME_VALUE_MICROSOFT_SQL_SERVER = "microsoft.sql_server";
+    var DB_SYSTEM_NAME_VALUE_MYSQL = "mysql";
+    var DB_SYSTEM_NAME_VALUE_POSTGRESQL = "postgresql";
+    var ATTR_DEPLOYMENT_ENVIRONMENT_NAME = "deployment.environment.name";
+    var DEPLOYMENT_ENVIRONMENT_NAME_VALUE_DEVELOPMENT = "development";
+    var DEPLOYMENT_ENVIRONMENT_NAME_VALUE_PRODUCTION = "production";
+    var DEPLOYMENT_ENVIRONMENT_NAME_VALUE_STAGING = "staging";
+    var DEPLOYMENT_ENVIRONMENT_NAME_VALUE_TEST = "test";
+    var ATTR_DOTNET_GC_HEAP_GENERATION = "dotnet.gc.heap.generation";
+    var DOTNET_GC_HEAP_GENERATION_VALUE_GEN0 = "gen0";
+    var DOTNET_GC_HEAP_GENERATION_VALUE_GEN1 = "gen1";
+    var DOTNET_GC_HEAP_GENERATION_VALUE_GEN2 = "gen2";
+    var DOTNET_GC_HEAP_GENERATION_VALUE_LOH = "loh";
+    var DOTNET_GC_HEAP_GENERATION_VALUE_POH = "poh";
+    var ATTR_ERROR_TYPE2 = "error.type";
+    var ERROR_TYPE_VALUE_OTHER = "_OTHER";
+    var ATTR_EXCEPTION_ESCAPED = "exception.escaped";
+    var ATTR_EXCEPTION_MESSAGE = "exception.message";
+    var ATTR_EXCEPTION_STACKTRACE = "exception.stacktrace";
+    var ATTR_EXCEPTION_TYPE = "exception.type";
+    var ATTR_HTTP_REQUEST_HEADER = (key) => `http.request.header.${key}`;
+    var ATTR_HTTP_REQUEST_METHOD = "http.request.method";
+    var HTTP_REQUEST_METHOD_VALUE_OTHER = "_OTHER";
+    var HTTP_REQUEST_METHOD_VALUE_CONNECT = "CONNECT";
+    var HTTP_REQUEST_METHOD_VALUE_DELETE = "DELETE";
+    var HTTP_REQUEST_METHOD_VALUE_GET = "GET";
+    var HTTP_REQUEST_METHOD_VALUE_HEAD = "HEAD";
+    var HTTP_REQUEST_METHOD_VALUE_OPTIONS = "OPTIONS";
+    var HTTP_REQUEST_METHOD_VALUE_PATCH = "PATCH";
+    var HTTP_REQUEST_METHOD_VALUE_POST = "POST";
+    var HTTP_REQUEST_METHOD_VALUE_PUT = "PUT";
+    var HTTP_REQUEST_METHOD_VALUE_TRACE = "TRACE";
+    var ATTR_HTTP_REQUEST_METHOD_ORIGINAL = "http.request.method_original";
+    var ATTR_HTTP_REQUEST_RESEND_COUNT = "http.request.resend_count";
+    var ATTR_HTTP_RESPONSE_HEADER = (key) => `http.response.header.${key}`;
+    var ATTR_HTTP_RESPONSE_STATUS_CODE2 = "http.response.status_code";
+    var ATTR_HTTP_ROUTE = "http.route";
+    var ATTR_JVM_GC_ACTION = "jvm.gc.action";
+    var ATTR_JVM_GC_NAME = "jvm.gc.name";
+    var ATTR_JVM_MEMORY_POOL_NAME = "jvm.memory.pool.name";
+    var ATTR_JVM_MEMORY_TYPE = "jvm.memory.type";
+    var JVM_MEMORY_TYPE_VALUE_HEAP = "heap";
+    var JVM_MEMORY_TYPE_VALUE_NON_HEAP = "non_heap";
+    var ATTR_JVM_THREAD_DAEMON = "jvm.thread.daemon";
+    var ATTR_JVM_THREAD_STATE = "jvm.thread.state";
+    var JVM_THREAD_STATE_VALUE_BLOCKED = "blocked";
+    var JVM_THREAD_STATE_VALUE_NEW = "new";
+    var JVM_THREAD_STATE_VALUE_RUNNABLE = "runnable";
+    var JVM_THREAD_STATE_VALUE_TERMINATED = "terminated";
+    var JVM_THREAD_STATE_VALUE_TIMED_WAITING = "timed_waiting";
+    var JVM_THREAD_STATE_VALUE_WAITING = "waiting";
+    var ATTR_K8S_CLUSTER_NAME = "k8s.cluster.name";
+    var ATTR_K8S_CLUSTER_UID = "k8s.cluster.uid";
+    var ATTR_K8S_CONTAINER_NAME = "k8s.container.name";
+    var ATTR_K8S_CONTAINER_RESTART_COUNT = "k8s.container.restart_count";
+    var ATTR_K8S_CRONJOB_ANNOTATION = (key) => `k8s.cronjob.annotation.${key}`;
+    var ATTR_K8S_CRONJOB_LABEL = (key) => `k8s.cronjob.label.${key}`;
+    var ATTR_K8S_CRONJOB_NAME = "k8s.cronjob.name";
+    var ATTR_K8S_CRONJOB_UID = "k8s.cronjob.uid";
+    var ATTR_K8S_DAEMONSET_ANNOTATION = (key) => `k8s.daemonset.annotation.${key}`;
+    var ATTR_K8S_DAEMONSET_LABEL = (key) => `k8s.daemonset.label.${key}`;
+    var ATTR_K8S_DAEMONSET_NAME = "k8s.daemonset.name";
+    var ATTR_K8S_DAEMONSET_UID = "k8s.daemonset.uid";
+    var ATTR_K8S_DEPLOYMENT_ANNOTATION = (key) => `k8s.deployment.annotation.${key}`;
+    var ATTR_K8S_DEPLOYMENT_LABEL = (key) => `k8s.deployment.label.${key}`;
+    var ATTR_K8S_DEPLOYMENT_NAME = "k8s.deployment.name";
+    var ATTR_K8S_DEPLOYMENT_UID = "k8s.deployment.uid";
+    var ATTR_K8S_JOB_ANNOTATION = (key) => `k8s.job.annotation.${key}`;
+    var ATTR_K8S_JOB_LABEL = (key) => `k8s.job.label.${key}`;
+    var ATTR_K8S_JOB_NAME = "k8s.job.name";
+    var ATTR_K8S_JOB_UID = "k8s.job.uid";
+    var ATTR_K8S_NAMESPACE_ANNOTATION = (key) => `k8s.namespace.annotation.${key}`;
+    var ATTR_K8S_NAMESPACE_LABEL = (key) => `k8s.namespace.label.${key}`;
+    var ATTR_K8S_NAMESPACE_NAME = "k8s.namespace.name";
+    var ATTR_K8S_NODE_ANNOTATION = (key) => `k8s.node.annotation.${key}`;
+    var ATTR_K8S_NODE_LABEL = (key) => `k8s.node.label.${key}`;
+    var ATTR_K8S_NODE_NAME = "k8s.node.name";
+    var ATTR_K8S_NODE_UID = "k8s.node.uid";
+    var ATTR_K8S_POD_ANNOTATION = (key) => `k8s.pod.annotation.${key}`;
+    var ATTR_K8S_POD_HOSTNAME = "k8s.pod.hostname";
+    var ATTR_K8S_POD_IP = "k8s.pod.ip";
+    var ATTR_K8S_POD_LABEL = (key) => `k8s.pod.label.${key}`;
+    var ATTR_K8S_POD_NAME = "k8s.pod.name";
+    var ATTR_K8S_POD_START_TIME = "k8s.pod.start_time";
+    var ATTR_K8S_POD_UID = "k8s.pod.uid";
+    var ATTR_K8S_REPLICASET_ANNOTATION = (key) => `k8s.replicaset.annotation.${key}`;
+    var ATTR_K8S_REPLICASET_LABEL = (key) => `k8s.replicaset.label.${key}`;
+    var ATTR_K8S_REPLICASET_NAME = "k8s.replicaset.name";
+    var ATTR_K8S_REPLICASET_UID = "k8s.replicaset.uid";
+    var ATTR_K8S_STATEFULSET_ANNOTATION = (key) => `k8s.statefulset.annotation.${key}`;
+    var ATTR_K8S_STATEFULSET_LABEL = (key) => `k8s.statefulset.label.${key}`;
+    var ATTR_K8S_STATEFULSET_NAME = "k8s.statefulset.name";
+    var ATTR_K8S_STATEFULSET_UID = "k8s.statefulset.uid";
+    var ATTR_NETWORK_LOCAL_ADDRESS = "network.local.address";
+    var ATTR_NETWORK_LOCAL_PORT = "network.local.port";
+    var ATTR_NETWORK_PEER_ADDRESS = "network.peer.address";
+    var ATTR_NETWORK_PEER_PORT = "network.peer.port";
+    var ATTR_NETWORK_PROTOCOL_NAME = "network.protocol.name";
+    var ATTR_NETWORK_PROTOCOL_VERSION = "network.protocol.version";
+    var ATTR_NETWORK_TRANSPORT = "network.transport";
+    var NETWORK_TRANSPORT_VALUE_PIPE = "pipe";
+    var NETWORK_TRANSPORT_VALUE_QUIC = "quic";
+    var NETWORK_TRANSPORT_VALUE_TCP = "tcp";
+    var NETWORK_TRANSPORT_VALUE_UDP = "udp";
+    var NETWORK_TRANSPORT_VALUE_UNIX = "unix";
+    var ATTR_NETWORK_TYPE = "network.type";
+    var NETWORK_TYPE_VALUE_IPV4 = "ipv4";
+    var NETWORK_TYPE_VALUE_IPV6 = "ipv6";
+    var ATTR_OTEL_EVENT_NAME = "otel.event.name";
+    var ATTR_OTEL_SCOPE_NAME = "otel.scope.name";
+    var ATTR_OTEL_SCOPE_VERSION = "otel.scope.version";
+    var ATTR_OTEL_STATUS_CODE = "otel.status_code";
+    var OTEL_STATUS_CODE_VALUE_ERROR = "ERROR";
+    var OTEL_STATUS_CODE_VALUE_OK = "OK";
+    var ATTR_OTEL_STATUS_DESCRIPTION = "otel.status_description";
+    var ATTR_SERVER_ADDRESS2 = "server.address";
+    var ATTR_SERVER_PORT2 = "server.port";
+    var ATTR_SERVICE_INSTANCE_ID = "service.instance.id";
+    var ATTR_SERVICE_NAME = "service.name";
+    var ATTR_SERVICE_NAMESPACE = "service.namespace";
+    var ATTR_SERVICE_VERSION = "service.version";
+    var ATTR_SIGNALR_CONNECTION_STATUS = "signalr.connection.status";
+    var SIGNALR_CONNECTION_STATUS_VALUE_APP_SHUTDOWN = "app_shutdown";
+    var SIGNALR_CONNECTION_STATUS_VALUE_NORMAL_CLOSURE = "normal_closure";
+    var SIGNALR_CONNECTION_STATUS_VALUE_TIMEOUT = "timeout";
+    var ATTR_SIGNALR_TRANSPORT = "signalr.transport";
+    var SIGNALR_TRANSPORT_VALUE_LONG_POLLING = "long_polling";
+    var SIGNALR_TRANSPORT_VALUE_SERVER_SENT_EVENTS = "server_sent_events";
+    var SIGNALR_TRANSPORT_VALUE_WEB_SOCKETS = "web_sockets";
+    var ATTR_TELEMETRY_DISTRO_NAME = "telemetry.distro.name";
+    var ATTR_TELEMETRY_DISTRO_VERSION = "telemetry.distro.version";
+    var ATTR_TELEMETRY_SDK_LANGUAGE = "telemetry.sdk.language";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_CPP = "cpp";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_DOTNET = "dotnet";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_ERLANG = "erlang";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_GO = "go";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_JAVA = "java";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_KOTLIN = "kotlin";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_NODEJS = "nodejs";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_PHP = "php";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_PYTHON = "python";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_RUBY = "ruby";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_RUST = "rust";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_SWIFT = "swift";
+    var TELEMETRY_SDK_LANGUAGE_VALUE_WEBJS = "webjs";
+    var ATTR_TELEMETRY_SDK_NAME = "telemetry.sdk.name";
+    var ATTR_TELEMETRY_SDK_VERSION = "telemetry.sdk.version";
+    var ATTR_URL_FRAGMENT = "url.fragment";
+    var ATTR_URL_FULL = "url.full";
+    var ATTR_URL_PATH = "url.path";
+    var ATTR_URL_QUERY = "url.query";
+    var ATTR_URL_SCHEME = "url.scheme";
+    var ATTR_USER_AGENT_ORIGINAL = "user_agent.original";
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_ABORTED = ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_ABORTED;
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_HANDLED = ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_HANDLED;
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_SKIPPED = ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_SKIPPED;
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_UNHANDLED = ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_UNHANDLED;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ACQUIRED = ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ACQUIRED;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ENDPOINT_LIMITER = ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ENDPOINT_LIMITER;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_GLOBAL_LIMITER = ASPNETCORE_RATE_LIMITING_RESULT_VALUE_GLOBAL_LIMITER;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_REQUEST_CANCELED = ASPNETCORE_RATE_LIMITING_RESULT_VALUE_REQUEST_CANCELED;
+    exports.ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_FAILURE = ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_FAILURE;
+    exports.ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_SUCCESS = ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_SUCCESS;
+    exports.ATTR_ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT = ATTR_ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT;
+    exports.ATTR_ASPNETCORE_DIAGNOSTICS_HANDLER_TYPE = ATTR_ASPNETCORE_DIAGNOSTICS_HANDLER_TYPE;
+    exports.ATTR_ASPNETCORE_RATE_LIMITING_POLICY = ATTR_ASPNETCORE_RATE_LIMITING_POLICY;
+    exports.ATTR_ASPNETCORE_RATE_LIMITING_RESULT = ATTR_ASPNETCORE_RATE_LIMITING_RESULT;
+    exports.ATTR_ASPNETCORE_REQUEST_IS_UNHANDLED = ATTR_ASPNETCORE_REQUEST_IS_UNHANDLED;
+    exports.ATTR_ASPNETCORE_ROUTING_IS_FALLBACK = ATTR_ASPNETCORE_ROUTING_IS_FALLBACK;
+    exports.ATTR_ASPNETCORE_ROUTING_MATCH_STATUS = ATTR_ASPNETCORE_ROUTING_MATCH_STATUS;
+    exports.ATTR_ASPNETCORE_USER_IS_AUTHENTICATED = ATTR_ASPNETCORE_USER_IS_AUTHENTICATED;
+    exports.ATTR_CLIENT_ADDRESS = ATTR_CLIENT_ADDRESS;
+    exports.ATTR_CLIENT_PORT = ATTR_CLIENT_PORT;
+    exports.ATTR_CODE_COLUMN_NUMBER = ATTR_CODE_COLUMN_NUMBER;
+    exports.ATTR_CODE_FILE_PATH = ATTR_CODE_FILE_PATH;
+    exports.ATTR_CODE_FUNCTION_NAME = ATTR_CODE_FUNCTION_NAME;
+    exports.ATTR_CODE_LINE_NUMBER = ATTR_CODE_LINE_NUMBER;
+    exports.ATTR_CODE_STACKTRACE = ATTR_CODE_STACKTRACE;
+    exports.ATTR_CONTAINER_ID = ATTR_CONTAINER_ID;
+    exports.ATTR_CONTAINER_IMAGE_NAME = ATTR_CONTAINER_IMAGE_NAME;
+    exports.ATTR_CONTAINER_IMAGE_REPO_DIGESTS = ATTR_CONTAINER_IMAGE_REPO_DIGESTS;
+    exports.ATTR_CONTAINER_IMAGE_TAGS = ATTR_CONTAINER_IMAGE_TAGS;
+    exports.ATTR_DB_COLLECTION_NAME = ATTR_DB_COLLECTION_NAME;
+    exports.ATTR_DB_NAMESPACE = ATTR_DB_NAMESPACE;
+    exports.ATTR_DB_OPERATION_BATCH_SIZE = ATTR_DB_OPERATION_BATCH_SIZE;
+    exports.ATTR_DB_OPERATION_NAME = ATTR_DB_OPERATION_NAME;
+    exports.ATTR_DB_QUERY_SUMMARY = ATTR_DB_QUERY_SUMMARY;
+    exports.ATTR_DB_QUERY_TEXT = ATTR_DB_QUERY_TEXT;
+    exports.ATTR_DB_RESPONSE_STATUS_CODE = ATTR_DB_RESPONSE_STATUS_CODE;
+    exports.ATTR_DB_STORED_PROCEDURE_NAME = ATTR_DB_STORED_PROCEDURE_NAME;
+    exports.ATTR_DB_SYSTEM_NAME = ATTR_DB_SYSTEM_NAME;
+    exports.ATTR_DEPLOYMENT_ENVIRONMENT_NAME = ATTR_DEPLOYMENT_ENVIRONMENT_NAME;
+    exports.ATTR_DOTNET_GC_HEAP_GENERATION = ATTR_DOTNET_GC_HEAP_GENERATION;
+    exports.ATTR_ERROR_TYPE = ATTR_ERROR_TYPE2;
+    exports.ATTR_EXCEPTION_ESCAPED = ATTR_EXCEPTION_ESCAPED;
+    exports.ATTR_EXCEPTION_MESSAGE = ATTR_EXCEPTION_MESSAGE;
+    exports.ATTR_EXCEPTION_STACKTRACE = ATTR_EXCEPTION_STACKTRACE;
+    exports.ATTR_EXCEPTION_TYPE = ATTR_EXCEPTION_TYPE;
+    exports.ATTR_HTTP_REQUEST_HEADER = ATTR_HTTP_REQUEST_HEADER;
+    exports.ATTR_HTTP_REQUEST_METHOD = ATTR_HTTP_REQUEST_METHOD;
+    exports.ATTR_HTTP_REQUEST_METHOD_ORIGINAL = ATTR_HTTP_REQUEST_METHOD_ORIGINAL;
+    exports.ATTR_HTTP_REQUEST_RESEND_COUNT = ATTR_HTTP_REQUEST_RESEND_COUNT;
+    exports.ATTR_HTTP_RESPONSE_HEADER = ATTR_HTTP_RESPONSE_HEADER;
+    exports.ATTR_HTTP_RESPONSE_STATUS_CODE = ATTR_HTTP_RESPONSE_STATUS_CODE2;
+    exports.ATTR_HTTP_ROUTE = ATTR_HTTP_ROUTE;
+    exports.ATTR_JVM_GC_ACTION = ATTR_JVM_GC_ACTION;
+    exports.ATTR_JVM_GC_NAME = ATTR_JVM_GC_NAME;
+    exports.ATTR_JVM_MEMORY_POOL_NAME = ATTR_JVM_MEMORY_POOL_NAME;
+    exports.ATTR_JVM_MEMORY_TYPE = ATTR_JVM_MEMORY_TYPE;
+    exports.ATTR_JVM_THREAD_DAEMON = ATTR_JVM_THREAD_DAEMON;
+    exports.ATTR_JVM_THREAD_STATE = ATTR_JVM_THREAD_STATE;
+    exports.ATTR_K8S_CLUSTER_NAME = ATTR_K8S_CLUSTER_NAME;
+    exports.ATTR_K8S_CLUSTER_UID = ATTR_K8S_CLUSTER_UID;
+    exports.ATTR_K8S_CONTAINER_NAME = ATTR_K8S_CONTAINER_NAME;
+    exports.ATTR_K8S_CONTAINER_RESTART_COUNT = ATTR_K8S_CONTAINER_RESTART_COUNT;
+    exports.ATTR_K8S_CRONJOB_ANNOTATION = ATTR_K8S_CRONJOB_ANNOTATION;
+    exports.ATTR_K8S_CRONJOB_LABEL = ATTR_K8S_CRONJOB_LABEL;
+    exports.ATTR_K8S_CRONJOB_NAME = ATTR_K8S_CRONJOB_NAME;
+    exports.ATTR_K8S_CRONJOB_UID = ATTR_K8S_CRONJOB_UID;
+    exports.ATTR_K8S_DAEMONSET_ANNOTATION = ATTR_K8S_DAEMONSET_ANNOTATION;
+    exports.ATTR_K8S_DAEMONSET_LABEL = ATTR_K8S_DAEMONSET_LABEL;
+    exports.ATTR_K8S_DAEMONSET_NAME = ATTR_K8S_DAEMONSET_NAME;
+    exports.ATTR_K8S_DAEMONSET_UID = ATTR_K8S_DAEMONSET_UID;
+    exports.ATTR_K8S_DEPLOYMENT_ANNOTATION = ATTR_K8S_DEPLOYMENT_ANNOTATION;
+    exports.ATTR_K8S_DEPLOYMENT_LABEL = ATTR_K8S_DEPLOYMENT_LABEL;
+    exports.ATTR_K8S_DEPLOYMENT_NAME = ATTR_K8S_DEPLOYMENT_NAME;
+    exports.ATTR_K8S_DEPLOYMENT_UID = ATTR_K8S_DEPLOYMENT_UID;
+    exports.ATTR_K8S_JOB_ANNOTATION = ATTR_K8S_JOB_ANNOTATION;
+    exports.ATTR_K8S_JOB_LABEL = ATTR_K8S_JOB_LABEL;
+    exports.ATTR_K8S_JOB_NAME = ATTR_K8S_JOB_NAME;
+    exports.ATTR_K8S_JOB_UID = ATTR_K8S_JOB_UID;
+    exports.ATTR_K8S_NAMESPACE_ANNOTATION = ATTR_K8S_NAMESPACE_ANNOTATION;
+    exports.ATTR_K8S_NAMESPACE_LABEL = ATTR_K8S_NAMESPACE_LABEL;
+    exports.ATTR_K8S_NAMESPACE_NAME = ATTR_K8S_NAMESPACE_NAME;
+    exports.ATTR_K8S_NODE_ANNOTATION = ATTR_K8S_NODE_ANNOTATION;
+    exports.ATTR_K8S_NODE_LABEL = ATTR_K8S_NODE_LABEL;
+    exports.ATTR_K8S_NODE_NAME = ATTR_K8S_NODE_NAME;
+    exports.ATTR_K8S_NODE_UID = ATTR_K8S_NODE_UID;
+    exports.ATTR_K8S_POD_ANNOTATION = ATTR_K8S_POD_ANNOTATION;
+    exports.ATTR_K8S_POD_HOSTNAME = ATTR_K8S_POD_HOSTNAME;
+    exports.ATTR_K8S_POD_IP = ATTR_K8S_POD_IP;
+    exports.ATTR_K8S_POD_LABEL = ATTR_K8S_POD_LABEL;
+    exports.ATTR_K8S_POD_NAME = ATTR_K8S_POD_NAME;
+    exports.ATTR_K8S_POD_START_TIME = ATTR_K8S_POD_START_TIME;
+    exports.ATTR_K8S_POD_UID = ATTR_K8S_POD_UID;
+    exports.ATTR_K8S_REPLICASET_ANNOTATION = ATTR_K8S_REPLICASET_ANNOTATION;
+    exports.ATTR_K8S_REPLICASET_LABEL = ATTR_K8S_REPLICASET_LABEL;
+    exports.ATTR_K8S_REPLICASET_NAME = ATTR_K8S_REPLICASET_NAME;
+    exports.ATTR_K8S_REPLICASET_UID = ATTR_K8S_REPLICASET_UID;
+    exports.ATTR_K8S_STATEFULSET_ANNOTATION = ATTR_K8S_STATEFULSET_ANNOTATION;
+    exports.ATTR_K8S_STATEFULSET_LABEL = ATTR_K8S_STATEFULSET_LABEL;
+    exports.ATTR_K8S_STATEFULSET_NAME = ATTR_K8S_STATEFULSET_NAME;
+    exports.ATTR_K8S_STATEFULSET_UID = ATTR_K8S_STATEFULSET_UID;
+    exports.ATTR_NETWORK_LOCAL_ADDRESS = ATTR_NETWORK_LOCAL_ADDRESS;
+    exports.ATTR_NETWORK_LOCAL_PORT = ATTR_NETWORK_LOCAL_PORT;
+    exports.ATTR_NETWORK_PEER_ADDRESS = ATTR_NETWORK_PEER_ADDRESS;
+    exports.ATTR_NETWORK_PEER_PORT = ATTR_NETWORK_PEER_PORT;
+    exports.ATTR_NETWORK_PROTOCOL_NAME = ATTR_NETWORK_PROTOCOL_NAME;
+    exports.ATTR_NETWORK_PROTOCOL_VERSION = ATTR_NETWORK_PROTOCOL_VERSION;
+    exports.ATTR_NETWORK_TRANSPORT = ATTR_NETWORK_TRANSPORT;
+    exports.ATTR_NETWORK_TYPE = ATTR_NETWORK_TYPE;
+    exports.ATTR_OTEL_EVENT_NAME = ATTR_OTEL_EVENT_NAME;
+    exports.ATTR_OTEL_SCOPE_NAME = ATTR_OTEL_SCOPE_NAME;
+    exports.ATTR_OTEL_SCOPE_VERSION = ATTR_OTEL_SCOPE_VERSION;
+    exports.ATTR_OTEL_STATUS_CODE = ATTR_OTEL_STATUS_CODE;
+    exports.ATTR_OTEL_STATUS_DESCRIPTION = ATTR_OTEL_STATUS_DESCRIPTION;
+    exports.ATTR_SERVER_ADDRESS = ATTR_SERVER_ADDRESS2;
+    exports.ATTR_SERVER_PORT = ATTR_SERVER_PORT2;
+    exports.ATTR_SERVICE_INSTANCE_ID = ATTR_SERVICE_INSTANCE_ID;
+    exports.ATTR_SERVICE_NAME = ATTR_SERVICE_NAME;
+    exports.ATTR_SERVICE_NAMESPACE = ATTR_SERVICE_NAMESPACE;
+    exports.ATTR_SERVICE_VERSION = ATTR_SERVICE_VERSION;
+    exports.ATTR_SIGNALR_CONNECTION_STATUS = ATTR_SIGNALR_CONNECTION_STATUS;
+    exports.ATTR_SIGNALR_TRANSPORT = ATTR_SIGNALR_TRANSPORT;
+    exports.ATTR_TELEMETRY_DISTRO_NAME = ATTR_TELEMETRY_DISTRO_NAME;
+    exports.ATTR_TELEMETRY_DISTRO_VERSION = ATTR_TELEMETRY_DISTRO_VERSION;
+    exports.ATTR_TELEMETRY_SDK_LANGUAGE = ATTR_TELEMETRY_SDK_LANGUAGE;
+    exports.ATTR_TELEMETRY_SDK_NAME = ATTR_TELEMETRY_SDK_NAME;
+    exports.ATTR_TELEMETRY_SDK_VERSION = ATTR_TELEMETRY_SDK_VERSION;
+    exports.ATTR_URL_FRAGMENT = ATTR_URL_FRAGMENT;
+    exports.ATTR_URL_FULL = ATTR_URL_FULL;
+    exports.ATTR_URL_PATH = ATTR_URL_PATH;
+    exports.ATTR_URL_QUERY = ATTR_URL_QUERY;
+    exports.ATTR_URL_SCHEME = ATTR_URL_SCHEME;
+    exports.ATTR_USER_AGENT_ORIGINAL = ATTR_USER_AGENT_ORIGINAL;
+    exports.DB_SYSTEM_NAME_VALUE_MARIADB = DB_SYSTEM_NAME_VALUE_MARIADB;
+    exports.DB_SYSTEM_NAME_VALUE_MICROSOFT_SQL_SERVER = DB_SYSTEM_NAME_VALUE_MICROSOFT_SQL_SERVER;
+    exports.DB_SYSTEM_NAME_VALUE_MYSQL = DB_SYSTEM_NAME_VALUE_MYSQL;
+    exports.DB_SYSTEM_NAME_VALUE_POSTGRESQL = DB_SYSTEM_NAME_VALUE_POSTGRESQL;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_DEVELOPMENT = DEPLOYMENT_ENVIRONMENT_NAME_VALUE_DEVELOPMENT;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_PRODUCTION = DEPLOYMENT_ENVIRONMENT_NAME_VALUE_PRODUCTION;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_STAGING = DEPLOYMENT_ENVIRONMENT_NAME_VALUE_STAGING;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_TEST = DEPLOYMENT_ENVIRONMENT_NAME_VALUE_TEST;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_GEN0 = DOTNET_GC_HEAP_GENERATION_VALUE_GEN0;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_GEN1 = DOTNET_GC_HEAP_GENERATION_VALUE_GEN1;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_GEN2 = DOTNET_GC_HEAP_GENERATION_VALUE_GEN2;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_LOH = DOTNET_GC_HEAP_GENERATION_VALUE_LOH;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_POH = DOTNET_GC_HEAP_GENERATION_VALUE_POH;
+    exports.ERROR_TYPE_VALUE_OTHER = ERROR_TYPE_VALUE_OTHER;
+    exports.HTTP_REQUEST_METHOD_VALUE_CONNECT = HTTP_REQUEST_METHOD_VALUE_CONNECT;
+    exports.HTTP_REQUEST_METHOD_VALUE_DELETE = HTTP_REQUEST_METHOD_VALUE_DELETE;
+    exports.HTTP_REQUEST_METHOD_VALUE_GET = HTTP_REQUEST_METHOD_VALUE_GET;
+    exports.HTTP_REQUEST_METHOD_VALUE_HEAD = HTTP_REQUEST_METHOD_VALUE_HEAD;
+    exports.HTTP_REQUEST_METHOD_VALUE_OPTIONS = HTTP_REQUEST_METHOD_VALUE_OPTIONS;
+    exports.HTTP_REQUEST_METHOD_VALUE_OTHER = HTTP_REQUEST_METHOD_VALUE_OTHER;
+    exports.HTTP_REQUEST_METHOD_VALUE_PATCH = HTTP_REQUEST_METHOD_VALUE_PATCH;
+    exports.HTTP_REQUEST_METHOD_VALUE_POST = HTTP_REQUEST_METHOD_VALUE_POST;
+    exports.HTTP_REQUEST_METHOD_VALUE_PUT = HTTP_REQUEST_METHOD_VALUE_PUT;
+    exports.HTTP_REQUEST_METHOD_VALUE_TRACE = HTTP_REQUEST_METHOD_VALUE_TRACE;
+    exports.JVM_MEMORY_TYPE_VALUE_HEAP = JVM_MEMORY_TYPE_VALUE_HEAP;
+    exports.JVM_MEMORY_TYPE_VALUE_NON_HEAP = JVM_MEMORY_TYPE_VALUE_NON_HEAP;
+    exports.JVM_THREAD_STATE_VALUE_BLOCKED = JVM_THREAD_STATE_VALUE_BLOCKED;
+    exports.JVM_THREAD_STATE_VALUE_NEW = JVM_THREAD_STATE_VALUE_NEW;
+    exports.JVM_THREAD_STATE_VALUE_RUNNABLE = JVM_THREAD_STATE_VALUE_RUNNABLE;
+    exports.JVM_THREAD_STATE_VALUE_TERMINATED = JVM_THREAD_STATE_VALUE_TERMINATED;
+    exports.JVM_THREAD_STATE_VALUE_TIMED_WAITING = JVM_THREAD_STATE_VALUE_TIMED_WAITING;
+    exports.JVM_THREAD_STATE_VALUE_WAITING = JVM_THREAD_STATE_VALUE_WAITING;
+    exports.NETWORK_TRANSPORT_VALUE_PIPE = NETWORK_TRANSPORT_VALUE_PIPE;
+    exports.NETWORK_TRANSPORT_VALUE_QUIC = NETWORK_TRANSPORT_VALUE_QUIC;
+    exports.NETWORK_TRANSPORT_VALUE_TCP = NETWORK_TRANSPORT_VALUE_TCP;
+    exports.NETWORK_TRANSPORT_VALUE_UDP = NETWORK_TRANSPORT_VALUE_UDP;
+    exports.NETWORK_TRANSPORT_VALUE_UNIX = NETWORK_TRANSPORT_VALUE_UNIX;
+    exports.NETWORK_TYPE_VALUE_IPV4 = NETWORK_TYPE_VALUE_IPV4;
+    exports.NETWORK_TYPE_VALUE_IPV6 = NETWORK_TYPE_VALUE_IPV6;
+    exports.OTEL_STATUS_CODE_VALUE_ERROR = OTEL_STATUS_CODE_VALUE_ERROR;
+    exports.OTEL_STATUS_CODE_VALUE_OK = OTEL_STATUS_CODE_VALUE_OK;
+    exports.SIGNALR_CONNECTION_STATUS_VALUE_APP_SHUTDOWN = SIGNALR_CONNECTION_STATUS_VALUE_APP_SHUTDOWN;
+    exports.SIGNALR_CONNECTION_STATUS_VALUE_NORMAL_CLOSURE = SIGNALR_CONNECTION_STATUS_VALUE_NORMAL_CLOSURE;
+    exports.SIGNALR_CONNECTION_STATUS_VALUE_TIMEOUT = SIGNALR_CONNECTION_STATUS_VALUE_TIMEOUT;
+    exports.SIGNALR_TRANSPORT_VALUE_LONG_POLLING = SIGNALR_TRANSPORT_VALUE_LONG_POLLING;
+    exports.SIGNALR_TRANSPORT_VALUE_SERVER_SENT_EVENTS = SIGNALR_TRANSPORT_VALUE_SERVER_SENT_EVENTS;
+    exports.SIGNALR_TRANSPORT_VALUE_WEB_SOCKETS = SIGNALR_TRANSPORT_VALUE_WEB_SOCKETS;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_CPP = TELEMETRY_SDK_LANGUAGE_VALUE_CPP;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_DOTNET = TELEMETRY_SDK_LANGUAGE_VALUE_DOTNET;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_ERLANG = TELEMETRY_SDK_LANGUAGE_VALUE_ERLANG;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_GO = TELEMETRY_SDK_LANGUAGE_VALUE_GO;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_JAVA = TELEMETRY_SDK_LANGUAGE_VALUE_JAVA;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_KOTLIN = TELEMETRY_SDK_LANGUAGE_VALUE_KOTLIN;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_NODEJS = TELEMETRY_SDK_LANGUAGE_VALUE_NODEJS;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_PHP = TELEMETRY_SDK_LANGUAGE_VALUE_PHP;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_PYTHON = TELEMETRY_SDK_LANGUAGE_VALUE_PYTHON;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_RUBY = TELEMETRY_SDK_LANGUAGE_VALUE_RUBY;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_RUST = TELEMETRY_SDK_LANGUAGE_VALUE_RUST;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_SWIFT = TELEMETRY_SDK_LANGUAGE_VALUE_SWIFT;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_WEBJS = TELEMETRY_SDK_LANGUAGE_VALUE_WEBJS;
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/stable_metrics.cjs
+var require_stable_metrics = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/stable_metrics.cjs"(exports) {
+    var METRIC_ASPNETCORE_DIAGNOSTICS_EXCEPTIONS = "aspnetcore.diagnostics.exceptions";
+    var METRIC_ASPNETCORE_RATE_LIMITING_ACTIVE_REQUEST_LEASES = "aspnetcore.rate_limiting.active_request_leases";
+    var METRIC_ASPNETCORE_RATE_LIMITING_QUEUED_REQUESTS = "aspnetcore.rate_limiting.queued_requests";
+    var METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_TIME_IN_QUEUE = "aspnetcore.rate_limiting.request.time_in_queue";
+    var METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_LEASE_DURATION = "aspnetcore.rate_limiting.request_lease.duration";
+    var METRIC_ASPNETCORE_RATE_LIMITING_REQUESTS = "aspnetcore.rate_limiting.requests";
+    var METRIC_ASPNETCORE_ROUTING_MATCH_ATTEMPTS = "aspnetcore.routing.match_attempts";
+    var METRIC_DB_CLIENT_OPERATION_DURATION = "db.client.operation.duration";
+    var METRIC_DOTNET_ASSEMBLY_COUNT = "dotnet.assembly.count";
+    var METRIC_DOTNET_EXCEPTIONS = "dotnet.exceptions";
+    var METRIC_DOTNET_GC_COLLECTIONS = "dotnet.gc.collections";
+    var METRIC_DOTNET_GC_HEAP_TOTAL_ALLOCATED = "dotnet.gc.heap.total_allocated";
+    var METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_FRAGMENTATION_SIZE = "dotnet.gc.last_collection.heap.fragmentation.size";
+    var METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_SIZE = "dotnet.gc.last_collection.heap.size";
+    var METRIC_DOTNET_GC_LAST_COLLECTION_MEMORY_COMMITTED_SIZE = "dotnet.gc.last_collection.memory.committed_size";
+    var METRIC_DOTNET_GC_PAUSE_TIME = "dotnet.gc.pause.time";
+    var METRIC_DOTNET_JIT_COMPILATION_TIME = "dotnet.jit.compilation.time";
+    var METRIC_DOTNET_JIT_COMPILED_IL_SIZE = "dotnet.jit.compiled_il.size";
+    var METRIC_DOTNET_JIT_COMPILED_METHODS = "dotnet.jit.compiled_methods";
+    var METRIC_DOTNET_MONITOR_LOCK_CONTENTIONS = "dotnet.monitor.lock_contentions";
+    var METRIC_DOTNET_PROCESS_CPU_COUNT = "dotnet.process.cpu.count";
+    var METRIC_DOTNET_PROCESS_CPU_TIME = "dotnet.process.cpu.time";
+    var METRIC_DOTNET_PROCESS_MEMORY_WORKING_SET = "dotnet.process.memory.working_set";
+    var METRIC_DOTNET_THREAD_POOL_QUEUE_LENGTH = "dotnet.thread_pool.queue.length";
+    var METRIC_DOTNET_THREAD_POOL_THREAD_COUNT = "dotnet.thread_pool.thread.count";
+    var METRIC_DOTNET_THREAD_POOL_WORK_ITEM_COUNT = "dotnet.thread_pool.work_item.count";
+    var METRIC_DOTNET_TIMER_COUNT = "dotnet.timer.count";
+    var METRIC_HTTP_CLIENT_REQUEST_DURATION = "http.client.request.duration";
+    var METRIC_HTTP_SERVER_REQUEST_DURATION = "http.server.request.duration";
+    var METRIC_JVM_CLASS_COUNT = "jvm.class.count";
+    var METRIC_JVM_CLASS_LOADED = "jvm.class.loaded";
+    var METRIC_JVM_CLASS_UNLOADED = "jvm.class.unloaded";
+    var METRIC_JVM_CPU_COUNT = "jvm.cpu.count";
+    var METRIC_JVM_CPU_RECENT_UTILIZATION = "jvm.cpu.recent_utilization";
+    var METRIC_JVM_CPU_TIME = "jvm.cpu.time";
+    var METRIC_JVM_GC_DURATION = "jvm.gc.duration";
+    var METRIC_JVM_MEMORY_COMMITTED = "jvm.memory.committed";
+    var METRIC_JVM_MEMORY_LIMIT = "jvm.memory.limit";
+    var METRIC_JVM_MEMORY_USED = "jvm.memory.used";
+    var METRIC_JVM_MEMORY_USED_AFTER_LAST_GC = "jvm.memory.used_after_last_gc";
+    var METRIC_JVM_THREAD_COUNT = "jvm.thread.count";
+    var METRIC_KESTREL_ACTIVE_CONNECTIONS = "kestrel.active_connections";
+    var METRIC_KESTREL_ACTIVE_TLS_HANDSHAKES = "kestrel.active_tls_handshakes";
+    var METRIC_KESTREL_CONNECTION_DURATION = "kestrel.connection.duration";
+    var METRIC_KESTREL_QUEUED_CONNECTIONS = "kestrel.queued_connections";
+    var METRIC_KESTREL_QUEUED_REQUESTS = "kestrel.queued_requests";
+    var METRIC_KESTREL_REJECTED_CONNECTIONS = "kestrel.rejected_connections";
+    var METRIC_KESTREL_TLS_HANDSHAKE_DURATION = "kestrel.tls_handshake.duration";
+    var METRIC_KESTREL_UPGRADED_CONNECTIONS = "kestrel.upgraded_connections";
+    var METRIC_SIGNALR_SERVER_ACTIVE_CONNECTIONS = "signalr.server.active_connections";
+    var METRIC_SIGNALR_SERVER_CONNECTION_DURATION = "signalr.server.connection.duration";
+    exports.METRIC_ASPNETCORE_DIAGNOSTICS_EXCEPTIONS = METRIC_ASPNETCORE_DIAGNOSTICS_EXCEPTIONS;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_ACTIVE_REQUEST_LEASES = METRIC_ASPNETCORE_RATE_LIMITING_ACTIVE_REQUEST_LEASES;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_QUEUED_REQUESTS = METRIC_ASPNETCORE_RATE_LIMITING_QUEUED_REQUESTS;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_REQUESTS = METRIC_ASPNETCORE_RATE_LIMITING_REQUESTS;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_LEASE_DURATION = METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_LEASE_DURATION;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_TIME_IN_QUEUE = METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_TIME_IN_QUEUE;
+    exports.METRIC_ASPNETCORE_ROUTING_MATCH_ATTEMPTS = METRIC_ASPNETCORE_ROUTING_MATCH_ATTEMPTS;
+    exports.METRIC_DB_CLIENT_OPERATION_DURATION = METRIC_DB_CLIENT_OPERATION_DURATION;
+    exports.METRIC_DOTNET_ASSEMBLY_COUNT = METRIC_DOTNET_ASSEMBLY_COUNT;
+    exports.METRIC_DOTNET_EXCEPTIONS = METRIC_DOTNET_EXCEPTIONS;
+    exports.METRIC_DOTNET_GC_COLLECTIONS = METRIC_DOTNET_GC_COLLECTIONS;
+    exports.METRIC_DOTNET_GC_HEAP_TOTAL_ALLOCATED = METRIC_DOTNET_GC_HEAP_TOTAL_ALLOCATED;
+    exports.METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_FRAGMENTATION_SIZE = METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_FRAGMENTATION_SIZE;
+    exports.METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_SIZE = METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_SIZE;
+    exports.METRIC_DOTNET_GC_LAST_COLLECTION_MEMORY_COMMITTED_SIZE = METRIC_DOTNET_GC_LAST_COLLECTION_MEMORY_COMMITTED_SIZE;
+    exports.METRIC_DOTNET_GC_PAUSE_TIME = METRIC_DOTNET_GC_PAUSE_TIME;
+    exports.METRIC_DOTNET_JIT_COMPILATION_TIME = METRIC_DOTNET_JIT_COMPILATION_TIME;
+    exports.METRIC_DOTNET_JIT_COMPILED_IL_SIZE = METRIC_DOTNET_JIT_COMPILED_IL_SIZE;
+    exports.METRIC_DOTNET_JIT_COMPILED_METHODS = METRIC_DOTNET_JIT_COMPILED_METHODS;
+    exports.METRIC_DOTNET_MONITOR_LOCK_CONTENTIONS = METRIC_DOTNET_MONITOR_LOCK_CONTENTIONS;
+    exports.METRIC_DOTNET_PROCESS_CPU_COUNT = METRIC_DOTNET_PROCESS_CPU_COUNT;
+    exports.METRIC_DOTNET_PROCESS_CPU_TIME = METRIC_DOTNET_PROCESS_CPU_TIME;
+    exports.METRIC_DOTNET_PROCESS_MEMORY_WORKING_SET = METRIC_DOTNET_PROCESS_MEMORY_WORKING_SET;
+    exports.METRIC_DOTNET_THREAD_POOL_QUEUE_LENGTH = METRIC_DOTNET_THREAD_POOL_QUEUE_LENGTH;
+    exports.METRIC_DOTNET_THREAD_POOL_THREAD_COUNT = METRIC_DOTNET_THREAD_POOL_THREAD_COUNT;
+    exports.METRIC_DOTNET_THREAD_POOL_WORK_ITEM_COUNT = METRIC_DOTNET_THREAD_POOL_WORK_ITEM_COUNT;
+    exports.METRIC_DOTNET_TIMER_COUNT = METRIC_DOTNET_TIMER_COUNT;
+    exports.METRIC_HTTP_CLIENT_REQUEST_DURATION = METRIC_HTTP_CLIENT_REQUEST_DURATION;
+    exports.METRIC_HTTP_SERVER_REQUEST_DURATION = METRIC_HTTP_SERVER_REQUEST_DURATION;
+    exports.METRIC_JVM_CLASS_COUNT = METRIC_JVM_CLASS_COUNT;
+    exports.METRIC_JVM_CLASS_LOADED = METRIC_JVM_CLASS_LOADED;
+    exports.METRIC_JVM_CLASS_UNLOADED = METRIC_JVM_CLASS_UNLOADED;
+    exports.METRIC_JVM_CPU_COUNT = METRIC_JVM_CPU_COUNT;
+    exports.METRIC_JVM_CPU_RECENT_UTILIZATION = METRIC_JVM_CPU_RECENT_UTILIZATION;
+    exports.METRIC_JVM_CPU_TIME = METRIC_JVM_CPU_TIME;
+    exports.METRIC_JVM_GC_DURATION = METRIC_JVM_GC_DURATION;
+    exports.METRIC_JVM_MEMORY_COMMITTED = METRIC_JVM_MEMORY_COMMITTED;
+    exports.METRIC_JVM_MEMORY_LIMIT = METRIC_JVM_MEMORY_LIMIT;
+    exports.METRIC_JVM_MEMORY_USED = METRIC_JVM_MEMORY_USED;
+    exports.METRIC_JVM_MEMORY_USED_AFTER_LAST_GC = METRIC_JVM_MEMORY_USED_AFTER_LAST_GC;
+    exports.METRIC_JVM_THREAD_COUNT = METRIC_JVM_THREAD_COUNT;
+    exports.METRIC_KESTREL_ACTIVE_CONNECTIONS = METRIC_KESTREL_ACTIVE_CONNECTIONS;
+    exports.METRIC_KESTREL_ACTIVE_TLS_HANDSHAKES = METRIC_KESTREL_ACTIVE_TLS_HANDSHAKES;
+    exports.METRIC_KESTREL_CONNECTION_DURATION = METRIC_KESTREL_CONNECTION_DURATION;
+    exports.METRIC_KESTREL_QUEUED_CONNECTIONS = METRIC_KESTREL_QUEUED_CONNECTIONS;
+    exports.METRIC_KESTREL_QUEUED_REQUESTS = METRIC_KESTREL_QUEUED_REQUESTS;
+    exports.METRIC_KESTREL_REJECTED_CONNECTIONS = METRIC_KESTREL_REJECTED_CONNECTIONS;
+    exports.METRIC_KESTREL_TLS_HANDSHAKE_DURATION = METRIC_KESTREL_TLS_HANDSHAKE_DURATION;
+    exports.METRIC_KESTREL_UPGRADED_CONNECTIONS = METRIC_KESTREL_UPGRADED_CONNECTIONS;
+    exports.METRIC_SIGNALR_SERVER_ACTIVE_CONNECTIONS = METRIC_SIGNALR_SERVER_ACTIVE_CONNECTIONS;
+    exports.METRIC_SIGNALR_SERVER_CONNECTION_DURATION = METRIC_SIGNALR_SERVER_CONNECTION_DURATION;
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/stable_events.cjs
+var require_stable_events = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/stable_events.cjs"(exports) {
+    var EVENT_EXCEPTION = "exception";
+    exports.EVENT_EXCEPTION = EVENT_EXCEPTION;
+  }
+});
+
+// node_modules/@opentelemetry/semantic-conventions/dist/index.cjs
+var require_dist4 = __commonJS({
+  "node_modules/@opentelemetry/semantic-conventions/dist/index.cjs"(exports) {
+    Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+    var require_SemanticAttributes2 = require_SemanticAttributes();
+    var require_SemanticResourceAttributes2 = require_SemanticResourceAttributes();
+    var require_stable_attributes2 = require_stable_attributes();
+    var require_stable_metrics2 = require_stable_metrics();
+    var require_stable_events2 = require_stable_events();
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_ABORTED = require_stable_attributes2.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_ABORTED;
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_HANDLED = require_stable_attributes2.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_HANDLED;
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_SKIPPED = require_stable_attributes2.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_SKIPPED;
+    exports.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_UNHANDLED = require_stable_attributes2.ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT_VALUE_UNHANDLED;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ACQUIRED = require_stable_attributes2.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ACQUIRED;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ENDPOINT_LIMITER = require_stable_attributes2.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_ENDPOINT_LIMITER;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_GLOBAL_LIMITER = require_stable_attributes2.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_GLOBAL_LIMITER;
+    exports.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_REQUEST_CANCELED = require_stable_attributes2.ASPNETCORE_RATE_LIMITING_RESULT_VALUE_REQUEST_CANCELED;
+    exports.ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_FAILURE = require_stable_attributes2.ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_FAILURE;
+    exports.ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_SUCCESS = require_stable_attributes2.ASPNETCORE_ROUTING_MATCH_STATUS_VALUE_SUCCESS;
+    exports.ATTR_ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT = require_stable_attributes2.ATTR_ASPNETCORE_DIAGNOSTICS_EXCEPTION_RESULT;
+    exports.ATTR_ASPNETCORE_DIAGNOSTICS_HANDLER_TYPE = require_stable_attributes2.ATTR_ASPNETCORE_DIAGNOSTICS_HANDLER_TYPE;
+    exports.ATTR_ASPNETCORE_RATE_LIMITING_POLICY = require_stable_attributes2.ATTR_ASPNETCORE_RATE_LIMITING_POLICY;
+    exports.ATTR_ASPNETCORE_RATE_LIMITING_RESULT = require_stable_attributes2.ATTR_ASPNETCORE_RATE_LIMITING_RESULT;
+    exports.ATTR_ASPNETCORE_REQUEST_IS_UNHANDLED = require_stable_attributes2.ATTR_ASPNETCORE_REQUEST_IS_UNHANDLED;
+    exports.ATTR_ASPNETCORE_ROUTING_IS_FALLBACK = require_stable_attributes2.ATTR_ASPNETCORE_ROUTING_IS_FALLBACK;
+    exports.ATTR_ASPNETCORE_ROUTING_MATCH_STATUS = require_stable_attributes2.ATTR_ASPNETCORE_ROUTING_MATCH_STATUS;
+    exports.ATTR_ASPNETCORE_USER_IS_AUTHENTICATED = require_stable_attributes2.ATTR_ASPNETCORE_USER_IS_AUTHENTICATED;
+    exports.ATTR_CLIENT_ADDRESS = require_stable_attributes2.ATTR_CLIENT_ADDRESS;
+    exports.ATTR_CLIENT_PORT = require_stable_attributes2.ATTR_CLIENT_PORT;
+    exports.ATTR_CODE_COLUMN_NUMBER = require_stable_attributes2.ATTR_CODE_COLUMN_NUMBER;
+    exports.ATTR_CODE_FILE_PATH = require_stable_attributes2.ATTR_CODE_FILE_PATH;
+    exports.ATTR_CODE_FUNCTION_NAME = require_stable_attributes2.ATTR_CODE_FUNCTION_NAME;
+    exports.ATTR_CODE_LINE_NUMBER = require_stable_attributes2.ATTR_CODE_LINE_NUMBER;
+    exports.ATTR_CODE_STACKTRACE = require_stable_attributes2.ATTR_CODE_STACKTRACE;
+    exports.ATTR_CONTAINER_ID = require_stable_attributes2.ATTR_CONTAINER_ID;
+    exports.ATTR_CONTAINER_IMAGE_NAME = require_stable_attributes2.ATTR_CONTAINER_IMAGE_NAME;
+    exports.ATTR_CONTAINER_IMAGE_REPO_DIGESTS = require_stable_attributes2.ATTR_CONTAINER_IMAGE_REPO_DIGESTS;
+    exports.ATTR_CONTAINER_IMAGE_TAGS = require_stable_attributes2.ATTR_CONTAINER_IMAGE_TAGS;
+    exports.ATTR_DB_COLLECTION_NAME = require_stable_attributes2.ATTR_DB_COLLECTION_NAME;
+    exports.ATTR_DB_NAMESPACE = require_stable_attributes2.ATTR_DB_NAMESPACE;
+    exports.ATTR_DB_OPERATION_BATCH_SIZE = require_stable_attributes2.ATTR_DB_OPERATION_BATCH_SIZE;
+    exports.ATTR_DB_OPERATION_NAME = require_stable_attributes2.ATTR_DB_OPERATION_NAME;
+    exports.ATTR_DB_QUERY_SUMMARY = require_stable_attributes2.ATTR_DB_QUERY_SUMMARY;
+    exports.ATTR_DB_QUERY_TEXT = require_stable_attributes2.ATTR_DB_QUERY_TEXT;
+    exports.ATTR_DB_RESPONSE_STATUS_CODE = require_stable_attributes2.ATTR_DB_RESPONSE_STATUS_CODE;
+    exports.ATTR_DB_STORED_PROCEDURE_NAME = require_stable_attributes2.ATTR_DB_STORED_PROCEDURE_NAME;
+    exports.ATTR_DB_SYSTEM_NAME = require_stable_attributes2.ATTR_DB_SYSTEM_NAME;
+    exports.ATTR_DEPLOYMENT_ENVIRONMENT_NAME = require_stable_attributes2.ATTR_DEPLOYMENT_ENVIRONMENT_NAME;
+    exports.ATTR_DOTNET_GC_HEAP_GENERATION = require_stable_attributes2.ATTR_DOTNET_GC_HEAP_GENERATION;
+    exports.ATTR_ERROR_TYPE = require_stable_attributes2.ATTR_ERROR_TYPE;
+    exports.ATTR_EXCEPTION_ESCAPED = require_stable_attributes2.ATTR_EXCEPTION_ESCAPED;
+    exports.ATTR_EXCEPTION_MESSAGE = require_stable_attributes2.ATTR_EXCEPTION_MESSAGE;
+    exports.ATTR_EXCEPTION_STACKTRACE = require_stable_attributes2.ATTR_EXCEPTION_STACKTRACE;
+    exports.ATTR_EXCEPTION_TYPE = require_stable_attributes2.ATTR_EXCEPTION_TYPE;
+    exports.ATTR_HTTP_REQUEST_HEADER = require_stable_attributes2.ATTR_HTTP_REQUEST_HEADER;
+    exports.ATTR_HTTP_REQUEST_METHOD = require_stable_attributes2.ATTR_HTTP_REQUEST_METHOD;
+    exports.ATTR_HTTP_REQUEST_METHOD_ORIGINAL = require_stable_attributes2.ATTR_HTTP_REQUEST_METHOD_ORIGINAL;
+    exports.ATTR_HTTP_REQUEST_RESEND_COUNT = require_stable_attributes2.ATTR_HTTP_REQUEST_RESEND_COUNT;
+    exports.ATTR_HTTP_RESPONSE_HEADER = require_stable_attributes2.ATTR_HTTP_RESPONSE_HEADER;
+    exports.ATTR_HTTP_RESPONSE_STATUS_CODE = require_stable_attributes2.ATTR_HTTP_RESPONSE_STATUS_CODE;
+    exports.ATTR_HTTP_ROUTE = require_stable_attributes2.ATTR_HTTP_ROUTE;
+    exports.ATTR_JVM_GC_ACTION = require_stable_attributes2.ATTR_JVM_GC_ACTION;
+    exports.ATTR_JVM_GC_NAME = require_stable_attributes2.ATTR_JVM_GC_NAME;
+    exports.ATTR_JVM_MEMORY_POOL_NAME = require_stable_attributes2.ATTR_JVM_MEMORY_POOL_NAME;
+    exports.ATTR_JVM_MEMORY_TYPE = require_stable_attributes2.ATTR_JVM_MEMORY_TYPE;
+    exports.ATTR_JVM_THREAD_DAEMON = require_stable_attributes2.ATTR_JVM_THREAD_DAEMON;
+    exports.ATTR_JVM_THREAD_STATE = require_stable_attributes2.ATTR_JVM_THREAD_STATE;
+    exports.ATTR_K8S_CLUSTER_NAME = require_stable_attributes2.ATTR_K8S_CLUSTER_NAME;
+    exports.ATTR_K8S_CLUSTER_UID = require_stable_attributes2.ATTR_K8S_CLUSTER_UID;
+    exports.ATTR_K8S_CONTAINER_NAME = require_stable_attributes2.ATTR_K8S_CONTAINER_NAME;
+    exports.ATTR_K8S_CONTAINER_RESTART_COUNT = require_stable_attributes2.ATTR_K8S_CONTAINER_RESTART_COUNT;
+    exports.ATTR_K8S_CRONJOB_ANNOTATION = require_stable_attributes2.ATTR_K8S_CRONJOB_ANNOTATION;
+    exports.ATTR_K8S_CRONJOB_LABEL = require_stable_attributes2.ATTR_K8S_CRONJOB_LABEL;
+    exports.ATTR_K8S_CRONJOB_NAME = require_stable_attributes2.ATTR_K8S_CRONJOB_NAME;
+    exports.ATTR_K8S_CRONJOB_UID = require_stable_attributes2.ATTR_K8S_CRONJOB_UID;
+    exports.ATTR_K8S_DAEMONSET_ANNOTATION = require_stable_attributes2.ATTR_K8S_DAEMONSET_ANNOTATION;
+    exports.ATTR_K8S_DAEMONSET_LABEL = require_stable_attributes2.ATTR_K8S_DAEMONSET_LABEL;
+    exports.ATTR_K8S_DAEMONSET_NAME = require_stable_attributes2.ATTR_K8S_DAEMONSET_NAME;
+    exports.ATTR_K8S_DAEMONSET_UID = require_stable_attributes2.ATTR_K8S_DAEMONSET_UID;
+    exports.ATTR_K8S_DEPLOYMENT_ANNOTATION = require_stable_attributes2.ATTR_K8S_DEPLOYMENT_ANNOTATION;
+    exports.ATTR_K8S_DEPLOYMENT_LABEL = require_stable_attributes2.ATTR_K8S_DEPLOYMENT_LABEL;
+    exports.ATTR_K8S_DEPLOYMENT_NAME = require_stable_attributes2.ATTR_K8S_DEPLOYMENT_NAME;
+    exports.ATTR_K8S_DEPLOYMENT_UID = require_stable_attributes2.ATTR_K8S_DEPLOYMENT_UID;
+    exports.ATTR_K8S_JOB_ANNOTATION = require_stable_attributes2.ATTR_K8S_JOB_ANNOTATION;
+    exports.ATTR_K8S_JOB_LABEL = require_stable_attributes2.ATTR_K8S_JOB_LABEL;
+    exports.ATTR_K8S_JOB_NAME = require_stable_attributes2.ATTR_K8S_JOB_NAME;
+    exports.ATTR_K8S_JOB_UID = require_stable_attributes2.ATTR_K8S_JOB_UID;
+    exports.ATTR_K8S_NAMESPACE_ANNOTATION = require_stable_attributes2.ATTR_K8S_NAMESPACE_ANNOTATION;
+    exports.ATTR_K8S_NAMESPACE_LABEL = require_stable_attributes2.ATTR_K8S_NAMESPACE_LABEL;
+    exports.ATTR_K8S_NAMESPACE_NAME = require_stable_attributes2.ATTR_K8S_NAMESPACE_NAME;
+    exports.ATTR_K8S_NODE_ANNOTATION = require_stable_attributes2.ATTR_K8S_NODE_ANNOTATION;
+    exports.ATTR_K8S_NODE_LABEL = require_stable_attributes2.ATTR_K8S_NODE_LABEL;
+    exports.ATTR_K8S_NODE_NAME = require_stable_attributes2.ATTR_K8S_NODE_NAME;
+    exports.ATTR_K8S_NODE_UID = require_stable_attributes2.ATTR_K8S_NODE_UID;
+    exports.ATTR_K8S_POD_ANNOTATION = require_stable_attributes2.ATTR_K8S_POD_ANNOTATION;
+    exports.ATTR_K8S_POD_HOSTNAME = require_stable_attributes2.ATTR_K8S_POD_HOSTNAME;
+    exports.ATTR_K8S_POD_IP = require_stable_attributes2.ATTR_K8S_POD_IP;
+    exports.ATTR_K8S_POD_LABEL = require_stable_attributes2.ATTR_K8S_POD_LABEL;
+    exports.ATTR_K8S_POD_NAME = require_stable_attributes2.ATTR_K8S_POD_NAME;
+    exports.ATTR_K8S_POD_START_TIME = require_stable_attributes2.ATTR_K8S_POD_START_TIME;
+    exports.ATTR_K8S_POD_UID = require_stable_attributes2.ATTR_K8S_POD_UID;
+    exports.ATTR_K8S_REPLICASET_ANNOTATION = require_stable_attributes2.ATTR_K8S_REPLICASET_ANNOTATION;
+    exports.ATTR_K8S_REPLICASET_LABEL = require_stable_attributes2.ATTR_K8S_REPLICASET_LABEL;
+    exports.ATTR_K8S_REPLICASET_NAME = require_stable_attributes2.ATTR_K8S_REPLICASET_NAME;
+    exports.ATTR_K8S_REPLICASET_UID = require_stable_attributes2.ATTR_K8S_REPLICASET_UID;
+    exports.ATTR_K8S_STATEFULSET_ANNOTATION = require_stable_attributes2.ATTR_K8S_STATEFULSET_ANNOTATION;
+    exports.ATTR_K8S_STATEFULSET_LABEL = require_stable_attributes2.ATTR_K8S_STATEFULSET_LABEL;
+    exports.ATTR_K8S_STATEFULSET_NAME = require_stable_attributes2.ATTR_K8S_STATEFULSET_NAME;
+    exports.ATTR_K8S_STATEFULSET_UID = require_stable_attributes2.ATTR_K8S_STATEFULSET_UID;
+    exports.ATTR_NETWORK_LOCAL_ADDRESS = require_stable_attributes2.ATTR_NETWORK_LOCAL_ADDRESS;
+    exports.ATTR_NETWORK_LOCAL_PORT = require_stable_attributes2.ATTR_NETWORK_LOCAL_PORT;
+    exports.ATTR_NETWORK_PEER_ADDRESS = require_stable_attributes2.ATTR_NETWORK_PEER_ADDRESS;
+    exports.ATTR_NETWORK_PEER_PORT = require_stable_attributes2.ATTR_NETWORK_PEER_PORT;
+    exports.ATTR_NETWORK_PROTOCOL_NAME = require_stable_attributes2.ATTR_NETWORK_PROTOCOL_NAME;
+    exports.ATTR_NETWORK_PROTOCOL_VERSION = require_stable_attributes2.ATTR_NETWORK_PROTOCOL_VERSION;
+    exports.ATTR_NETWORK_TRANSPORT = require_stable_attributes2.ATTR_NETWORK_TRANSPORT;
+    exports.ATTR_NETWORK_TYPE = require_stable_attributes2.ATTR_NETWORK_TYPE;
+    exports.ATTR_OTEL_EVENT_NAME = require_stable_attributes2.ATTR_OTEL_EVENT_NAME;
+    exports.ATTR_OTEL_SCOPE_NAME = require_stable_attributes2.ATTR_OTEL_SCOPE_NAME;
+    exports.ATTR_OTEL_SCOPE_VERSION = require_stable_attributes2.ATTR_OTEL_SCOPE_VERSION;
+    exports.ATTR_OTEL_STATUS_CODE = require_stable_attributes2.ATTR_OTEL_STATUS_CODE;
+    exports.ATTR_OTEL_STATUS_DESCRIPTION = require_stable_attributes2.ATTR_OTEL_STATUS_DESCRIPTION;
+    exports.ATTR_SERVER_ADDRESS = require_stable_attributes2.ATTR_SERVER_ADDRESS;
+    exports.ATTR_SERVER_PORT = require_stable_attributes2.ATTR_SERVER_PORT;
+    exports.ATTR_SERVICE_INSTANCE_ID = require_stable_attributes2.ATTR_SERVICE_INSTANCE_ID;
+    exports.ATTR_SERVICE_NAME = require_stable_attributes2.ATTR_SERVICE_NAME;
+    exports.ATTR_SERVICE_NAMESPACE = require_stable_attributes2.ATTR_SERVICE_NAMESPACE;
+    exports.ATTR_SERVICE_VERSION = require_stable_attributes2.ATTR_SERVICE_VERSION;
+    exports.ATTR_SIGNALR_CONNECTION_STATUS = require_stable_attributes2.ATTR_SIGNALR_CONNECTION_STATUS;
+    exports.ATTR_SIGNALR_TRANSPORT = require_stable_attributes2.ATTR_SIGNALR_TRANSPORT;
+    exports.ATTR_TELEMETRY_DISTRO_NAME = require_stable_attributes2.ATTR_TELEMETRY_DISTRO_NAME;
+    exports.ATTR_TELEMETRY_DISTRO_VERSION = require_stable_attributes2.ATTR_TELEMETRY_DISTRO_VERSION;
+    exports.ATTR_TELEMETRY_SDK_LANGUAGE = require_stable_attributes2.ATTR_TELEMETRY_SDK_LANGUAGE;
+    exports.ATTR_TELEMETRY_SDK_NAME = require_stable_attributes2.ATTR_TELEMETRY_SDK_NAME;
+    exports.ATTR_TELEMETRY_SDK_VERSION = require_stable_attributes2.ATTR_TELEMETRY_SDK_VERSION;
+    exports.ATTR_URL_FRAGMENT = require_stable_attributes2.ATTR_URL_FRAGMENT;
+    exports.ATTR_URL_FULL = require_stable_attributes2.ATTR_URL_FULL;
+    exports.ATTR_URL_PATH = require_stable_attributes2.ATTR_URL_PATH;
+    exports.ATTR_URL_QUERY = require_stable_attributes2.ATTR_URL_QUERY;
+    exports.ATTR_URL_SCHEME = require_stable_attributes2.ATTR_URL_SCHEME;
+    exports.ATTR_USER_AGENT_ORIGINAL = require_stable_attributes2.ATTR_USER_AGENT_ORIGINAL;
+    exports.AWSECSLAUNCHTYPEVALUES_EC2 = require_SemanticResourceAttributes2.AWSECSLAUNCHTYPEVALUES_EC2;
+    exports.AWSECSLAUNCHTYPEVALUES_FARGATE = require_SemanticResourceAttributes2.AWSECSLAUNCHTYPEVALUES_FARGATE;
+    exports.AwsEcsLaunchtypeValues = require_SemanticResourceAttributes2.AwsEcsLaunchtypeValues;
+    exports.CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_ALIBABA_CLOUD_ECS;
+    exports.CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_ALIBABA_CLOUD_FC;
+    exports.CLOUDPLATFORMVALUES_AWS_EC2 = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AWS_EC2;
+    exports.CLOUDPLATFORMVALUES_AWS_ECS = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AWS_ECS;
+    exports.CLOUDPLATFORMVALUES_AWS_EKS = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AWS_EKS;
+    exports.CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AWS_ELASTIC_BEANSTALK;
+    exports.CLOUDPLATFORMVALUES_AWS_LAMBDA = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AWS_LAMBDA;
+    exports.CLOUDPLATFORMVALUES_AZURE_AKS = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AZURE_AKS;
+    exports.CLOUDPLATFORMVALUES_AZURE_APP_SERVICE = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AZURE_APP_SERVICE;
+    exports.CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AZURE_CONTAINER_INSTANCES;
+    exports.CLOUDPLATFORMVALUES_AZURE_FUNCTIONS = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AZURE_FUNCTIONS;
+    exports.CLOUDPLATFORMVALUES_AZURE_VM = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_AZURE_VM;
+    exports.CLOUDPLATFORMVALUES_GCP_APP_ENGINE = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_GCP_APP_ENGINE;
+    exports.CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_GCP_CLOUD_FUNCTIONS;
+    exports.CLOUDPLATFORMVALUES_GCP_CLOUD_RUN = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_GCP_CLOUD_RUN;
+    exports.CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_GCP_COMPUTE_ENGINE;
+    exports.CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE = require_SemanticResourceAttributes2.CLOUDPLATFORMVALUES_GCP_KUBERNETES_ENGINE;
+    exports.CLOUDPROVIDERVALUES_ALIBABA_CLOUD = require_SemanticResourceAttributes2.CLOUDPROVIDERVALUES_ALIBABA_CLOUD;
+    exports.CLOUDPROVIDERVALUES_AWS = require_SemanticResourceAttributes2.CLOUDPROVIDERVALUES_AWS;
+    exports.CLOUDPROVIDERVALUES_AZURE = require_SemanticResourceAttributes2.CLOUDPROVIDERVALUES_AZURE;
+    exports.CLOUDPROVIDERVALUES_GCP = require_SemanticResourceAttributes2.CLOUDPROVIDERVALUES_GCP;
+    exports.CloudPlatformValues = require_SemanticResourceAttributes2.CloudPlatformValues;
+    exports.CloudProviderValues = require_SemanticResourceAttributes2.CloudProviderValues;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_ALL = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_ALL;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_ANY = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_ANY;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_EACH_QUORUM;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_ONE;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_QUORUM;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_LOCAL_SERIAL;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_ONE = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_ONE;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_QUORUM;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_SERIAL;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_THREE = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_THREE;
+    exports.DBCASSANDRACONSISTENCYLEVELVALUES_TWO = require_SemanticAttributes2.DBCASSANDRACONSISTENCYLEVELVALUES_TWO;
+    exports.DBSYSTEMVALUES_ADABAS = require_SemanticAttributes2.DBSYSTEMVALUES_ADABAS;
+    exports.DBSYSTEMVALUES_CACHE = require_SemanticAttributes2.DBSYSTEMVALUES_CACHE;
+    exports.DBSYSTEMVALUES_CASSANDRA = require_SemanticAttributes2.DBSYSTEMVALUES_CASSANDRA;
+    exports.DBSYSTEMVALUES_CLOUDSCAPE = require_SemanticAttributes2.DBSYSTEMVALUES_CLOUDSCAPE;
+    exports.DBSYSTEMVALUES_COCKROACHDB = require_SemanticAttributes2.DBSYSTEMVALUES_COCKROACHDB;
+    exports.DBSYSTEMVALUES_COLDFUSION = require_SemanticAttributes2.DBSYSTEMVALUES_COLDFUSION;
+    exports.DBSYSTEMVALUES_COSMOSDB = require_SemanticAttributes2.DBSYSTEMVALUES_COSMOSDB;
+    exports.DBSYSTEMVALUES_COUCHBASE = require_SemanticAttributes2.DBSYSTEMVALUES_COUCHBASE;
+    exports.DBSYSTEMVALUES_COUCHDB = require_SemanticAttributes2.DBSYSTEMVALUES_COUCHDB;
+    exports.DBSYSTEMVALUES_DB2 = require_SemanticAttributes2.DBSYSTEMVALUES_DB2;
+    exports.DBSYSTEMVALUES_DERBY = require_SemanticAttributes2.DBSYSTEMVALUES_DERBY;
+    exports.DBSYSTEMVALUES_DYNAMODB = require_SemanticAttributes2.DBSYSTEMVALUES_DYNAMODB;
+    exports.DBSYSTEMVALUES_EDB = require_SemanticAttributes2.DBSYSTEMVALUES_EDB;
+    exports.DBSYSTEMVALUES_ELASTICSEARCH = require_SemanticAttributes2.DBSYSTEMVALUES_ELASTICSEARCH;
+    exports.DBSYSTEMVALUES_FILEMAKER = require_SemanticAttributes2.DBSYSTEMVALUES_FILEMAKER;
+    exports.DBSYSTEMVALUES_FIREBIRD = require_SemanticAttributes2.DBSYSTEMVALUES_FIREBIRD;
+    exports.DBSYSTEMVALUES_FIRSTSQL = require_SemanticAttributes2.DBSYSTEMVALUES_FIRSTSQL;
+    exports.DBSYSTEMVALUES_GEODE = require_SemanticAttributes2.DBSYSTEMVALUES_GEODE;
+    exports.DBSYSTEMVALUES_H2 = require_SemanticAttributes2.DBSYSTEMVALUES_H2;
+    exports.DBSYSTEMVALUES_HANADB = require_SemanticAttributes2.DBSYSTEMVALUES_HANADB;
+    exports.DBSYSTEMVALUES_HBASE = require_SemanticAttributes2.DBSYSTEMVALUES_HBASE;
+    exports.DBSYSTEMVALUES_HIVE = require_SemanticAttributes2.DBSYSTEMVALUES_HIVE;
+    exports.DBSYSTEMVALUES_HSQLDB = require_SemanticAttributes2.DBSYSTEMVALUES_HSQLDB;
+    exports.DBSYSTEMVALUES_INFORMIX = require_SemanticAttributes2.DBSYSTEMVALUES_INFORMIX;
+    exports.DBSYSTEMVALUES_INGRES = require_SemanticAttributes2.DBSYSTEMVALUES_INGRES;
+    exports.DBSYSTEMVALUES_INSTANTDB = require_SemanticAttributes2.DBSYSTEMVALUES_INSTANTDB;
+    exports.DBSYSTEMVALUES_INTERBASE = require_SemanticAttributes2.DBSYSTEMVALUES_INTERBASE;
+    exports.DBSYSTEMVALUES_MARIADB = require_SemanticAttributes2.DBSYSTEMVALUES_MARIADB;
+    exports.DBSYSTEMVALUES_MAXDB = require_SemanticAttributes2.DBSYSTEMVALUES_MAXDB;
+    exports.DBSYSTEMVALUES_MEMCACHED = require_SemanticAttributes2.DBSYSTEMVALUES_MEMCACHED;
+    exports.DBSYSTEMVALUES_MONGODB = require_SemanticAttributes2.DBSYSTEMVALUES_MONGODB;
+    exports.DBSYSTEMVALUES_MSSQL = require_SemanticAttributes2.DBSYSTEMVALUES_MSSQL;
+    exports.DBSYSTEMVALUES_MYSQL = require_SemanticAttributes2.DBSYSTEMVALUES_MYSQL;
+    exports.DBSYSTEMVALUES_NEO4J = require_SemanticAttributes2.DBSYSTEMVALUES_NEO4J;
+    exports.DBSYSTEMVALUES_NETEZZA = require_SemanticAttributes2.DBSYSTEMVALUES_NETEZZA;
+    exports.DBSYSTEMVALUES_ORACLE = require_SemanticAttributes2.DBSYSTEMVALUES_ORACLE;
+    exports.DBSYSTEMVALUES_OTHER_SQL = require_SemanticAttributes2.DBSYSTEMVALUES_OTHER_SQL;
+    exports.DBSYSTEMVALUES_PERVASIVE = require_SemanticAttributes2.DBSYSTEMVALUES_PERVASIVE;
+    exports.DBSYSTEMVALUES_POINTBASE = require_SemanticAttributes2.DBSYSTEMVALUES_POINTBASE;
+    exports.DBSYSTEMVALUES_POSTGRESQL = require_SemanticAttributes2.DBSYSTEMVALUES_POSTGRESQL;
+    exports.DBSYSTEMVALUES_PROGRESS = require_SemanticAttributes2.DBSYSTEMVALUES_PROGRESS;
+    exports.DBSYSTEMVALUES_REDIS = require_SemanticAttributes2.DBSYSTEMVALUES_REDIS;
+    exports.DBSYSTEMVALUES_REDSHIFT = require_SemanticAttributes2.DBSYSTEMVALUES_REDSHIFT;
+    exports.DBSYSTEMVALUES_SQLITE = require_SemanticAttributes2.DBSYSTEMVALUES_SQLITE;
+    exports.DBSYSTEMVALUES_SYBASE = require_SemanticAttributes2.DBSYSTEMVALUES_SYBASE;
+    exports.DBSYSTEMVALUES_TERADATA = require_SemanticAttributes2.DBSYSTEMVALUES_TERADATA;
+    exports.DBSYSTEMVALUES_VERTICA = require_SemanticAttributes2.DBSYSTEMVALUES_VERTICA;
+    exports.DB_SYSTEM_NAME_VALUE_MARIADB = require_stable_attributes2.DB_SYSTEM_NAME_VALUE_MARIADB;
+    exports.DB_SYSTEM_NAME_VALUE_MICROSOFT_SQL_SERVER = require_stable_attributes2.DB_SYSTEM_NAME_VALUE_MICROSOFT_SQL_SERVER;
+    exports.DB_SYSTEM_NAME_VALUE_MYSQL = require_stable_attributes2.DB_SYSTEM_NAME_VALUE_MYSQL;
+    exports.DB_SYSTEM_NAME_VALUE_POSTGRESQL = require_stable_attributes2.DB_SYSTEM_NAME_VALUE_POSTGRESQL;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_DEVELOPMENT = require_stable_attributes2.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_DEVELOPMENT;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_PRODUCTION = require_stable_attributes2.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_PRODUCTION;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_STAGING = require_stable_attributes2.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_STAGING;
+    exports.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_TEST = require_stable_attributes2.DEPLOYMENT_ENVIRONMENT_NAME_VALUE_TEST;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_GEN0 = require_stable_attributes2.DOTNET_GC_HEAP_GENERATION_VALUE_GEN0;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_GEN1 = require_stable_attributes2.DOTNET_GC_HEAP_GENERATION_VALUE_GEN1;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_GEN2 = require_stable_attributes2.DOTNET_GC_HEAP_GENERATION_VALUE_GEN2;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_LOH = require_stable_attributes2.DOTNET_GC_HEAP_GENERATION_VALUE_LOH;
+    exports.DOTNET_GC_HEAP_GENERATION_VALUE_POH = require_stable_attributes2.DOTNET_GC_HEAP_GENERATION_VALUE_POH;
+    exports.DbCassandraConsistencyLevelValues = require_SemanticAttributes2.DbCassandraConsistencyLevelValues;
+    exports.DbSystemValues = require_SemanticAttributes2.DbSystemValues;
+    exports.ERROR_TYPE_VALUE_OTHER = require_stable_attributes2.ERROR_TYPE_VALUE_OTHER;
+    exports.EVENT_EXCEPTION = require_stable_events2.EVENT_EXCEPTION;
+    exports.FAASDOCUMENTOPERATIONVALUES_DELETE = require_SemanticAttributes2.FAASDOCUMENTOPERATIONVALUES_DELETE;
+    exports.FAASDOCUMENTOPERATIONVALUES_EDIT = require_SemanticAttributes2.FAASDOCUMENTOPERATIONVALUES_EDIT;
+    exports.FAASDOCUMENTOPERATIONVALUES_INSERT = require_SemanticAttributes2.FAASDOCUMENTOPERATIONVALUES_INSERT;
+    exports.FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD = require_SemanticAttributes2.FAASINVOKEDPROVIDERVALUES_ALIBABA_CLOUD;
+    exports.FAASINVOKEDPROVIDERVALUES_AWS = require_SemanticAttributes2.FAASINVOKEDPROVIDERVALUES_AWS;
+    exports.FAASINVOKEDPROVIDERVALUES_AZURE = require_SemanticAttributes2.FAASINVOKEDPROVIDERVALUES_AZURE;
+    exports.FAASINVOKEDPROVIDERVALUES_GCP = require_SemanticAttributes2.FAASINVOKEDPROVIDERVALUES_GCP;
+    exports.FAASTRIGGERVALUES_DATASOURCE = require_SemanticAttributes2.FAASTRIGGERVALUES_DATASOURCE;
+    exports.FAASTRIGGERVALUES_HTTP = require_SemanticAttributes2.FAASTRIGGERVALUES_HTTP;
+    exports.FAASTRIGGERVALUES_OTHER = require_SemanticAttributes2.FAASTRIGGERVALUES_OTHER;
+    exports.FAASTRIGGERVALUES_PUBSUB = require_SemanticAttributes2.FAASTRIGGERVALUES_PUBSUB;
+    exports.FAASTRIGGERVALUES_TIMER = require_SemanticAttributes2.FAASTRIGGERVALUES_TIMER;
+    exports.FaasDocumentOperationValues = require_SemanticAttributes2.FaasDocumentOperationValues;
+    exports.FaasInvokedProviderValues = require_SemanticAttributes2.FaasInvokedProviderValues;
+    exports.FaasTriggerValues = require_SemanticAttributes2.FaasTriggerValues;
+    exports.HOSTARCHVALUES_AMD64 = require_SemanticResourceAttributes2.HOSTARCHVALUES_AMD64;
+    exports.HOSTARCHVALUES_ARM32 = require_SemanticResourceAttributes2.HOSTARCHVALUES_ARM32;
+    exports.HOSTARCHVALUES_ARM64 = require_SemanticResourceAttributes2.HOSTARCHVALUES_ARM64;
+    exports.HOSTARCHVALUES_IA64 = require_SemanticResourceAttributes2.HOSTARCHVALUES_IA64;
+    exports.HOSTARCHVALUES_PPC32 = require_SemanticResourceAttributes2.HOSTARCHVALUES_PPC32;
+    exports.HOSTARCHVALUES_PPC64 = require_SemanticResourceAttributes2.HOSTARCHVALUES_PPC64;
+    exports.HOSTARCHVALUES_X86 = require_SemanticResourceAttributes2.HOSTARCHVALUES_X86;
+    exports.HTTPFLAVORVALUES_HTTP_1_0 = require_SemanticAttributes2.HTTPFLAVORVALUES_HTTP_1_0;
+    exports.HTTPFLAVORVALUES_HTTP_1_1 = require_SemanticAttributes2.HTTPFLAVORVALUES_HTTP_1_1;
+    exports.HTTPFLAVORVALUES_HTTP_2_0 = require_SemanticAttributes2.HTTPFLAVORVALUES_HTTP_2_0;
+    exports.HTTPFLAVORVALUES_QUIC = require_SemanticAttributes2.HTTPFLAVORVALUES_QUIC;
+    exports.HTTPFLAVORVALUES_SPDY = require_SemanticAttributes2.HTTPFLAVORVALUES_SPDY;
+    exports.HTTP_REQUEST_METHOD_VALUE_CONNECT = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_CONNECT;
+    exports.HTTP_REQUEST_METHOD_VALUE_DELETE = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_DELETE;
+    exports.HTTP_REQUEST_METHOD_VALUE_GET = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_GET;
+    exports.HTTP_REQUEST_METHOD_VALUE_HEAD = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_HEAD;
+    exports.HTTP_REQUEST_METHOD_VALUE_OPTIONS = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_OPTIONS;
+    exports.HTTP_REQUEST_METHOD_VALUE_OTHER = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_OTHER;
+    exports.HTTP_REQUEST_METHOD_VALUE_PATCH = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_PATCH;
+    exports.HTTP_REQUEST_METHOD_VALUE_POST = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_POST;
+    exports.HTTP_REQUEST_METHOD_VALUE_PUT = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_PUT;
+    exports.HTTP_REQUEST_METHOD_VALUE_TRACE = require_stable_attributes2.HTTP_REQUEST_METHOD_VALUE_TRACE;
+    exports.HostArchValues = require_SemanticResourceAttributes2.HostArchValues;
+    exports.HttpFlavorValues = require_SemanticAttributes2.HttpFlavorValues;
+    exports.JVM_MEMORY_TYPE_VALUE_HEAP = require_stable_attributes2.JVM_MEMORY_TYPE_VALUE_HEAP;
+    exports.JVM_MEMORY_TYPE_VALUE_NON_HEAP = require_stable_attributes2.JVM_MEMORY_TYPE_VALUE_NON_HEAP;
+    exports.JVM_THREAD_STATE_VALUE_BLOCKED = require_stable_attributes2.JVM_THREAD_STATE_VALUE_BLOCKED;
+    exports.JVM_THREAD_STATE_VALUE_NEW = require_stable_attributes2.JVM_THREAD_STATE_VALUE_NEW;
+    exports.JVM_THREAD_STATE_VALUE_RUNNABLE = require_stable_attributes2.JVM_THREAD_STATE_VALUE_RUNNABLE;
+    exports.JVM_THREAD_STATE_VALUE_TERMINATED = require_stable_attributes2.JVM_THREAD_STATE_VALUE_TERMINATED;
+    exports.JVM_THREAD_STATE_VALUE_TIMED_WAITING = require_stable_attributes2.JVM_THREAD_STATE_VALUE_TIMED_WAITING;
+    exports.JVM_THREAD_STATE_VALUE_WAITING = require_stable_attributes2.JVM_THREAD_STATE_VALUE_WAITING;
+    exports.MESSAGETYPEVALUES_RECEIVED = require_SemanticAttributes2.MESSAGETYPEVALUES_RECEIVED;
+    exports.MESSAGETYPEVALUES_SENT = require_SemanticAttributes2.MESSAGETYPEVALUES_SENT;
+    exports.MESSAGINGDESTINATIONKINDVALUES_QUEUE = require_SemanticAttributes2.MESSAGINGDESTINATIONKINDVALUES_QUEUE;
+    exports.MESSAGINGDESTINATIONKINDVALUES_TOPIC = require_SemanticAttributes2.MESSAGINGDESTINATIONKINDVALUES_TOPIC;
+    exports.MESSAGINGOPERATIONVALUES_PROCESS = require_SemanticAttributes2.MESSAGINGOPERATIONVALUES_PROCESS;
+    exports.MESSAGINGOPERATIONVALUES_RECEIVE = require_SemanticAttributes2.MESSAGINGOPERATIONVALUES_RECEIVE;
+    exports.METRIC_ASPNETCORE_DIAGNOSTICS_EXCEPTIONS = require_stable_metrics2.METRIC_ASPNETCORE_DIAGNOSTICS_EXCEPTIONS;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_ACTIVE_REQUEST_LEASES = require_stable_metrics2.METRIC_ASPNETCORE_RATE_LIMITING_ACTIVE_REQUEST_LEASES;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_QUEUED_REQUESTS = require_stable_metrics2.METRIC_ASPNETCORE_RATE_LIMITING_QUEUED_REQUESTS;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_REQUESTS = require_stable_metrics2.METRIC_ASPNETCORE_RATE_LIMITING_REQUESTS;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_LEASE_DURATION = require_stable_metrics2.METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_LEASE_DURATION;
+    exports.METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_TIME_IN_QUEUE = require_stable_metrics2.METRIC_ASPNETCORE_RATE_LIMITING_REQUEST_TIME_IN_QUEUE;
+    exports.METRIC_ASPNETCORE_ROUTING_MATCH_ATTEMPTS = require_stable_metrics2.METRIC_ASPNETCORE_ROUTING_MATCH_ATTEMPTS;
+    exports.METRIC_DB_CLIENT_OPERATION_DURATION = require_stable_metrics2.METRIC_DB_CLIENT_OPERATION_DURATION;
+    exports.METRIC_DOTNET_ASSEMBLY_COUNT = require_stable_metrics2.METRIC_DOTNET_ASSEMBLY_COUNT;
+    exports.METRIC_DOTNET_EXCEPTIONS = require_stable_metrics2.METRIC_DOTNET_EXCEPTIONS;
+    exports.METRIC_DOTNET_GC_COLLECTIONS = require_stable_metrics2.METRIC_DOTNET_GC_COLLECTIONS;
+    exports.METRIC_DOTNET_GC_HEAP_TOTAL_ALLOCATED = require_stable_metrics2.METRIC_DOTNET_GC_HEAP_TOTAL_ALLOCATED;
+    exports.METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_FRAGMENTATION_SIZE = require_stable_metrics2.METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_FRAGMENTATION_SIZE;
+    exports.METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_SIZE = require_stable_metrics2.METRIC_DOTNET_GC_LAST_COLLECTION_HEAP_SIZE;
+    exports.METRIC_DOTNET_GC_LAST_COLLECTION_MEMORY_COMMITTED_SIZE = require_stable_metrics2.METRIC_DOTNET_GC_LAST_COLLECTION_MEMORY_COMMITTED_SIZE;
+    exports.METRIC_DOTNET_GC_PAUSE_TIME = require_stable_metrics2.METRIC_DOTNET_GC_PAUSE_TIME;
+    exports.METRIC_DOTNET_JIT_COMPILATION_TIME = require_stable_metrics2.METRIC_DOTNET_JIT_COMPILATION_TIME;
+    exports.METRIC_DOTNET_JIT_COMPILED_IL_SIZE = require_stable_metrics2.METRIC_DOTNET_JIT_COMPILED_IL_SIZE;
+    exports.METRIC_DOTNET_JIT_COMPILED_METHODS = require_stable_metrics2.METRIC_DOTNET_JIT_COMPILED_METHODS;
+    exports.METRIC_DOTNET_MONITOR_LOCK_CONTENTIONS = require_stable_metrics2.METRIC_DOTNET_MONITOR_LOCK_CONTENTIONS;
+    exports.METRIC_DOTNET_PROCESS_CPU_COUNT = require_stable_metrics2.METRIC_DOTNET_PROCESS_CPU_COUNT;
+    exports.METRIC_DOTNET_PROCESS_CPU_TIME = require_stable_metrics2.METRIC_DOTNET_PROCESS_CPU_TIME;
+    exports.METRIC_DOTNET_PROCESS_MEMORY_WORKING_SET = require_stable_metrics2.METRIC_DOTNET_PROCESS_MEMORY_WORKING_SET;
+    exports.METRIC_DOTNET_THREAD_POOL_QUEUE_LENGTH = require_stable_metrics2.METRIC_DOTNET_THREAD_POOL_QUEUE_LENGTH;
+    exports.METRIC_DOTNET_THREAD_POOL_THREAD_COUNT = require_stable_metrics2.METRIC_DOTNET_THREAD_POOL_THREAD_COUNT;
+    exports.METRIC_DOTNET_THREAD_POOL_WORK_ITEM_COUNT = require_stable_metrics2.METRIC_DOTNET_THREAD_POOL_WORK_ITEM_COUNT;
+    exports.METRIC_DOTNET_TIMER_COUNT = require_stable_metrics2.METRIC_DOTNET_TIMER_COUNT;
+    exports.METRIC_HTTP_CLIENT_REQUEST_DURATION = require_stable_metrics2.METRIC_HTTP_CLIENT_REQUEST_DURATION;
+    exports.METRIC_HTTP_SERVER_REQUEST_DURATION = require_stable_metrics2.METRIC_HTTP_SERVER_REQUEST_DURATION;
+    exports.METRIC_JVM_CLASS_COUNT = require_stable_metrics2.METRIC_JVM_CLASS_COUNT;
+    exports.METRIC_JVM_CLASS_LOADED = require_stable_metrics2.METRIC_JVM_CLASS_LOADED;
+    exports.METRIC_JVM_CLASS_UNLOADED = require_stable_metrics2.METRIC_JVM_CLASS_UNLOADED;
+    exports.METRIC_JVM_CPU_COUNT = require_stable_metrics2.METRIC_JVM_CPU_COUNT;
+    exports.METRIC_JVM_CPU_RECENT_UTILIZATION = require_stable_metrics2.METRIC_JVM_CPU_RECENT_UTILIZATION;
+    exports.METRIC_JVM_CPU_TIME = require_stable_metrics2.METRIC_JVM_CPU_TIME;
+    exports.METRIC_JVM_GC_DURATION = require_stable_metrics2.METRIC_JVM_GC_DURATION;
+    exports.METRIC_JVM_MEMORY_COMMITTED = require_stable_metrics2.METRIC_JVM_MEMORY_COMMITTED;
+    exports.METRIC_JVM_MEMORY_LIMIT = require_stable_metrics2.METRIC_JVM_MEMORY_LIMIT;
+    exports.METRIC_JVM_MEMORY_USED = require_stable_metrics2.METRIC_JVM_MEMORY_USED;
+    exports.METRIC_JVM_MEMORY_USED_AFTER_LAST_GC = require_stable_metrics2.METRIC_JVM_MEMORY_USED_AFTER_LAST_GC;
+    exports.METRIC_JVM_THREAD_COUNT = require_stable_metrics2.METRIC_JVM_THREAD_COUNT;
+    exports.METRIC_KESTREL_ACTIVE_CONNECTIONS = require_stable_metrics2.METRIC_KESTREL_ACTIVE_CONNECTIONS;
+    exports.METRIC_KESTREL_ACTIVE_TLS_HANDSHAKES = require_stable_metrics2.METRIC_KESTREL_ACTIVE_TLS_HANDSHAKES;
+    exports.METRIC_KESTREL_CONNECTION_DURATION = require_stable_metrics2.METRIC_KESTREL_CONNECTION_DURATION;
+    exports.METRIC_KESTREL_QUEUED_CONNECTIONS = require_stable_metrics2.METRIC_KESTREL_QUEUED_CONNECTIONS;
+    exports.METRIC_KESTREL_QUEUED_REQUESTS = require_stable_metrics2.METRIC_KESTREL_QUEUED_REQUESTS;
+    exports.METRIC_KESTREL_REJECTED_CONNECTIONS = require_stable_metrics2.METRIC_KESTREL_REJECTED_CONNECTIONS;
+    exports.METRIC_KESTREL_TLS_HANDSHAKE_DURATION = require_stable_metrics2.METRIC_KESTREL_TLS_HANDSHAKE_DURATION;
+    exports.METRIC_KESTREL_UPGRADED_CONNECTIONS = require_stable_metrics2.METRIC_KESTREL_UPGRADED_CONNECTIONS;
+    exports.METRIC_SIGNALR_SERVER_ACTIVE_CONNECTIONS = require_stable_metrics2.METRIC_SIGNALR_SERVER_ACTIVE_CONNECTIONS;
+    exports.METRIC_SIGNALR_SERVER_CONNECTION_DURATION = require_stable_metrics2.METRIC_SIGNALR_SERVER_CONNECTION_DURATION;
+    exports.MessageTypeValues = require_SemanticAttributes2.MessageTypeValues;
+    exports.MessagingDestinationKindValues = require_SemanticAttributes2.MessagingDestinationKindValues;
+    exports.MessagingOperationValues = require_SemanticAttributes2.MessagingOperationValues;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_CDMA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_CDMA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_CDMA2000_1XRTT;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EDGE = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_EDGE;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_EHRPD;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0 = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_0;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_A;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_EVDO_B;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_GPRS = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_GPRS;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_GSM = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_GSM;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_HSDPA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSPA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_HSPA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_HSPAP;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_HSUPA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_IDEN = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_IDEN;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_IWLAN;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_LTE = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_LTE;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_LTE_CA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_NR = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_NR;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_NRNSA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_TD_SCDMA;
+    exports.NETHOSTCONNECTIONSUBTYPEVALUES_UMTS = require_SemanticAttributes2.NETHOSTCONNECTIONSUBTYPEVALUES_UMTS;
+    exports.NETHOSTCONNECTIONTYPEVALUES_CELL = require_SemanticAttributes2.NETHOSTCONNECTIONTYPEVALUES_CELL;
+    exports.NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE = require_SemanticAttributes2.NETHOSTCONNECTIONTYPEVALUES_UNAVAILABLE;
+    exports.NETHOSTCONNECTIONTYPEVALUES_UNKNOWN = require_SemanticAttributes2.NETHOSTCONNECTIONTYPEVALUES_UNKNOWN;
+    exports.NETHOSTCONNECTIONTYPEVALUES_WIFI = require_SemanticAttributes2.NETHOSTCONNECTIONTYPEVALUES_WIFI;
+    exports.NETHOSTCONNECTIONTYPEVALUES_WIRED = require_SemanticAttributes2.NETHOSTCONNECTIONTYPEVALUES_WIRED;
+    exports.NETTRANSPORTVALUES_INPROC = require_SemanticAttributes2.NETTRANSPORTVALUES_INPROC;
+    exports.NETTRANSPORTVALUES_IP = require_SemanticAttributes2.NETTRANSPORTVALUES_IP;
+    exports.NETTRANSPORTVALUES_IP_TCP = require_SemanticAttributes2.NETTRANSPORTVALUES_IP_TCP;
+    exports.NETTRANSPORTVALUES_IP_UDP = require_SemanticAttributes2.NETTRANSPORTVALUES_IP_UDP;
+    exports.NETTRANSPORTVALUES_OTHER = require_SemanticAttributes2.NETTRANSPORTVALUES_OTHER;
+    exports.NETTRANSPORTVALUES_PIPE = require_SemanticAttributes2.NETTRANSPORTVALUES_PIPE;
+    exports.NETTRANSPORTVALUES_UNIX = require_SemanticAttributes2.NETTRANSPORTVALUES_UNIX;
+    exports.NETWORK_TRANSPORT_VALUE_PIPE = require_stable_attributes2.NETWORK_TRANSPORT_VALUE_PIPE;
+    exports.NETWORK_TRANSPORT_VALUE_QUIC = require_stable_attributes2.NETWORK_TRANSPORT_VALUE_QUIC;
+    exports.NETWORK_TRANSPORT_VALUE_TCP = require_stable_attributes2.NETWORK_TRANSPORT_VALUE_TCP;
+    exports.NETWORK_TRANSPORT_VALUE_UDP = require_stable_attributes2.NETWORK_TRANSPORT_VALUE_UDP;
+    exports.NETWORK_TRANSPORT_VALUE_UNIX = require_stable_attributes2.NETWORK_TRANSPORT_VALUE_UNIX;
+    exports.NETWORK_TYPE_VALUE_IPV4 = require_stable_attributes2.NETWORK_TYPE_VALUE_IPV4;
+    exports.NETWORK_TYPE_VALUE_IPV6 = require_stable_attributes2.NETWORK_TYPE_VALUE_IPV6;
+    exports.NetHostConnectionSubtypeValues = require_SemanticAttributes2.NetHostConnectionSubtypeValues;
+    exports.NetHostConnectionTypeValues = require_SemanticAttributes2.NetHostConnectionTypeValues;
+    exports.NetTransportValues = require_SemanticAttributes2.NetTransportValues;
+    exports.OSTYPEVALUES_AIX = require_SemanticResourceAttributes2.OSTYPEVALUES_AIX;
+    exports.OSTYPEVALUES_DARWIN = require_SemanticResourceAttributes2.OSTYPEVALUES_DARWIN;
+    exports.OSTYPEVALUES_DRAGONFLYBSD = require_SemanticResourceAttributes2.OSTYPEVALUES_DRAGONFLYBSD;
+    exports.OSTYPEVALUES_FREEBSD = require_SemanticResourceAttributes2.OSTYPEVALUES_FREEBSD;
+    exports.OSTYPEVALUES_HPUX = require_SemanticResourceAttributes2.OSTYPEVALUES_HPUX;
+    exports.OSTYPEVALUES_LINUX = require_SemanticResourceAttributes2.OSTYPEVALUES_LINUX;
+    exports.OSTYPEVALUES_NETBSD = require_SemanticResourceAttributes2.OSTYPEVALUES_NETBSD;
+    exports.OSTYPEVALUES_OPENBSD = require_SemanticResourceAttributes2.OSTYPEVALUES_OPENBSD;
+    exports.OSTYPEVALUES_SOLARIS = require_SemanticResourceAttributes2.OSTYPEVALUES_SOLARIS;
+    exports.OSTYPEVALUES_WINDOWS = require_SemanticResourceAttributes2.OSTYPEVALUES_WINDOWS;
+    exports.OSTYPEVALUES_Z_OS = require_SemanticResourceAttributes2.OSTYPEVALUES_Z_OS;
+    exports.OTEL_STATUS_CODE_VALUE_ERROR = require_stable_attributes2.OTEL_STATUS_CODE_VALUE_ERROR;
+    exports.OTEL_STATUS_CODE_VALUE_OK = require_stable_attributes2.OTEL_STATUS_CODE_VALUE_OK;
+    exports.OsTypeValues = require_SemanticResourceAttributes2.OsTypeValues;
+    exports.RPCGRPCSTATUSCODEVALUES_ABORTED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_ABORTED;
+    exports.RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_ALREADY_EXISTS;
+    exports.RPCGRPCSTATUSCODEVALUES_CANCELLED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_CANCELLED;
+    exports.RPCGRPCSTATUSCODEVALUES_DATA_LOSS = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_DATA_LOSS;
+    exports.RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_DEADLINE_EXCEEDED;
+    exports.RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_FAILED_PRECONDITION;
+    exports.RPCGRPCSTATUSCODEVALUES_INTERNAL = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_INTERNAL;
+    exports.RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_INVALID_ARGUMENT;
+    exports.RPCGRPCSTATUSCODEVALUES_NOT_FOUND = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_NOT_FOUND;
+    exports.RPCGRPCSTATUSCODEVALUES_OK = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_OK;
+    exports.RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_OUT_OF_RANGE;
+    exports.RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_PERMISSION_DENIED;
+    exports.RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_RESOURCE_EXHAUSTED;
+    exports.RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_UNAUTHENTICATED;
+    exports.RPCGRPCSTATUSCODEVALUES_UNAVAILABLE = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_UNAVAILABLE;
+    exports.RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_UNIMPLEMENTED;
+    exports.RPCGRPCSTATUSCODEVALUES_UNKNOWN = require_SemanticAttributes2.RPCGRPCSTATUSCODEVALUES_UNKNOWN;
+    exports.RpcGrpcStatusCodeValues = require_SemanticAttributes2.RpcGrpcStatusCodeValues;
+    exports.SEMATTRS_AWS_DYNAMODB_ATTRIBUTES_TO_GET = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_ATTRIBUTES_TO_GET;
+    exports.SEMATTRS_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_ATTRIBUTE_DEFINITIONS;
+    exports.SEMATTRS_AWS_DYNAMODB_CONSISTENT_READ = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_CONSISTENT_READ;
+    exports.SEMATTRS_AWS_DYNAMODB_CONSUMED_CAPACITY = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_CONSUMED_CAPACITY;
+    exports.SEMATTRS_AWS_DYNAMODB_COUNT = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_COUNT;
+    exports.SEMATTRS_AWS_DYNAMODB_EXCLUSIVE_START_TABLE = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_EXCLUSIVE_START_TABLE;
+    exports.SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEXES;
+    exports.SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_GLOBAL_SECONDARY_INDEX_UPDATES;
+    exports.SEMATTRS_AWS_DYNAMODB_INDEX_NAME = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_INDEX_NAME;
+    exports.SEMATTRS_AWS_DYNAMODB_ITEM_COLLECTION_METRICS = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_ITEM_COLLECTION_METRICS;
+    exports.SEMATTRS_AWS_DYNAMODB_LIMIT = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_LIMIT;
+    exports.SEMATTRS_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_LOCAL_SECONDARY_INDEXES;
+    exports.SEMATTRS_AWS_DYNAMODB_PROJECTION = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_PROJECTION;
+    exports.SEMATTRS_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_PROVISIONED_READ_CAPACITY;
+    exports.SEMATTRS_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_PROVISIONED_WRITE_CAPACITY;
+    exports.SEMATTRS_AWS_DYNAMODB_SCANNED_COUNT = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_SCANNED_COUNT;
+    exports.SEMATTRS_AWS_DYNAMODB_SCAN_FORWARD = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_SCAN_FORWARD;
+    exports.SEMATTRS_AWS_DYNAMODB_SEGMENT = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_SEGMENT;
+    exports.SEMATTRS_AWS_DYNAMODB_SELECT = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_SELECT;
+    exports.SEMATTRS_AWS_DYNAMODB_TABLE_COUNT = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_TABLE_COUNT;
+    exports.SEMATTRS_AWS_DYNAMODB_TABLE_NAMES = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_TABLE_NAMES;
+    exports.SEMATTRS_AWS_DYNAMODB_TOTAL_SEGMENTS = require_SemanticAttributes2.SEMATTRS_AWS_DYNAMODB_TOTAL_SEGMENTS;
+    exports.SEMATTRS_AWS_LAMBDA_INVOKED_ARN = require_SemanticAttributes2.SEMATTRS_AWS_LAMBDA_INVOKED_ARN;
+    exports.SEMATTRS_CODE_FILEPATH = require_SemanticAttributes2.SEMATTRS_CODE_FILEPATH;
+    exports.SEMATTRS_CODE_FUNCTION = require_SemanticAttributes2.SEMATTRS_CODE_FUNCTION;
+    exports.SEMATTRS_CODE_LINENO = require_SemanticAttributes2.SEMATTRS_CODE_LINENO;
+    exports.SEMATTRS_CODE_NAMESPACE = require_SemanticAttributes2.SEMATTRS_CODE_NAMESPACE;
+    exports.SEMATTRS_DB_CASSANDRA_CONSISTENCY_LEVEL = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_CONSISTENCY_LEVEL;
+    exports.SEMATTRS_DB_CASSANDRA_COORDINATOR_DC = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_COORDINATOR_DC;
+    exports.SEMATTRS_DB_CASSANDRA_COORDINATOR_ID = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_COORDINATOR_ID;
+    exports.SEMATTRS_DB_CASSANDRA_IDEMPOTENCE = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_IDEMPOTENCE;
+    exports.SEMATTRS_DB_CASSANDRA_KEYSPACE = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_KEYSPACE;
+    exports.SEMATTRS_DB_CASSANDRA_PAGE_SIZE = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_PAGE_SIZE;
+    exports.SEMATTRS_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_SPECULATIVE_EXECUTION_COUNT;
+    exports.SEMATTRS_DB_CASSANDRA_TABLE = require_SemanticAttributes2.SEMATTRS_DB_CASSANDRA_TABLE;
+    exports.SEMATTRS_DB_CONNECTION_STRING = require_SemanticAttributes2.SEMATTRS_DB_CONNECTION_STRING;
+    exports.SEMATTRS_DB_HBASE_NAMESPACE = require_SemanticAttributes2.SEMATTRS_DB_HBASE_NAMESPACE;
+    exports.SEMATTRS_DB_JDBC_DRIVER_CLASSNAME = require_SemanticAttributes2.SEMATTRS_DB_JDBC_DRIVER_CLASSNAME;
+    exports.SEMATTRS_DB_MONGODB_COLLECTION = require_SemanticAttributes2.SEMATTRS_DB_MONGODB_COLLECTION;
+    exports.SEMATTRS_DB_MSSQL_INSTANCE_NAME = require_SemanticAttributes2.SEMATTRS_DB_MSSQL_INSTANCE_NAME;
+    exports.SEMATTRS_DB_NAME = require_SemanticAttributes2.SEMATTRS_DB_NAME;
+    exports.SEMATTRS_DB_OPERATION = require_SemanticAttributes2.SEMATTRS_DB_OPERATION;
+    exports.SEMATTRS_DB_REDIS_DATABASE_INDEX = require_SemanticAttributes2.SEMATTRS_DB_REDIS_DATABASE_INDEX;
+    exports.SEMATTRS_DB_SQL_TABLE = require_SemanticAttributes2.SEMATTRS_DB_SQL_TABLE;
+    exports.SEMATTRS_DB_STATEMENT = require_SemanticAttributes2.SEMATTRS_DB_STATEMENT;
+    exports.SEMATTRS_DB_SYSTEM = require_SemanticAttributes2.SEMATTRS_DB_SYSTEM;
+    exports.SEMATTRS_DB_USER = require_SemanticAttributes2.SEMATTRS_DB_USER;
+    exports.SEMATTRS_ENDUSER_ID = require_SemanticAttributes2.SEMATTRS_ENDUSER_ID;
+    exports.SEMATTRS_ENDUSER_ROLE = require_SemanticAttributes2.SEMATTRS_ENDUSER_ROLE;
+    exports.SEMATTRS_ENDUSER_SCOPE = require_SemanticAttributes2.SEMATTRS_ENDUSER_SCOPE;
+    exports.SEMATTRS_EXCEPTION_ESCAPED = require_SemanticAttributes2.SEMATTRS_EXCEPTION_ESCAPED;
+    exports.SEMATTRS_EXCEPTION_MESSAGE = require_SemanticAttributes2.SEMATTRS_EXCEPTION_MESSAGE;
+    exports.SEMATTRS_EXCEPTION_STACKTRACE = require_SemanticAttributes2.SEMATTRS_EXCEPTION_STACKTRACE;
+    exports.SEMATTRS_EXCEPTION_TYPE = require_SemanticAttributes2.SEMATTRS_EXCEPTION_TYPE;
+    exports.SEMATTRS_FAAS_COLDSTART = require_SemanticAttributes2.SEMATTRS_FAAS_COLDSTART;
+    exports.SEMATTRS_FAAS_CRON = require_SemanticAttributes2.SEMATTRS_FAAS_CRON;
+    exports.SEMATTRS_FAAS_DOCUMENT_COLLECTION = require_SemanticAttributes2.SEMATTRS_FAAS_DOCUMENT_COLLECTION;
+    exports.SEMATTRS_FAAS_DOCUMENT_NAME = require_SemanticAttributes2.SEMATTRS_FAAS_DOCUMENT_NAME;
+    exports.SEMATTRS_FAAS_DOCUMENT_OPERATION = require_SemanticAttributes2.SEMATTRS_FAAS_DOCUMENT_OPERATION;
+    exports.SEMATTRS_FAAS_DOCUMENT_TIME = require_SemanticAttributes2.SEMATTRS_FAAS_DOCUMENT_TIME;
+    exports.SEMATTRS_FAAS_EXECUTION = require_SemanticAttributes2.SEMATTRS_FAAS_EXECUTION;
+    exports.SEMATTRS_FAAS_INVOKED_NAME = require_SemanticAttributes2.SEMATTRS_FAAS_INVOKED_NAME;
+    exports.SEMATTRS_FAAS_INVOKED_PROVIDER = require_SemanticAttributes2.SEMATTRS_FAAS_INVOKED_PROVIDER;
+    exports.SEMATTRS_FAAS_INVOKED_REGION = require_SemanticAttributes2.SEMATTRS_FAAS_INVOKED_REGION;
+    exports.SEMATTRS_FAAS_TIME = require_SemanticAttributes2.SEMATTRS_FAAS_TIME;
+    exports.SEMATTRS_FAAS_TRIGGER = require_SemanticAttributes2.SEMATTRS_FAAS_TRIGGER;
+    exports.SEMATTRS_HTTP_CLIENT_IP = require_SemanticAttributes2.SEMATTRS_HTTP_CLIENT_IP;
+    exports.SEMATTRS_HTTP_FLAVOR = require_SemanticAttributes2.SEMATTRS_HTTP_FLAVOR;
+    exports.SEMATTRS_HTTP_HOST = require_SemanticAttributes2.SEMATTRS_HTTP_HOST;
+    exports.SEMATTRS_HTTP_METHOD = require_SemanticAttributes2.SEMATTRS_HTTP_METHOD;
+    exports.SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH = require_SemanticAttributes2.SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH;
+    exports.SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED = require_SemanticAttributes2.SEMATTRS_HTTP_REQUEST_CONTENT_LENGTH_UNCOMPRESSED;
+    exports.SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH = require_SemanticAttributes2.SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH;
+    exports.SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED = require_SemanticAttributes2.SEMATTRS_HTTP_RESPONSE_CONTENT_LENGTH_UNCOMPRESSED;
+    exports.SEMATTRS_HTTP_ROUTE = require_SemanticAttributes2.SEMATTRS_HTTP_ROUTE;
+    exports.SEMATTRS_HTTP_SCHEME = require_SemanticAttributes2.SEMATTRS_HTTP_SCHEME;
+    exports.SEMATTRS_HTTP_SERVER_NAME = require_SemanticAttributes2.SEMATTRS_HTTP_SERVER_NAME;
+    exports.SEMATTRS_HTTP_STATUS_CODE = require_SemanticAttributes2.SEMATTRS_HTTP_STATUS_CODE;
+    exports.SEMATTRS_HTTP_TARGET = require_SemanticAttributes2.SEMATTRS_HTTP_TARGET;
+    exports.SEMATTRS_HTTP_URL = require_SemanticAttributes2.SEMATTRS_HTTP_URL;
+    exports.SEMATTRS_HTTP_USER_AGENT = require_SemanticAttributes2.SEMATTRS_HTTP_USER_AGENT;
+    exports.SEMATTRS_MESSAGE_COMPRESSED_SIZE = require_SemanticAttributes2.SEMATTRS_MESSAGE_COMPRESSED_SIZE;
+    exports.SEMATTRS_MESSAGE_ID = require_SemanticAttributes2.SEMATTRS_MESSAGE_ID;
+    exports.SEMATTRS_MESSAGE_TYPE = require_SemanticAttributes2.SEMATTRS_MESSAGE_TYPE;
+    exports.SEMATTRS_MESSAGE_UNCOMPRESSED_SIZE = require_SemanticAttributes2.SEMATTRS_MESSAGE_UNCOMPRESSED_SIZE;
+    exports.SEMATTRS_MESSAGING_CONSUMER_ID = require_SemanticAttributes2.SEMATTRS_MESSAGING_CONSUMER_ID;
+    exports.SEMATTRS_MESSAGING_CONVERSATION_ID = require_SemanticAttributes2.SEMATTRS_MESSAGING_CONVERSATION_ID;
+    exports.SEMATTRS_MESSAGING_DESTINATION = require_SemanticAttributes2.SEMATTRS_MESSAGING_DESTINATION;
+    exports.SEMATTRS_MESSAGING_DESTINATION_KIND = require_SemanticAttributes2.SEMATTRS_MESSAGING_DESTINATION_KIND;
+    exports.SEMATTRS_MESSAGING_KAFKA_CLIENT_ID = require_SemanticAttributes2.SEMATTRS_MESSAGING_KAFKA_CLIENT_ID;
+    exports.SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP = require_SemanticAttributes2.SEMATTRS_MESSAGING_KAFKA_CONSUMER_GROUP;
+    exports.SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY = require_SemanticAttributes2.SEMATTRS_MESSAGING_KAFKA_MESSAGE_KEY;
+    exports.SEMATTRS_MESSAGING_KAFKA_PARTITION = require_SemanticAttributes2.SEMATTRS_MESSAGING_KAFKA_PARTITION;
+    exports.SEMATTRS_MESSAGING_KAFKA_TOMBSTONE = require_SemanticAttributes2.SEMATTRS_MESSAGING_KAFKA_TOMBSTONE;
+    exports.SEMATTRS_MESSAGING_MESSAGE_ID = require_SemanticAttributes2.SEMATTRS_MESSAGING_MESSAGE_ID;
+    exports.SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES = require_SemanticAttributes2.SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_COMPRESSED_SIZE_BYTES;
+    exports.SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES = require_SemanticAttributes2.SEMATTRS_MESSAGING_MESSAGE_PAYLOAD_SIZE_BYTES;
+    exports.SEMATTRS_MESSAGING_OPERATION = require_SemanticAttributes2.SEMATTRS_MESSAGING_OPERATION;
+    exports.SEMATTRS_MESSAGING_PROTOCOL = require_SemanticAttributes2.SEMATTRS_MESSAGING_PROTOCOL;
+    exports.SEMATTRS_MESSAGING_PROTOCOL_VERSION = require_SemanticAttributes2.SEMATTRS_MESSAGING_PROTOCOL_VERSION;
+    exports.SEMATTRS_MESSAGING_RABBITMQ_ROUTING_KEY = require_SemanticAttributes2.SEMATTRS_MESSAGING_RABBITMQ_ROUTING_KEY;
+    exports.SEMATTRS_MESSAGING_SYSTEM = require_SemanticAttributes2.SEMATTRS_MESSAGING_SYSTEM;
+    exports.SEMATTRS_MESSAGING_TEMP_DESTINATION = require_SemanticAttributes2.SEMATTRS_MESSAGING_TEMP_DESTINATION;
+    exports.SEMATTRS_MESSAGING_URL = require_SemanticAttributes2.SEMATTRS_MESSAGING_URL;
+    exports.SEMATTRS_NET_HOST_CARRIER_ICC = require_SemanticAttributes2.SEMATTRS_NET_HOST_CARRIER_ICC;
+    exports.SEMATTRS_NET_HOST_CARRIER_MCC = require_SemanticAttributes2.SEMATTRS_NET_HOST_CARRIER_MCC;
+    exports.SEMATTRS_NET_HOST_CARRIER_MNC = require_SemanticAttributes2.SEMATTRS_NET_HOST_CARRIER_MNC;
+    exports.SEMATTRS_NET_HOST_CARRIER_NAME = require_SemanticAttributes2.SEMATTRS_NET_HOST_CARRIER_NAME;
+    exports.SEMATTRS_NET_HOST_CONNECTION_SUBTYPE = require_SemanticAttributes2.SEMATTRS_NET_HOST_CONNECTION_SUBTYPE;
+    exports.SEMATTRS_NET_HOST_CONNECTION_TYPE = require_SemanticAttributes2.SEMATTRS_NET_HOST_CONNECTION_TYPE;
+    exports.SEMATTRS_NET_HOST_IP = require_SemanticAttributes2.SEMATTRS_NET_HOST_IP;
+    exports.SEMATTRS_NET_HOST_NAME = require_SemanticAttributes2.SEMATTRS_NET_HOST_NAME;
+    exports.SEMATTRS_NET_HOST_PORT = require_SemanticAttributes2.SEMATTRS_NET_HOST_PORT;
+    exports.SEMATTRS_NET_PEER_IP = require_SemanticAttributes2.SEMATTRS_NET_PEER_IP;
+    exports.SEMATTRS_NET_PEER_NAME = require_SemanticAttributes2.SEMATTRS_NET_PEER_NAME;
+    exports.SEMATTRS_NET_PEER_PORT = require_SemanticAttributes2.SEMATTRS_NET_PEER_PORT;
+    exports.SEMATTRS_NET_TRANSPORT = require_SemanticAttributes2.SEMATTRS_NET_TRANSPORT;
+    exports.SEMATTRS_PEER_SERVICE = require_SemanticAttributes2.SEMATTRS_PEER_SERVICE;
+    exports.SEMATTRS_RPC_GRPC_STATUS_CODE = require_SemanticAttributes2.SEMATTRS_RPC_GRPC_STATUS_CODE;
+    exports.SEMATTRS_RPC_JSONRPC_ERROR_CODE = require_SemanticAttributes2.SEMATTRS_RPC_JSONRPC_ERROR_CODE;
+    exports.SEMATTRS_RPC_JSONRPC_ERROR_MESSAGE = require_SemanticAttributes2.SEMATTRS_RPC_JSONRPC_ERROR_MESSAGE;
+    exports.SEMATTRS_RPC_JSONRPC_REQUEST_ID = require_SemanticAttributes2.SEMATTRS_RPC_JSONRPC_REQUEST_ID;
+    exports.SEMATTRS_RPC_JSONRPC_VERSION = require_SemanticAttributes2.SEMATTRS_RPC_JSONRPC_VERSION;
+    exports.SEMATTRS_RPC_METHOD = require_SemanticAttributes2.SEMATTRS_RPC_METHOD;
+    exports.SEMATTRS_RPC_SERVICE = require_SemanticAttributes2.SEMATTRS_RPC_SERVICE;
+    exports.SEMATTRS_RPC_SYSTEM = require_SemanticAttributes2.SEMATTRS_RPC_SYSTEM;
+    exports.SEMATTRS_THREAD_ID = require_SemanticAttributes2.SEMATTRS_THREAD_ID;
+    exports.SEMATTRS_THREAD_NAME = require_SemanticAttributes2.SEMATTRS_THREAD_NAME;
+    exports.SEMRESATTRS_AWS_ECS_CLUSTER_ARN = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_ECS_CLUSTER_ARN;
+    exports.SEMRESATTRS_AWS_ECS_CONTAINER_ARN = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_ECS_CONTAINER_ARN;
+    exports.SEMRESATTRS_AWS_ECS_LAUNCHTYPE = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_ECS_LAUNCHTYPE;
+    exports.SEMRESATTRS_AWS_ECS_TASK_ARN = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_ECS_TASK_ARN;
+    exports.SEMRESATTRS_AWS_ECS_TASK_FAMILY = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_ECS_TASK_FAMILY;
+    exports.SEMRESATTRS_AWS_ECS_TASK_REVISION = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_ECS_TASK_REVISION;
+    exports.SEMRESATTRS_AWS_EKS_CLUSTER_ARN = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_EKS_CLUSTER_ARN;
+    exports.SEMRESATTRS_AWS_LOG_GROUP_ARNS = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_LOG_GROUP_ARNS;
+    exports.SEMRESATTRS_AWS_LOG_GROUP_NAMES = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_LOG_GROUP_NAMES;
+    exports.SEMRESATTRS_AWS_LOG_STREAM_ARNS = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_LOG_STREAM_ARNS;
+    exports.SEMRESATTRS_AWS_LOG_STREAM_NAMES = require_SemanticResourceAttributes2.SEMRESATTRS_AWS_LOG_STREAM_NAMES;
+    exports.SEMRESATTRS_CLOUD_ACCOUNT_ID = require_SemanticResourceAttributes2.SEMRESATTRS_CLOUD_ACCOUNT_ID;
+    exports.SEMRESATTRS_CLOUD_AVAILABILITY_ZONE = require_SemanticResourceAttributes2.SEMRESATTRS_CLOUD_AVAILABILITY_ZONE;
+    exports.SEMRESATTRS_CLOUD_PLATFORM = require_SemanticResourceAttributes2.SEMRESATTRS_CLOUD_PLATFORM;
+    exports.SEMRESATTRS_CLOUD_PROVIDER = require_SemanticResourceAttributes2.SEMRESATTRS_CLOUD_PROVIDER;
+    exports.SEMRESATTRS_CLOUD_REGION = require_SemanticResourceAttributes2.SEMRESATTRS_CLOUD_REGION;
+    exports.SEMRESATTRS_CONTAINER_ID = require_SemanticResourceAttributes2.SEMRESATTRS_CONTAINER_ID;
+    exports.SEMRESATTRS_CONTAINER_IMAGE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_CONTAINER_IMAGE_NAME;
+    exports.SEMRESATTRS_CONTAINER_IMAGE_TAG = require_SemanticResourceAttributes2.SEMRESATTRS_CONTAINER_IMAGE_TAG;
+    exports.SEMRESATTRS_CONTAINER_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_CONTAINER_NAME;
+    exports.SEMRESATTRS_CONTAINER_RUNTIME = require_SemanticResourceAttributes2.SEMRESATTRS_CONTAINER_RUNTIME;
+    exports.SEMRESATTRS_DEPLOYMENT_ENVIRONMENT = require_SemanticResourceAttributes2.SEMRESATTRS_DEPLOYMENT_ENVIRONMENT;
+    exports.SEMRESATTRS_DEVICE_ID = require_SemanticResourceAttributes2.SEMRESATTRS_DEVICE_ID;
+    exports.SEMRESATTRS_DEVICE_MODEL_IDENTIFIER = require_SemanticResourceAttributes2.SEMRESATTRS_DEVICE_MODEL_IDENTIFIER;
+    exports.SEMRESATTRS_DEVICE_MODEL_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_DEVICE_MODEL_NAME;
+    exports.SEMRESATTRS_FAAS_ID = require_SemanticResourceAttributes2.SEMRESATTRS_FAAS_ID;
+    exports.SEMRESATTRS_FAAS_INSTANCE = require_SemanticResourceAttributes2.SEMRESATTRS_FAAS_INSTANCE;
+    exports.SEMRESATTRS_FAAS_MAX_MEMORY = require_SemanticResourceAttributes2.SEMRESATTRS_FAAS_MAX_MEMORY;
+    exports.SEMRESATTRS_FAAS_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_FAAS_NAME;
+    exports.SEMRESATTRS_FAAS_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_FAAS_VERSION;
+    exports.SEMRESATTRS_HOST_ARCH = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_ARCH;
+    exports.SEMRESATTRS_HOST_ID = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_ID;
+    exports.SEMRESATTRS_HOST_IMAGE_ID = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_IMAGE_ID;
+    exports.SEMRESATTRS_HOST_IMAGE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_IMAGE_NAME;
+    exports.SEMRESATTRS_HOST_IMAGE_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_IMAGE_VERSION;
+    exports.SEMRESATTRS_HOST_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_NAME;
+    exports.SEMRESATTRS_HOST_TYPE = require_SemanticResourceAttributes2.SEMRESATTRS_HOST_TYPE;
+    exports.SEMRESATTRS_K8S_CLUSTER_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_CLUSTER_NAME;
+    exports.SEMRESATTRS_K8S_CONTAINER_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_CONTAINER_NAME;
+    exports.SEMRESATTRS_K8S_CRONJOB_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_CRONJOB_NAME;
+    exports.SEMRESATTRS_K8S_CRONJOB_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_CRONJOB_UID;
+    exports.SEMRESATTRS_K8S_DAEMONSET_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_DAEMONSET_NAME;
+    exports.SEMRESATTRS_K8S_DAEMONSET_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_DAEMONSET_UID;
+    exports.SEMRESATTRS_K8S_DEPLOYMENT_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_DEPLOYMENT_NAME;
+    exports.SEMRESATTRS_K8S_DEPLOYMENT_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_DEPLOYMENT_UID;
+    exports.SEMRESATTRS_K8S_JOB_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_JOB_NAME;
+    exports.SEMRESATTRS_K8S_JOB_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_JOB_UID;
+    exports.SEMRESATTRS_K8S_NAMESPACE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_NAMESPACE_NAME;
+    exports.SEMRESATTRS_K8S_NODE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_NODE_NAME;
+    exports.SEMRESATTRS_K8S_NODE_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_NODE_UID;
+    exports.SEMRESATTRS_K8S_POD_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_POD_NAME;
+    exports.SEMRESATTRS_K8S_POD_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_POD_UID;
+    exports.SEMRESATTRS_K8S_REPLICASET_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_REPLICASET_NAME;
+    exports.SEMRESATTRS_K8S_REPLICASET_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_REPLICASET_UID;
+    exports.SEMRESATTRS_K8S_STATEFULSET_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_STATEFULSET_NAME;
+    exports.SEMRESATTRS_K8S_STATEFULSET_UID = require_SemanticResourceAttributes2.SEMRESATTRS_K8S_STATEFULSET_UID;
+    exports.SEMRESATTRS_OS_DESCRIPTION = require_SemanticResourceAttributes2.SEMRESATTRS_OS_DESCRIPTION;
+    exports.SEMRESATTRS_OS_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_OS_NAME;
+    exports.SEMRESATTRS_OS_TYPE = require_SemanticResourceAttributes2.SEMRESATTRS_OS_TYPE;
+    exports.SEMRESATTRS_OS_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_OS_VERSION;
+    exports.SEMRESATTRS_PROCESS_COMMAND = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_COMMAND;
+    exports.SEMRESATTRS_PROCESS_COMMAND_ARGS = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_COMMAND_ARGS;
+    exports.SEMRESATTRS_PROCESS_COMMAND_LINE = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_COMMAND_LINE;
+    exports.SEMRESATTRS_PROCESS_EXECUTABLE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_EXECUTABLE_NAME;
+    exports.SEMRESATTRS_PROCESS_EXECUTABLE_PATH = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_EXECUTABLE_PATH;
+    exports.SEMRESATTRS_PROCESS_OWNER = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_OWNER;
+    exports.SEMRESATTRS_PROCESS_PID = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_PID;
+    exports.SEMRESATTRS_PROCESS_RUNTIME_DESCRIPTION = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_RUNTIME_DESCRIPTION;
+    exports.SEMRESATTRS_PROCESS_RUNTIME_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_RUNTIME_NAME;
+    exports.SEMRESATTRS_PROCESS_RUNTIME_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_PROCESS_RUNTIME_VERSION;
+    exports.SEMRESATTRS_SERVICE_INSTANCE_ID = require_SemanticResourceAttributes2.SEMRESATTRS_SERVICE_INSTANCE_ID;
+    exports.SEMRESATTRS_SERVICE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_SERVICE_NAME;
+    exports.SEMRESATTRS_SERVICE_NAMESPACE = require_SemanticResourceAttributes2.SEMRESATTRS_SERVICE_NAMESPACE;
+    exports.SEMRESATTRS_SERVICE_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_SERVICE_VERSION;
+    exports.SEMRESATTRS_TELEMETRY_AUTO_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_TELEMETRY_AUTO_VERSION;
+    exports.SEMRESATTRS_TELEMETRY_SDK_LANGUAGE = require_SemanticResourceAttributes2.SEMRESATTRS_TELEMETRY_SDK_LANGUAGE;
+    exports.SEMRESATTRS_TELEMETRY_SDK_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_TELEMETRY_SDK_NAME;
+    exports.SEMRESATTRS_TELEMETRY_SDK_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_TELEMETRY_SDK_VERSION;
+    exports.SEMRESATTRS_WEBENGINE_DESCRIPTION = require_SemanticResourceAttributes2.SEMRESATTRS_WEBENGINE_DESCRIPTION;
+    exports.SEMRESATTRS_WEBENGINE_NAME = require_SemanticResourceAttributes2.SEMRESATTRS_WEBENGINE_NAME;
+    exports.SEMRESATTRS_WEBENGINE_VERSION = require_SemanticResourceAttributes2.SEMRESATTRS_WEBENGINE_VERSION;
+    exports.SIGNALR_CONNECTION_STATUS_VALUE_APP_SHUTDOWN = require_stable_attributes2.SIGNALR_CONNECTION_STATUS_VALUE_APP_SHUTDOWN;
+    exports.SIGNALR_CONNECTION_STATUS_VALUE_NORMAL_CLOSURE = require_stable_attributes2.SIGNALR_CONNECTION_STATUS_VALUE_NORMAL_CLOSURE;
+    exports.SIGNALR_CONNECTION_STATUS_VALUE_TIMEOUT = require_stable_attributes2.SIGNALR_CONNECTION_STATUS_VALUE_TIMEOUT;
+    exports.SIGNALR_TRANSPORT_VALUE_LONG_POLLING = require_stable_attributes2.SIGNALR_TRANSPORT_VALUE_LONG_POLLING;
+    exports.SIGNALR_TRANSPORT_VALUE_SERVER_SENT_EVENTS = require_stable_attributes2.SIGNALR_TRANSPORT_VALUE_SERVER_SENT_EVENTS;
+    exports.SIGNALR_TRANSPORT_VALUE_WEB_SOCKETS = require_stable_attributes2.SIGNALR_TRANSPORT_VALUE_WEB_SOCKETS;
+    exports.SemanticAttributes = require_SemanticAttributes2.SemanticAttributes;
+    exports.SemanticResourceAttributes = require_SemanticResourceAttributes2.SemanticResourceAttributes;
+    exports.TELEMETRYSDKLANGUAGEVALUES_CPP = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_CPP;
+    exports.TELEMETRYSDKLANGUAGEVALUES_DOTNET = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_DOTNET;
+    exports.TELEMETRYSDKLANGUAGEVALUES_ERLANG = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_ERLANG;
+    exports.TELEMETRYSDKLANGUAGEVALUES_GO = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_GO;
+    exports.TELEMETRYSDKLANGUAGEVALUES_JAVA = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_JAVA;
+    exports.TELEMETRYSDKLANGUAGEVALUES_NODEJS = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_NODEJS;
+    exports.TELEMETRYSDKLANGUAGEVALUES_PHP = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_PHP;
+    exports.TELEMETRYSDKLANGUAGEVALUES_PYTHON = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_PYTHON;
+    exports.TELEMETRYSDKLANGUAGEVALUES_RUBY = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_RUBY;
+    exports.TELEMETRYSDKLANGUAGEVALUES_WEBJS = require_SemanticResourceAttributes2.TELEMETRYSDKLANGUAGEVALUES_WEBJS;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_CPP = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_CPP;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_DOTNET = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_DOTNET;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_ERLANG = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_ERLANG;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_GO = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_GO;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_JAVA = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_JAVA;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_KOTLIN = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_KOTLIN;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_NODEJS = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_NODEJS;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_PHP = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_PHP;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_PYTHON = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_PYTHON;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_RUBY = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_RUBY;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_RUST = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_RUST;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_SWIFT = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_SWIFT;
+    exports.TELEMETRY_SDK_LANGUAGE_VALUE_WEBJS = require_stable_attributes2.TELEMETRY_SDK_LANGUAGE_VALUE_WEBJS;
+    exports.TelemetrySdkLanguageValues = require_SemanticResourceAttributes2.TelemetrySdkLanguageValues;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/semconv.js
+var require_semconv = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/semconv.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ATTR_PROCESS_RUNTIME_NAME = void 0;
+    exports.ATTR_PROCESS_RUNTIME_NAME = "process.runtime.name";
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/platform/node/sdk-info.js
+var require_sdk_info = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/platform/node/sdk-info.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SDK_INFO = void 0;
+    var version_1 = require_version();
+    var semantic_conventions_1 = require_dist4();
+    var semconv_1 = require_semconv();
+    exports.SDK_INFO = {
+      [semantic_conventions_1.ATTR_TELEMETRY_SDK_NAME]: "opentelemetry",
+      [semconv_1.ATTR_PROCESS_RUNTIME_NAME]: "node",
+      [semantic_conventions_1.ATTR_TELEMETRY_SDK_LANGUAGE]: semantic_conventions_1.TELEMETRY_SDK_LANGUAGE_VALUE_NODEJS,
+      [semantic_conventions_1.ATTR_TELEMETRY_SDK_VERSION]: version_1.VERSION
+    };
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/platform/node/index.js
+var require_node = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/platform/node/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.otperformance = exports.SDK_INFO = exports._globalThis = exports.getStringListFromEnv = exports.getNumberFromEnv = exports.getBooleanFromEnv = exports.getStringFromEnv = void 0;
+    var environment_1 = require_environment();
+    Object.defineProperty(exports, "getStringFromEnv", { enumerable: true, get: function() {
+      return environment_1.getStringFromEnv;
+    } });
+    Object.defineProperty(exports, "getBooleanFromEnv", { enumerable: true, get: function() {
+      return environment_1.getBooleanFromEnv;
+    } });
+    Object.defineProperty(exports, "getNumberFromEnv", { enumerable: true, get: function() {
+      return environment_1.getNumberFromEnv;
+    } });
+    Object.defineProperty(exports, "getStringListFromEnv", { enumerable: true, get: function() {
+      return environment_1.getStringListFromEnv;
+    } });
+    var globalThis_1 = require_globalThis();
+    Object.defineProperty(exports, "_globalThis", { enumerable: true, get: function() {
+      return globalThis_1._globalThis;
+    } });
+    var sdk_info_1 = require_sdk_info();
+    Object.defineProperty(exports, "SDK_INFO", { enumerable: true, get: function() {
+      return sdk_info_1.SDK_INFO;
+    } });
+    exports.otperformance = performance;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/platform/index.js
+var require_platform = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/platform/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getStringListFromEnv = exports.getNumberFromEnv = exports.getStringFromEnv = exports.getBooleanFromEnv = exports.otperformance = exports._globalThis = exports.SDK_INFO = void 0;
+    var node_1 = require_node();
+    Object.defineProperty(exports, "SDK_INFO", { enumerable: true, get: function() {
+      return node_1.SDK_INFO;
+    } });
+    Object.defineProperty(exports, "_globalThis", { enumerable: true, get: function() {
+      return node_1._globalThis;
+    } });
+    Object.defineProperty(exports, "otperformance", { enumerable: true, get: function() {
+      return node_1.otperformance;
+    } });
+    Object.defineProperty(exports, "getBooleanFromEnv", { enumerable: true, get: function() {
+      return node_1.getBooleanFromEnv;
+    } });
+    Object.defineProperty(exports, "getStringFromEnv", { enumerable: true, get: function() {
+      return node_1.getStringFromEnv;
+    } });
+    Object.defineProperty(exports, "getNumberFromEnv", { enumerable: true, get: function() {
+      return node_1.getNumberFromEnv;
+    } });
+    Object.defineProperty(exports, "getStringListFromEnv", { enumerable: true, get: function() {
+      return node_1.getStringListFromEnv;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/time.js
+var require_time = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/time.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.addHrTimes = exports.isTimeInput = exports.isTimeInputHrTime = exports.hrTimeToSeconds = exports.hrTimeToMilliseconds = exports.hrTimeToMicroseconds = exports.hrTimeToNanoseconds = exports.hrTimeToTimeStamp = exports.hrTimeDuration = exports.timeInputToHrTime = exports.hrTime = exports.getTimeOrigin = exports.millisToHrTime = void 0;
+    var platform_1 = require_platform();
+    var NANOSECOND_DIGITS = 9;
+    var NANOSECOND_DIGITS_IN_MILLIS = 6;
+    var MILLISECONDS_TO_NANOSECONDS = Math.pow(10, NANOSECOND_DIGITS_IN_MILLIS);
+    var SECOND_TO_NANOSECONDS = Math.pow(10, NANOSECOND_DIGITS);
+    function millisToHrTime(epochMillis) {
+      const epochSeconds = epochMillis / 1e3;
+      const seconds = Math.trunc(epochSeconds);
+      const nanos = Math.round(epochMillis % 1e3 * MILLISECONDS_TO_NANOSECONDS);
+      return [seconds, nanos];
+    }
+    exports.millisToHrTime = millisToHrTime;
+    function getTimeOrigin() {
+      return platform_1.otperformance.timeOrigin;
+    }
+    exports.getTimeOrigin = getTimeOrigin;
+    function hrTime2(performanceNow) {
+      const timeOrigin = millisToHrTime(platform_1.otperformance.timeOrigin);
+      const now = millisToHrTime(typeof performanceNow === "number" ? performanceNow : platform_1.otperformance.now());
+      return addHrTimes(timeOrigin, now);
+    }
+    exports.hrTime = hrTime2;
+    function timeInputToHrTime(time3) {
+      if (isTimeInputHrTime(time3)) {
+        return time3;
+      } else if (typeof time3 === "number") {
+        if (time3 < platform_1.otperformance.timeOrigin / 2) {
+          return hrTime2(time3);
+        } else {
+          return millisToHrTime(time3);
+        }
+      } else if (time3 instanceof Date) {
+        return millisToHrTime(time3.getTime());
+      } else {
+        throw TypeError("Invalid input type");
+      }
+    }
+    exports.timeInputToHrTime = timeInputToHrTime;
+    function hrTimeDuration2(startTime, endTime) {
+      let seconds = endTime[0] - startTime[0];
+      let nanos = endTime[1] - startTime[1];
+      if (nanos < 0) {
+        seconds -= 1;
+        nanos += SECOND_TO_NANOSECONDS;
+      }
+      return [seconds, nanos];
+    }
+    exports.hrTimeDuration = hrTimeDuration2;
+    function hrTimeToTimeStamp(time3) {
+      const precision = NANOSECOND_DIGITS;
+      const tmp = `${"0".repeat(precision)}${time3[1]}Z`;
+      const nanoString = tmp.substring(tmp.length - precision - 1);
+      const date5 = new Date(time3[0] * 1e3).toISOString();
+      return date5.replace("000Z", nanoString);
+    }
+    exports.hrTimeToTimeStamp = hrTimeToTimeStamp;
+    function hrTimeToNanoseconds(time3) {
+      return time3[0] * SECOND_TO_NANOSECONDS + time3[1];
+    }
+    exports.hrTimeToNanoseconds = hrTimeToNanoseconds;
+    function hrTimeToMicroseconds(time3) {
+      return time3[0] * 1e6 + time3[1] / 1e3;
+    }
+    exports.hrTimeToMicroseconds = hrTimeToMicroseconds;
+    function hrTimeToMilliseconds2(time3) {
+      return time3[0] * 1e3 + time3[1] / 1e6;
+    }
+    exports.hrTimeToMilliseconds = hrTimeToMilliseconds2;
+    function hrTimeToSeconds(time3) {
+      return time3[0] + time3[1] / SECOND_TO_NANOSECONDS;
+    }
+    exports.hrTimeToSeconds = hrTimeToSeconds;
+    function isTimeInputHrTime(value) {
+      return Array.isArray(value) && value.length === 2 && typeof value[0] === "number" && typeof value[1] === "number";
+    }
+    exports.isTimeInputHrTime = isTimeInputHrTime;
+    function isTimeInput(value) {
+      return isTimeInputHrTime(value) || typeof value === "number" || value instanceof Date;
+    }
+    exports.isTimeInput = isTimeInput;
+    function addHrTimes(time1, time22) {
+      const out = [time1[0] + time22[0], time1[1] + time22[1]];
+      if (out[1] >= SECOND_TO_NANOSECONDS) {
+        out[1] -= SECOND_TO_NANOSECONDS;
+        out[0] += 1;
+      }
+      return out;
+    }
+    exports.addHrTimes = addHrTimes;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/common/timer-util.js
+var require_timer_util = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/common/timer-util.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.unrefTimer = void 0;
+    function unrefTimer(timer) {
+      if (typeof timer !== "number") {
+        timer.unref();
+      }
+    }
+    exports.unrefTimer = unrefTimer;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/ExportResult.js
+var require_ExportResult = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/ExportResult.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ExportResultCode = void 0;
+    var ExportResultCode2;
+    (function(ExportResultCode3) {
+      ExportResultCode3[ExportResultCode3["SUCCESS"] = 0] = "SUCCESS";
+      ExportResultCode3[ExportResultCode3["FAILED"] = 1] = "FAILED";
+    })(ExportResultCode2 || (exports.ExportResultCode = ExportResultCode2 = {}));
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/propagation/composite.js
+var require_composite = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/propagation/composite.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.CompositePropagator = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var CompositePropagator = class {
+      _propagators;
+      _fields;
+      /**
+       * Construct a composite propagator from a list of propagators.
+       *
+       * @param [config] Configuration object for composite propagator
+       */
+      constructor(config2 = {}) {
+        this._propagators = config2.propagators ?? [];
+        const fields = /* @__PURE__ */ new Set();
+        for (const propagator of this._propagators) {
+          const propagatorFields = typeof propagator.fields === "function" ? propagator.fields() : [];
+          for (const field of propagatorFields) {
+            fields.add(field);
+          }
+        }
+        this._fields = Array.from(fields);
+      }
+      /**
+       * Run each of the configured propagators with the given context and carrier.
+       * Propagators are run in the order they are configured, so if multiple
+       * propagators write the same carrier key, the propagator later in the list
+       * will "win".
+       *
+       * @param context Context to inject
+       * @param carrier Carrier into which context will be injected
+       */
+      inject(context2, carrier, setter) {
+        for (const propagator of this._propagators) {
+          try {
+            propagator.inject(context2, carrier, setter);
+          } catch (err) {
+            api_1.diag.warn(`Failed to inject with ${propagator.constructor.name}. Err: ${err.message}`);
+          }
+        }
+      }
+      /**
+       * Run each of the configured propagators with the given context and carrier.
+       * Propagators are run in the order they are configured, so if multiple
+       * propagators write the same context key, the propagator later in the list
+       * will "win".
+       *
+       * @param context Context to add values to
+       * @param carrier Carrier from which to extract context
+       */
+      extract(context2, carrier, getter) {
+        return this._propagators.reduce((ctx, propagator) => {
+          try {
+            return propagator.extract(ctx, carrier, getter);
+          } catch (err) {
+            api_1.diag.warn(`Failed to extract with ${propagator.constructor.name}. Err: ${err.message}`);
+          }
+          return ctx;
+        }, context2);
+      }
+      fields() {
+        return this._fields.slice();
+      }
+    };
+    exports.CompositePropagator = CompositePropagator;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/internal/validators.js
+var require_validators = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/internal/validators.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.validateValue = exports.validateKey = void 0;
+    var VALID_KEY_CHAR_RANGE2 = "[_0-9a-z-*/]";
+    var VALID_KEY2 = `[a-z]${VALID_KEY_CHAR_RANGE2}{0,255}`;
+    var VALID_VENDOR_KEY2 = `[a-z0-9]${VALID_KEY_CHAR_RANGE2}{0,240}@[a-z]${VALID_KEY_CHAR_RANGE2}{0,13}`;
+    var VALID_KEY_REGEX2 = new RegExp(`^(?:${VALID_KEY2}|${VALID_VENDOR_KEY2})$`);
+    var VALID_VALUE_BASE_REGEX2 = /^[ -~]{0,255}[!-~]$/;
+    var INVALID_VALUE_COMMA_EQUAL_REGEX2 = /,|=/;
+    function validateKey2(key) {
+      return VALID_KEY_REGEX2.test(key);
+    }
+    exports.validateKey = validateKey2;
+    function validateValue2(value) {
+      return VALID_VALUE_BASE_REGEX2.test(value) && !INVALID_VALUE_COMMA_EQUAL_REGEX2.test(value);
+    }
+    exports.validateValue = validateValue2;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/trace/TraceState.js
+var require_TraceState = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/trace/TraceState.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TraceState = void 0;
+    var validators_1 = require_validators();
+    var MAX_TRACE_STATE_ITEMS2 = 32;
+    var MAX_TRACE_STATE_LEN2 = 512;
+    var LIST_MEMBERS_SEPARATOR2 = ",";
+    var LIST_MEMBER_KEY_VALUE_SPLITTER2 = "=";
+    var TraceState = class _TraceState {
+      _length;
+      _rawTraceState;
+      _internalState;
+      constructor(rawTraceState) {
+        this._rawTraceState = typeof rawTraceState === "string" ? rawTraceState : "";
+        this._length = this._rawTraceState.length;
+      }
+      set(key, value) {
+        if (!(0, validators_1.validateKey)(key) || !(0, validators_1.validateValue)(value)) {
+          return this;
+        }
+        const currState = this._getState();
+        const currValue = currState.get(key);
+        let newLength = this._length;
+        if (typeof currValue === "string") {
+          newLength += value.length - currValue.length;
+        } else {
+          newLength += key.length + value.length + (currState.size > 0 ? 2 : 1);
+        }
+        if (newLength > MAX_TRACE_STATE_LEN2) {
+          return this;
+        }
+        const newState = new Map(currState);
+        newState.delete(key);
+        newState.set(key, value);
+        return this._fromState(newState, newLength);
+      }
+      unset(key) {
+        const currState = this._getState();
+        const currValue = currState.get(key);
+        if (typeof currValue !== "string") {
+          return this;
+        }
+        let newLength = this._length - (key.length + currValue.length + 1);
+        if (currState.size > 1) {
+          newLength = newLength - 1;
+        }
+        const newState = new Map(currState);
+        newState.delete(key);
+        return this._fromState(newState, newLength);
+      }
+      get(key) {
+        const currState = this._getState();
+        return currState.get(key);
+      }
+      serialize() {
+        let serialized = "";
+        let index = 0;
+        for (const entry of this._getState()) {
+          if (index > 0) {
+            serialized = LIST_MEMBERS_SEPARATOR2 + serialized;
+          }
+          serialized = `${entry[0]}${LIST_MEMBER_KEY_VALUE_SPLITTER2}${entry[1]}` + serialized;
+          index++;
+        }
+        return serialized;
+      }
+      _getState() {
+        if (this._internalState) {
+          return this._internalState;
+        }
+        const vendorMembers = this._rawTraceState.split(LIST_MEMBERS_SEPARATOR2);
+        const vendorEntries = /* @__PURE__ */ new Map();
+        let currentLength = 0;
+        for (const member of vendorMembers) {
+          const m = member.trim();
+          const idx = m.indexOf(LIST_MEMBER_KEY_VALUE_SPLITTER2);
+          if (idx === -1) {
+            continue;
+          }
+          const key = m.slice(0, idx);
+          const value = m.slice(idx + 1);
+          if (!(0, validators_1.validateKey)(key) || !(0, validators_1.validateValue)(value)) {
+            continue;
+          }
+          const futureLength = currentLength + m.length + (vendorEntries.size > 0 ? 1 : 0);
+          if (futureLength > MAX_TRACE_STATE_LEN2) {
+            continue;
+          }
+          vendorEntries.set(key, value);
+          currentLength = futureLength;
+          if (vendorEntries.size >= MAX_TRACE_STATE_ITEMS2) {
+            break;
+          }
+        }
+        this._length = currentLength;
+        this._internalState = new Map(Array.from(vendorEntries.entries()).reverse());
+        return this._internalState;
+      }
+      _fromState(state, length) {
+        const traceState = Object.create(_TraceState.prototype);
+        traceState._internalState = state;
+        traceState._length = length;
+        return traceState;
+      }
+    };
+    exports.TraceState = TraceState;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/trace/W3CTraceContextPropagator.js
+var require_W3CTraceContextPropagator = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/trace/W3CTraceContextPropagator.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.W3CTraceContextPropagator = exports.parseTraceParent = exports.TRACE_STATE_HEADER = exports.TRACE_PARENT_HEADER = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var suppress_tracing_1 = require_suppress_tracing();
+    var TraceState_1 = require_TraceState();
+    exports.TRACE_PARENT_HEADER = "traceparent";
+    exports.TRACE_STATE_HEADER = "tracestate";
+    var VERSION3 = "00";
+    var VERSION_PART = "(?!ff)[\\da-f]{2}";
+    var TRACE_ID_PART = "(?![0]{32})[\\da-f]{32}";
+    var PARENT_ID_PART = "(?![0]{16})[\\da-f]{16}";
+    var FLAGS_PART = "[\\da-f]{2}";
+    var TRACE_PARENT_REGEX = new RegExp(`^\\s?(${VERSION_PART})-(${TRACE_ID_PART})-(${PARENT_ID_PART})-(${FLAGS_PART})(-.*)?\\s?$`);
+    function parseTraceParent(traceParent) {
+      const match = TRACE_PARENT_REGEX.exec(traceParent);
+      if (!match)
+        return null;
+      if (match[1] === "00" && match[5])
+        return null;
+      return {
+        traceId: match[2],
+        spanId: match[3],
+        traceFlags: parseInt(match[4], 16)
+      };
+    }
+    exports.parseTraceParent = parseTraceParent;
+    var W3CTraceContextPropagator = class {
+      inject(context2, carrier, setter) {
+        const spanContext = api_1.trace.getSpanContext(context2);
+        if (!spanContext || (0, suppress_tracing_1.isTracingSuppressed)(context2) || !(0, api_1.isSpanContextValid)(spanContext))
+          return;
+        const traceParent = `${VERSION3}-${spanContext.traceId}-${spanContext.spanId}-0${Number(spanContext.traceFlags || api_1.TraceFlags.NONE).toString(16)}`;
+        setter.set(carrier, exports.TRACE_PARENT_HEADER, traceParent);
+        if (spanContext.traceState) {
+          setter.set(carrier, exports.TRACE_STATE_HEADER, spanContext.traceState.serialize());
+        }
+      }
+      extract(context2, carrier, getter) {
+        const traceParentHeader = getter.get(carrier, exports.TRACE_PARENT_HEADER);
+        if (!traceParentHeader)
+          return context2;
+        const traceParent = Array.isArray(traceParentHeader) ? traceParentHeader[0] : traceParentHeader;
+        if (typeof traceParent !== "string")
+          return context2;
+        const spanContext = parseTraceParent(traceParent);
+        if (!spanContext)
+          return context2;
+        spanContext.isRemote = true;
+        const traceStateHeader = getter.get(carrier, exports.TRACE_STATE_HEADER);
+        if (traceStateHeader) {
+          const state = Array.isArray(traceStateHeader) ? traceStateHeader.join(",") : traceStateHeader;
+          spanContext.traceState = new TraceState_1.TraceState(typeof state === "string" ? state : void 0);
+        }
+        return api_1.trace.setSpanContext(context2, spanContext);
+      }
+      fields() {
+        return [exports.TRACE_PARENT_HEADER, exports.TRACE_STATE_HEADER];
+      }
+    };
+    exports.W3CTraceContextPropagator = W3CTraceContextPropagator;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/trace/rpc-metadata.js
+var require_rpc_metadata = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/trace/rpc-metadata.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getRPCMetadata = exports.deleteRPCMetadata = exports.setRPCMetadata = exports.RPCType = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var RPC_METADATA_KEY = (0, api_1.createContextKey)("OpenTelemetry SDK Context Key RPC_METADATA");
+    var RPCType;
+    (function(RPCType2) {
+      RPCType2["HTTP"] = "http";
+    })(RPCType || (exports.RPCType = RPCType = {}));
+    function setRPCMetadata(context2, meta3) {
+      return context2.setValue(RPC_METADATA_KEY, meta3);
+    }
+    exports.setRPCMetadata = setRPCMetadata;
+    function deleteRPCMetadata(context2) {
+      return context2.deleteValue(RPC_METADATA_KEY);
+    }
+    exports.deleteRPCMetadata = deleteRPCMetadata;
+    function getRPCMetadata(context2) {
+      return context2.getValue(RPC_METADATA_KEY);
+    }
+    exports.getRPCMetadata = getRPCMetadata;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/lodash.merge.js
+var require_lodash_merge = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/lodash.merge.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isPlainObject = void 0;
+    var objectTag = "[object Object]";
+    var nullTag = "[object Null]";
+    var undefinedTag = "[object Undefined]";
+    var funcProto = Function.prototype;
+    var funcToString = funcProto.toString;
+    var objectCtorString = funcToString.call(Object);
+    var getPrototypeOf = Object.getPrototypeOf;
+    var objectProto = Object.prototype;
+    var hasOwnProperty = objectProto.hasOwnProperty;
+    var symToStringTag = Symbol ? Symbol.toStringTag : void 0;
+    var nativeObjectToString = objectProto.toString;
+    function isPlainObject2(value) {
+      if (!isObjectLike(value) || baseGetTag(value) !== objectTag) {
+        return false;
+      }
+      const proto = getPrototypeOf(value);
+      if (proto === null) {
+        return true;
+      }
+      const Ctor = hasOwnProperty.call(proto, "constructor") && proto.constructor;
+      return typeof Ctor == "function" && Ctor instanceof Ctor && funcToString.call(Ctor) === objectCtorString;
+    }
+    exports.isPlainObject = isPlainObject2;
+    function isObjectLike(value) {
+      return value != null && typeof value == "object";
+    }
+    function baseGetTag(value) {
+      if (value == null) {
+        return value === void 0 ? undefinedTag : nullTag;
+      }
+      return symToStringTag && symToStringTag in Object(value) ? getRawTag(value) : objectToString(value);
+    }
+    function getRawTag(value) {
+      const isOwn = hasOwnProperty.call(value, symToStringTag), tag = value[symToStringTag];
+      let unmasked = false;
+      try {
+        value[symToStringTag] = void 0;
+        unmasked = true;
+      } catch {
+      }
+      const result = nativeObjectToString.call(value);
+      if (unmasked) {
+        if (isOwn) {
+          value[symToStringTag] = tag;
+        } else {
+          delete value[symToStringTag];
+        }
+      }
+      return result;
+    }
+    function objectToString(value) {
+      return nativeObjectToString.call(value);
+    }
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/merge.js
+var require_merge2 = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/merge.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.merge = void 0;
+    var lodash_merge_1 = require_lodash_merge();
+    var MAX_LEVEL = 20;
+    function merge2(...args) {
+      let result = args.shift();
+      const objects = /* @__PURE__ */ new WeakMap();
+      while (args.length > 0) {
+        result = mergeTwoObjects(result, args.shift(), 0, objects);
+      }
+      return result;
+    }
+    exports.merge = merge2;
+    function takeValue(value) {
+      if (isArray(value)) {
+        return value.slice();
+      }
+      return value;
+    }
+    function mergeTwoObjects(one, two, level = 0, objects) {
+      let result;
+      if (level > MAX_LEVEL) {
+        return void 0;
+      }
+      level++;
+      if (isPrimitive(one) || isPrimitive(two) || isFunction(two)) {
+        result = takeValue(two);
+      } else if (isArray(one)) {
+        result = one.slice();
+        if (isArray(two)) {
+          for (let i = 0, j = two.length; i < j; i++) {
+            result.push(takeValue(two[i]));
+          }
+        } else if (isObject2(two)) {
+          const keys2 = Object.keys(two);
+          for (let i = 0, j = keys2.length; i < j; i++) {
+            const key = keys2[i];
+            if (key === "__proto__" || key === "constructor" || key === "prototype") {
+              continue;
+            }
+            result[key] = takeValue(two[key]);
+          }
+        }
+      } else if (isObject2(one)) {
+        if (isObject2(two)) {
+          if (!shouldMerge(one, two)) {
+            return two;
+          }
+          result = Object.assign({}, one);
+          const keys2 = Object.keys(two);
+          for (let i = 0, j = keys2.length; i < j; i++) {
+            const key = keys2[i];
+            if (key === "__proto__" || key === "constructor" || key === "prototype") {
+              continue;
+            }
+            const twoValue = two[key];
+            if (isPrimitive(twoValue)) {
+              if (typeof twoValue === "undefined") {
+                delete result[key];
+              } else {
+                result[key] = twoValue;
+              }
+            } else {
+              const obj1 = result[key];
+              const obj2 = twoValue;
+              if (wasObjectReferenced(one, key, objects) || wasObjectReferenced(two, key, objects)) {
+                delete result[key];
+              } else {
+                if (isObject2(obj1) && isObject2(obj2)) {
+                  const arr1 = objects.get(obj1) || [];
+                  const arr2 = objects.get(obj2) || [];
+                  arr1.push({ obj: one, key });
+                  arr2.push({ obj: two, key });
+                  objects.set(obj1, arr1);
+                  objects.set(obj2, arr2);
+                }
+                result[key] = mergeTwoObjects(result[key], twoValue, level, objects);
+              }
+            }
+          }
+        } else {
+          result = two;
+        }
+      }
+      return result;
+    }
+    function wasObjectReferenced(obj, key, objects) {
+      const arr = objects.get(obj[key]) || [];
+      for (let i = 0, j = arr.length; i < j; i++) {
+        const info = arr[i];
+        if (info.key === key && info.obj === obj) {
+          return true;
+        }
+      }
+      return false;
+    }
+    function isArray(value) {
+      return Array.isArray(value);
+    }
+    function isFunction(value) {
+      return typeof value === "function";
+    }
+    function isObject2(value) {
+      return !isPrimitive(value) && !isArray(value) && !isFunction(value) && typeof value === "object";
+    }
+    function isPrimitive(value) {
+      return typeof value === "string" || typeof value === "number" || typeof value === "boolean" || typeof value === "undefined" || value instanceof Date || value instanceof RegExp || value === null;
+    }
+    function shouldMerge(one, two) {
+      if (!(0, lodash_merge_1.isPlainObject)(one) || !(0, lodash_merge_1.isPlainObject)(two)) {
+        return false;
+      }
+      return true;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/timeout.js
+var require_timeout = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/timeout.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.callWithTimeout = exports.TimeoutError = void 0;
+    var TimeoutError = class _TimeoutError extends Error {
+      constructor(message) {
+        super(message);
+        Object.setPrototypeOf(this, _TimeoutError.prototype);
+      }
+    };
+    exports.TimeoutError = TimeoutError;
+    function callWithTimeout(promise2, timeout) {
+      let timeoutHandle;
+      const timeoutPromise = new Promise(function timeoutFunction(_resolve, reject) {
+        timeoutHandle = setTimeout(function timeoutHandler() {
+          reject(new TimeoutError("Operation timed out."));
+        }, timeout);
+      });
+      return Promise.race([promise2, timeoutPromise]).then((result) => {
+        clearTimeout(timeoutHandle);
+        return result;
+      }, (reason) => {
+        clearTimeout(timeoutHandle);
+        throw reason;
+      });
+    }
+    exports.callWithTimeout = callWithTimeout;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/url.js
+var require_url = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/url.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isUrlIgnored = exports.urlMatches = void 0;
+    function urlMatches(url2, urlToMatch) {
+      if (typeof urlToMatch === "string") {
+        return url2 === urlToMatch;
+      } else {
+        return !!url2.match(urlToMatch);
+      }
+    }
+    exports.urlMatches = urlMatches;
+    function isUrlIgnored(url2, ignoredUrls) {
+      if (!ignoredUrls) {
+        return false;
+      }
+      for (const ignoreUrl of ignoredUrls) {
+        if (urlMatches(url2, ignoreUrl)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    exports.isUrlIgnored = isUrlIgnored;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/promise.js
+var require_promise2 = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/promise.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Deferred = void 0;
+    var Deferred = class {
+      _promise;
+      _resolve;
+      _reject;
+      constructor() {
+        this._promise = new Promise((resolve5, reject) => {
+          this._resolve = resolve5;
+          this._reject = reject;
+        });
+      }
+      get promise() {
+        return this._promise;
+      }
+      resolve(val) {
+        this._resolve(val);
+      }
+      reject(err) {
+        this._reject(err);
+      }
+    };
+    exports.Deferred = Deferred;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/callback.js
+var require_callback = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/callback.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BindOnceFuture = void 0;
+    var promise_1 = require_promise2();
+    var BindOnceFuture = class {
+      _isCalled = false;
+      _deferred = new promise_1.Deferred();
+      _callback;
+      _that;
+      constructor(callback, that) {
+        this._callback = callback;
+        this._that = that;
+      }
+      get isCalled() {
+        return this._isCalled;
+      }
+      get promise() {
+        return this._deferred.promise;
+      }
+      call(...args) {
+        if (!this._isCalled) {
+          this._isCalled = true;
+          try {
+            Promise.resolve(this._callback.call(this._that, ...args)).then((val) => this._deferred.resolve(val), (err) => this._deferred.reject(err));
+          } catch (err) {
+            this._deferred.reject(err);
+          }
+        }
+        return this._deferred.promise;
+      }
+    };
+    exports.BindOnceFuture = BindOnceFuture;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/utils/configuration.js
+var require_configuration = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/utils/configuration.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.diagLogLevelFromString = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var logLevelMap = {
+      ALL: api_1.DiagLogLevel.ALL,
+      VERBOSE: api_1.DiagLogLevel.VERBOSE,
+      DEBUG: api_1.DiagLogLevel.DEBUG,
+      INFO: api_1.DiagLogLevel.INFO,
+      WARN: api_1.DiagLogLevel.WARN,
+      ERROR: api_1.DiagLogLevel.ERROR,
+      NONE: api_1.DiagLogLevel.NONE
+    };
+    function diagLogLevelFromString(value) {
+      if (value == null) {
+        return void 0;
+      }
+      const resolvedLogLevel = logLevelMap[value.toUpperCase()];
+      if (resolvedLogLevel == null) {
+        api_1.diag.warn(`Unknown log level "${value}", expected one of ${Object.keys(logLevelMap)}, using default`);
+        return api_1.DiagLogLevel.INFO;
+      }
+      return resolvedLogLevel;
+    }
+    exports.diagLogLevelFromString = diagLogLevelFromString;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/internal/exporter.js
+var require_exporter = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/internal/exporter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports._export = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var suppress_tracing_1 = require_suppress_tracing();
+    function _export(exporter, arg) {
+      return new Promise((resolve5) => {
+        api_1.context.with((0, suppress_tracing_1.suppressTracing)(api_1.context.active()), () => {
+          exporter.export(arg, resolve5);
+        });
+      });
+    }
+    exports._export = _export;
+  }
+});
+
+// node_modules/@opentelemetry/core/build/src/index.js
+var require_src = __commonJS({
+  "node_modules/@opentelemetry/core/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.diagLogLevelFromString = exports.BindOnceFuture = exports.urlMatches = exports.isUrlIgnored = exports.callWithTimeout = exports.TimeoutError = exports.merge = exports.TraceState = exports.unsuppressTracing = exports.suppressTracing = exports.isTracingSuppressed = exports.setRPCMetadata = exports.getRPCMetadata = exports.deleteRPCMetadata = exports.RPCType = exports.parseTraceParent = exports.W3CTraceContextPropagator = exports.TRACE_STATE_HEADER = exports.TRACE_PARENT_HEADER = exports.CompositePropagator = exports.otperformance = exports.getStringListFromEnv = exports.getNumberFromEnv = exports.getBooleanFromEnv = exports.getStringFromEnv = exports._globalThis = exports.SDK_INFO = exports.parseKeyPairsIntoRecord = exports.ExportResultCode = exports.unrefTimer = exports.timeInputToHrTime = exports.millisToHrTime = exports.isTimeInputHrTime = exports.isTimeInput = exports.hrTimeToTimeStamp = exports.hrTimeToSeconds = exports.hrTimeToNanoseconds = exports.hrTimeToMilliseconds = exports.hrTimeToMicroseconds = exports.hrTimeDuration = exports.hrTime = exports.getTimeOrigin = exports.addHrTimes = exports.loggingErrorHandler = exports.setGlobalErrorHandler = exports.globalErrorHandler = exports.sanitizeAttributes = exports.isAttributeValue = exports.AnchoredClock = exports.W3CBaggagePropagator = void 0;
+    exports.internal = void 0;
+    var W3CBaggagePropagator_1 = require_W3CBaggagePropagator();
+    Object.defineProperty(exports, "W3CBaggagePropagator", { enumerable: true, get: function() {
+      return W3CBaggagePropagator_1.W3CBaggagePropagator;
+    } });
+    var anchored_clock_1 = require_anchored_clock();
+    Object.defineProperty(exports, "AnchoredClock", { enumerable: true, get: function() {
+      return anchored_clock_1.AnchoredClock;
+    } });
+    var attributes_1 = require_attributes();
+    Object.defineProperty(exports, "isAttributeValue", { enumerable: true, get: function() {
+      return attributes_1.isAttributeValue;
+    } });
+    Object.defineProperty(exports, "sanitizeAttributes", { enumerable: true, get: function() {
+      return attributes_1.sanitizeAttributes;
+    } });
+    var global_error_handler_1 = require_global_error_handler();
+    Object.defineProperty(exports, "globalErrorHandler", { enumerable: true, get: function() {
+      return global_error_handler_1.globalErrorHandler;
+    } });
+    Object.defineProperty(exports, "setGlobalErrorHandler", { enumerable: true, get: function() {
+      return global_error_handler_1.setGlobalErrorHandler;
+    } });
+    var logging_error_handler_1 = require_logging_error_handler();
+    Object.defineProperty(exports, "loggingErrorHandler", { enumerable: true, get: function() {
+      return logging_error_handler_1.loggingErrorHandler;
+    } });
+    var time_1 = require_time();
+    Object.defineProperty(exports, "addHrTimes", { enumerable: true, get: function() {
+      return time_1.addHrTimes;
+    } });
+    Object.defineProperty(exports, "getTimeOrigin", { enumerable: true, get: function() {
+      return time_1.getTimeOrigin;
+    } });
+    Object.defineProperty(exports, "hrTime", { enumerable: true, get: function() {
+      return time_1.hrTime;
+    } });
+    Object.defineProperty(exports, "hrTimeDuration", { enumerable: true, get: function() {
+      return time_1.hrTimeDuration;
+    } });
+    Object.defineProperty(exports, "hrTimeToMicroseconds", { enumerable: true, get: function() {
+      return time_1.hrTimeToMicroseconds;
+    } });
+    Object.defineProperty(exports, "hrTimeToMilliseconds", { enumerable: true, get: function() {
+      return time_1.hrTimeToMilliseconds;
+    } });
+    Object.defineProperty(exports, "hrTimeToNanoseconds", { enumerable: true, get: function() {
+      return time_1.hrTimeToNanoseconds;
+    } });
+    Object.defineProperty(exports, "hrTimeToSeconds", { enumerable: true, get: function() {
+      return time_1.hrTimeToSeconds;
+    } });
+    Object.defineProperty(exports, "hrTimeToTimeStamp", { enumerable: true, get: function() {
+      return time_1.hrTimeToTimeStamp;
+    } });
+    Object.defineProperty(exports, "isTimeInput", { enumerable: true, get: function() {
+      return time_1.isTimeInput;
+    } });
+    Object.defineProperty(exports, "isTimeInputHrTime", { enumerable: true, get: function() {
+      return time_1.isTimeInputHrTime;
+    } });
+    Object.defineProperty(exports, "millisToHrTime", { enumerable: true, get: function() {
+      return time_1.millisToHrTime;
+    } });
+    Object.defineProperty(exports, "timeInputToHrTime", { enumerable: true, get: function() {
+      return time_1.timeInputToHrTime;
+    } });
+    var timer_util_1 = require_timer_util();
+    Object.defineProperty(exports, "unrefTimer", { enumerable: true, get: function() {
+      return timer_util_1.unrefTimer;
+    } });
+    var ExportResult_1 = require_ExportResult();
+    Object.defineProperty(exports, "ExportResultCode", { enumerable: true, get: function() {
+      return ExportResult_1.ExportResultCode;
+    } });
+    var utils_1 = require_utils4();
+    Object.defineProperty(exports, "parseKeyPairsIntoRecord", { enumerable: true, get: function() {
+      return utils_1.parseKeyPairsIntoRecord;
+    } });
+    var platform_1 = require_platform();
+    Object.defineProperty(exports, "SDK_INFO", { enumerable: true, get: function() {
+      return platform_1.SDK_INFO;
+    } });
+    Object.defineProperty(exports, "_globalThis", { enumerable: true, get: function() {
+      return platform_1._globalThis;
+    } });
+    Object.defineProperty(exports, "getStringFromEnv", { enumerable: true, get: function() {
+      return platform_1.getStringFromEnv;
+    } });
+    Object.defineProperty(exports, "getBooleanFromEnv", { enumerable: true, get: function() {
+      return platform_1.getBooleanFromEnv;
+    } });
+    Object.defineProperty(exports, "getNumberFromEnv", { enumerable: true, get: function() {
+      return platform_1.getNumberFromEnv;
+    } });
+    Object.defineProperty(exports, "getStringListFromEnv", { enumerable: true, get: function() {
+      return platform_1.getStringListFromEnv;
+    } });
+    Object.defineProperty(exports, "otperformance", { enumerable: true, get: function() {
+      return platform_1.otperformance;
+    } });
+    var composite_1 = require_composite();
+    Object.defineProperty(exports, "CompositePropagator", { enumerable: true, get: function() {
+      return composite_1.CompositePropagator;
+    } });
+    var W3CTraceContextPropagator_1 = require_W3CTraceContextPropagator();
+    Object.defineProperty(exports, "TRACE_PARENT_HEADER", { enumerable: true, get: function() {
+      return W3CTraceContextPropagator_1.TRACE_PARENT_HEADER;
+    } });
+    Object.defineProperty(exports, "TRACE_STATE_HEADER", { enumerable: true, get: function() {
+      return W3CTraceContextPropagator_1.TRACE_STATE_HEADER;
+    } });
+    Object.defineProperty(exports, "W3CTraceContextPropagator", { enumerable: true, get: function() {
+      return W3CTraceContextPropagator_1.W3CTraceContextPropagator;
+    } });
+    Object.defineProperty(exports, "parseTraceParent", { enumerable: true, get: function() {
+      return W3CTraceContextPropagator_1.parseTraceParent;
+    } });
+    var rpc_metadata_1 = require_rpc_metadata();
+    Object.defineProperty(exports, "RPCType", { enumerable: true, get: function() {
+      return rpc_metadata_1.RPCType;
+    } });
+    Object.defineProperty(exports, "deleteRPCMetadata", { enumerable: true, get: function() {
+      return rpc_metadata_1.deleteRPCMetadata;
+    } });
+    Object.defineProperty(exports, "getRPCMetadata", { enumerable: true, get: function() {
+      return rpc_metadata_1.getRPCMetadata;
+    } });
+    Object.defineProperty(exports, "setRPCMetadata", { enumerable: true, get: function() {
+      return rpc_metadata_1.setRPCMetadata;
+    } });
+    var suppress_tracing_1 = require_suppress_tracing();
+    Object.defineProperty(exports, "isTracingSuppressed", { enumerable: true, get: function() {
+      return suppress_tracing_1.isTracingSuppressed;
+    } });
+    Object.defineProperty(exports, "suppressTracing", { enumerable: true, get: function() {
+      return suppress_tracing_1.suppressTracing;
+    } });
+    Object.defineProperty(exports, "unsuppressTracing", { enumerable: true, get: function() {
+      return suppress_tracing_1.unsuppressTracing;
+    } });
+    var TraceState_1 = require_TraceState();
+    Object.defineProperty(exports, "TraceState", { enumerable: true, get: function() {
+      return TraceState_1.TraceState;
+    } });
+    var merge_1 = require_merge2();
+    Object.defineProperty(exports, "merge", { enumerable: true, get: function() {
+      return merge_1.merge;
+    } });
+    var timeout_1 = require_timeout();
+    Object.defineProperty(exports, "TimeoutError", { enumerable: true, get: function() {
+      return timeout_1.TimeoutError;
+    } });
+    Object.defineProperty(exports, "callWithTimeout", { enumerable: true, get: function() {
+      return timeout_1.callWithTimeout;
+    } });
+    var url_1 = require_url();
+    Object.defineProperty(exports, "isUrlIgnored", { enumerable: true, get: function() {
+      return url_1.isUrlIgnored;
+    } });
+    Object.defineProperty(exports, "urlMatches", { enumerable: true, get: function() {
+      return url_1.urlMatches;
+    } });
+    var callback_1 = require_callback();
+    Object.defineProperty(exports, "BindOnceFuture", { enumerable: true, get: function() {
+      return callback_1.BindOnceFuture;
+    } });
+    var configuration_1 = require_configuration();
+    Object.defineProperty(exports, "diagLogLevelFromString", { enumerable: true, get: function() {
+      return configuration_1.diagLogLevelFromString;
+    } });
+    var exporter_1 = require_exporter();
+    exports.internal = {
+      _export: exporter_1._export
+    };
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/StackContextManager.js
+var require_StackContextManager = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/StackContextManager.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.StackContextManager = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var StackContextManager = class {
+      /**
+       * whether the context manager is enabled or not
+       */
+      _enabled = false;
+      /**
+       * Keeps the reference to current context
+       */
+      _currentContext = api_1.ROOT_CONTEXT;
+      /**
+       *
+       * @param context
+       * @param target Function to be executed within the context
+       */
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+      _bindFunction(context2 = api_1.ROOT_CONTEXT, target) {
+        const manager = this;
+        const contextWrapper = function(...args) {
+          return manager.with(context2, () => target.apply(this, args));
+        };
+        Object.defineProperty(contextWrapper, "length", {
+          enumerable: false,
+          configurable: true,
+          writable: false,
+          value: target.length
+        });
+        return contextWrapper;
+      }
+      /**
+       * Returns the active context
+       */
+      active() {
+        return this._currentContext;
+      }
+      /**
+       * Binds a the certain context or the active one to the target function and then returns the target
+       * @param context A context (span) to be bind to target
+       * @param target a function or event emitter. When target or one of its callbacks is called,
+       *  the provided context will be used as the active context for the duration of the call.
+       */
+      bind(context2, target) {
+        if (context2 === void 0) {
+          context2 = this.active();
+        }
+        if (typeof target === "function") {
+          return this._bindFunction(context2, target);
+        }
+        return target;
+      }
+      /**
+       * Disable the context manager (clears the current context)
+       */
+      disable() {
+        this._currentContext = api_1.ROOT_CONTEXT;
+        this._enabled = false;
+        return this;
+      }
+      /**
+       * Enables the context manager and creates a default(root) context
+       */
+      enable() {
+        if (this._enabled) {
+          return this;
+        }
+        this._enabled = true;
+        this._currentContext = api_1.ROOT_CONTEXT;
+        return this;
+      }
+      /**
+       * Calls the callback function [fn] with the provided [context]. If [context] is undefined then it will use the window.
+       * The context will be set as active
+       * @param context
+       * @param fn Callback function
+       * @param thisArg optional receiver to be used for calling fn
+       * @param args optional arguments forwarded to fn
+       */
+      with(context2, fn, thisArg, ...args) {
+        const previousContext = this._currentContext;
+        this._currentContext = context2 || api_1.ROOT_CONTEXT;
+        try {
+          return fn.call(thisArg, ...args);
+        } finally {
+          this._currentContext = previousContext;
+        }
+      }
+    };
+    exports.StackContextManager = StackContextManager;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/default-service-name.js
+var require_default_service_name = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/default-service-name.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports._clearDefaultServiceNameCache = exports.defaultServiceName = void 0;
+    var serviceName;
+    function defaultServiceName() {
+      if (serviceName === void 0) {
+        try {
+          const argv0 = globalThis.process.argv0;
+          serviceName = argv0 ? `unknown_service:${argv0}` : "unknown_service";
+        } catch {
+          serviceName = "unknown_service";
+        }
+      }
+      return serviceName;
+    }
+    exports.defaultServiceName = defaultServiceName;
+    function _clearDefaultServiceNameCache() {
+      serviceName = void 0;
+    }
+    exports._clearDefaultServiceNameCache = _clearDefaultServiceNameCache;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/utils.js
+var require_utils6 = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isPromiseLike = void 0;
+    var isPromiseLike = (val) => {
+      return val !== null && typeof val === "object" && typeof val.then === "function";
+    };
+    exports.isPromiseLike = isPromiseLike;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/ResourceImpl.js
+var require_ResourceImpl = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/ResourceImpl.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.defaultResource = exports.emptyResource = exports.resourceFromDetectedResource = exports.resourceFromAttributes = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var semantic_conventions_1 = require_dist4();
+    var default_service_name_1 = require_default_service_name();
+    var utils_1 = require_utils6();
+    var ResourceImpl = class _ResourceImpl {
+      _rawAttributes;
+      _asyncAttributesPending = false;
+      _schemaUrl;
+      _memoizedAttributes;
+      static FromAttributeList(attributes, options) {
+        const res = new _ResourceImpl({}, options);
+        res._rawAttributes = guardedRawAttributes(attributes);
+        res._asyncAttributesPending = attributes.filter(([_, val]) => (0, utils_1.isPromiseLike)(val)).length > 0;
+        return res;
+      }
+      constructor(resource, options) {
+        const attributes = resource.attributes ?? {};
+        this._rawAttributes = Object.entries(attributes).map(([k, v]) => {
+          if ((0, utils_1.isPromiseLike)(v)) {
+            this._asyncAttributesPending = true;
+          }
+          return [k, v];
+        });
+        this._rawAttributes = guardedRawAttributes(this._rawAttributes);
+        this._schemaUrl = validateSchemaUrl(options?.schemaUrl);
+      }
+      get asyncAttributesPending() {
+        return this._asyncAttributesPending;
+      }
+      async waitForAsyncAttributes() {
+        if (!this.asyncAttributesPending) {
+          return;
+        }
+        for (let i = 0; i < this._rawAttributes.length; i++) {
+          const [k, v] = this._rawAttributes[i];
+          this._rawAttributes[i] = [k, (0, utils_1.isPromiseLike)(v) ? await v : v];
+        }
+        this._asyncAttributesPending = false;
+      }
+      get attributes() {
+        if (this.asyncAttributesPending) {
+          api_1.diag.error("Accessing resource attributes before async attributes settled");
+        }
+        if (this._memoizedAttributes) {
+          return this._memoizedAttributes;
+        }
+        const attrs = {};
+        for (const [k, v] of this._rawAttributes) {
+          if ((0, utils_1.isPromiseLike)(v)) {
+            api_1.diag.debug(`Unsettled resource attribute ${k} skipped`);
+            continue;
+          }
+          if (v != null) {
+            attrs[k] ??= v;
+          }
+        }
+        if (!this._asyncAttributesPending) {
+          this._memoizedAttributes = attrs;
+        }
+        return attrs;
+      }
+      getRawAttributes() {
+        return this._rawAttributes;
+      }
+      get schemaUrl() {
+        return this._schemaUrl;
+      }
+      merge(resource) {
+        if (resource == null)
+          return this;
+        const mergedSchemaUrl = mergeSchemaUrl(this, resource);
+        const mergedOptions = mergedSchemaUrl ? { schemaUrl: mergedSchemaUrl } : void 0;
+        return _ResourceImpl.FromAttributeList([...resource.getRawAttributes(), ...this.getRawAttributes()], mergedOptions);
+      }
+    };
+    function resourceFromAttributes(attributes, options) {
+      return ResourceImpl.FromAttributeList(Object.entries(attributes), options);
+    }
+    exports.resourceFromAttributes = resourceFromAttributes;
+    function resourceFromDetectedResource(detectedResource, options) {
+      return new ResourceImpl(detectedResource, options);
+    }
+    exports.resourceFromDetectedResource = resourceFromDetectedResource;
+    function emptyResource() {
+      return resourceFromAttributes({});
+    }
+    exports.emptyResource = emptyResource;
+    function defaultResource() {
+      return resourceFromAttributes({
+        [semantic_conventions_1.ATTR_SERVICE_NAME]: (0, default_service_name_1.defaultServiceName)(),
+        [semantic_conventions_1.ATTR_TELEMETRY_SDK_LANGUAGE]: core_1.SDK_INFO[semantic_conventions_1.ATTR_TELEMETRY_SDK_LANGUAGE],
+        [semantic_conventions_1.ATTR_TELEMETRY_SDK_NAME]: core_1.SDK_INFO[semantic_conventions_1.ATTR_TELEMETRY_SDK_NAME],
+        [semantic_conventions_1.ATTR_TELEMETRY_SDK_VERSION]: core_1.SDK_INFO[semantic_conventions_1.ATTR_TELEMETRY_SDK_VERSION]
+      });
+    }
+    exports.defaultResource = defaultResource;
+    function guardedRawAttributes(attributes) {
+      return attributes.map(([k, v]) => {
+        if ((0, utils_1.isPromiseLike)(v)) {
+          return [
+            k,
+            v.catch((err) => {
+              api_1.diag.debug("promise rejection for resource attribute: %s - %s", k, err);
+              return void 0;
+            })
+          ];
+        }
+        return [k, v];
+      });
+    }
+    function validateSchemaUrl(schemaUrl) {
+      if (typeof schemaUrl === "string" || schemaUrl === void 0) {
+        return schemaUrl;
+      }
+      api_1.diag.warn("Schema URL must be string or undefined, got %s. Schema URL will be ignored.", schemaUrl);
+      return void 0;
+    }
+    function mergeSchemaUrl(old, updating) {
+      const oldSchemaUrl = old?.schemaUrl;
+      const updatingSchemaUrl = updating?.schemaUrl;
+      const isOldEmpty = oldSchemaUrl === void 0 || oldSchemaUrl === "";
+      const isUpdatingEmpty = updatingSchemaUrl === void 0 || updatingSchemaUrl === "";
+      if (isOldEmpty) {
+        return updatingSchemaUrl;
+      }
+      if (isUpdatingEmpty) {
+        return oldSchemaUrl;
+      }
+      if (oldSchemaUrl === updatingSchemaUrl) {
+        return oldSchemaUrl;
+      }
+      api_1.diag.warn('Schema URL merge conflict: old resource has "%s", updating resource has "%s". Resulting resource will have undefined Schema URL.', oldSchemaUrl, updatingSchemaUrl);
+      return void 0;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detect-resources.js
+var require_detect_resources = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detect-resources.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.detectResources = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var ResourceImpl_1 = require_ResourceImpl();
+    var detectResources = (config2 = {}) => {
+      const resources = (config2.detectors || []).map((d) => {
+        try {
+          const resource = (0, ResourceImpl_1.resourceFromDetectedResource)(d.detect(config2));
+          api_1.diag.debug(`${d.constructor.name} found resource.`, resource);
+          return resource;
+        } catch (e2) {
+          api_1.diag.debug(`${d.constructor.name} failed: ${e2.message}`);
+          return (0, ResourceImpl_1.emptyResource)();
+        }
+      });
+      return resources.reduce((acc, resource) => acc.merge(resource), (0, ResourceImpl_1.emptyResource)());
+    };
+    exports.detectResources = detectResources;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/EnvDetector.js
+var require_EnvDetector = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/EnvDetector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.envDetector = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var semantic_conventions_1 = require_dist4();
+    var core_1 = require_src();
+    var EnvDetector = class {
+      // Type, attribute keys, and attribute values should not exceed 256 characters.
+      _MAX_LENGTH = 255;
+      // OTEL_RESOURCE_ATTRIBUTES is a comma-separated list of attributes.
+      _COMMA_SEPARATOR = ",";
+      // OTEL_RESOURCE_ATTRIBUTES contains key value pair separated by '='.
+      _LABEL_KEY_VALUE_SPLITTER = "=";
+      /**
+       * Returns a {@link Resource} populated with attributes from the
+       * OTEL_RESOURCE_ATTRIBUTES environment variable. Note this is an async
+       * function to conform to the Detector interface.
+       *
+       * @param config The resource detection config
+       */
+      detect(_config) {
+        const attributes = {};
+        const rawAttributes = (0, core_1.getStringFromEnv)("OTEL_RESOURCE_ATTRIBUTES");
+        const serviceName = (0, core_1.getStringFromEnv)("OTEL_SERVICE_NAME");
+        if (rawAttributes) {
+          try {
+            const parsedAttributes = this._parseResourceAttributes(rawAttributes);
+            Object.assign(attributes, parsedAttributes);
+          } catch (e2) {
+            api_1.diag.debug(`EnvDetector failed: ${e2 instanceof Error ? e2.message : e2}`);
+          }
+        }
+        if (serviceName) {
+          attributes[semantic_conventions_1.ATTR_SERVICE_NAME] = serviceName;
+        }
+        return { attributes };
+      }
+      /**
+       * Creates an attribute map from the OTEL_RESOURCE_ATTRIBUTES environment
+       * variable.
+       *
+       * OTEL_RESOURCE_ATTRIBUTES: A comma-separated list of attributes in the
+       * format "key1=value1,key2=value2". The ',' and '=' characters in keys
+       * and values MUST be percent-encoded. Other characters MAY be percent-encoded.
+       *
+       * Per the spec, on any error (e.g., decoding failure), the entire environment
+       * variable value is discarded.
+       *
+       * @param rawEnvAttributes The resource attributes as a comma-separated list
+       * of key/value pairs.
+       * @returns The parsed resource attributes.
+       * @throws Error if parsing fails (caller handles by discarding all attributes)
+       */
+      _parseResourceAttributes(rawEnvAttributes) {
+        if (!rawEnvAttributes)
+          return {};
+        const attributes = {};
+        const rawAttributes = rawEnvAttributes.split(this._COMMA_SEPARATOR).filter((attr) => attr.trim() !== "");
+        for (const rawAttribute of rawAttributes) {
+          const keyValuePair = rawAttribute.split(this._LABEL_KEY_VALUE_SPLITTER);
+          if (keyValuePair.length !== 2) {
+            throw new Error(`Invalid format for OTEL_RESOURCE_ATTRIBUTES: "${rawAttribute}". Expected format: key=value. The ',' and '=' characters must be percent-encoded in keys and values.`);
+          }
+          const [rawKey, rawValue] = keyValuePair;
+          const key = rawKey.trim();
+          const value = rawValue.trim();
+          if (key.length === 0) {
+            throw new Error(`Invalid OTEL_RESOURCE_ATTRIBUTES: empty attribute key in "${rawAttribute}".`);
+          }
+          let decodedKey;
+          let decodedValue;
+          try {
+            decodedKey = decodeURIComponent(key);
+            decodedValue = decodeURIComponent(value);
+          } catch (e2) {
+            throw new Error(`Failed to percent-decode OTEL_RESOURCE_ATTRIBUTES entry "${rawAttribute}": ${e2 instanceof Error ? e2.message : e2}`, { cause: e2 });
+          }
+          if (decodedKey.length > this._MAX_LENGTH) {
+            throw new Error(`Attribute key exceeds the maximum length of ${this._MAX_LENGTH} characters: "${decodedKey}".`);
+          }
+          if (decodedValue.length > this._MAX_LENGTH) {
+            throw new Error(`Attribute value exceeds the maximum length of ${this._MAX_LENGTH} characters for key "${decodedKey}".`);
+          }
+          attributes[decodedKey] = decodedValue;
+        }
+        return attributes;
+      }
+    };
+    exports.envDetector = new EnvDetector();
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/semconv.js
+var require_semconv2 = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/semconv.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ATTR_WEBENGINE_VERSION = exports.ATTR_WEBENGINE_NAME = exports.ATTR_WEBENGINE_DESCRIPTION = exports.ATTR_SERVICE_NAMESPACE = exports.ATTR_SERVICE_INSTANCE_ID = exports.ATTR_PROCESS_RUNTIME_VERSION = exports.ATTR_PROCESS_RUNTIME_NAME = exports.ATTR_PROCESS_RUNTIME_DESCRIPTION = exports.ATTR_PROCESS_PID = exports.ATTR_PROCESS_OWNER = exports.ATTR_PROCESS_EXECUTABLE_PATH = exports.ATTR_PROCESS_EXECUTABLE_NAME = exports.ATTR_PROCESS_COMMAND_ARGS = exports.ATTR_PROCESS_COMMAND = exports.ATTR_OS_VERSION = exports.ATTR_OS_TYPE = exports.ATTR_K8S_POD_NAME = exports.ATTR_K8S_NAMESPACE_NAME = exports.ATTR_K8S_DEPLOYMENT_NAME = exports.ATTR_K8S_CLUSTER_NAME = exports.ATTR_HOST_TYPE = exports.ATTR_HOST_NAME = exports.ATTR_HOST_IMAGE_VERSION = exports.ATTR_HOST_IMAGE_NAME = exports.ATTR_HOST_IMAGE_ID = exports.ATTR_HOST_ID = exports.ATTR_HOST_ARCH = exports.ATTR_CONTAINER_NAME = exports.ATTR_CONTAINER_IMAGE_TAGS = exports.ATTR_CONTAINER_IMAGE_NAME = exports.ATTR_CONTAINER_ID = exports.ATTR_CLOUD_REGION = exports.ATTR_CLOUD_PROVIDER = exports.ATTR_CLOUD_AVAILABILITY_ZONE = exports.ATTR_CLOUD_ACCOUNT_ID = void 0;
+    exports.ATTR_CLOUD_ACCOUNT_ID = "cloud.account.id";
+    exports.ATTR_CLOUD_AVAILABILITY_ZONE = "cloud.availability_zone";
+    exports.ATTR_CLOUD_PROVIDER = "cloud.provider";
+    exports.ATTR_CLOUD_REGION = "cloud.region";
+    exports.ATTR_CONTAINER_ID = "container.id";
+    exports.ATTR_CONTAINER_IMAGE_NAME = "container.image.name";
+    exports.ATTR_CONTAINER_IMAGE_TAGS = "container.image.tags";
+    exports.ATTR_CONTAINER_NAME = "container.name";
+    exports.ATTR_HOST_ARCH = "host.arch";
+    exports.ATTR_HOST_ID = "host.id";
+    exports.ATTR_HOST_IMAGE_ID = "host.image.id";
+    exports.ATTR_HOST_IMAGE_NAME = "host.image.name";
+    exports.ATTR_HOST_IMAGE_VERSION = "host.image.version";
+    exports.ATTR_HOST_NAME = "host.name";
+    exports.ATTR_HOST_TYPE = "host.type";
+    exports.ATTR_K8S_CLUSTER_NAME = "k8s.cluster.name";
+    exports.ATTR_K8S_DEPLOYMENT_NAME = "k8s.deployment.name";
+    exports.ATTR_K8S_NAMESPACE_NAME = "k8s.namespace.name";
+    exports.ATTR_K8S_POD_NAME = "k8s.pod.name";
+    exports.ATTR_OS_TYPE = "os.type";
+    exports.ATTR_OS_VERSION = "os.version";
+    exports.ATTR_PROCESS_COMMAND = "process.command";
+    exports.ATTR_PROCESS_COMMAND_ARGS = "process.command_args";
+    exports.ATTR_PROCESS_EXECUTABLE_NAME = "process.executable.name";
+    exports.ATTR_PROCESS_EXECUTABLE_PATH = "process.executable.path";
+    exports.ATTR_PROCESS_OWNER = "process.owner";
+    exports.ATTR_PROCESS_PID = "process.pid";
+    exports.ATTR_PROCESS_RUNTIME_DESCRIPTION = "process.runtime.description";
+    exports.ATTR_PROCESS_RUNTIME_NAME = "process.runtime.name";
+    exports.ATTR_PROCESS_RUNTIME_VERSION = "process.runtime.version";
+    exports.ATTR_SERVICE_INSTANCE_ID = "service.instance.id";
+    exports.ATTR_SERVICE_NAMESPACE = "service.namespace";
+    exports.ATTR_WEBENGINE_DESCRIPTION = "webengine.description";
+    exports.ATTR_WEBENGINE_NAME = "webengine.name";
+    exports.ATTR_WEBENGINE_VERSION = "webengine.version";
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/execAsync.js
+var require_execAsync = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/execAsync.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.execAsync = void 0;
+    var child_process = __require("child_process");
+    var util = __require("util");
+    exports.execAsync = util.promisify(child_process.exec);
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-darwin.js
+var require_getMachineId_darwin = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-darwin.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMachineId = void 0;
+    var execAsync_1 = require_execAsync();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    async function getMachineId() {
+      try {
+        const result = await (0, execAsync_1.execAsync)('ioreg -rd1 -c "IOPlatformExpertDevice"');
+        const idLine = result.stdout.split("\n").find((line) => line.includes("IOPlatformUUID"));
+        if (!idLine) {
+          return void 0;
+        }
+        const parts = idLine.split('" = "');
+        if (parts.length === 2) {
+          return parts[1].slice(0, -1);
+        }
+      } catch (e2) {
+        api_1.diag.debug(`error reading machine id: ${e2}`);
+      }
+      return void 0;
+    }
+    exports.getMachineId = getMachineId;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-linux.js
+var require_getMachineId_linux = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-linux.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMachineId = void 0;
+    var fs_1 = __require("fs");
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    async function getMachineId() {
+      const paths = ["/etc/machine-id", "/var/lib/dbus/machine-id"];
+      for (const path3 of paths) {
+        try {
+          const result = await fs_1.promises.readFile(path3, { encoding: "utf8" });
+          return result.trim();
+        } catch (e2) {
+          api_1.diag.debug(`error reading machine id: ${e2}`);
+        }
+      }
+      return void 0;
+    }
+    exports.getMachineId = getMachineId;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-bsd.js
+var require_getMachineId_bsd = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-bsd.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMachineId = void 0;
+    var fs_1 = __require("fs");
+    var execAsync_1 = require_execAsync();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    async function getMachineId() {
+      try {
+        const result = await fs_1.promises.readFile("/etc/hostid", { encoding: "utf8" });
+        return result.trim();
+      } catch (e2) {
+        api_1.diag.debug(`error reading machine id: ${e2}`);
+      }
+      try {
+        const result = await (0, execAsync_1.execAsync)("kenv -q smbios.system.uuid");
+        return result.stdout.trim();
+      } catch (e2) {
+        api_1.diag.debug(`error reading machine id: ${e2}`);
+      }
+      return void 0;
+    }
+    exports.getMachineId = getMachineId;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-win.js
+var require_getMachineId_win = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-win.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMachineId = void 0;
+    var process3 = __require("process");
+    var execAsync_1 = require_execAsync();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    async function getMachineId() {
+      const args = "QUERY HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography /v MachineGuid";
+      let command = "%windir%\\System32\\REG.exe";
+      if (process3.arch === "ia32" && "PROCESSOR_ARCHITEW6432" in process3.env) {
+        command = "%windir%\\sysnative\\cmd.exe /c " + command;
+      }
+      try {
+        const result = await (0, execAsync_1.execAsync)(`${command} ${args}`);
+        const parts = result.stdout.split("REG_SZ");
+        if (parts.length === 2) {
+          return parts[1].trim();
+        }
+      } catch (e2) {
+        api_1.diag.debug(`error reading machine id: ${e2}`);
+      }
+      return void 0;
+    }
+    exports.getMachineId = getMachineId;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-unsupported.js
+var require_getMachineId_unsupported = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId-unsupported.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMachineId = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    async function getMachineId() {
+      api_1.diag.debug("could not read machine-id: unsupported platform");
+      return void 0;
+    }
+    exports.getMachineId = getMachineId;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId.js
+var require_getMachineId = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/machine-id/getMachineId.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMachineId = void 0;
+    var process3 = __require("process");
+    var getMachineIdImpl;
+    async function getMachineId() {
+      if (!getMachineIdImpl) {
+        switch (process3.platform) {
+          case "darwin":
+            getMachineIdImpl = (await Promise.resolve().then(() => __toESM(require_getMachineId_darwin()))).getMachineId;
+            break;
+          case "linux":
+            getMachineIdImpl = (await Promise.resolve().then(() => __toESM(require_getMachineId_linux()))).getMachineId;
+            break;
+          case "freebsd":
+            getMachineIdImpl = (await Promise.resolve().then(() => __toESM(require_getMachineId_bsd()))).getMachineId;
+            break;
+          case "win32":
+            getMachineIdImpl = (await Promise.resolve().then(() => __toESM(require_getMachineId_win()))).getMachineId;
+            break;
+          default:
+            getMachineIdImpl = (await Promise.resolve().then(() => __toESM(require_getMachineId_unsupported()))).getMachineId;
+            break;
+        }
+      }
+      return getMachineIdImpl();
+    }
+    exports.getMachineId = getMachineId;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/utils.js
+var require_utils7 = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.normalizeType = exports.normalizeArch = void 0;
+    var normalizeArch = (nodeArchString) => {
+      switch (nodeArchString) {
+        case "arm":
+          return "arm32";
+        case "ppc":
+          return "ppc32";
+        case "x64":
+          return "amd64";
+        default:
+          return nodeArchString;
+      }
+    };
+    exports.normalizeArch = normalizeArch;
+    var normalizeType = (nodePlatform) => {
+      switch (nodePlatform) {
+        case "sunos":
+          return "solaris";
+        case "win32":
+          return "windows";
+        default:
+          return nodePlatform;
+      }
+    };
+    exports.normalizeType = normalizeType;
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/HostDetector.js
+var require_HostDetector = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/HostDetector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.hostDetector = void 0;
+    var semconv_1 = require_semconv2();
+    var os_1 = __require("os");
+    var getMachineId_1 = require_getMachineId();
+    var utils_1 = require_utils7();
+    var HostDetector = class {
+      detect(_config) {
+        const attributes = {
+          [semconv_1.ATTR_HOST_NAME]: (0, os_1.hostname)(),
+          [semconv_1.ATTR_HOST_ARCH]: (0, utils_1.normalizeArch)((0, os_1.arch)()),
+          [semconv_1.ATTR_HOST_ID]: (0, getMachineId_1.getMachineId)()
+        };
+        return { attributes };
+      }
+    };
+    exports.hostDetector = new HostDetector();
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/OSDetector.js
+var require_OSDetector = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/OSDetector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.osDetector = void 0;
+    var semconv_1 = require_semconv2();
+    var os_1 = __require("os");
+    var utils_1 = require_utils7();
+    var OSDetector = class {
+      detect(_config) {
+        const attributes = {
+          [semconv_1.ATTR_OS_TYPE]: (0, utils_1.normalizeType)((0, os_1.platform)()),
+          [semconv_1.ATTR_OS_VERSION]: (0, os_1.release)()
+        };
+        return { attributes };
+      }
+    };
+    exports.osDetector = new OSDetector();
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/ProcessDetector.js
+var require_ProcessDetector = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/ProcessDetector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.processDetector = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var semconv_1 = require_semconv2();
+    var os = __require("os");
+    var ProcessDetector = class {
+      detect(_config) {
+        const attributes = {
+          [semconv_1.ATTR_PROCESS_PID]: process.pid,
+          [semconv_1.ATTR_PROCESS_EXECUTABLE_NAME]: process.title,
+          [semconv_1.ATTR_PROCESS_EXECUTABLE_PATH]: process.execPath,
+          [semconv_1.ATTR_PROCESS_COMMAND_ARGS]: [
+            process.argv[0],
+            ...process.execArgv,
+            ...process.argv.slice(1)
+          ],
+          [semconv_1.ATTR_PROCESS_RUNTIME_VERSION]: process.versions.node,
+          [semconv_1.ATTR_PROCESS_RUNTIME_NAME]: "nodejs",
+          [semconv_1.ATTR_PROCESS_RUNTIME_DESCRIPTION]: "Node.js"
+        };
+        if (process.argv.length > 1) {
+          attributes[semconv_1.ATTR_PROCESS_COMMAND] = process.argv[1];
+        }
+        try {
+          const userInfo = os.userInfo();
+          attributes[semconv_1.ATTR_PROCESS_OWNER] = userInfo.username;
+        } catch (e2) {
+          api_1.diag.debug(`error obtaining process owner: ${e2}`);
+        }
+        return { attributes };
+      }
+    };
+    exports.processDetector = new ProcessDetector();
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/ServiceInstanceIdDetector.js
+var require_ServiceInstanceIdDetector = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/ServiceInstanceIdDetector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serviceInstanceIdDetector = void 0;
+    var semconv_1 = require_semconv2();
+    var crypto_1 = __require("crypto");
+    var ServiceInstanceIdDetector = class {
+      // Multiple calls to ServiceInstanceIdDetector return the same ID.
+      _serviceInstanceId;
+      detect(_config) {
+        if (!this._serviceInstanceId) {
+          this._serviceInstanceId = (0, crypto_1.randomUUID)();
+        }
+        return {
+          attributes: {
+            [semconv_1.ATTR_SERVICE_INSTANCE_ID]: this._serviceInstanceId
+          }
+        };
+      }
+    };
+    exports.serviceInstanceIdDetector = new ServiceInstanceIdDetector();
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/node/index.js
+var require_node2 = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/node/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serviceInstanceIdDetector = exports.processDetector = exports.osDetector = exports.hostDetector = void 0;
+    var HostDetector_1 = require_HostDetector();
+    Object.defineProperty(exports, "hostDetector", { enumerable: true, get: function() {
+      return HostDetector_1.hostDetector;
+    } });
+    var OSDetector_1 = require_OSDetector();
+    Object.defineProperty(exports, "osDetector", { enumerable: true, get: function() {
+      return OSDetector_1.osDetector;
+    } });
+    var ProcessDetector_1 = require_ProcessDetector();
+    Object.defineProperty(exports, "processDetector", { enumerable: true, get: function() {
+      return ProcessDetector_1.processDetector;
+    } });
+    var ServiceInstanceIdDetector_1 = require_ServiceInstanceIdDetector();
+    Object.defineProperty(exports, "serviceInstanceIdDetector", { enumerable: true, get: function() {
+      return ServiceInstanceIdDetector_1.serviceInstanceIdDetector;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/platform/index.js
+var require_platform2 = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/platform/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serviceInstanceIdDetector = exports.processDetector = exports.osDetector = exports.hostDetector = void 0;
+    var node_1 = require_node2();
+    Object.defineProperty(exports, "hostDetector", { enumerable: true, get: function() {
+      return node_1.hostDetector;
+    } });
+    Object.defineProperty(exports, "osDetector", { enumerable: true, get: function() {
+      return node_1.osDetector;
+    } });
+    Object.defineProperty(exports, "processDetector", { enumerable: true, get: function() {
+      return node_1.processDetector;
+    } });
+    Object.defineProperty(exports, "serviceInstanceIdDetector", { enumerable: true, get: function() {
+      return node_1.serviceInstanceIdDetector;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/NoopDetector.js
+var require_NoopDetector = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/NoopDetector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.noopDetector = exports.NoopDetector = void 0;
+    var NoopDetector = class {
+      detect() {
+        return {
+          attributes: {}
+        };
+      }
+    };
+    exports.NoopDetector = NoopDetector;
+    exports.noopDetector = new NoopDetector();
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/detectors/index.js
+var require_detectors = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/detectors/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.noopDetector = exports.serviceInstanceIdDetector = exports.processDetector = exports.osDetector = exports.hostDetector = exports.envDetector = void 0;
+    var EnvDetector_1 = require_EnvDetector();
+    Object.defineProperty(exports, "envDetector", { enumerable: true, get: function() {
+      return EnvDetector_1.envDetector;
+    } });
+    var platform_1 = require_platform2();
+    Object.defineProperty(exports, "hostDetector", { enumerable: true, get: function() {
+      return platform_1.hostDetector;
+    } });
+    Object.defineProperty(exports, "osDetector", { enumerable: true, get: function() {
+      return platform_1.osDetector;
+    } });
+    Object.defineProperty(exports, "processDetector", { enumerable: true, get: function() {
+      return platform_1.processDetector;
+    } });
+    Object.defineProperty(exports, "serviceInstanceIdDetector", { enumerable: true, get: function() {
+      return platform_1.serviceInstanceIdDetector;
+    } });
+    var NoopDetector_1 = require_NoopDetector();
+    Object.defineProperty(exports, "noopDetector", { enumerable: true, get: function() {
+      return NoopDetector_1.noopDetector;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/resources/build/src/index.js
+var require_src2 = __commonJS({
+  "node_modules/@opentelemetry/resources/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.defaultServiceName = exports.emptyResource = exports.defaultResource = exports.resourceFromAttributes = exports.serviceInstanceIdDetector = exports.processDetector = exports.osDetector = exports.hostDetector = exports.envDetector = exports.detectResources = void 0;
+    var detect_resources_1 = require_detect_resources();
+    Object.defineProperty(exports, "detectResources", { enumerable: true, get: function() {
+      return detect_resources_1.detectResources;
+    } });
+    var detectors_1 = require_detectors();
+    Object.defineProperty(exports, "envDetector", { enumerable: true, get: function() {
+      return detectors_1.envDetector;
+    } });
+    Object.defineProperty(exports, "hostDetector", { enumerable: true, get: function() {
+      return detectors_1.hostDetector;
+    } });
+    Object.defineProperty(exports, "osDetector", { enumerable: true, get: function() {
+      return detectors_1.osDetector;
+    } });
+    Object.defineProperty(exports, "processDetector", { enumerable: true, get: function() {
+      return detectors_1.processDetector;
+    } });
+    Object.defineProperty(exports, "serviceInstanceIdDetector", { enumerable: true, get: function() {
+      return detectors_1.serviceInstanceIdDetector;
+    } });
+    var ResourceImpl_1 = require_ResourceImpl();
+    Object.defineProperty(exports, "resourceFromAttributes", { enumerable: true, get: function() {
+      return ResourceImpl_1.resourceFromAttributes;
+    } });
+    Object.defineProperty(exports, "defaultResource", { enumerable: true, get: function() {
+      return ResourceImpl_1.defaultResource;
+    } });
+    Object.defineProperty(exports, "emptyResource", { enumerable: true, get: function() {
+      return ResourceImpl_1.emptyResource;
+    } });
+    var default_service_name_1 = require_default_service_name();
+    Object.defineProperty(exports, "defaultServiceName", { enumerable: true, get: function() {
+      return default_service_name_1.defaultServiceName;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/enums.js
+var require_enums = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/enums.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ExceptionEventName = void 0;
+    exports.ExceptionEventName = "exception";
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/inspect.js
+var require_inspect = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/inspect.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.formatInspect = exports.settledResourceAttributes = exports.inspectCustom = void 0;
+    exports.inspectCustom = /* @__PURE__ */ Symbol.for("nodejs.util.inspect.custom");
+    function settledResourceAttributes(resource) {
+      const attrs = {};
+      for (const [k, v] of resource.getRawAttributes()) {
+        if (typeof v?.then === "function") {
+          continue;
+        }
+        if (v != null) {
+          attrs[k] ??= v;
+        }
+      }
+      return attrs;
+    }
+    exports.settledResourceAttributes = settledResourceAttributes;
+    function formatInspect(className, payload, depth, options, inspect) {
+      if (typeof depth === "number" && depth < 0) {
+        const tag = `[${className}]`;
+        return options?.stylize ? options.stylize(tag, "special") : tag;
+      }
+      if (typeof inspect !== "function" || !options) {
+        return payload;
+      }
+      const childOptions = {
+        ...options,
+        depth: options.depth == null ? options.depth : options.depth - 1
+      };
+      return `${className} ${inspect(payload, childOptions)}`;
+    }
+    exports.formatInspect = formatInspect;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/Span.js
+var require_Span = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/Span.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SpanImpl = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var semantic_conventions_1 = require_dist4();
+    var enums_1 = require_enums();
+    var inspect_1 = require_inspect();
+    var SpanImpl = class {
+      // Below properties are included to implement ReadableSpan for export
+      // purposes but are not intended to be written-to directly.
+      _spanContext;
+      kind;
+      parentSpanContext;
+      attributes = {};
+      links = [];
+      events = [];
+      startTime;
+      resource;
+      instrumentationScope;
+      _droppedAttributesCount = 0;
+      _droppedEventsCount = 0;
+      _droppedLinksCount = 0;
+      _attributesCount = 0;
+      name;
+      status = {
+        code: api_1.SpanStatusCode.UNSET
+      };
+      endTime = [0, 0];
+      _ended = false;
+      _duration = [-1, -1];
+      _spanProcessor;
+      _spanLimits;
+      _attributeValueLengthLimit;
+      _recordEndMetrics;
+      _performanceStartTime;
+      _performanceOffset;
+      _startTimeProvided;
+      /**
+       * Constructs a new SpanImpl instance.
+       */
+      constructor(opts) {
+        const now = Date.now();
+        this._spanContext = opts.spanContext;
+        this._performanceStartTime = core_1.otperformance.now();
+        this._performanceOffset = now - (this._performanceStartTime + core_1.otperformance.timeOrigin);
+        this._startTimeProvided = opts.startTime != null;
+        this._spanLimits = opts.spanLimits;
+        this._attributeValueLengthLimit = this._spanLimits.attributeValueLengthLimit ?? 0;
+        this._spanProcessor = opts.spanProcessor;
+        this.name = opts.name;
+        this.parentSpanContext = opts.parentSpanContext;
+        this.kind = opts.kind;
+        if (opts.links) {
+          for (const link of opts.links) {
+            this.addLink(link);
+          }
+        }
+        this.startTime = this._getTime(opts.startTime ?? now);
+        this.resource = opts.resource;
+        this.instrumentationScope = opts.scope;
+        this._recordEndMetrics = opts.recordEndMetrics;
+        if (opts.attributes != null) {
+          this.setAttributes(opts.attributes);
+        }
+        this._spanProcessor.onStart(this, opts.context);
+      }
+      spanContext() {
+        return this._spanContext;
+      }
+      setAttribute(key, value) {
+        if (value == null || this._isSpanEnded())
+          return this;
+        if (key.length === 0) {
+          api_1.diag.warn(`Invalid attribute key: ${key}`);
+          return this;
+        }
+        if (!(0, core_1.isAttributeValue)(value)) {
+          api_1.diag.warn(`Invalid attribute value set for key: ${key}`);
+          return this;
+        }
+        const { attributeCountLimit } = this._spanLimits;
+        const isNewKey = !Object.prototype.hasOwnProperty.call(this.attributes, key);
+        if (attributeCountLimit !== void 0 && this._attributesCount >= attributeCountLimit && isNewKey) {
+          this._droppedAttributesCount++;
+          return this;
+        }
+        this.attributes[key] = this._truncateToSize(value);
+        if (isNewKey) {
+          this._attributesCount++;
+        }
+        return this;
+      }
+      setAttributes(attributes) {
+        for (const key in attributes) {
+          if (Object.prototype.hasOwnProperty.call(attributes, key)) {
+            this.setAttribute(key, attributes[key]);
+          }
+        }
+        return this;
+      }
+      /**
+       *
+       * @param name Span Name
+       * @param [attributesOrStartTime] Span attributes or start time
+       *     if type is {@type TimeInput} and 3rd param is undefined
+       * @param [timeStamp] Specified time stamp for the event
+       */
+      addEvent(name2, attributesOrStartTime, timeStamp) {
+        if (this._isSpanEnded())
+          return this;
+        const { eventCountLimit } = this._spanLimits;
+        if (eventCountLimit === 0) {
+          api_1.diag.warn("No events allowed.");
+          this._droppedEventsCount++;
+          return this;
+        }
+        if (eventCountLimit !== void 0 && this.events.length >= eventCountLimit) {
+          if (this._droppedEventsCount === 0) {
+            api_1.diag.debug("Dropping extra events.");
+          }
+          this.events.shift();
+          this._droppedEventsCount++;
+        }
+        if ((0, core_1.isTimeInput)(attributesOrStartTime)) {
+          if (!(0, core_1.isTimeInput)(timeStamp)) {
+            timeStamp = attributesOrStartTime;
+          }
+          attributesOrStartTime = void 0;
+        }
+        const sanitized = (0, core_1.sanitizeAttributes)(attributesOrStartTime);
+        const { attributePerEventCountLimit } = this._spanLimits;
+        const attributes = {};
+        let droppedAttributesCount = 0;
+        let eventAttributesCount = 0;
+        for (const attr in sanitized) {
+          if (!Object.prototype.hasOwnProperty.call(sanitized, attr)) {
+            continue;
+          }
+          const attrVal = sanitized[attr];
+          if (attributePerEventCountLimit !== void 0 && eventAttributesCount >= attributePerEventCountLimit) {
+            droppedAttributesCount++;
+            continue;
+          }
+          attributes[attr] = this._truncateToSize(attrVal);
+          eventAttributesCount++;
+        }
+        this.events.push({
+          name: name2,
+          attributes,
+          time: this._getTime(timeStamp),
+          droppedAttributesCount
+        });
+        return this;
+      }
+      addLink(link) {
+        if (this._isSpanEnded())
+          return this;
+        const { linkCountLimit } = this._spanLimits;
+        if (linkCountLimit === 0) {
+          this._droppedLinksCount++;
+          return this;
+        }
+        if (linkCountLimit !== void 0 && this.links.length >= linkCountLimit) {
+          if (this._droppedLinksCount === 0) {
+            api_1.diag.debug("Dropping extra links.");
+          }
+          this.links.shift();
+          this._droppedLinksCount++;
+        }
+        const { attributePerLinkCountLimit } = this._spanLimits;
+        const sanitized = (0, core_1.sanitizeAttributes)(link.attributes);
+        const attributes = {};
+        let droppedAttributesCount = 0;
+        let linkAttributesCount = 0;
+        for (const attr in sanitized) {
+          if (!Object.prototype.hasOwnProperty.call(sanitized, attr)) {
+            continue;
+          }
+          const attrVal = sanitized[attr];
+          if (attributePerLinkCountLimit !== void 0 && linkAttributesCount >= attributePerLinkCountLimit) {
+            droppedAttributesCount++;
+            continue;
+          }
+          attributes[attr] = this._truncateToSize(attrVal);
+          linkAttributesCount++;
+        }
+        const processedLink = { context: link.context };
+        if (linkAttributesCount > 0) {
+          processedLink.attributes = attributes;
+        }
+        if (droppedAttributesCount > 0) {
+          processedLink.droppedAttributesCount = droppedAttributesCount;
+        }
+        this.links.push(processedLink);
+        return this;
+      }
+      addLinks(links) {
+        for (const link of links) {
+          this.addLink(link);
+        }
+        return this;
+      }
+      setStatus(status) {
+        if (this._isSpanEnded())
+          return this;
+        if (status.code === api_1.SpanStatusCode.UNSET)
+          return this;
+        if (this.status.code === api_1.SpanStatusCode.OK)
+          return this;
+        const newStatus = { code: status.code };
+        if (status.code === api_1.SpanStatusCode.ERROR) {
+          if (typeof status.message === "string") {
+            newStatus.message = status.message;
+          } else if (status.message != null) {
+            api_1.diag.warn(`Dropping invalid status.message of type '${typeof status.message}', expected 'string'`);
+          }
+        }
+        this.status = newStatus;
+        return this;
+      }
+      updateName(name2) {
+        if (this._isSpanEnded())
+          return this;
+        this.name = name2;
+        return this;
+      }
+      end(endTime) {
+        if (this._isSpanEnded()) {
+          api_1.diag.error(`${this.name} ${this._spanContext.traceId}-${this._spanContext.spanId} - You can only call end() on a span once.`);
+          return;
+        }
+        this.endTime = this._getTime(endTime);
+        this._duration = (0, core_1.hrTimeDuration)(this.startTime, this.endTime);
+        if (this._duration[0] < 0) {
+          api_1.diag.warn("Inconsistent start and end time, startTime > endTime. Setting span duration to 0ms.", this.startTime, this.endTime);
+          this.endTime = this.startTime.slice();
+          this._duration = [0, 0];
+        }
+        if (this._droppedEventsCount > 0) {
+          api_1.diag.warn(`Dropped ${this._droppedEventsCount} events because eventCountLimit reached`);
+        }
+        if (this._droppedLinksCount > 0) {
+          api_1.diag.warn(`Dropped ${this._droppedLinksCount} links because linkCountLimit reached`);
+        }
+        if (this._spanProcessor.onEnding) {
+          this._spanProcessor.onEnding(this);
+        }
+        this._recordEndMetrics?.();
+        this._ended = true;
+        this._spanProcessor.onEnd(this);
+      }
+      _getTime(inp) {
+        if (typeof inp === "number" && inp <= core_1.otperformance.now()) {
+          return (0, core_1.hrTime)(inp + this._performanceOffset);
+        }
+        if (typeof inp === "number") {
+          return (0, core_1.millisToHrTime)(inp);
+        }
+        if (inp instanceof Date) {
+          return (0, core_1.millisToHrTime)(inp.getTime());
+        }
+        if ((0, core_1.isTimeInputHrTime)(inp)) {
+          return inp;
+        }
+        if (this._startTimeProvided) {
+          return (0, core_1.millisToHrTime)(Date.now());
+        }
+        const msDuration = core_1.otperformance.now() - this._performanceStartTime;
+        return (0, core_1.addHrTimes)(this.startTime, (0, core_1.millisToHrTime)(msDuration));
+      }
+      isRecording() {
+        return this._ended === false;
+      }
+      recordException(exception, time3) {
+        const attributes = {};
+        if (typeof exception === "string") {
+          attributes[semantic_conventions_1.ATTR_EXCEPTION_MESSAGE] = exception;
+        } else if (exception) {
+          if (exception.code) {
+            attributes[semantic_conventions_1.ATTR_EXCEPTION_TYPE] = exception.code.toString();
+          } else if (exception.name) {
+            attributes[semantic_conventions_1.ATTR_EXCEPTION_TYPE] = exception.name;
+          }
+          if (exception.message) {
+            attributes[semantic_conventions_1.ATTR_EXCEPTION_MESSAGE] = exception.message;
+          }
+          if (exception.stack) {
+            attributes[semantic_conventions_1.ATTR_EXCEPTION_STACKTRACE] = exception.stack;
+          }
+        }
+        if (attributes[semantic_conventions_1.ATTR_EXCEPTION_TYPE] || attributes[semantic_conventions_1.ATTR_EXCEPTION_MESSAGE]) {
+          this.addEvent(enums_1.ExceptionEventName, attributes, time3);
+        } else {
+          api_1.diag.warn(`Failed to record an exception ${exception}`);
+        }
+      }
+      get duration() {
+        return this._duration;
+      }
+      get ended() {
+        return this._ended;
+      }
+      get droppedAttributesCount() {
+        return this._droppedAttributesCount;
+      }
+      get droppedEventsCount() {
+        return this._droppedEventsCount;
+      }
+      get droppedLinksCount() {
+        return this._droppedLinksCount;
+      }
+      _isSpanEnded() {
+        if (this._ended) {
+          const error62 = new Error(`Operation attempted on ended Span {traceId: ${this._spanContext.traceId}, spanId: ${this._spanContext.spanId}}`);
+          api_1.diag.warn(`Cannot execute the operation on ended Span {traceId: ${this._spanContext.traceId}, spanId: ${this._spanContext.spanId}}`, error62);
+        }
+        return this._ended;
+      }
+      // Utility function to truncate given value within size
+      // for value type of string, will truncate to given limit
+      // for type of non-string, will return same value
+      _truncateToLimitUtil(value, limit) {
+        if (value.length <= limit) {
+          return value;
+        }
+        return value.substring(0, limit);
+      }
+      /**
+       * If the given attribute value is of type string and has more characters than given {@code attributeValueLengthLimit} then
+       * return string with truncated to {@code attributeValueLengthLimit} characters
+       *
+       * If the given attribute value is array of strings then
+       * return new array of strings with each element truncated to {@code attributeValueLengthLimit} characters
+       *
+       * Otherwise return same Attribute {@code value}
+       *
+       * @param value Attribute value
+       * @returns truncated attribute value if required, otherwise same value
+       */
+      _truncateToSize(value) {
+        const limit = this._attributeValueLengthLimit;
+        if (limit <= 0) {
+          api_1.diag.warn(`Attribute value limit must be positive, got ${limit}`);
+          return value;
+        }
+        if (typeof value === "string") {
+          return this._truncateToLimitUtil(value, limit);
+        }
+        if (Array.isArray(value)) {
+          return value.map((val) => typeof val === "string" ? this._truncateToLimitUtil(val, limit) : val);
+        }
+        return value;
+      }
+      [inspect_1.inspectCustom](depth, options, inspect) {
+        const payload = {
+          name: this.name,
+          kind: this.kind,
+          spanContext: this._spanContext,
+          parentSpanContext: this.parentSpanContext,
+          status: this.status,
+          startTime: this.startTime,
+          endTime: this.endTime,
+          duration: this._duration,
+          ended: this._ended,
+          attributes: this.attributes,
+          events: this.events,
+          links: this.links,
+          droppedAttributesCount: this._droppedAttributesCount,
+          droppedEventsCount: this._droppedEventsCount,
+          droppedLinksCount: this._droppedLinksCount,
+          instrumentationScope: this.instrumentationScope,
+          resource: { attributes: (0, inspect_1.settledResourceAttributes)(this.resource) }
+        };
+        return (0, inspect_1.formatInspect)("SpanImpl", payload, depth, options, inspect);
+      }
+    };
+    exports.SpanImpl = SpanImpl;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/Sampler.js
+var require_Sampler = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/Sampler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SamplingDecision = void 0;
+    var SamplingDecision2;
+    (function(SamplingDecision3) {
+      SamplingDecision3[SamplingDecision3["NOT_RECORD"] = 0] = "NOT_RECORD";
+      SamplingDecision3[SamplingDecision3["RECORD"] = 1] = "RECORD";
+      SamplingDecision3[SamplingDecision3["RECORD_AND_SAMPLED"] = 2] = "RECORD_AND_SAMPLED";
+    })(SamplingDecision2 || (exports.SamplingDecision = SamplingDecision2 = {}));
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/semconv.js
+var require_semconv3 = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/semconv.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTEL_COMPONENT_TYPE_VALUE_SIMPLE_SPAN_PROCESSOR = exports.OTEL_COMPONENT_TYPE_VALUE_BATCHING_SPAN_PROCESSOR = exports.METRIC_OTEL_SDK_SPAN_STARTED = exports.METRIC_OTEL_SDK_SPAN_LIVE = exports.METRIC_OTEL_SDK_PROCESSOR_SPAN_QUEUE_SIZE = exports.METRIC_OTEL_SDK_PROCESSOR_SPAN_QUEUE_CAPACITY = exports.METRIC_OTEL_SDK_PROCESSOR_SPAN_PROCESSED = exports.ATTR_OTEL_SPAN_SAMPLING_RESULT = exports.ATTR_OTEL_SPAN_PARENT_ORIGIN = exports.ATTR_OTEL_COMPONENT_TYPE = exports.ATTR_OTEL_COMPONENT_NAME = void 0;
+    exports.ATTR_OTEL_COMPONENT_NAME = "otel.component.name";
+    exports.ATTR_OTEL_COMPONENT_TYPE = "otel.component.type";
+    exports.ATTR_OTEL_SPAN_PARENT_ORIGIN = "otel.span.parent.origin";
+    exports.ATTR_OTEL_SPAN_SAMPLING_RESULT = "otel.span.sampling_result";
+    exports.METRIC_OTEL_SDK_PROCESSOR_SPAN_PROCESSED = "otel.sdk.processor.span.processed";
+    exports.METRIC_OTEL_SDK_PROCESSOR_SPAN_QUEUE_CAPACITY = "otel.sdk.processor.span.queue.capacity";
+    exports.METRIC_OTEL_SDK_PROCESSOR_SPAN_QUEUE_SIZE = "otel.sdk.processor.span.queue.size";
+    exports.METRIC_OTEL_SDK_SPAN_LIVE = "otel.sdk.span.live";
+    exports.METRIC_OTEL_SDK_SPAN_STARTED = "otel.sdk.span.started";
+    exports.OTEL_COMPONENT_TYPE_VALUE_BATCHING_SPAN_PROCESSOR = "batching_span_processor";
+    exports.OTEL_COMPONENT_TYPE_VALUE_SIMPLE_SPAN_PROCESSOR = "simple_span_processor";
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/TracerMetrics.js
+var require_TracerMetrics = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/TracerMetrics.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TracerMetrics = void 0;
+    var Sampler_1 = require_Sampler();
+    var semconv_1 = require_semconv3();
+    var TracerMetrics = class {
+      startedSpans;
+      liveSpans;
+      constructor(meter) {
+        this.startedSpans = meter.createCounter(semconv_1.METRIC_OTEL_SDK_SPAN_STARTED, {
+          unit: "{span}",
+          description: "The number of created spans."
+        });
+        this.liveSpans = meter.createUpDownCounter(semconv_1.METRIC_OTEL_SDK_SPAN_LIVE, {
+          unit: "{span}",
+          description: "The number of currently live spans."
+        });
+      }
+      startSpan(parentSpanCtx, samplingDecision) {
+        const samplingDecisionStr = samplingDecisionToString(samplingDecision);
+        this.startedSpans.add(1, {
+          [semconv_1.ATTR_OTEL_SPAN_PARENT_ORIGIN]: parentOrigin(parentSpanCtx),
+          [semconv_1.ATTR_OTEL_SPAN_SAMPLING_RESULT]: samplingDecisionStr
+        });
+        if (samplingDecision === Sampler_1.SamplingDecision.NOT_RECORD) {
+          return () => {
+          };
+        }
+        const liveSpanAttributes = {
+          [semconv_1.ATTR_OTEL_SPAN_SAMPLING_RESULT]: samplingDecisionStr
+        };
+        this.liveSpans.add(1, liveSpanAttributes);
+        return () => {
+          this.liveSpans.add(-1, liveSpanAttributes);
+        };
+      }
+    };
+    exports.TracerMetrics = TracerMetrics;
+    function parentOrigin(parentSpanContext) {
+      if (!parentSpanContext) {
+        return "none";
+      }
+      if (parentSpanContext.isRemote) {
+        return "remote";
+      }
+      return "local";
+    }
+    function samplingDecisionToString(decision) {
+      switch (decision) {
+        case Sampler_1.SamplingDecision.RECORD_AND_SAMPLED:
+          return "RECORD_AND_SAMPLE";
+        case Sampler_1.SamplingDecision.RECORD:
+          return "RECORD_ONLY";
+        case Sampler_1.SamplingDecision.NOT_RECORD:
+          return "DROP";
+      }
+    }
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/version.js
+var require_version2 = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/version.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.VERSION = void 0;
+    exports.VERSION = "2.12.0";
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/Tracer.js
+var require_Tracer = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/Tracer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Tracer = void 0;
+    var api = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var Span_1 = require_Span();
+    var TracerMetrics_1 = require_TracerMetrics();
+    var version_1 = require_version2();
+    var inspect_1 = require_inspect();
+    var Tracer = class {
+      _sampler;
+      _spanLimits;
+      _idGenerator;
+      instrumentationScope;
+      _resource;
+      _spanProcessor;
+      _tracerMetrics;
+      /**
+       * Constructs a new Tracer instance.
+       */
+      constructor(instrumentationScope, options) {
+        this.instrumentationScope = instrumentationScope;
+        this._sampler = options.sampler;
+        this._spanLimits = options.spanLimits;
+        this._resource = options.resource;
+        this._idGenerator = options.idGenerator;
+        this._spanProcessor = options.spanProcessor;
+        const meter = options.meterProvider.getMeter("@opentelemetry/sdk-trace", version_1.VERSION);
+        this._tracerMetrics = new TracerMetrics_1.TracerMetrics(meter);
+      }
+      /**
+       * Starts a new Span or returns the default NoopSpan based on the sampling
+       * decision.
+       */
+      startSpan(name2, options = {}, context2 = api.context.active()) {
+        if (options.root) {
+          context2 = api.trace.deleteSpan(context2);
+        }
+        const parentSpan = api.trace.getSpan(context2);
+        if ((0, core_1.isTracingSuppressed)(context2)) {
+          api.diag.debug("Instrumentation suppressed, returning Noop Span");
+          const nonRecordingSpan = api.trace.wrapSpanContext(api.INVALID_SPAN_CONTEXT);
+          return nonRecordingSpan;
+        }
+        const parentSpanContext = parentSpan?.spanContext();
+        const spanId = this._idGenerator.generateSpanId();
+        let validParentSpanContext;
+        let traceId;
+        let traceState;
+        if (!parentSpanContext || !api.trace.isSpanContextValid(parentSpanContext)) {
+          traceId = this._idGenerator.generateTraceId();
+        } else {
+          traceId = parentSpanContext.traceId;
+          traceState = parentSpanContext.traceState;
+          validParentSpanContext = parentSpanContext;
+        }
+        const spanKind = options.kind ?? api.SpanKind.INTERNAL;
+        const links = (options.links ?? []).map((link) => {
+          return {
+            context: link.context,
+            attributes: (0, core_1.sanitizeAttributes)(link.attributes)
+          };
+        });
+        const attributes = (0, core_1.sanitizeAttributes)(options.attributes);
+        const samplingResult = this._sampler.shouldSample(context2, traceId, name2, spanKind, attributes, links);
+        const recordEndMetrics = this._tracerMetrics.startSpan(parentSpanContext, samplingResult.decision);
+        traceState = samplingResult.traceState ?? traceState;
+        const traceFlags = samplingResult.decision === api.SamplingDecision.RECORD_AND_SAMPLED ? api.TraceFlags.SAMPLED : api.TraceFlags.NONE;
+        const spanContext = { traceId, spanId, traceFlags, traceState };
+        if (samplingResult.decision === api.SamplingDecision.NOT_RECORD) {
+          api.diag.debug("Recording is off, propagating context in a non-recording span");
+          const nonRecordingSpan = api.trace.wrapSpanContext(spanContext);
+          return nonRecordingSpan;
+        }
+        const initAttributes = (0, core_1.sanitizeAttributes)(Object.assign(attributes, samplingResult.attributes));
+        const span = new Span_1.SpanImpl({
+          resource: this._resource,
+          scope: this.instrumentationScope,
+          context: context2,
+          spanContext,
+          name: name2,
+          kind: spanKind,
+          links,
+          parentSpanContext: validParentSpanContext,
+          attributes: initAttributes,
+          startTime: options.startTime,
+          spanProcessor: this._spanProcessor,
+          spanLimits: this._spanLimits,
+          recordEndMetrics
+        });
+        return span;
+      }
+      startActiveSpan(name2, arg2, arg3, arg4) {
+        let opts;
+        let ctx;
+        let fn;
+        if (arguments.length < 2) {
+          return;
+        } else if (arguments.length === 2) {
+          fn = arg2;
+        } else if (arguments.length === 3) {
+          opts = arg2;
+          fn = arg3;
+        } else {
+          opts = arg2;
+          ctx = arg3;
+          fn = arg4;
+        }
+        const parentContext = ctx ?? api.context.active();
+        const span = this.startSpan(name2, opts, parentContext);
+        const contextWithSpanSet = api.trace.setSpan(parentContext, span);
+        return api.context.with(contextWithSpanSet, fn, void 0, span);
+      }
+      [inspect_1.inspectCustom](depth, options, inspect) {
+        const payload = {
+          instrumentationScope: this.instrumentationScope,
+          resource: { attributes: (0, inspect_1.settledResourceAttributes)(this._resource) },
+          spanLimits: this._spanLimits
+        };
+        return (0, inspect_1.formatInspect)("Tracer", payload, depth, options, inspect);
+      }
+    };
+    exports.Tracer = Tracer;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/MultiSpanProcessor.js
+var require_MultiSpanProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/MultiSpanProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MultiSpanProcessor = void 0;
+    var core_1 = require_src();
+    var MultiSpanProcessor = class {
+      _spanProcessors;
+      constructor(spanProcessors) {
+        this._spanProcessors = spanProcessors;
+      }
+      forceFlush() {
+        const promises = [];
+        for (const spanProcessor of this._spanProcessors) {
+          promises.push(spanProcessor.forceFlush());
+        }
+        return new Promise((resolve5) => {
+          Promise.all(promises).then(() => {
+            resolve5();
+          }).catch((error62) => {
+            (0, core_1.globalErrorHandler)(error62 || new Error("MultiSpanProcessor: forceFlush failed"));
+            resolve5();
+          });
+        });
+      }
+      onStart(span, context2) {
+        for (const spanProcessor of this._spanProcessors) {
+          spanProcessor.onStart(span, context2);
+        }
+      }
+      onEnding(span) {
+        for (const spanProcessor of this._spanProcessors) {
+          if (spanProcessor.onEnding) {
+            spanProcessor.onEnding(span);
+          }
+        }
+      }
+      onEnd(span) {
+        for (const spanProcessor of this._spanProcessors) {
+          spanProcessor.onEnd(span);
+        }
+      }
+      shutdown() {
+        const promises = [];
+        for (const spanProcessor of this._spanProcessors) {
+          promises.push(spanProcessor.shutdown());
+        }
+        return new Promise((resolve5, reject) => {
+          Promise.all(promises).then(() => {
+            resolve5();
+          }, reject);
+        });
+      }
+    };
+    exports.MultiSpanProcessor = MultiSpanProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/sampler/AlwaysOffSampler.js
+var require_AlwaysOffSampler = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/sampler/AlwaysOffSampler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AlwaysOffSampler = void 0;
+    var Sampler_1 = require_Sampler();
+    var AlwaysOffSampler = class {
+      shouldSample() {
+        return {
+          decision: Sampler_1.SamplingDecision.NOT_RECORD
+        };
+      }
+      toString() {
+        return "AlwaysOffSampler";
+      }
+    };
+    exports.AlwaysOffSampler = AlwaysOffSampler;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/sampler/AlwaysOnSampler.js
+var require_AlwaysOnSampler = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/sampler/AlwaysOnSampler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AlwaysOnSampler = void 0;
+    var Sampler_1 = require_Sampler();
+    var AlwaysOnSampler = class {
+      shouldSample() {
+        return {
+          decision: Sampler_1.SamplingDecision.RECORD_AND_SAMPLED
+        };
+      }
+      toString() {
+        return "AlwaysOnSampler";
+      }
+    };
+    exports.AlwaysOnSampler = AlwaysOnSampler;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/sampler/ParentBasedSampler.js
+var require_ParentBasedSampler = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/sampler/ParentBasedSampler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ParentBasedSampler = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var AlwaysOffSampler_1 = require_AlwaysOffSampler();
+    var AlwaysOnSampler_1 = require_AlwaysOnSampler();
+    var ParentBasedSampler = class {
+      _root;
+      _remoteParentSampled;
+      _remoteParentNotSampled;
+      _localParentSampled;
+      _localParentNotSampled;
+      constructor(config2) {
+        this._root = config2.root;
+        if (!this._root) {
+          (0, core_1.globalErrorHandler)(new Error("ParentBasedSampler must have a root sampler configured"));
+          this._root = new AlwaysOnSampler_1.AlwaysOnSampler();
+        }
+        this._remoteParentSampled = config2.remoteParentSampled ?? new AlwaysOnSampler_1.AlwaysOnSampler();
+        this._remoteParentNotSampled = config2.remoteParentNotSampled ?? new AlwaysOffSampler_1.AlwaysOffSampler();
+        this._localParentSampled = config2.localParentSampled ?? new AlwaysOnSampler_1.AlwaysOnSampler();
+        this._localParentNotSampled = config2.localParentNotSampled ?? new AlwaysOffSampler_1.AlwaysOffSampler();
+      }
+      shouldSample(context2, traceId, spanName, spanKind, attributes, links) {
+        const parentContext = api_1.trace.getSpanContext(context2);
+        if (!parentContext || !(0, api_1.isSpanContextValid)(parentContext)) {
+          return this._root.shouldSample(context2, traceId, spanName, spanKind, attributes, links);
+        }
+        if (parentContext.isRemote) {
+          if (parentContext.traceFlags & api_1.TraceFlags.SAMPLED) {
+            return this._remoteParentSampled.shouldSample(context2, traceId, spanName, spanKind, attributes, links);
+          }
+          return this._remoteParentNotSampled.shouldSample(context2, traceId, spanName, spanKind, attributes, links);
+        }
+        if (parentContext.traceFlags & api_1.TraceFlags.SAMPLED) {
+          return this._localParentSampled.shouldSample(context2, traceId, spanName, spanKind, attributes, links);
+        }
+        return this._localParentNotSampled.shouldSample(context2, traceId, spanName, spanKind, attributes, links);
+      }
+      toString() {
+        return `ParentBased{root=${this._root.toString()}, remoteParentSampled=${this._remoteParentSampled.toString()}, remoteParentNotSampled=${this._remoteParentNotSampled.toString()}, localParentSampled=${this._localParentSampled.toString()}, localParentNotSampled=${this._localParentNotSampled.toString()}}`;
+      }
+    };
+    exports.ParentBasedSampler = ParentBasedSampler;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/export/SpanProcessorMetrics.js
+var require_SpanProcessorMetrics = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/export/SpanProcessorMetrics.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SpanProcessorMetrics = void 0;
+    var semantic_conventions_1 = require_dist4();
+    var semconv_1 = require_semconv3();
+    var componentCounter2 = /* @__PURE__ */ new Map();
+    var SpanProcessorMetrics = class {
+      processedSpans;
+      queueSize;
+      queueSizeCallback;
+      standardAttrs;
+      droppedAttrs;
+      constructor(componentType, meter, queueConfig) {
+        const counter = componentCounter2.get(componentType) ?? 0;
+        componentCounter2.set(componentType, counter + 1);
+        this.standardAttrs = {
+          [semconv_1.ATTR_OTEL_COMPONENT_TYPE]: componentType,
+          [semconv_1.ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter}`
+        };
+        this.droppedAttrs = {
+          ...this.standardAttrs,
+          [semantic_conventions_1.ATTR_ERROR_TYPE]: "queue_full"
+        };
+        this.processedSpans = meter.createCounter(semconv_1.METRIC_OTEL_SDK_PROCESSOR_SPAN_PROCESSED, {
+          unit: "{span}",
+          description: "The number of spans for which the processing has finished, either successful or failed."
+        });
+        if (queueConfig) {
+          const { capacity, getQueueSize } = queueConfig;
+          const queueCapacity = meter.createUpDownCounter(semconv_1.METRIC_OTEL_SDK_PROCESSOR_SPAN_QUEUE_CAPACITY, {
+            unit: "{span}",
+            description: "The maximum number of spans the queue of a given instance of an SDK span processor can hold."
+          });
+          queueCapacity.add(capacity, this.standardAttrs);
+          this.queueSize = meter.createObservableUpDownCounter(semconv_1.METRIC_OTEL_SDK_PROCESSOR_SPAN_QUEUE_SIZE, {
+            unit: "{span}",
+            description: "The number of spans in the queue of a given instance of an SDK span processor."
+          });
+          this.queueSizeCallback = (result) => result.observe(getQueueSize(), this.standardAttrs);
+          this.queueSize.addCallback(this.queueSizeCallback);
+        }
+      }
+      dropSpans(count) {
+        this.processedSpans.add(count, this.droppedAttrs);
+      }
+      finishSpans(count, error62) {
+        if (!error62) {
+          this.processedSpans.add(count, this.standardAttrs);
+          return;
+        }
+        const attrs = {
+          ...this.standardAttrs,
+          [semantic_conventions_1.ATTR_ERROR_TYPE]: error62.name
+        };
+        this.processedSpans.add(count, attrs);
+      }
+      shutdown() {
+        if (this.queueSize && this.queueSizeCallback) {
+          this.queueSize.removeCallback(this.queueSizeCallback);
+        }
+      }
+    };
+    exports.SpanProcessorMetrics = SpanProcessorMetrics;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/export/BatchSpanProcessorBase.js
+var require_BatchSpanProcessorBase = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/export/BatchSpanProcessorBase.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BatchSpanProcessorBase = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var SpanProcessorMetrics_1 = require_SpanProcessorMetrics();
+    var semconv_1 = require_semconv3();
+    var BatchSpanProcessorBase = class {
+      _maxExportBatchSize;
+      _maxQueueSize;
+      _scheduledDelayMillis;
+      _exportTimeoutMillis;
+      _exporter;
+      _metrics;
+      _isExporting = false;
+      _finishedSpans = [];
+      _timer;
+      _shutdownOnce;
+      _droppedSpansCount = 0;
+      constructor(options) {
+        this._exporter = options.exporter;
+        this._maxExportBatchSize = options.maxExportBatchSize ?? 512;
+        this._maxQueueSize = options.maxQueueSize ?? 2048;
+        this._scheduledDelayMillis = options.scheduledDelayMillis ?? 5e3;
+        this._exportTimeoutMillis = options.exportTimeoutMillis ?? 3e4;
+        this._shutdownOnce = new core_1.BindOnceFuture(this._shutdown, this);
+        if (this._maxExportBatchSize > this._maxQueueSize) {
+          api_1.diag.warn("BatchSpanProcessor: maxExportBatchSize must be smaller or equal to maxQueueSize, setting maxExportBatchSize to match maxQueueSize");
+          this._maxExportBatchSize = this._maxQueueSize;
+        }
+        const meter = options.selfObsMeterProvider ? options.selfObsMeterProvider.getMeter("@opentelemetry/sdk-trace") : (0, api_1.createNoopMeter)();
+        this._metrics = new SpanProcessorMetrics_1.SpanProcessorMetrics(semconv_1.OTEL_COMPONENT_TYPE_VALUE_BATCHING_SPAN_PROCESSOR, meter, {
+          capacity: this._maxQueueSize,
+          getQueueSize: () => this._finishedSpans.length
+        });
+      }
+      forceFlush() {
+        if (this._shutdownOnce.isCalled) {
+          return this._shutdownOnce.promise;
+        }
+        return this._flushAll();
+      }
+      // does nothing.
+      onStart(_span, _parentContext) {
+      }
+      onEnd(span) {
+        if (this._shutdownOnce.isCalled) {
+          return;
+        }
+        if ((span.spanContext().traceFlags & api_1.TraceFlags.SAMPLED) === 0) {
+          return;
+        }
+        this._addToBuffer(span);
+      }
+      shutdown() {
+        return this._shutdownOnce.call();
+      }
+      _shutdown() {
+        return Promise.resolve().then(() => {
+          return this.onShutdown();
+        }).then(() => {
+          return this._flushAll();
+        }).then(() => {
+          this._metrics.shutdown();
+          return this._exporter.shutdown();
+        });
+      }
+      /** Add a span in the buffer. */
+      _addToBuffer(span) {
+        if (this._finishedSpans.length >= this._maxQueueSize) {
+          if (this._droppedSpansCount === 0) {
+            api_1.diag.debug("maxQueueSize reached, dropping spans");
+          }
+          this._droppedSpansCount++;
+          this._metrics.dropSpans(1);
+          return;
+        }
+        if (this._droppedSpansCount > 0) {
+          api_1.diag.warn(`Dropped ${this._droppedSpansCount} spans because maxQueueSize reached`);
+          this._droppedSpansCount = 0;
+        }
+        this._finishedSpans.push(span);
+        this._maybeStartTimer();
+      }
+      /**
+       * Send all spans to the exporter respecting the batch size limit
+       * This function is used only on forceFlush or shutdown,
+       * for all other cases _flush should be used
+       * */
+      _flushAll() {
+        return new Promise((resolve5, reject) => {
+          const promises = [];
+          const count = Math.ceil(this._finishedSpans.length / this._maxExportBatchSize);
+          for (let i = 0, j = count; i < j; i++) {
+            promises.push(this._flushOneBatch());
+          }
+          Promise.all(promises).then(() => {
+            resolve5();
+          }).catch(reject);
+        });
+      }
+      _flushOneBatch() {
+        this._clearTimer();
+        if (this._finishedSpans.length === 0) {
+          return Promise.resolve();
+        }
+        return new Promise((resolve5, reject) => {
+          const timer = setTimeout(() => {
+            reject(new Error("Timeout"));
+          }, this._exportTimeoutMillis);
+          api_1.context.with((0, core_1.suppressTracing)(api_1.context.active()), () => {
+            let spans;
+            if (this._finishedSpans.length <= this._maxExportBatchSize) {
+              spans = this._finishedSpans;
+              this._finishedSpans = [];
+            } else {
+              spans = this._finishedSpans.splice(0, this._maxExportBatchSize);
+            }
+            const doExport = () => this._exporter.export(spans, (result) => {
+              clearTimeout(timer);
+              this._metrics.finishSpans(spans.length, result.error);
+              if (result.code === core_1.ExportResultCode.SUCCESS) {
+                resolve5();
+              } else {
+                reject(result.error ?? new Error("BatchSpanProcessor: span export failed"));
+              }
+            });
+            let pendingResources = null;
+            for (let i = 0, len = spans.length; i < len; i++) {
+              const span = spans[i];
+              if (span.resource.asyncAttributesPending && span.resource.waitForAsyncAttributes) {
+                pendingResources ??= [];
+                pendingResources.push(span.resource.waitForAsyncAttributes());
+              }
+            }
+            if (pendingResources === null) {
+              doExport();
+            } else {
+              Promise.all(pendingResources).then(doExport, (err) => {
+                (0, core_1.globalErrorHandler)(err);
+                reject(err);
+              });
+            }
+          });
+        });
+      }
+      _maybeStartTimer() {
+        if (this._isExporting)
+          return;
+        const flush = () => {
+          this._isExporting = true;
+          this._flushOneBatch().finally(() => {
+            this._isExporting = false;
+            if (this._finishedSpans.length > 0) {
+              this._clearTimer();
+              this._maybeStartTimer();
+            }
+          }).catch((e2) => {
+            this._isExporting = false;
+            (0, core_1.globalErrorHandler)(e2);
+          });
+        };
+        if (this._finishedSpans.length >= this._maxExportBatchSize) {
+          return flush();
+        }
+        if (this._timer !== void 0)
+          return;
+        this._timer = setTimeout(() => flush(), this._scheduledDelayMillis);
+        if (typeof this._timer !== "number") {
+          this._timer.unref();
+        }
+      }
+      _clearTimer() {
+        if (this._timer !== void 0) {
+          clearTimeout(this._timer);
+          this._timer = void 0;
+        }
+      }
+    };
+    exports.BatchSpanProcessorBase = BatchSpanProcessorBase;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/platform/node/export/BatchSpanProcessor.js
+var require_BatchSpanProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/platform/node/export/BatchSpanProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BatchSpanProcessor = void 0;
+    var BatchSpanProcessorBase_1 = require_BatchSpanProcessorBase();
+    var BatchSpanProcessor = class extends BatchSpanProcessorBase_1.BatchSpanProcessorBase {
+      onShutdown() {
+      }
+    };
+    exports.BatchSpanProcessor = BatchSpanProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/platform/node/RandomIdGenerator.js
+var require_RandomIdGenerator = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/platform/node/RandomIdGenerator.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RandomIdGenerator = void 0;
+    var SPAN_ID_BYTES = 8;
+    var TRACE_ID_BYTES = 16;
+    var RandomIdGenerator = class {
+      /**
+       * Returns a random 16-byte trace ID formatted/encoded as a 32 lowercase hex
+       * characters corresponding to 128 bits.
+       */
+      generateTraceId = getIdGenerator(TRACE_ID_BYTES);
+      /**
+       * Returns a random 8-byte span ID formatted/encoded as a 16 lowercase hex
+       * characters corresponding to 64 bits.
+       */
+      generateSpanId = getIdGenerator(SPAN_ID_BYTES);
+    };
+    exports.RandomIdGenerator = RandomIdGenerator;
+    var SHARED_BUFFER = Buffer.allocUnsafe(TRACE_ID_BYTES);
+    function getIdGenerator(bytes) {
+      return function generateId() {
+        for (let i = 0; i < bytes / 4; i++) {
+          SHARED_BUFFER.writeUInt32BE(Math.random() * 2 ** 32 >>> 0, i * 4);
+        }
+        for (let i = 0; i < bytes; i++) {
+          if (SHARED_BUFFER[i] > 0) {
+            break;
+          } else if (i === bytes - 1) {
+            SHARED_BUFFER[bytes - 1] = 1;
+          }
+        }
+        return SHARED_BUFFER.toString("hex", 0, bytes);
+      };
+    }
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/platform/node/index.js
+var require_node3 = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/platform/node/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RandomIdGenerator = exports.BatchSpanProcessor = void 0;
+    var BatchSpanProcessor_1 = require_BatchSpanProcessor();
+    Object.defineProperty(exports, "BatchSpanProcessor", { enumerable: true, get: function() {
+      return BatchSpanProcessor_1.BatchSpanProcessor;
+    } });
+    var RandomIdGenerator_1 = require_RandomIdGenerator();
+    Object.defineProperty(exports, "RandomIdGenerator", { enumerable: true, get: function() {
+      return RandomIdGenerator_1.RandomIdGenerator;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/platform/index.js
+var require_platform3 = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/platform/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RandomIdGenerator = exports.BatchSpanProcessor = void 0;
+    var node_1 = require_node3();
+    Object.defineProperty(exports, "BatchSpanProcessor", { enumerable: true, get: function() {
+      return node_1.BatchSpanProcessor;
+    } });
+    Object.defineProperty(exports, "RandomIdGenerator", { enumerable: true, get: function() {
+      return node_1.RandomIdGenerator;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/TracerProvider.js
+var require_TracerProvider = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/TracerProvider.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TracerProvider = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var resources_1 = require_src2();
+    var Tracer_1 = require_Tracer();
+    var MultiSpanProcessor_1 = require_MultiSpanProcessor();
+    var ParentBasedSampler_1 = require_ParentBasedSampler();
+    var AlwaysOnSampler_1 = require_AlwaysOnSampler();
+    var platform_1 = require_platform3();
+    var inspect_1 = require_inspect();
+    var ForceFlushState;
+    (function(ForceFlushState2) {
+      ForceFlushState2[ForceFlushState2["resolved"] = 0] = "resolved";
+      ForceFlushState2[ForceFlushState2["timeout"] = 1] = "timeout";
+      ForceFlushState2[ForceFlushState2["error"] = 2] = "error";
+      ForceFlushState2[ForceFlushState2["unresolved"] = 3] = "unresolved";
+    })(ForceFlushState || (ForceFlushState = {}));
+    var TracerProvider = class {
+      _resource;
+      _activeSpanProcessor;
+      _forceFlushTimeoutMillis;
+      _tracerOptions;
+      _tracers = /* @__PURE__ */ new Map();
+      constructor(options = {}) {
+        this._forceFlushTimeoutMillis = options.forceFlushTimeoutMillis ?? 3e4;
+        this._resource = options.resource ?? (0, resources_1.defaultResource)();
+        const spanProcessors = options.spanProcessors ?? [];
+        this._activeSpanProcessor = new MultiSpanProcessor_1.MultiSpanProcessor(spanProcessors);
+        this._tracerOptions = {
+          resource: this._resource,
+          sampler: options.sampler ?? new ParentBasedSampler_1.ParentBasedSampler({
+            root: new AlwaysOnSampler_1.AlwaysOnSampler()
+          }),
+          spanLimits: {
+            attributeCountLimit: options.spanLimits?.attributeCountLimit ?? 128,
+            attributeValueLengthLimit: options.spanLimits?.attributeValueLengthLimit ?? Infinity,
+            eventCountLimit: options.spanLimits?.eventCountLimit ?? 128,
+            linkCountLimit: options.spanLimits?.linkCountLimit ?? 128,
+            attributePerEventCountLimit: options.spanLimits?.attributePerEventCountLimit ?? 128,
+            attributePerLinkCountLimit: options.spanLimits?.attributePerLinkCountLimit ?? 128
+          },
+          idGenerator: options.idGenerator || new platform_1.RandomIdGenerator(),
+          spanProcessor: this._activeSpanProcessor,
+          meterProvider: options.meterProvider ?? {
+            getMeter() {
+              return (0, api_1.createNoopMeter)();
+            }
+          }
+        };
+      }
+      getTracer(name2, version2, options) {
+        const key = `${name2}@${version2 || ""}:${options?.schemaUrl || ""}`;
+        if (!this._tracers.has(key)) {
+          this._tracers.set(key, new Tracer_1.Tracer({ name: name2, version: version2, schemaUrl: options?.schemaUrl }, this._tracerOptions));
+        }
+        return this._tracers.get(key);
+      }
+      forceFlush(options) {
+        const timeout = options?.timeoutMillis ?? this._forceFlushTimeoutMillis;
+        const promises = this._activeSpanProcessor["_spanProcessors"].map((spanProcessor) => {
+          return new Promise((resolve5) => {
+            let state;
+            const timeoutInterval = setTimeout(() => {
+              resolve5(new Error(`Span processor did not completed within timeout period of ${timeout} ms`));
+              state = ForceFlushState.timeout;
+            }, timeout);
+            spanProcessor.forceFlush().then(() => {
+              clearTimeout(timeoutInterval);
+              if (state !== ForceFlushState.timeout) {
+                state = ForceFlushState.resolved;
+                resolve5(state);
+              }
+            }).catch((error62) => {
+              clearTimeout(timeoutInterval);
+              state = ForceFlushState.error;
+              resolve5(error62);
+            });
+          });
+        });
+        return new Promise((resolve5, reject) => {
+          Promise.all(promises).then((results) => {
+            const errors = results.filter((result) => result !== ForceFlushState.resolved);
+            if (errors.length > 0) {
+              reject(errors);
+            } else {
+              resolve5();
+            }
+          }).catch((error62) => reject([error62]));
+        });
+      }
+      shutdown() {
+        return this._activeSpanProcessor.shutdown();
+      }
+      [inspect_1.inspectCustom](depth, options, inspect) {
+        const processors = this._activeSpanProcessor["_spanProcessors"];
+        const payload = {
+          resource: { attributes: (0, inspect_1.settledResourceAttributes)(this._resource) },
+          tracers: Array.from(this._tracers.keys()),
+          spanProcessors: processors.map((p) => p.constructor?.name ?? "SpanProcessor")
+        };
+        return (0, inspect_1.formatInspect)("TracerProvider", payload, depth, options, inspect);
+      }
+    };
+    exports.TracerProvider = TracerProvider;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/export/ConsoleSpanExporter.js
+var require_ConsoleSpanExporter = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/export/ConsoleSpanExporter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ConsoleSpanExporter = void 0;
+    var core_1 = require_src();
+    var ConsoleSpanExporter = class {
+      /**
+       * Export spans.
+       * @param spans
+       * @param resultCallback
+       */
+      export(spans, resultCallback) {
+        return this._sendSpans(spans, resultCallback);
+      }
+      /**
+       * Shutdown the exporter.
+       */
+      shutdown() {
+        this._sendSpans([]);
+        return this.forceFlush();
+      }
+      /**
+       * Exports any pending spans in exporter
+       */
+      forceFlush() {
+        return Promise.resolve();
+      }
+      /**
+       * converts span info into more readable format
+       * @param span
+       */
+      _exportInfo(span) {
+        return {
+          resource: {
+            attributes: span.resource.attributes
+          },
+          instrumentationScope: span.instrumentationScope,
+          traceId: span.spanContext().traceId,
+          parentSpanContext: span.parentSpanContext,
+          traceState: span.spanContext().traceState?.serialize(),
+          name: span.name,
+          id: span.spanContext().spanId,
+          kind: span.kind,
+          timestamp: (0, core_1.hrTimeToMicroseconds)(span.startTime),
+          duration: (0, core_1.hrTimeToMicroseconds)(span.duration),
+          attributes: span.attributes,
+          status: span.status,
+          events: span.events,
+          links: span.links
+        };
+      }
+      /**
+       * Showing spans in console
+       * @param spans
+       * @param done
+       */
+      _sendSpans(spans, done) {
+        for (const span of spans) {
+          console.dir(this._exportInfo(span), { depth: 3 });
+        }
+        if (done) {
+          return done({ code: core_1.ExportResultCode.SUCCESS });
+        }
+      }
+    };
+    exports.ConsoleSpanExporter = ConsoleSpanExporter;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/export/InMemorySpanExporter.js
+var require_InMemorySpanExporter = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/export/InMemorySpanExporter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InMemorySpanExporter = void 0;
+    var core_1 = require_src();
+    var InMemorySpanExporter = class {
+      _finishedSpans = [];
+      /**
+       * Indicates if the exporter has been "shutdown."
+       * When false, exported spans will not be stored in-memory.
+       */
+      _stopped = false;
+      export(spans, resultCallback) {
+        if (this._stopped)
+          return resultCallback({
+            code: core_1.ExportResultCode.FAILED,
+            error: new Error("Exporter has been stopped")
+          });
+        this._finishedSpans.push(...spans);
+        setTimeout(() => resultCallback({ code: core_1.ExportResultCode.SUCCESS }), 0);
+      }
+      shutdown() {
+        this._stopped = true;
+        this._finishedSpans = [];
+        return this.forceFlush();
+      }
+      /**
+       * Exports any pending spans in the exporter
+       */
+      forceFlush() {
+        return Promise.resolve();
+      }
+      reset() {
+        this._finishedSpans = [];
+      }
+      getFinishedSpans() {
+        return this._finishedSpans;
+      }
+    };
+    exports.InMemorySpanExporter = InMemorySpanExporter;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/export/SimpleSpanProcessor.js
+var require_SimpleSpanProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/export/SimpleSpanProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SimpleSpanProcessor = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var SpanProcessorMetrics_1 = require_SpanProcessorMetrics();
+    var semconv_1 = require_semconv3();
+    var SimpleSpanProcessor = class {
+      _exporter;
+      _metrics;
+      _shutdownOnce;
+      _pendingExports;
+      constructor(options) {
+        this._exporter = options.exporter;
+        this._shutdownOnce = new core_1.BindOnceFuture(this._shutdown, this);
+        this._pendingExports = /* @__PURE__ */ new Set();
+        const meter = options.selfObsMeterProvider ? options.selfObsMeterProvider.getMeter("@opentelemetry/sdk-trace") : (0, api_1.createNoopMeter)();
+        this._metrics = new SpanProcessorMetrics_1.SpanProcessorMetrics(semconv_1.OTEL_COMPONENT_TYPE_VALUE_SIMPLE_SPAN_PROCESSOR, meter);
+      }
+      async forceFlush() {
+        let pendingExportError;
+        let pendingExportRejected = false;
+        try {
+          await Promise.all(Array.from(this._pendingExports));
+        } catch (err) {
+          pendingExportError = err;
+          pendingExportRejected = true;
+        }
+        if (this._exporter.forceFlush) {
+          await this._exporter.forceFlush();
+        }
+        if (pendingExportRejected) {
+          throw pendingExportError;
+        }
+      }
+      onStart(_span, _parentContext) {
+      }
+      onEnd(span) {
+        if (this._shutdownOnce.isCalled) {
+          return;
+        }
+        if ((span.spanContext().traceFlags & api_1.TraceFlags.SAMPLED) === 0) {
+          return;
+        }
+        const pendingExport = this._doExport(span);
+        this._pendingExports.add(pendingExport);
+        void pendingExport.then(() => {
+          this._pendingExports.delete(pendingExport);
+        }, (err) => {
+          (0, core_1.globalErrorHandler)(err);
+          this._pendingExports.delete(pendingExport);
+        });
+      }
+      async _doExport(span) {
+        if (span.resource.asyncAttributesPending) {
+          await span.resource.waitForAsyncAttributes?.();
+        }
+        const result = await core_1.internal._export(this._exporter, [span]);
+        this._metrics.finishSpans(1, result.error);
+        if (result.code !== core_1.ExportResultCode.SUCCESS) {
+          throw result.error ?? new Error(`SimpleSpanProcessor: span export failed (status ${result})`);
+        }
+      }
+      shutdown() {
+        return this._shutdownOnce.call();
+      }
+      _shutdown() {
+        this._metrics.shutdown();
+        return this._exporter.shutdown();
+      }
+    };
+    exports.SimpleSpanProcessor = SimpleSpanProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/export/NoopSpanProcessor.js
+var require_NoopSpanProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/export/NoopSpanProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.NoopSpanProcessor = void 0;
+    var NoopSpanProcessor = class {
+      onStart(_span, _context) {
+      }
+      onEnd(_span) {
+      }
+      shutdown() {
+        return Promise.resolve();
+      }
+      forceFlush() {
+        return Promise.resolve();
+      }
+    };
+    exports.NoopSpanProcessor = NoopSpanProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/sampler/AlwaysRecordSampler.js
+var require_AlwaysRecordSampler = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/sampler/AlwaysRecordSampler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createAlwaysRecordSampler = void 0;
+    var Sampler_1 = require_Sampler();
+    function createAlwaysRecordSampler(delegate) {
+      if (!delegate) {
+        throw new Error("createAlwaysRecordSampler requires a delegate sampler");
+      }
+      return {
+        shouldSample(context2, traceId, spanName, spanKind, attributes, links) {
+          const result = delegate.shouldSample(context2, traceId, spanName, spanKind, attributes, links);
+          if (result.decision === Sampler_1.SamplingDecision.NOT_RECORD) {
+            return {
+              decision: Sampler_1.SamplingDecision.RECORD,
+              attributes: result.attributes,
+              traceState: result.traceState
+            };
+          }
+          return result;
+        },
+        toString() {
+          return `AlwaysRecordSampler{${delegate.toString()}}`;
+        }
+      };
+    }
+    exports.createAlwaysRecordSampler = createAlwaysRecordSampler;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/sampler/TraceIdRatioBasedSampler.js
+var require_TraceIdRatioBasedSampler = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/sampler/TraceIdRatioBasedSampler.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TraceIdRatioBasedSampler = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var Sampler_1 = require_Sampler();
+    var TraceIdRatioBasedSampler = class {
+      _ratio;
+      _upperBound;
+      constructor(ratio = 0) {
+        this._ratio = this._normalize(ratio);
+        this._upperBound = this._ratio === 1 ? 4294967296 : Math.floor(this._ratio * 4294967295);
+      }
+      shouldSample(context2, traceId) {
+        return {
+          decision: (0, api_1.isValidTraceId)(traceId) && this._accumulate(traceId) < this._upperBound ? Sampler_1.SamplingDecision.RECORD_AND_SAMPLED : Sampler_1.SamplingDecision.NOT_RECORD
+        };
+      }
+      toString() {
+        return `TraceIdRatioBased{${this._ratio}}`;
+      }
+      _normalize(ratio) {
+        if (typeof ratio !== "number" || isNaN(ratio))
+          return 0;
+        return ratio >= 1 ? 1 : ratio <= 0 ? 0 : ratio;
+      }
+      _accumulate(traceId) {
+        let accumulation = 0;
+        for (let i = 0; i < 32; i += 8) {
+          let part2 = 0;
+          for (let j = 0; j < 8; j++) {
+            const c = traceId.charCodeAt(i + j);
+            const v = c < 58 ? c - 48 : c < 71 ? c - 55 : c - 87;
+            part2 = part2 << 4 | v;
+          }
+          accumulation = (accumulation ^ part2) >>> 0;
+        }
+        return accumulation;
+      }
+    };
+    exports.TraceIdRatioBasedSampler = TraceIdRatioBasedSampler;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace/build/src/index.js
+var require_src3 = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SamplingDecision = exports.TraceIdRatioBasedSampler = exports.ParentBasedSampler = exports.createAlwaysRecordSampler = exports.AlwaysOnSampler = exports.AlwaysOffSampler = exports.NoopSpanProcessor = exports.SimpleSpanProcessor = exports.InMemorySpanExporter = exports.ConsoleSpanExporter = exports.RandomIdGenerator = exports.BatchSpanProcessor = exports.TracerProvider = exports.StackContextManager = void 0;
+    var StackContextManager_1 = require_StackContextManager();
+    Object.defineProperty(exports, "StackContextManager", { enumerable: true, get: function() {
+      return StackContextManager_1.StackContextManager;
+    } });
+    var TracerProvider_1 = require_TracerProvider();
+    Object.defineProperty(exports, "TracerProvider", { enumerable: true, get: function() {
+      return TracerProvider_1.TracerProvider;
+    } });
+    var platform_1 = require_platform3();
+    Object.defineProperty(exports, "BatchSpanProcessor", { enumerable: true, get: function() {
+      return platform_1.BatchSpanProcessor;
+    } });
+    Object.defineProperty(exports, "RandomIdGenerator", { enumerable: true, get: function() {
+      return platform_1.RandomIdGenerator;
+    } });
+    var ConsoleSpanExporter_1 = require_ConsoleSpanExporter();
+    Object.defineProperty(exports, "ConsoleSpanExporter", { enumerable: true, get: function() {
+      return ConsoleSpanExporter_1.ConsoleSpanExporter;
+    } });
+    var InMemorySpanExporter_1 = require_InMemorySpanExporter();
+    Object.defineProperty(exports, "InMemorySpanExporter", { enumerable: true, get: function() {
+      return InMemorySpanExporter_1.InMemorySpanExporter;
+    } });
+    var SimpleSpanProcessor_1 = require_SimpleSpanProcessor();
+    Object.defineProperty(exports, "SimpleSpanProcessor", { enumerable: true, get: function() {
+      return SimpleSpanProcessor_1.SimpleSpanProcessor;
+    } });
+    var NoopSpanProcessor_1 = require_NoopSpanProcessor();
+    Object.defineProperty(exports, "NoopSpanProcessor", { enumerable: true, get: function() {
+      return NoopSpanProcessor_1.NoopSpanProcessor;
+    } });
+    var AlwaysOffSampler_1 = require_AlwaysOffSampler();
+    Object.defineProperty(exports, "AlwaysOffSampler", { enumerable: true, get: function() {
+      return AlwaysOffSampler_1.AlwaysOffSampler;
+    } });
+    var AlwaysOnSampler_1 = require_AlwaysOnSampler();
+    Object.defineProperty(exports, "AlwaysOnSampler", { enumerable: true, get: function() {
+      return AlwaysOnSampler_1.AlwaysOnSampler;
+    } });
+    var AlwaysRecordSampler_1 = require_AlwaysRecordSampler();
+    Object.defineProperty(exports, "createAlwaysRecordSampler", { enumerable: true, get: function() {
+      return AlwaysRecordSampler_1.createAlwaysRecordSampler;
+    } });
+    var ParentBasedSampler_1 = require_ParentBasedSampler();
+    Object.defineProperty(exports, "ParentBasedSampler", { enumerable: true, get: function() {
+      return ParentBasedSampler_1.ParentBasedSampler;
+    } });
+    var TraceIdRatioBasedSampler_1 = require_TraceIdRatioBasedSampler();
+    Object.defineProperty(exports, "TraceIdRatioBasedSampler", { enumerable: true, get: function() {
+      return TraceIdRatioBasedSampler_1.TraceIdRatioBasedSampler;
+    } });
+    var Sampler_1 = require_Sampler();
+    Object.defineProperty(exports, "SamplingDecision", { enumerable: true, get: function() {
+      return Sampler_1.SamplingDecision;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace-base/build/src/config.js
+var require_config = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace-base/build/src/config.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildSamplerFromEnv = exports.loadDefaultConfig = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var sdk_trace_1 = require_src3();
+    var TracesSamplerValues;
+    (function(TracesSamplerValues2) {
+      TracesSamplerValues2["AlwaysOff"] = "always_off";
+      TracesSamplerValues2["AlwaysOn"] = "always_on";
+      TracesSamplerValues2["ParentBasedAlwaysOff"] = "parentbased_always_off";
+      TracesSamplerValues2["ParentBasedAlwaysOn"] = "parentbased_always_on";
+      TracesSamplerValues2["ParentBasedTraceIdRatio"] = "parentbased_traceidratio";
+      TracesSamplerValues2["TraceIdRatio"] = "traceidratio";
+    })(TracesSamplerValues || (TracesSamplerValues = {}));
+    var DEFAULT_RATIO = 1;
+    function loadDefaultConfig() {
+      return {
+        sampler: buildSamplerFromEnv(),
+        forceFlushTimeoutMillis: 3e4,
+        generalLimits: {
+          attributeValueLengthLimit: (0, core_1.getNumberFromEnv)("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT") ?? Infinity,
+          attributeCountLimit: (0, core_1.getNumberFromEnv)("OTEL_ATTRIBUTE_COUNT_LIMIT") ?? 128
+        },
+        spanLimits: {
+          attributeValueLengthLimit: (0, core_1.getNumberFromEnv)("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT") ?? Infinity,
+          attributeCountLimit: (0, core_1.getNumberFromEnv)("OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT") ?? 128,
+          linkCountLimit: (0, core_1.getNumberFromEnv)("OTEL_SPAN_LINK_COUNT_LIMIT") ?? 128,
+          eventCountLimit: (0, core_1.getNumberFromEnv)("OTEL_SPAN_EVENT_COUNT_LIMIT") ?? 128,
+          attributePerEventCountLimit: (0, core_1.getNumberFromEnv)("OTEL_SPAN_ATTRIBUTE_PER_EVENT_COUNT_LIMIT") ?? 128,
+          attributePerLinkCountLimit: (0, core_1.getNumberFromEnv)("OTEL_SPAN_ATTRIBUTE_PER_LINK_COUNT_LIMIT") ?? 128
+        }
+      };
+    }
+    exports.loadDefaultConfig = loadDefaultConfig;
+    function buildSamplerFromEnv() {
+      const sampler = (0, core_1.getStringFromEnv)("OTEL_TRACES_SAMPLER") ?? TracesSamplerValues.ParentBasedAlwaysOn;
+      switch (sampler) {
+        case TracesSamplerValues.AlwaysOn:
+          return new sdk_trace_1.AlwaysOnSampler();
+        case TracesSamplerValues.AlwaysOff:
+          return new sdk_trace_1.AlwaysOffSampler();
+        case TracesSamplerValues.ParentBasedAlwaysOn:
+          return new sdk_trace_1.ParentBasedSampler({
+            root: new sdk_trace_1.AlwaysOnSampler()
+          });
+        case TracesSamplerValues.ParentBasedAlwaysOff:
+          return new sdk_trace_1.ParentBasedSampler({
+            root: new sdk_trace_1.AlwaysOffSampler()
+          });
+        case TracesSamplerValues.TraceIdRatio:
+          return new sdk_trace_1.TraceIdRatioBasedSampler(getSamplerProbabilityFromEnv());
+        case TracesSamplerValues.ParentBasedTraceIdRatio:
+          return new sdk_trace_1.ParentBasedSampler({
+            root: new sdk_trace_1.TraceIdRatioBasedSampler(getSamplerProbabilityFromEnv())
+          });
+        default:
+          api_1.diag.error(`OTEL_TRACES_SAMPLER value "${sampler}" invalid, defaulting to "${TracesSamplerValues.ParentBasedAlwaysOn}".`);
+          return new sdk_trace_1.ParentBasedSampler({
+            root: new sdk_trace_1.AlwaysOnSampler()
+          });
+      }
+    }
+    exports.buildSamplerFromEnv = buildSamplerFromEnv;
+    function getSamplerProbabilityFromEnv() {
+      const probability = (0, core_1.getNumberFromEnv)("OTEL_TRACES_SAMPLER_ARG");
+      if (probability == null) {
+        api_1.diag.error(`OTEL_TRACES_SAMPLER_ARG is blank, defaulting to ${DEFAULT_RATIO}.`);
+        return DEFAULT_RATIO;
+      }
+      if (probability < 0 || probability > 1) {
+        api_1.diag.error(`OTEL_TRACES_SAMPLER_ARG=${probability} was given, but it is out of range ([0..1]), defaulting to ${DEFAULT_RATIO}.`);
+        return DEFAULT_RATIO;
+      }
+      return probability;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace-base/build/src/utility.js
+var require_utility = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace-base/build/src/utility.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.reconfigureLimits = exports.DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT = exports.DEFAULT_ATTRIBUTE_COUNT_LIMIT = void 0;
+    var core_1 = require_src();
+    exports.DEFAULT_ATTRIBUTE_COUNT_LIMIT = 128;
+    exports.DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT = Infinity;
+    function reconfigureLimits(userConfig) {
+      const spanLimits = Object.assign({}, userConfig.spanLimits);
+      spanLimits.attributeCountLimit = userConfig.spanLimits?.attributeCountLimit ?? userConfig.generalLimits?.attributeCountLimit ?? (0, core_1.getNumberFromEnv)("OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT") ?? (0, core_1.getNumberFromEnv)("OTEL_ATTRIBUTE_COUNT_LIMIT") ?? exports.DEFAULT_ATTRIBUTE_COUNT_LIMIT;
+      spanLimits.attributeValueLengthLimit = userConfig.spanLimits?.attributeValueLengthLimit ?? userConfig.generalLimits?.attributeValueLengthLimit ?? (0, core_1.getNumberFromEnv)("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT") ?? (0, core_1.getNumberFromEnv)("OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT") ?? exports.DEFAULT_ATTRIBUTE_VALUE_LENGTH_LIMIT;
+      return Object.assign({}, userConfig, { spanLimits });
+    }
+    exports.reconfigureLimits = reconfigureLimits;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace-base/build/src/BasicTracerProvider-shim.js
+var require_BasicTracerProvider_shim = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace-base/build/src/BasicTracerProvider-shim.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BasicTracerProvider = void 0;
+    var core_1 = require_src();
+    var config_1 = require_config();
+    var utility_1 = require_utility();
+    var sdk_trace_1 = require_src3();
+    var BasicTracerProvider = class extends sdk_trace_1.TracerProvider {
+      constructor(config2 = {}) {
+        const mergedConfig = (0, core_1.merge)({}, (0, config_1.loadDefaultConfig)(), (0, utility_1.reconfigureLimits)(config2));
+        delete mergedConfig.generalLimits;
+        super(mergedConfig);
+      }
+    };
+    exports.BasicTracerProvider = BasicTracerProvider;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace-base/build/src/BatchSpanProcessor-shim.js
+var require_BatchSpanProcessor_shim = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace-base/build/src/BatchSpanProcessor-shim.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BatchSpanProcessor = void 0;
+    var core_1 = require_src();
+    var sdk_trace_1 = require_src3();
+    var BatchSpanProcessor = class extends sdk_trace_1.BatchSpanProcessor {
+      constructor(exporter, config2) {
+        if (!config2) {
+          config2 = {};
+        }
+        const envFallbacks = [
+          ["maxExportBatchSize", "OTEL_BSP_MAX_EXPORT_BATCH_SIZE"],
+          ["maxQueueSize", "OTEL_BSP_MAX_QUEUE_SIZE"],
+          ["scheduledDelayMillis", "OTEL_BSP_SCHEDULE_DELAY"],
+          ["exportTimeoutMillis", "OTEL_BSP_EXPORT_TIMEOUT"]
+        ];
+        for (const [configName, envName] of envFallbacks) {
+          if (config2[configName] === void 0) {
+            const envFallback = (0, core_1.getNumberFromEnv)(envName);
+            if (envFallback !== void 0) {
+              config2[configName] = envFallback;
+            }
+          }
+        }
+        super({ exporter, ...config2 });
+      }
+    };
+    exports.BatchSpanProcessor = BatchSpanProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace-base/build/src/SimpleSpanProcessor-shim.js
+var require_SimpleSpanProcessor_shim = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace-base/build/src/SimpleSpanProcessor-shim.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SimpleSpanProcessor = void 0;
+    var sdk_trace_1 = require_src3();
+    var SimpleSpanProcessor = class extends sdk_trace_1.SimpleSpanProcessor {
+      constructor(exporter) {
+        super({ exporter });
+      }
+    };
+    exports.SimpleSpanProcessor = SimpleSpanProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-trace-base/build/src/index-shim.js
+var require_index_shim = __commonJS({
+  "node_modules/@opentelemetry/sdk-trace-base/build/src/index-shim.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SamplingDecision = exports.TraceIdRatioBasedSampler = exports.ParentBasedSampler = exports.AlwaysOnSampler = exports.AlwaysOffSampler = exports.NoopSpanProcessor = exports.InMemorySpanExporter = exports.RandomIdGenerator = exports.ConsoleSpanExporter = exports.SimpleSpanProcessor = exports.BatchSpanProcessor = exports.BasicTracerProvider = void 0;
+    var BasicTracerProvider_shim_1 = require_BasicTracerProvider_shim();
+    Object.defineProperty(exports, "BasicTracerProvider", { enumerable: true, get: function() {
+      return BasicTracerProvider_shim_1.BasicTracerProvider;
+    } });
+    var BatchSpanProcessor_shim_1 = require_BatchSpanProcessor_shim();
+    Object.defineProperty(exports, "BatchSpanProcessor", { enumerable: true, get: function() {
+      return BatchSpanProcessor_shim_1.BatchSpanProcessor;
+    } });
+    var SimpleSpanProcessor_shim_1 = require_SimpleSpanProcessor_shim();
+    Object.defineProperty(exports, "SimpleSpanProcessor", { enumerable: true, get: function() {
+      return SimpleSpanProcessor_shim_1.SimpleSpanProcessor;
+    } });
+    var sdk_trace_1 = require_src3();
+    Object.defineProperty(exports, "ConsoleSpanExporter", { enumerable: true, get: function() {
+      return sdk_trace_1.ConsoleSpanExporter;
+    } });
+    Object.defineProperty(exports, "RandomIdGenerator", { enumerable: true, get: function() {
+      return sdk_trace_1.RandomIdGenerator;
+    } });
+    Object.defineProperty(exports, "InMemorySpanExporter", { enumerable: true, get: function() {
+      return sdk_trace_1.InMemorySpanExporter;
+    } });
+    Object.defineProperty(exports, "NoopSpanProcessor", { enumerable: true, get: function() {
+      return sdk_trace_1.NoopSpanProcessor;
+    } });
+    Object.defineProperty(exports, "AlwaysOffSampler", { enumerable: true, get: function() {
+      return sdk_trace_1.AlwaysOffSampler;
+    } });
+    Object.defineProperty(exports, "AlwaysOnSampler", { enumerable: true, get: function() {
+      return sdk_trace_1.AlwaysOnSampler;
+    } });
+    Object.defineProperty(exports, "ParentBasedSampler", { enumerable: true, get: function() {
+      return sdk_trace_1.ParentBasedSampler;
+    } });
+    Object.defineProperty(exports, "TraceIdRatioBasedSampler", { enumerable: true, get: function() {
+      return sdk_trace_1.TraceIdRatioBasedSampler;
+    } });
+    Object.defineProperty(exports, "SamplingDecision", { enumerable: true, get: function() {
+      return sdk_trace_1.SamplingDecision;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/OTLPExporterBase.js
+var OTLPExporterBase;
+var init_OTLPExporterBase = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/OTLPExporterBase.js"() {
+    OTLPExporterBase = class {
+      _delegate;
+      constructor(delegate) {
+        this._delegate = delegate;
+      }
+      /**
+       * Export items.
+       * @param items
+       * @param resultCallback
+       */
+      export(items, resultCallback) {
+        this._delegate.export(items, resultCallback);
+      }
+      forceFlush() {
+        return this._delegate.forceFlush();
+      }
+      shutdown() {
+        return this._delegate.shutdown();
+      }
+      setMetrics(metrics2) {
+        this._delegate.setMetrics(metrics2);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/types.js
+var OTLPExporterError;
+var init_types2 = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/types.js"() {
+    OTLPExporterError = class extends Error {
+      code;
+      name = "OTLPExporterError";
+      data;
+      constructor(message, code2, data) {
+        super(message);
+        this.data = data;
+        this.code = code2;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/shared-configuration.js
+function validateTimeoutMillis(timeoutMillis) {
+  if (Number.isFinite(timeoutMillis) && timeoutMillis > 0) {
+    return timeoutMillis;
+  }
+  throw new Error(`Configuration: timeoutMillis is invalid, expected number greater than 0 (actual: '${timeoutMillis}')`);
+}
+function wrapStaticHeadersInFunction(headers) {
+  if (headers == null) {
+    return void 0;
+  }
+  return async () => headers;
+}
+function mergeOtlpSharedConfigurationWithDefaults(userProvidedConfiguration, fallbackConfiguration, defaultConfiguration) {
+  return {
+    timeoutMillis: validateTimeoutMillis(userProvidedConfiguration.timeoutMillis ?? fallbackConfiguration.timeoutMillis ?? defaultConfiguration.timeoutMillis),
+    concurrencyLimit: userProvidedConfiguration.concurrencyLimit ?? fallbackConfiguration.concurrencyLimit ?? defaultConfiguration.concurrencyLimit,
+    compression: userProvidedConfiguration.compression ?? fallbackConfiguration.compression ?? defaultConfiguration.compression
+  };
+}
+function getSharedConfigurationDefaults() {
+  return {
+    timeoutMillis: 1e4,
+    concurrencyLimit: 30,
+    compression: "none"
+  };
+}
+var init_shared_configuration = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/shared-configuration.js"() {
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/legacy-node-configuration.js
+var CompressionAlgorithm;
+var init_legacy_node_configuration = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/legacy-node-configuration.js"() {
+    (function(CompressionAlgorithm2) {
+      CompressionAlgorithm2["NONE"] = "none";
+      CompressionAlgorithm2["GZIP"] = "gzip";
+    })(CompressionAlgorithm || (CompressionAlgorithm = {}));
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/bounded-queue-export-promise-handler.js
+function createBoundedQueueExportPromiseHandler(options) {
+  return new BoundedQueueExportPromiseHandler(options.concurrencyLimit);
+}
+var BoundedQueueExportPromiseHandler;
+var init_bounded_queue_export_promise_handler = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/bounded-queue-export-promise-handler.js"() {
+    BoundedQueueExportPromiseHandler = class {
+      _concurrencyLimit;
+      _sendingPromises = [];
+      /**
+       * @param concurrencyLimit maximum promises allowed in a queue at the same time.
+       */
+      constructor(concurrencyLimit) {
+        this._concurrencyLimit = concurrencyLimit;
+      }
+      pushPromise(promise2) {
+        if (this.hasReachedLimit()) {
+          throw new Error("Concurrency Limit reached");
+        }
+        this._sendingPromises.push(promise2);
+        const popPromise = () => {
+          const index = this._sendingPromises.indexOf(promise2);
+          void this._sendingPromises.splice(index, 1);
+        };
+        promise2.then(popPromise, popPromise);
+      }
+      hasReachedLimit() {
+        return this._sendingPromises.length >= this._concurrencyLimit;
+      }
+      async awaitAll() {
+        await Promise.all(this._sendingPromises);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/logging-response-handler.js
+function isPartialSuccessResponse(response) {
+  return Object.prototype.hasOwnProperty.call(response, "partialSuccess");
+}
+function createLoggingPartialSuccessResponseHandler() {
+  return {
+    handleResponse(response) {
+      if (response == null || !isPartialSuccessResponse(response) || response.partialSuccess == null || Object.keys(response.partialSuccess).length === 0) {
+        return;
+      }
+      diag2.warn("Received Partial Success response:", JSON.stringify(response.partialSuccess));
+    }
+  };
+}
+var init_logging_response_handler = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/logging-response-handler.js"() {
+    init_esm();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/otlp-export-delegate.js
+function createOtlpExportDelegate(components2, settings) {
+  return new OTLPExportDelegate(components2.transport, components2.serializer, createLoggingPartialSuccessResponseHandler(), components2.promiseHandler, components2.metrics, settings.timeout);
+}
+var import_core9, OTLPExportDelegate;
+var init_otlp_export_delegate = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/otlp-export-delegate.js"() {
+    import_core9 = __toESM(require_src());
+    init_types2();
+    init_logging_response_handler();
+    init_esm();
+    OTLPExportDelegate = class {
+      _metrics;
+      _diagLogger;
+      _transport;
+      _serializer;
+      _responseHandler;
+      _promiseQueue;
+      _timeout;
+      constructor(transport, serializer, responseHandler, promiseQueue, metrics2, timeout) {
+        this._transport = transport;
+        this._serializer = serializer;
+        this._responseHandler = responseHandler;
+        this._promiseQueue = promiseQueue;
+        this._timeout = timeout;
+        this._diagLogger = diag2.createComponentLogger({
+          namespace: "OTLPExportDelegate"
+        });
+        this._metrics = metrics2;
+      }
+      export(internalRepresentation, resultCallback) {
+        this._diagLogger.debug("items to be sent", internalRepresentation);
+        if (this._promiseQueue.hasReachedLimit()) {
+          resultCallback({
+            code: import_core9.ExportResultCode.FAILED,
+            error: new Error("Concurrent export limit reached")
+          });
+          return;
+        }
+        const serializedRequest = this._serializer.serializeRequest(internalRepresentation);
+        if (serializedRequest == null) {
+          resultCallback({
+            code: import_core9.ExportResultCode.FAILED,
+            error: new Error("Nothing to send")
+          });
+          return;
+        }
+        const finishExport = this._metrics.startExport(internalRepresentation);
+        this._promiseQueue.pushPromise(this._transport.send(serializedRequest, this._timeout).then((response) => {
+          if (response.status === "success") {
+            finishExport(void 0);
+            if (response.data != null) {
+              try {
+                this._responseHandler.handleResponse(this._serializer.deserializeResponse(response.data));
+              } catch (e2) {
+                this._diagLogger.warn("Export succeeded but could not deserialize response - is the response specification compliant?", e2, response.data);
+              }
+            }
+            resultCallback({
+              code: import_core9.ExportResultCode.SUCCESS
+            });
+            return;
+          } else if (response.status === "failure" && response.error) {
+            finishExport(response.error);
+            resultCallback({
+              code: import_core9.ExportResultCode.FAILED,
+              error: response.error
+            });
+            return;
+          } else if (response.status === "retryable") {
+            finishExport("export_max_retries");
+            resultCallback({
+              code: import_core9.ExportResultCode.FAILED,
+              error: response.error ?? new OTLPExporterError("Export failed with retryable status")
+            });
+          } else {
+            finishExport("export_failed");
+            resultCallback({
+              code: import_core9.ExportResultCode.FAILED,
+              error: new OTLPExporterError("Export failed with unknown error")
+            });
+          }
+        }, (reason) => {
+          finishExport(reason);
+          resultCallback({
+            code: import_core9.ExportResultCode.FAILED,
+            error: reason
+          });
+        }));
+      }
+      forceFlush() {
+        return this._promiseQueue.awaitAll();
+      }
+      setMetrics(metrics2) {
+        this._metrics = metrics2;
+      }
+      async shutdown() {
+        this._diagLogger.debug("shutdown started");
+        await this.forceFlush();
+        this._transport.shutdown();
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/otlp-network-export-delegate.js
+function createOtlpNetworkExportDelegate(options, serializer, metrics2, transport) {
+  return createOtlpExportDelegate({
+    transport,
+    serializer,
+    promiseHandler: createBoundedQueueExportPromiseHandler(options),
+    metrics: metrics2
+  }, { timeout: options.timeoutMillis });
+}
+var init_otlp_network_export_delegate = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/otlp-network-export-delegate.js"() {
+    init_bounded_queue_export_promise_handler();
+    init_otlp_export_delegate();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/semconv.js
+var ATTR_HTTP_RESPONSE_STATUS_CODE, ATTR_OTEL_COMPONENT_NAME, ATTR_OTEL_COMPONENT_TYPE, ATTR_SERVER_ADDRESS, ATTR_SERVER_PORT, ATTR_ERROR_TYPE;
+var init_semconv2 = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/semconv.js"() {
+    ATTR_HTTP_RESPONSE_STATUS_CODE = "http.response.status_code";
+    ATTR_OTEL_COMPONENT_NAME = "otel.component.name";
+    ATTR_OTEL_COMPONENT_TYPE = "otel.component.type";
+    ATTR_SERVER_ADDRESS = "server.address";
+    ATTR_SERVER_PORT = "server.port";
+    ATTR_ERROR_TYPE = "error.type";
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/version.js
+var VERSION2;
+var init_version2 = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/version.js"() {
+    VERSION2 = "0.223.0";
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/ExporterMetrics.js
+var import_core10, componentCounter, ExporterMetrics;
+var init_ExporterMetrics = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/ExporterMetrics.js"() {
+    init_esm();
+    import_core10 = __toESM(require_src());
+    init_semconv2();
+    init_version2();
+    componentCounter = /* @__PURE__ */ new Map();
+    ExporterMetrics = class {
+      inflight;
+      exported;
+      duration;
+      standardAttrs;
+      responseAttributesFromError;
+      helper;
+      constructor(options) {
+        const { componentType, metricsHelper, meterProvider, url: url2, responseAttributesFromError } = options;
+        this.responseAttributesFromError = responseAttributesFromError;
+        const meter = meterProvider ? meterProvider.getMeter("@opentelemetry/otlp-exporter", VERSION2) : createNoopMeter();
+        const counter = componentCounter.get(componentType) ?? 0;
+        componentCounter.set(componentType, counter + 1);
+        this.standardAttrs = {
+          [ATTR_OTEL_COMPONENT_TYPE]: componentType,
+          [ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter}`
+        };
+        if (url2) {
+          let urlToParse = url2;
+          if (!url2.includes("://")) {
+            urlToParse = `http://${url2}`;
+          }
+          try {
+            const parsedUrl = new URL(urlToParse);
+            this.standardAttrs[ATTR_SERVER_ADDRESS] = parsedUrl.hostname;
+            let port = void 0;
+            if (parsedUrl.port) {
+              port = Number(parsedUrl.port);
+            } else if (parsedUrl.protocol === "http:") {
+              port = 80;
+            } else if (parsedUrl.protocol === "https:") {
+              port = 443;
+            }
+            if (typeof port === "number") {
+              this.standardAttrs[ATTR_SERVER_PORT] = port;
+            }
+          } catch {
+          }
+        }
+        this.helper = metricsHelper;
+        this.inflight = meter.createUpDownCounter(`otel.sdk.exporter.${this.helper.name}.inflight`, {
+          unit: `{${this.helper.name}}`,
+          description: `The number of ${this.helper.name}s which were passed to the exporter, but that have not been exported yet (neither successful, nor failed).`
+        });
+        this.exported = meter.createCounter(`otel.sdk.exporter.${this.helper.name}.exported`, {
+          unit: `{${this.helper.name}}`,
+          description: `The number of ${this.helper.name}s for which the export has finished, either successful or failed.`
+        });
+        this.duration = meter.createHistogram("otel.sdk.exporter.operation.duration", {
+          unit: "s",
+          description: "The duration of exporting a batch of telemetry records.",
+          advice: {
+            explicitBucketBoundaries: []
+          }
+        });
+      }
+      startExport(request2) {
+        const numItems = this.helper.countItems(request2);
+        const startTime = (0, import_core10.hrTime)();
+        this.inflight.add(numItems, this.standardAttrs);
+        return (error62) => {
+          const endTime = (0, import_core10.hrTime)();
+          this.inflight.add(-numItems, this.standardAttrs);
+          const exportedAttrs = error62 ? {
+            ...this.standardAttrs,
+            [ATTR_ERROR_TYPE]: error62 instanceof Error ? error62.name : "export_failed"
+          } : this.standardAttrs;
+          this.exported.add(numItems, exportedAttrs);
+          const durationAttrs = {
+            ...exportedAttrs,
+            ...this.responseAttributesFromError(error62)
+          };
+          const duration3 = (0, import_core10.hrTimeToMilliseconds)((0, import_core10.hrTimeDuration)(startTime, endTime)) / 1e3;
+          this.duration.record(duration3, durationAttrs);
+        };
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/index.js
+var esm_exports2 = {};
+__export(esm_exports2, {
+  CompressionAlgorithm: () => CompressionAlgorithm,
+  ExporterMetrics: () => ExporterMetrics,
+  OTLPExporterBase: () => OTLPExporterBase,
+  OTLPExporterError: () => OTLPExporterError,
+  createOtlpNetworkExportDelegate: () => createOtlpNetworkExportDelegate,
+  getSharedConfigurationDefaults: () => getSharedConfigurationDefaults,
+  mergeOtlpSharedConfigurationWithDefaults: () => mergeOtlpSharedConfigurationWithDefaults
+});
+var init_esm2 = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/index.js"() {
+    init_OTLPExporterBase();
+    init_types2();
+    init_shared_configuration();
+    init_legacy_node_configuration();
+    init_otlp_network_export_delegate();
+    init_ExporterMetrics();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/index.js
+var require_metrics2 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MetricsExporterMetricsHelper = void 0;
+    exports.MetricsExporterMetricsHelper = {
+      name: "metric_data_point",
+      countItems: (request2) => {
+        let count = 0;
+        for (const scopeMetrics of request2.scopeMetrics) {
+          for (const metric of scopeMetrics.metrics) {
+            count += metric.dataPoints.length;
+          }
+        }
+        return count;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/index.js
+var require_trace = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TraceExporterMetricsHelper = void 0;
+    exports.TraceExporterMetricsHelper = {
+      name: "span",
+      countItems: (request2) => request2.length
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/index.js
+var require_logs = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LogsExporterMetricsHelper = void 0;
+    exports.LogsExporterMetricsHelper = {
+      name: "log",
+      countItems: (request2) => request2.length
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/utils.js
+var require_utils8 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.estimateVarintSize = void 0;
+    function estimateVarintSize(v) {
+      if (v < 0)
+        return 10;
+      if (v < 128)
+        return 1;
+      if (v < 16384)
+        return 2;
+      if (v < 2097152)
+        return 3;
+      if (v < 268435456)
+        return 4;
+      if (v < 34359738368)
+        return 5;
+      if (v < 4398046511104)
+        return 6;
+      if (v < 562949953421312)
+        return 7;
+      if (v < 72057594037927940)
+        return 8;
+      return 9;
+    }
+    exports.estimateVarintSize = estimateVarintSize;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/protobuf-writer.js
+var require_protobuf_writer = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/protobuf-writer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufWriter = exports.GROWING_BUFFER_DEBUG_MESSAGE = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var utils_1 = require_utils8();
+    exports.GROWING_BUFFER_DEBUG_MESSAGE = "ProtobufWriter: estimated size was too small, growing buffer.";
+    var RESERVED_LENGTH_BYTES = 1;
+    var ProtobufWriter = class {
+      _buffer;
+      // Avoid using TextEncoder type. While the global is there on all supported runtimes, types may differ.
+      _textEncoder;
+      _dataView;
+      pos = 0;
+      constructor(estimatedSize = 65536) {
+        this._buffer = new Uint8Array(estimatedSize);
+        this._textEncoder = new TextEncoder();
+        this._dataView = new DataView(this._buffer.buffer, this._buffer.byteOffset);
+      }
+      /**
+       * Ensure buffer has capacity for at least size more bytes
+       */
+      _ensureCapacity(size) {
+        const needed = this.pos + size;
+        if (needed <= this._buffer.length) {
+          return;
+        }
+        api_1.diag.debug(exports.GROWING_BUFFER_DEBUG_MESSAGE);
+        let newSize = this._buffer.length * 2;
+        while (newSize < needed) {
+          newSize *= 2;
+        }
+        const newBuffer = new Uint8Array(newSize);
+        newBuffer.set(this._buffer);
+        this._buffer = newBuffer;
+        this._dataView = new DataView(this._buffer.buffer, this._buffer.byteOffset);
+      }
+      /**
+       * Get the written bytes as a Uint8Array
+       */
+      finish() {
+        return this._buffer.subarray(0, this.pos);
+      }
+      /**
+       * Insert placeholder for length. Update later with {@link finishLengthDelimited}
+       * Returns the position where to write the length.
+       */
+      startLengthDelimited() {
+        const lengthPos = this.pos;
+        this._ensureCapacity(RESERVED_LENGTH_BYTES);
+        this.pos += RESERVED_LENGTH_BYTES;
+        return lengthPos;
+      }
+      /**
+       * Write length varint at placeholder position and shift content forward if needed.
+       * Most messages are small (< 128 bytes), so we reserve 1 byte and only shift
+       * when the length needs more bytes.
+       */
+      finishLengthDelimited(pos, length) {
+        const v = length >>> 0;
+        const varintSize = (0, utils_1.estimateVarintSize)(v);
+        if (varintSize > RESERVED_LENGTH_BYTES) {
+          const additionalBytes = varintSize - RESERVED_LENGTH_BYTES;
+          this._ensureCapacity(additionalBytes);
+          this._buffer.copyWithin(pos + varintSize, pos + RESERVED_LENGTH_BYTES, this.pos);
+          this.pos += additionalBytes;
+        }
+        let writePos = pos;
+        if (v < 128) {
+          this._buffer[writePos] = v;
+        } else if (v < 16384) {
+          this._buffer[writePos++] = v & 127 | 128;
+          this._buffer[writePos] = v >>> 7;
+        } else if (v < 2097152) {
+          this._buffer[writePos++] = v & 127 | 128;
+          this._buffer[writePos++] = v >>> 7 & 127 | 128;
+          this._buffer[writePos] = v >>> 14;
+        } else if (v < 268435456) {
+          this._buffer[writePos++] = v & 127 | 128;
+          this._buffer[writePos++] = v >>> 7 & 127 | 128;
+          this._buffer[writePos++] = v >>> 14 & 127 | 128;
+          this._buffer[writePos] = v >>> 21;
+        } else {
+          this._buffer[writePos++] = v & 127 | 128;
+          this._buffer[writePos++] = v >>> 7 & 127 | 128;
+          this._buffer[writePos++] = v >>> 14 & 127 | 128;
+          this._buffer[writePos++] = v >>> 21 & 127 | 128;
+          this._buffer[writePos] = v >>> 28;
+        }
+      }
+      /**
+       * Write a sint32 value using zigzag encoding
+       */
+      writeSint32(value) {
+        this.writeVarint((value << 1 ^ value >> 31) >>> 0);
+      }
+      /**
+       * Write a signed 64-bit fixed integer (sfixed64) from a JS number.
+       * Handles negative values via two's complement.
+       */
+      writeSfixed64(value) {
+        let low;
+        let high;
+        if (value >= 0) {
+          low = value >>> 0;
+          high = value / 4294967296 >>> 0;
+        } else {
+          const abs = Math.abs(value);
+          low = abs >>> 0;
+          high = abs / 4294967296 >>> 0;
+          low = ~low >>> 0;
+          high = ~high >>> 0;
+          low = low + 1 >>> 0;
+          if (low === 0) {
+            high = high + 1 >>> 0;
+          }
+        }
+        this.writeFixed64(low, high);
+      }
+      /**
+       * Write a varint (variable-length integer)
+       */
+      writeVarint(value) {
+        this._ensureCapacity((0, utils_1.estimateVarintSize)(value));
+        if (value >= 0 && value <= 4294967295) {
+          let v = value >>> 0;
+          while (v > 127) {
+            this._buffer[this.pos++] = v & 127 | 128;
+            v >>>= 7;
+          }
+          this._buffer[this.pos++] = v;
+        } else {
+          let low;
+          let high;
+          if (value >= 0) {
+            low = value >>> 0;
+            high = value / 4294967296 >>> 0;
+          } else {
+            const abs = Math.abs(value);
+            low = abs >>> 0;
+            high = abs / 4294967296 >>> 0;
+            low = ~low >>> 0;
+            high = ~high >>> 0;
+            low = low + 1 >>> 0;
+            if (low === 0) {
+              high = high + 1 >>> 0;
+            }
+          }
+          while (high > 0 || low > 127) {
+            this._buffer[this.pos++] = low & 127 | 128;
+            low = (low >>> 7 | high << 25) >>> 0;
+            high >>>= 7;
+          }
+          this._buffer[this.pos++] = low & 127;
+        }
+      }
+      /**
+       * Write a 32-bit fixed integer (little-endian)
+       */
+      writeFixed32(value) {
+        this._ensureCapacity(4);
+        const v = value >>> 0;
+        this._buffer[this.pos++] = v & 255;
+        this._buffer[this.pos++] = v >>> 8 & 255;
+        this._buffer[this.pos++] = v >>> 16 & 255;
+        this._buffer[this.pos++] = v >>> 24 & 255;
+      }
+      /**
+       * Write a 64-bit fixed integer (little-endian)
+       * @param low - Low 32 bits
+       * @param high - High 32 bits
+       */
+      writeFixed64(low, high) {
+        this._ensureCapacity(8);
+        const l = low >>> 0;
+        const h = high >>> 0;
+        this._buffer[this.pos++] = l & 255;
+        this._buffer[this.pos++] = l >>> 8 & 255;
+        this._buffer[this.pos++] = l >>> 16 & 255;
+        this._buffer[this.pos++] = l >>> 24 & 255;
+        this._buffer[this.pos++] = h & 255;
+        this._buffer[this.pos++] = h >>> 8 & 255;
+        this._buffer[this.pos++] = h >>> 16 & 255;
+        this._buffer[this.pos++] = h >>> 24 & 255;
+      }
+      /**
+       * Write length-delimited data (varint length + bytes)
+       */
+      writeBytes(bytes) {
+        this.writeVarint(bytes.length);
+        this._ensureCapacity(bytes.length);
+        this._buffer.set(bytes, this.pos);
+        this.pos += bytes.length;
+      }
+      /**
+       * Write a field key (field number + wire type)
+       */
+      writeTag(fieldNumber, wireType) {
+        this.writeVarint(fieldNumber << 3 | wireType);
+      }
+      /**
+       * Write a double (64-bit IEEE 754)
+       */
+      writeDouble(value) {
+        this._ensureCapacity(8);
+        this._dataView.setFloat64(this.pos, value, true);
+        this.pos += 8;
+      }
+      /**
+       * Write a string as UTF-8 bytes (length-delimited)
+       */
+      writeString(str) {
+        let isAscii = true;
+        const len = str.length;
+        for (let i = 0; i < len; i++) {
+          if (str.charCodeAt(i) > 127) {
+            isAscii = false;
+            break;
+          }
+        }
+        if (isAscii) {
+          this.writeVarint(len);
+          this._ensureCapacity(len);
+          for (let i = 0; i < len; i++) {
+            this._buffer[this.pos++] = str.charCodeAt(i);
+          }
+        } else {
+          const bytes = this._textEncoder.encode(str);
+          this.writeBytes(bytes);
+        }
+      }
+    };
+    exports.ProtobufWriter = ProtobufWriter;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/hex-to-binary.js
+var require_hex_to_binary = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/hex-to-binary.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.hexToBinary = void 0;
+    function intValue(charCode) {
+      if (charCode >= 48 && charCode <= 57) {
+        return charCode - 48;
+      }
+      if (charCode >= 97 && charCode <= 102) {
+        return charCode - 87;
+      }
+      return charCode - 55;
+    }
+    function hexToBinary(hexStr) {
+      const buf = new Uint8Array(hexStr.length / 2);
+      let offset = 0;
+      for (let i = 0; i < hexStr.length; i += 2) {
+        const hi = intValue(hexStr.charCodeAt(i));
+        const lo = intValue(hexStr.charCodeAt(i + 1));
+        buf[offset++] = hi << 4 | lo;
+      }
+      return buf;
+    }
+    exports.hexToBinary = hexToBinary;
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/types/LogRecord.js
+var require_LogRecord = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/types/LogRecord.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SeverityNumber = void 0;
+    var SeverityNumber;
+    (function(SeverityNumber2) {
+      SeverityNumber2[SeverityNumber2["UNSPECIFIED"] = 0] = "UNSPECIFIED";
+      SeverityNumber2[SeverityNumber2["TRACE"] = 1] = "TRACE";
+      SeverityNumber2[SeverityNumber2["TRACE2"] = 2] = "TRACE2";
+      SeverityNumber2[SeverityNumber2["TRACE3"] = 3] = "TRACE3";
+      SeverityNumber2[SeverityNumber2["TRACE4"] = 4] = "TRACE4";
+      SeverityNumber2[SeverityNumber2["DEBUG"] = 5] = "DEBUG";
+      SeverityNumber2[SeverityNumber2["DEBUG2"] = 6] = "DEBUG2";
+      SeverityNumber2[SeverityNumber2["DEBUG3"] = 7] = "DEBUG3";
+      SeverityNumber2[SeverityNumber2["DEBUG4"] = 8] = "DEBUG4";
+      SeverityNumber2[SeverityNumber2["INFO"] = 9] = "INFO";
+      SeverityNumber2[SeverityNumber2["INFO2"] = 10] = "INFO2";
+      SeverityNumber2[SeverityNumber2["INFO3"] = 11] = "INFO3";
+      SeverityNumber2[SeverityNumber2["INFO4"] = 12] = "INFO4";
+      SeverityNumber2[SeverityNumber2["WARN"] = 13] = "WARN";
+      SeverityNumber2[SeverityNumber2["WARN2"] = 14] = "WARN2";
+      SeverityNumber2[SeverityNumber2["WARN3"] = 15] = "WARN3";
+      SeverityNumber2[SeverityNumber2["WARN4"] = 16] = "WARN4";
+      SeverityNumber2[SeverityNumber2["ERROR"] = 17] = "ERROR";
+      SeverityNumber2[SeverityNumber2["ERROR2"] = 18] = "ERROR2";
+      SeverityNumber2[SeverityNumber2["ERROR3"] = 19] = "ERROR3";
+      SeverityNumber2[SeverityNumber2["ERROR4"] = 20] = "ERROR4";
+      SeverityNumber2[SeverityNumber2["FATAL"] = 21] = "FATAL";
+      SeverityNumber2[SeverityNumber2["FATAL2"] = 22] = "FATAL2";
+      SeverityNumber2[SeverityNumber2["FATAL3"] = 23] = "FATAL3";
+      SeverityNumber2[SeverityNumber2["FATAL4"] = 24] = "FATAL4";
+    })(SeverityNumber || (exports.SeverityNumber = SeverityNumber = {}));
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/NoopLogger.js
+var require_NoopLogger = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/NoopLogger.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createNoopLogger = exports.NOOP_LOGGER = exports.NoopLogger = void 0;
+    var NoopLogger = class {
+      emit(_logRecord) {
+      }
+      enabled() {
+        return false;
+      }
+    };
+    exports.NoopLogger = NoopLogger;
+    exports.NOOP_LOGGER = new NoopLogger();
+    function createNoopLogger() {
+      return exports.NOOP_LOGGER;
+    }
+    exports.createNoopLogger = createNoopLogger;
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/internal/global-utils.js
+var require_global_utils = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/internal/global-utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.API_BACKWARDS_COMPATIBILITY_VERSION = exports.makeGetter = exports._global = exports.GLOBAL_LOGS_API_KEY = void 0;
+    exports.GLOBAL_LOGS_API_KEY = /* @__PURE__ */ Symbol.for("io.opentelemetry.js.api.logs");
+    exports._global = globalThis;
+    function makeGetter(requiredVersion, instance, fallback) {
+      return (version2) => version2 === requiredVersion ? instance : fallback;
+    }
+    exports.makeGetter = makeGetter;
+    exports.API_BACKWARDS_COMPATIBILITY_VERSION = 1;
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/NoopLoggerProvider.js
+var require_NoopLoggerProvider = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/NoopLoggerProvider.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.NOOP_LOGGER_PROVIDER = exports.NoopLoggerProvider = void 0;
+    var NoopLogger_1 = require_NoopLogger();
+    var NoopLoggerProvider = class {
+      getLogger(_name, _version, _options) {
+        return new NoopLogger_1.NoopLogger();
+      }
+    };
+    exports.NoopLoggerProvider = NoopLoggerProvider;
+    exports.NOOP_LOGGER_PROVIDER = new NoopLoggerProvider();
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/ProxyLogger.js
+var require_ProxyLogger = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/ProxyLogger.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProxyLogger = void 0;
+    var NoopLogger_1 = require_NoopLogger();
+    var ProxyLogger = class {
+      constructor(provider2, name2, version2, options) {
+        this._provider = provider2;
+        this.name = name2;
+        this.version = version2;
+        this.options = options;
+      }
+      /**
+       * Emit a log record. This method should only be used by log appenders.
+       *
+       * @param logRecord
+       */
+      emit(logRecord) {
+        this._getLogger().emit(logRecord);
+      }
+      enabled(options) {
+        return this._getLogger().enabled(options);
+      }
+      /**
+       * Try to get a logger from the proxy logger provider.
+       * If the proxy logger provider has no delegate, return a noop logger.
+       */
+      _getLogger() {
+        if (this._delegate) {
+          return this._delegate;
+        }
+        const logger = this._provider._getDelegateLogger(this.name, this.version, this.options);
+        if (!logger) {
+          return NoopLogger_1.NOOP_LOGGER;
+        }
+        this._delegate = logger;
+        return this._delegate;
+      }
+    };
+    exports.ProxyLogger = ProxyLogger;
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/ProxyLoggerProvider.js
+var require_ProxyLoggerProvider = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/ProxyLoggerProvider.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProxyLoggerProvider = void 0;
+    var NoopLoggerProvider_1 = require_NoopLoggerProvider();
+    var ProxyLogger_1 = require_ProxyLogger();
+    var ProxyLoggerProvider = class {
+      getLogger(name2, version2, options) {
+        var _a3;
+        return (_a3 = this._getDelegateLogger(name2, version2, options)) !== null && _a3 !== void 0 ? _a3 : new ProxyLogger_1.ProxyLogger(this, name2, version2, options);
+      }
+      /**
+       * Get the delegate logger provider.
+       * Used by tests only.
+       * @internal
+       */
+      _getDelegate() {
+        var _a3;
+        return (_a3 = this._delegate) !== null && _a3 !== void 0 ? _a3 : NoopLoggerProvider_1.NOOP_LOGGER_PROVIDER;
+      }
+      /**
+       * Set the delegate logger provider
+       * @internal
+       */
+      _setDelegate(delegate) {
+        this._delegate = delegate;
+      }
+      /**
+       * @internal
+       */
+      _getDelegateLogger(name2, version2, options) {
+        var _a3;
+        return (_a3 = this._delegate) === null || _a3 === void 0 ? void 0 : _a3.getLogger(name2, version2, options);
+      }
+    };
+    exports.ProxyLoggerProvider = ProxyLoggerProvider;
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/api/logs.js
+var require_logs2 = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/api/logs.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LogsAPI = void 0;
+    var global_utils_1 = require_global_utils();
+    var NoopLoggerProvider_1 = require_NoopLoggerProvider();
+    var ProxyLoggerProvider_1 = require_ProxyLoggerProvider();
+    var LogsAPI = class _LogsAPI {
+      constructor() {
+        this._proxyLoggerProvider = new ProxyLoggerProvider_1.ProxyLoggerProvider();
+      }
+      static getInstance() {
+        if (!this._instance) {
+          this._instance = new _LogsAPI();
+        }
+        return this._instance;
+      }
+      setGlobalLoggerProvider(provider2) {
+        if (global_utils_1._global[global_utils_1.GLOBAL_LOGS_API_KEY]) {
+          return this.getLoggerProvider();
+        }
+        global_utils_1._global[global_utils_1.GLOBAL_LOGS_API_KEY] = (0, global_utils_1.makeGetter)(global_utils_1.API_BACKWARDS_COMPATIBILITY_VERSION, provider2, NoopLoggerProvider_1.NOOP_LOGGER_PROVIDER);
+        this._proxyLoggerProvider._setDelegate(provider2);
+        return provider2;
+      }
+      /**
+       * Returns the global logger provider.
+       *
+       * @returns LoggerProvider
+       */
+      getLoggerProvider() {
+        var _a3, _b;
+        return (_b = (_a3 = global_utils_1._global[global_utils_1.GLOBAL_LOGS_API_KEY]) === null || _a3 === void 0 ? void 0 : _a3.call(global_utils_1._global, global_utils_1.API_BACKWARDS_COMPATIBILITY_VERSION)) !== null && _b !== void 0 ? _b : this._proxyLoggerProvider;
+      }
+      /**
+       * Returns a Logger, creating one if one with the given name, version,
+       * schemaUrl, and attributes is not already created.
+       *
+       * Getting a Logger may be expensive, especially when `attributes` are
+       * provided. Reuse Logger instances where possible instead of calling
+       * `getLogger()` on hot paths.
+       *
+       * @param name The name of the logger or instrumentation library.
+       * @param version The version of the logger or instrumentation library.
+       * @param options The options of the logger or instrumentation library.
+       * @returns {@link Logger}
+       */
+      getLogger(name2, version2, options) {
+        return this.getLoggerProvider().getLogger(name2, version2, options);
+      }
+      /** Remove the global logger provider */
+      disable() {
+        delete global_utils_1._global[global_utils_1.GLOBAL_LOGS_API_KEY];
+        this._proxyLoggerProvider = new ProxyLoggerProvider_1.ProxyLoggerProvider();
+      }
+    };
+    exports.LogsAPI = LogsAPI;
+  }
+});
+
+// node_modules/@opentelemetry/api-logs/build/src/index.js
+var require_src4 = __commonJS({
+  "node_modules/@opentelemetry/api-logs/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.logs = exports.createNoopLogger = exports.SeverityNumber = void 0;
+    var LogRecord_1 = require_LogRecord();
+    Object.defineProperty(exports, "SeverityNumber", { enumerable: true, get: function() {
+      return LogRecord_1.SeverityNumber;
+    } });
+    var NoopLogger_1 = require_NoopLogger();
+    Object.defineProperty(exports, "createNoopLogger", { enumerable: true, get: function() {
+      return NoopLogger_1.createNoopLogger;
+    } });
+    var logs_1 = require_logs2();
+    exports.logs = logs_1.LogsAPI.getInstance();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/common-serializer.js
+var require_common_serializer = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/common-serializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.writeResource = exports.writeInstrumentationScope = exports.writeAnyValue = exports.writeKeyValue = exports.writeAttributes = exports.writeHrTimeAsFixed64 = void 0;
+    function writeHrTimeAsFixed64(serializer, hrTime2) {
+      const seconds = hrTime2[0];
+      const nanos = hrTime2[1];
+      const nanosPerSecond = 1e9;
+      const secondsLower16Bits = seconds & 65535;
+      const secondsUpperBits = seconds / 65536 >>> 0;
+      const nanosFromLower16Bits = secondsLower16Bits * nanosPerSecond;
+      const nanosFromUpperBits = secondsUpperBits * nanosPerSecond;
+      const lower16ContributionLow32 = nanosFromLower16Bits >>> 0;
+      const lower16ContributionHigh32 = Math.floor(nanosFromLower16Bits / 4294967296);
+      const upperBitsContributionLow32 = (nanosFromUpperBits & 65535) * 65536 >>> 0;
+      const upperBitsContributionHigh32 = nanosFromUpperBits / 65536 >>> 0;
+      const low32WithCarry = lower16ContributionLow32 + upperBitsContributionLow32 + nanos;
+      const totalLow = low32WithCarry >>> 0;
+      const carry = Math.floor(low32WithCarry / 4294967296);
+      const totalHigh = lower16ContributionHigh32 + upperBitsContributionHigh32 + carry >>> 0;
+      serializer.writeFixed64(totalLow, totalHigh);
+    }
+    exports.writeHrTimeAsFixed64 = writeHrTimeAsFixed64;
+    function writeAttributes(writer, attributes, fieldNumber) {
+      for (const key in attributes) {
+        if (!Object.prototype.hasOwnProperty.call(attributes, key)) {
+          continue;
+        }
+        const value = attributes[key];
+        writer.writeTag(fieldNumber, 2);
+        const kvStart = writer.startLengthDelimited();
+        const startPos = writer.pos;
+        writeKeyValue(writer, key, value);
+        writer.finishLengthDelimited(kvStart, writer.pos - startPos);
+      }
+    }
+    exports.writeAttributes = writeAttributes;
+    function writeKeyValue(writer, key, value) {
+      writer.writeTag(1, 2);
+      writer.writeString(key);
+      writer.writeTag(2, 2);
+      const valueStart = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      writeAnyValue(writer, value);
+      writer.finishLengthDelimited(valueStart, writer.pos - startPos);
+    }
+    exports.writeKeyValue = writeKeyValue;
+    var MIN_64_BIT_INT = -(2 ** 63);
+    var MAX_64_BIT_INT = 2 ** 63;
+    function writeAnyValue(writer, value) {
+      const t = typeof value;
+      if (t === "string") {
+        writer.writeTag(1, 2);
+        writer.writeString(value);
+      } else if (t === "boolean") {
+        writer.writeTag(2, 0);
+        writer.writeVarint(value ? 1 : 0);
+      } else if (t === "number") {
+        const numValue = value;
+        if (Number.isInteger(numValue) && numValue >= MIN_64_BIT_INT && numValue < MAX_64_BIT_INT) {
+          writer.writeTag(3, 0);
+          writer.writeVarint(numValue);
+        } else {
+          writer.writeTag(4, 1);
+          writer.writeDouble(numValue);
+        }
+      } else if (value instanceof Uint8Array) {
+        writer.writeTag(7, 2);
+        writer.writeBytes(value);
+      } else if (Array.isArray(value)) {
+        writer.writeTag(5, 2);
+        const arrayStart = writer.startLengthDelimited();
+        const arrayStartPos = writer.pos;
+        for (const item of value) {
+          writer.writeTag(1, 2);
+          const itemStart = writer.startLengthDelimited();
+          const itemStartPos = writer.pos;
+          writeAnyValue(writer, item);
+          writer.finishLengthDelimited(itemStart, writer.pos - itemStartPos);
+        }
+        writer.finishLengthDelimited(arrayStart, writer.pos - arrayStartPos);
+      } else if (t === "object" && value != null) {
+        writer.writeTag(6, 2);
+        const kvlistStart = writer.startLengthDelimited();
+        const kvlistStartPos = writer.pos;
+        const obj = value;
+        for (const k in obj) {
+          if (!Object.prototype.hasOwnProperty.call(obj, k)) {
+            continue;
+          }
+          const v = obj[k];
+          writer.writeTag(1, 2);
+          const kvStart = writer.startLengthDelimited();
+          const kvStartPos = writer.pos;
+          writer.writeTag(1, 2);
+          writer.writeString(k);
+          writer.writeTag(2, 2);
+          const valueStart = writer.startLengthDelimited();
+          const valueStartPos = writer.pos;
+          writeAnyValue(writer, v);
+          writer.finishLengthDelimited(valueStart, writer.pos - valueStartPos);
+          writer.finishLengthDelimited(kvStart, writer.pos - kvStartPos);
+        }
+        writer.finishLengthDelimited(kvlistStart, writer.pos - kvlistStartPos);
+      }
+    }
+    exports.writeAnyValue = writeAnyValue;
+    function writeInstrumentationScope(writer, scope, fieldNumber) {
+      writer.writeTag(fieldNumber, 2);
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      writer.writeTag(1, 2);
+      writer.writeString(scope.name);
+      if (scope.version) {
+        writer.writeTag(2, 2);
+        writer.writeString(scope.version);
+      }
+      if (scope.attributes) {
+        writeAttributes(writer, scope.attributes, 3);
+      }
+      if (scope.droppedAttributesCount) {
+        writer.writeTag(4, 0);
+        writer.writeVarint(scope.droppedAttributesCount);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    exports.writeInstrumentationScope = writeInstrumentationScope;
+    function writeResource(writer, resource, fieldNumber) {
+      writer.writeTag(fieldNumber, 2);
+      const resourceStart = writer.startLengthDelimited();
+      const resourceStartPos = writer.pos;
+      if (resource.attributes) {
+        writeAttributes(writer, resource.attributes, 1);
+      }
+      writer.writeTag(2, 0);
+      writer.writeVarint(0);
+      writer.finishLengthDelimited(resourceStart, writer.pos - resourceStartPos);
+    }
+    exports.writeResource = writeResource;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/protobuf-size-estimator.js
+var require_protobuf_size_estimator = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/protobuf-size-estimator.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufSizeEstimator = void 0;
+    var utils_1 = require_utils8();
+    function utf8ByteLength(str) {
+      const len = str.length;
+      let byteLen = 0;
+      for (let i = 0; i < len; i++) {
+        const code2 = str.charCodeAt(i);
+        if (code2 < 128) {
+          byteLen += 1;
+        } else if (code2 < 2048) {
+          byteLen += 2;
+        } else if (code2 < 55296 || code2 >= 57344) {
+          byteLen += 3;
+        } else {
+          i++;
+          byteLen += 4;
+        }
+      }
+      return byteLen;
+    }
+    var ProtobufSizeEstimator = class {
+      pos = 0;
+      startLengthDelimited() {
+        return this.pos;
+      }
+      finishLengthDelimited(_, length) {
+        this.pos += (0, utils_1.estimateVarintSize)(length);
+      }
+      writeVarint(value) {
+        this.pos += (0, utils_1.estimateVarintSize)(value);
+      }
+      writeSint32(value) {
+        this.pos += (0, utils_1.estimateVarintSize)((value << 1 ^ value >> 31) >>> 0);
+      }
+      writeSfixed64(_value) {
+        this.pos += 8;
+      }
+      writeFixed32(_value) {
+        this.pos += 4;
+      }
+      writeFixed64(_low, _high) {
+        this.pos += 8;
+      }
+      writeBytes(bytes) {
+        this.pos += (0, utils_1.estimateVarintSize)(bytes.length);
+        this.pos += bytes.length;
+      }
+      writeTag(fieldNumber, wireType) {
+        this.writeVarint(fieldNumber << 3 | wireType);
+      }
+      writeDouble(_value) {
+        this.pos += 8;
+      }
+      writeString(str) {
+        const byteLen = utf8ByteLength(str);
+        this.pos += (0, utils_1.estimateVarintSize)(byteLen);
+        this.pos += byteLen;
+      }
+    };
+    exports.ProtobufSizeEstimator = ProtobufSizeEstimator;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/logs-serializer.js
+var require_logs_serializer = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/logs-serializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serializeLogsExportRequest = void 0;
+    var protobuf_writer_1 = require_protobuf_writer();
+    var hex_to_binary_1 = require_hex_to_binary();
+    var api_logs_1 = require_src4();
+    var common_serializer_1 = require_common_serializer();
+    var protobuf_size_estimator_1 = require_protobuf_size_estimator();
+    function serializeLogRecord(writer, logRecord) {
+      const logStart = writer.startLengthDelimited();
+      const logStartPos = writer.pos;
+      writer.writeTag(1, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, logRecord.hrTime);
+      if (logRecord.severityNumber !== void 0 && logRecord.severityNumber !== api_logs_1.SeverityNumber.UNSPECIFIED) {
+        writer.writeTag(2, 0);
+        writer.writeVarint(logRecord.severityNumber);
+      }
+      if (logRecord.severityText) {
+        writer.writeTag(3, 2);
+        writer.writeString(logRecord.severityText);
+      }
+      if (logRecord.body !== void 0) {
+        writer.writeTag(5, 2);
+        const bodyStart = writer.startLengthDelimited();
+        const bodyStartPos = writer.pos;
+        (0, common_serializer_1.writeAnyValue)(writer, logRecord.body);
+        writer.finishLengthDelimited(bodyStart, writer.pos - bodyStartPos);
+      }
+      if (logRecord.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, logRecord.attributes, 6);
+      }
+      writer.writeTag(7, 0);
+      writer.writeVarint(logRecord.droppedAttributesCount);
+      if (logRecord.spanContext?.traceFlags) {
+        writer.writeTag(8, 5);
+        writer.writeFixed32(logRecord.spanContext.traceFlags);
+      }
+      if (logRecord.spanContext?.traceId) {
+        writer.writeTag(9, 2);
+        writer.writeBytes((0, hex_to_binary_1.hexToBinary)(logRecord.spanContext.traceId));
+      }
+      if (logRecord.spanContext?.spanId) {
+        writer.writeTag(10, 2);
+        writer.writeBytes((0, hex_to_binary_1.hexToBinary)(logRecord.spanContext.spanId));
+      }
+      writer.writeTag(11, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, logRecord.hrTimeObserved);
+      if (logRecord.eventName) {
+        writer.writeTag(12, 2);
+        writer.writeString(logRecord.eventName);
+      }
+      writer.finishLengthDelimited(logStart, writer.pos - logStartPos);
+    }
+    function serializeScopeLogs(writer, scope, logRecords) {
+      const scopeLogsStart = writer.startLengthDelimited();
+      const scopeLogsStartPos = writer.pos;
+      (0, common_serializer_1.writeInstrumentationScope)(writer, scope, 1);
+      for (const logRecord of logRecords) {
+        writer.writeTag(2, 2);
+        serializeLogRecord(writer, logRecord);
+      }
+      if (scope.schemaUrl) {
+        writer.writeTag(3, 2);
+        writer.writeString(scope.schemaUrl);
+      }
+      writer.finishLengthDelimited(scopeLogsStart, writer.pos - scopeLogsStartPos);
+    }
+    function serializeResourceLogs(writer, resource, scopeMap) {
+      const resourceLogsStart = writer.startLengthDelimited();
+      const resourceLogsStartPos = writer.pos;
+      (0, common_serializer_1.writeResource)(writer, resource, 1);
+      for (const scopeLogs of scopeMap.values()) {
+        writer.writeTag(2, 2);
+        const scope = scopeLogs[0].instrumentationScope;
+        serializeScopeLogs(writer, scope, scopeLogs);
+      }
+      if (resource.schemaUrl) {
+        writer.writeTag(3, 2);
+        writer.writeString(resource.schemaUrl);
+      }
+      writer.finishLengthDelimited(resourceLogsStart, writer.pos - resourceLogsStartPos);
+    }
+    function createResourceMap(logRecords) {
+      const resourceMap = /* @__PURE__ */ new Map();
+      for (const record2 of logRecords) {
+        const resource = record2.resource;
+        const scope = record2.instrumentationScope;
+        let ismMap = resourceMap.get(resource);
+        if (!ismMap) {
+          ismMap = /* @__PURE__ */ new Map();
+          resourceMap.set(resource, ismMap);
+        }
+        let records = ismMap.get(scope);
+        if (!records) {
+          records = [];
+          ismMap.set(scope, records);
+        }
+        records.push(record2);
+      }
+      return resourceMap;
+    }
+    function serializeLogsExportRequest(logRecords) {
+      const resourceMap = createResourceMap(logRecords);
+      const estimator = new protobuf_size_estimator_1.ProtobufSizeEstimator();
+      for (const [resource, scopeMap] of resourceMap) {
+        estimator.writeTag(1, 2);
+        serializeResourceLogs(estimator, resource, scopeMap);
+      }
+      const writer = new protobuf_writer_1.ProtobufWriter(estimator.pos);
+      for (const [resource, scopeMap] of resourceMap) {
+        writer.writeTag(1, 2);
+        serializeResourceLogs(writer, resource, scopeMap);
+      }
+      return writer.finish();
+    }
+    exports.serializeLogsExportRequest = serializeLogsExportRequest;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/protobuf-reader.js
+var require_protobuf_reader = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/protobuf/protobuf-reader.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufReader = void 0;
+    var ProtobufReader = class {
+      pos = 0;
+      _buf;
+      _textDecoder;
+      constructor(buf) {
+        this._buf = buf;
+        this._textDecoder = new TextDecoder();
+      }
+      isAtEnd() {
+        return this.pos >= this._buf.length;
+      }
+      /** Read a varint and decode it as a tag, returning field number and wire type. */
+      readTag() {
+        const raw = this.readVarint();
+        return { fieldNumber: raw >>> 3, wireType: raw & 7 };
+      }
+      /**
+       * Read a base-128 varint.
+       * Returns a JS `number`; precision above 2^53 is silently lost.
+       * Throws if the buffer is truncated mid-varint.
+       */
+      readVarint() {
+        let result = 0;
+        let shift = 0;
+        let terminated = false;
+        while (this.pos < this._buf.length) {
+          const b = this._buf[this.pos++];
+          result += (b & 127) * Math.pow(2, shift);
+          shift += 7;
+          if ((b & 128) === 0) {
+            terminated = true;
+            break;
+          }
+        }
+        if (!terminated) {
+          throw new Error("Truncated buffer: unexpected end of data while reading varint");
+        }
+        return result;
+      }
+      /** Read a length-delimited byte sequence (bytes field or embedded message). */
+      readBytes() {
+        const len = this.readVarint();
+        if (this.pos + len > this._buf.length) {
+          throw new Error(`Truncated buffer: expected ${len} bytes at position ${this.pos}, but only ${this._buf.length - this.pos} available`);
+        }
+        const slice = this._buf.subarray(this.pos, this.pos + len);
+        this.pos += len;
+        return slice;
+      }
+      /** Read a length-delimited UTF-8 string. */
+      readString() {
+        return this._textDecoder.decode(this.readBytes());
+      }
+      /**
+       * Skip an unknown field.
+       * Handles wire types 0 (varint), 1 (64-bit), 2 (length-delimited),
+       * and 5 (32-bit).
+       *
+       * Wire types 3 and 4 (start-group / end-group) are deprecated in proto3
+       * and are not used by any OpenTelemetry proto definition. Encountering
+       * them is treated as an error.
+       */
+      skip(wireType) {
+        switch (wireType) {
+          case 0:
+            this.readVarint();
+            break;
+          case 1:
+            this.pos += 8;
+            break;
+          case 2:
+            this.readBytes();
+            break;
+          case 5:
+            this.pos += 4;
+            break;
+          default:
+            throw new Error(`Unknown wire type ${wireType}, cannot safely skip`);
+        }
+      }
+    };
+    exports.ProtobufReader = ProtobufReader;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/response-deserializer.js
+var require_response_deserializer = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/response-deserializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.deserializeExportLogsServiceResponse = void 0;
+    var protobuf_reader_1 = require_protobuf_reader();
+    function deserializePartialSuccess(data) {
+      const reader = new protobuf_reader_1.ProtobufReader(data);
+      const result = {};
+      while (!reader.isAtEnd()) {
+        const { fieldNumber, wireType } = reader.readTag();
+        switch (fieldNumber) {
+          case 1:
+            if (wireType === 0) {
+              result.rejectedLogRecords = reader.readVarint();
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          case 2:
+            if (wireType === 2) {
+              result.errorMessage = reader.readString();
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          default:
+            reader.skip(wireType);
+            break;
+        }
+      }
+      return result;
+    }
+    function deserializeExportLogsServiceResponse(data) {
+      const reader = new protobuf_reader_1.ProtobufReader(data);
+      const result = {};
+      while (!reader.isAtEnd()) {
+        const { fieldNumber, wireType } = reader.readTag();
+        switch (fieldNumber) {
+          case 1:
+            if (wireType === 2) {
+              result.partialSuccess = deserializePartialSuccess(reader.readBytes());
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          default:
+            reader.skip(wireType);
+            break;
+        }
+      }
+      return result;
+    }
+    exports.deserializeExportLogsServiceResponse = deserializeExportLogsServiceResponse;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/logs.js
+var require_logs3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/logs.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufLogsSerializer = void 0;
+    var logs_serializer_1 = require_logs_serializer();
+    var response_deserializer_1 = require_response_deserializer();
+    exports.ProtobufLogsSerializer = {
+      serializeRequest: (arg) => {
+        return (0, logs_serializer_1.serializeLogsExportRequest)(arg);
+      },
+      deserializeResponse: (arg) => {
+        return (0, response_deserializer_1.deserializeExportLogsServiceResponse)(arg);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/index.js
+var require_protobuf = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/protobuf/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufLogsSerializer = void 0;
+    var logs_1 = require_logs3();
+    Object.defineProperty(exports, "ProtobufLogsSerializer", { enumerable: true, get: function() {
+      return logs_1.ProtobufLogsSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/AggregationTemporality.js
+var require_AggregationTemporality = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/AggregationTemporality.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AggregationTemporality = void 0;
+    var AggregationTemporality;
+    (function(AggregationTemporality2) {
+      AggregationTemporality2[AggregationTemporality2["DELTA"] = 0] = "DELTA";
+      AggregationTemporality2[AggregationTemporality2["CUMULATIVE"] = 1] = "CUMULATIVE";
+    })(AggregationTemporality || (exports.AggregationTemporality = AggregationTemporality = {}));
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricData.js
+var require_MetricData = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricData.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DataPointType = exports.InstrumentType = void 0;
+    var InstrumentType;
+    (function(InstrumentType2) {
+      InstrumentType2["COUNTER"] = "COUNTER";
+      InstrumentType2["GAUGE"] = "GAUGE";
+      InstrumentType2["HISTOGRAM"] = "HISTOGRAM";
+      InstrumentType2["UP_DOWN_COUNTER"] = "UP_DOWN_COUNTER";
+      InstrumentType2["OBSERVABLE_COUNTER"] = "OBSERVABLE_COUNTER";
+      InstrumentType2["OBSERVABLE_GAUGE"] = "OBSERVABLE_GAUGE";
+      InstrumentType2["OBSERVABLE_UP_DOWN_COUNTER"] = "OBSERVABLE_UP_DOWN_COUNTER";
+    })(InstrumentType || (exports.InstrumentType = InstrumentType = {}));
+    var DataPointType;
+    (function(DataPointType2) {
+      DataPointType2[DataPointType2["HISTOGRAM"] = 0] = "HISTOGRAM";
+      DataPointType2[DataPointType2["EXPONENTIAL_HISTOGRAM"] = 1] = "EXPONENTIAL_HISTOGRAM";
+      DataPointType2[DataPointType2["GAUGE"] = 2] = "GAUGE";
+      DataPointType2[DataPointType2["SUM"] = 3] = "SUM";
+    })(DataPointType || (exports.DataPointType = DataPointType = {}));
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/utils.js
+var require_utils9 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.equalsCaseInsensitive = exports.binarySearchUB = exports.setEquals = exports.callWithTimeout = exports.TimeoutError = exports.instrumentationScopeId = exports.hashAttributes = void 0;
+    function hashAttributes(attributes) {
+      let keys2 = Object.keys(attributes);
+      if (keys2.length === 0)
+        return "";
+      keys2 = keys2.sort();
+      return JSON.stringify(keys2.map((key) => [key, attributes[key]]));
+    }
+    exports.hashAttributes = hashAttributes;
+    function instrumentationScopeId(instrumentationScope) {
+      return `${instrumentationScope.name}:${instrumentationScope.version ?? ""}:${instrumentationScope.schemaUrl ?? ""}`;
+    }
+    exports.instrumentationScopeId = instrumentationScopeId;
+    var TimeoutError = class _TimeoutError extends Error {
+      constructor(message) {
+        super(message);
+        Object.setPrototypeOf(this, _TimeoutError.prototype);
+      }
+    };
+    exports.TimeoutError = TimeoutError;
+    function callWithTimeout(promise2, timeout) {
+      let timeoutHandle;
+      const timeoutPromise = new Promise(function timeoutFunction(_resolve, reject) {
+        timeoutHandle = setTimeout(function timeoutHandler() {
+          reject(new TimeoutError("Operation timed out."));
+        }, timeout);
+      });
+      return Promise.race([promise2, timeoutPromise]).then((result) => {
+        clearTimeout(timeoutHandle);
+        return result;
+      }, (reason) => {
+        clearTimeout(timeoutHandle);
+        throw reason;
+      });
+    }
+    exports.callWithTimeout = callWithTimeout;
+    function setEquals(lhs, rhs) {
+      if (lhs.size !== rhs.size) {
+        return false;
+      }
+      for (const item of lhs) {
+        if (!rhs.has(item)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    exports.setEquals = setEquals;
+    function binarySearchUB(arr, value) {
+      let lo = 0;
+      let hi = arr.length - 1;
+      let ret = arr.length;
+      while (hi >= lo) {
+        const mid = lo + Math.trunc((hi - lo) / 2);
+        if (arr[mid] < value) {
+          lo = mid + 1;
+        } else {
+          ret = mid;
+          hi = mid - 1;
+        }
+      }
+      return ret;
+    }
+    exports.binarySearchUB = binarySearchUB;
+    function equalsCaseInsensitive(lhs, rhs) {
+      return lhs.toLowerCase() === rhs.toLowerCase();
+    }
+    exports.equalsCaseInsensitive = equalsCaseInsensitive;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/types.js
+var require_types4 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AggregatorKind = void 0;
+    var AggregatorKind;
+    (function(AggregatorKind2) {
+      AggregatorKind2[AggregatorKind2["DROP"] = 0] = "DROP";
+      AggregatorKind2[AggregatorKind2["SUM"] = 1] = "SUM";
+      AggregatorKind2[AggregatorKind2["LAST_VALUE"] = 2] = "LAST_VALUE";
+      AggregatorKind2[AggregatorKind2["HISTOGRAM"] = 3] = "HISTOGRAM";
+      AggregatorKind2[AggregatorKind2["EXPONENTIAL_HISTOGRAM"] = 4] = "EXPONENTIAL_HISTOGRAM";
+    })(AggregatorKind || (exports.AggregatorKind = AggregatorKind = {}));
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/Drop.js
+var require_Drop = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/Drop.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DropAggregator = void 0;
+    var types_1 = require_types4();
+    var DropAggregator = class {
+      kind = types_1.AggregatorKind.DROP;
+      createAccumulation() {
+        return void 0;
+      }
+      merge(_previous, _delta) {
+        return void 0;
+      }
+      diff(_previous, _current) {
+        return void 0;
+      }
+      toMetricData(_descriptor, _aggregationTemporality, _accumulationByAttributes, _endTime) {
+        return void 0;
+      }
+    };
+    exports.DropAggregator = DropAggregator;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/Histogram.js
+var require_Histogram = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/Histogram.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HistogramAggregator = exports.HistogramAccumulation = void 0;
+    var types_1 = require_types4();
+    var MetricData_1 = require_MetricData();
+    var utils_1 = require_utils9();
+    function createNewEmptyCheckpoint(boundaries) {
+      const counts = boundaries.map(() => 0);
+      counts.push(0);
+      return {
+        buckets: {
+          boundaries,
+          counts
+        },
+        sum: 0,
+        count: 0,
+        hasMinMax: false,
+        min: Infinity,
+        max: -Infinity
+      };
+    }
+    var HistogramAccumulation = class {
+      startTime;
+      _boundaries;
+      _recordMinMax;
+      _current;
+      constructor(startTime, boundaries, recordMinMax = true, current = createNewEmptyCheckpoint(boundaries)) {
+        this.startTime = startTime;
+        this._boundaries = boundaries;
+        this._recordMinMax = recordMinMax;
+        this._current = current;
+      }
+      record(value) {
+        if (Number.isNaN(value)) {
+          return;
+        }
+        this._current.count += 1;
+        this._current.sum += value;
+        if (this._recordMinMax) {
+          this._current.min = Math.min(value, this._current.min);
+          this._current.max = Math.max(value, this._current.max);
+          this._current.hasMinMax = true;
+        }
+        const idx = (0, utils_1.binarySearchUB)(this._boundaries, value);
+        this._current.buckets.counts[idx] += 1;
+      }
+      setStartTime(startTime) {
+        this.startTime = startTime;
+      }
+      toPointValue() {
+        return this._current;
+      }
+    };
+    exports.HistogramAccumulation = HistogramAccumulation;
+    var HistogramAggregator = class {
+      kind = types_1.AggregatorKind.HISTOGRAM;
+      _boundaries;
+      _recordMinMax;
+      /**
+       * @param _boundaries sorted upper bounds of recorded values.
+       * @param _recordMinMax If set to true, min and max will be recorded. Otherwise, min and max will not be recorded.
+       */
+      constructor(boundaries, recordMinMax) {
+        this._boundaries = boundaries;
+        this._recordMinMax = recordMinMax;
+      }
+      createAccumulation(startTime) {
+        return new HistogramAccumulation(startTime, this._boundaries, this._recordMinMax);
+      }
+      /**
+       * Return the result of the merge of two histogram accumulations. As long as one Aggregator
+       * instance produces all Accumulations with constant boundaries we don't need to worry about
+       * merging accumulations with different boundaries.
+       */
+      merge(previous, delta) {
+        const previousValue = previous.toPointValue();
+        const deltaValue = delta.toPointValue();
+        const previousCounts = previousValue.buckets.counts;
+        const deltaCounts = deltaValue.buckets.counts;
+        const mergedCounts = new Array(previousCounts.length);
+        for (let idx = 0; idx < previousCounts.length; idx++) {
+          mergedCounts[idx] = previousCounts[idx] + deltaCounts[idx];
+        }
+        let min = Infinity;
+        let max = -Infinity;
+        if (this._recordMinMax) {
+          if (previousValue.hasMinMax && deltaValue.hasMinMax) {
+            min = Math.min(previousValue.min, deltaValue.min);
+            max = Math.max(previousValue.max, deltaValue.max);
+          } else if (previousValue.hasMinMax) {
+            min = previousValue.min;
+            max = previousValue.max;
+          } else if (deltaValue.hasMinMax) {
+            min = deltaValue.min;
+            max = deltaValue.max;
+          }
+        }
+        return new HistogramAccumulation(previous.startTime, previousValue.buckets.boundaries, this._recordMinMax, {
+          buckets: {
+            boundaries: previousValue.buckets.boundaries,
+            counts: mergedCounts
+          },
+          count: previousValue.count + deltaValue.count,
+          sum: previousValue.sum + deltaValue.sum,
+          hasMinMax: this._recordMinMax && (previousValue.hasMinMax || deltaValue.hasMinMax),
+          min,
+          max
+        });
+      }
+      /**
+       * Returns a new DELTA aggregation by comparing two cumulative measurements.
+       */
+      diff(previous, current) {
+        const previousValue = previous.toPointValue();
+        const currentValue = current.toPointValue();
+        const previousCounts = previousValue.buckets.counts;
+        const currentCounts = currentValue.buckets.counts;
+        const diffedCounts = new Array(previousCounts.length);
+        for (let idx = 0; idx < previousCounts.length; idx++) {
+          diffedCounts[idx] = currentCounts[idx] - previousCounts[idx];
+        }
+        return new HistogramAccumulation(current.startTime, previousValue.buckets.boundaries, this._recordMinMax, {
+          buckets: {
+            boundaries: previousValue.buckets.boundaries,
+            counts: diffedCounts
+          },
+          count: currentValue.count - previousValue.count,
+          sum: currentValue.sum - previousValue.sum,
+          hasMinMax: false,
+          min: Infinity,
+          max: -Infinity
+        });
+      }
+      toMetricData(descriptor, aggregationTemporality, accumulationByAttributes, endTime) {
+        return {
+          descriptor,
+          aggregationTemporality,
+          dataPointType: MetricData_1.DataPointType.HISTOGRAM,
+          dataPoints: accumulationByAttributes.map(([attributes, accumulation]) => {
+            const pointValue = accumulation.toPointValue();
+            const allowsNegativeValues = descriptor.type === MetricData_1.InstrumentType.GAUGE || descriptor.type === MetricData_1.InstrumentType.UP_DOWN_COUNTER || descriptor.type === MetricData_1.InstrumentType.OBSERVABLE_GAUGE || descriptor.type === MetricData_1.InstrumentType.OBSERVABLE_UP_DOWN_COUNTER;
+            return {
+              attributes,
+              startTime: accumulation.startTime,
+              endTime,
+              value: {
+                min: pointValue.hasMinMax ? pointValue.min : void 0,
+                max: pointValue.hasMinMax ? pointValue.max : void 0,
+                sum: !allowsNegativeValues ? pointValue.sum : void 0,
+                buckets: pointValue.buckets,
+                count: pointValue.count
+              }
+            };
+          })
+        };
+      }
+    };
+    exports.HistogramAggregator = HistogramAggregator;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/Buckets.js
+var require_Buckets = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/Buckets.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Buckets = void 0;
+    var Buckets = class _Buckets {
+      backing;
+      indexBase;
+      indexStart;
+      indexEnd;
+      /**
+       * The term index refers to the number of the exponential histogram bucket
+       * used to determine its boundaries. The lower boundary of a bucket is
+       * determined by base ** index and the upper boundary of a bucket is
+       * determined by base ** (index + 1). index values are signed to account
+       * for values less than or equal to 1.
+       *
+       * indexBase is the index of the 0th position in the
+       * backing array, i.e., backing[0] is the count
+       * in the bucket with index `indexBase`.
+       *
+       * indexStart is the smallest index value represented
+       * in the backing array.
+       *
+       * indexEnd is the largest index value represented in
+       * the backing array.
+       */
+      constructor(backing = new BucketsBacking(), indexBase = 0, indexStart = 0, indexEnd = 0) {
+        this.backing = backing;
+        this.indexBase = indexBase;
+        this.indexStart = indexStart;
+        this.indexEnd = indexEnd;
+      }
+      /**
+       * Offset is the bucket index of the smallest entry in the counts array
+       * @returns {number}
+       */
+      get offset() {
+        return this.indexStart;
+      }
+      /**
+       * Buckets is a view into the backing array.
+       * @returns {number}
+       */
+      get length() {
+        if (this.backing.length === 0) {
+          return 0;
+        }
+        if (this.indexEnd === this.indexStart && this.at(0) === 0) {
+          return 0;
+        }
+        return this.indexEnd - this.indexStart + 1;
+      }
+      /**
+       * An array of counts, where count[i] carries the count
+       * of the bucket at index (offset+i).  count[i] is the count of
+       * values greater than base^(offset+i) and less than or equal to
+       * base^(offset+i+1).
+       * @returns {number} The logical counts based on the backing array
+       */
+      counts() {
+        return Array.from({ length: this.length }, (_, i) => this.at(i));
+      }
+      /**
+       * At returns the count of the bucket at a position in the logical
+       * array of counts.
+       * @param position
+       * @returns {number}
+       */
+      at(position) {
+        const bias = this.indexBase - this.indexStart;
+        if (position < bias) {
+          position += this.backing.length;
+        }
+        position -= bias;
+        return this.backing.countAt(position);
+      }
+      /**
+       * incrementBucket increments the backing array index by `increment`
+       * @param bucketIndex
+       * @param increment
+       */
+      incrementBucket(bucketIndex, increment) {
+        this.backing.increment(bucketIndex, increment);
+      }
+      /**
+       * decrementBucket decrements the backing array index by `decrement`
+       * if decrement is greater than the current value, it's set to 0.
+       * @param bucketIndex
+       * @param decrement
+       */
+      decrementBucket(bucketIndex, decrement) {
+        this.backing.decrement(bucketIndex, decrement);
+      }
+      /**
+       * trim removes leading and / or trailing zero buckets (which can occur
+       * after diffing two histos) and rotates the backing array so that the
+       * smallest non-zero index is in the 0th position of the backing array
+       */
+      trim() {
+        for (let i = 0; i < this.length; i++) {
+          if (this.at(i) !== 0) {
+            this.indexStart += i;
+            break;
+          } else if (i === this.length - 1) {
+            this.indexStart = this.indexEnd = this.indexBase = 0;
+            return;
+          }
+        }
+        for (let i = this.length - 1; i >= 0; i--) {
+          if (this.at(i) !== 0) {
+            this.indexEnd -= this.length - i - 1;
+            break;
+          }
+        }
+        this._rotate();
+      }
+      /**
+       * downscale first rotates, then collapses 2**`by`-to-1 buckets.
+       * @param by
+       */
+      downscale(by) {
+        this._rotate();
+        const size = 1 + this.indexEnd - this.indexStart;
+        const each = 1 << by;
+        let inpos = 0;
+        let outpos = 0;
+        for (let pos = this.indexStart; pos <= this.indexEnd; ) {
+          let mod = pos % each;
+          if (mod < 0) {
+            mod += each;
+          }
+          for (let i = mod; i < each && inpos < size; i++) {
+            this._relocateBucket(outpos, inpos);
+            inpos++;
+            pos++;
+          }
+          outpos++;
+        }
+        this.indexStart >>= by;
+        this.indexEnd >>= by;
+        this.indexBase = this.indexStart;
+      }
+      /**
+       * Clone returns a deep copy of Buckets
+       * @returns {Buckets}
+       */
+      clone() {
+        return new _Buckets(this.backing.clone(), this.indexBase, this.indexStart, this.indexEnd);
+      }
+      /**
+       * _rotate shifts the backing array contents so that indexStart ==
+       * indexBase to simplify the downscale logic.
+       */
+      _rotate() {
+        const bias = this.indexBase - this.indexStart;
+        if (bias === 0) {
+          return;
+        } else if (bias > 0) {
+          this.backing.reverse(0, this.backing.length);
+          this.backing.reverse(0, bias);
+          this.backing.reverse(bias, this.backing.length);
+        } else {
+          this.backing.reverse(0, this.backing.length);
+          this.backing.reverse(0, this.backing.length + bias);
+        }
+        this.indexBase = this.indexStart;
+      }
+      /**
+       * _relocateBucket adds the count in counts[src] to counts[dest] and
+       * resets count[src] to zero.
+       */
+      _relocateBucket(dest, src) {
+        if (dest === src) {
+          return;
+        }
+        this.incrementBucket(dest, this.backing.emptyBucket(src));
+      }
+    };
+    exports.Buckets = Buckets;
+    var BucketsBacking = class _BucketsBacking {
+      _counts;
+      constructor(counts = [0]) {
+        this._counts = counts;
+      }
+      /**
+       * length returns the physical size of the backing array, which
+       * is >= buckets.length()
+       */
+      get length() {
+        return this._counts.length;
+      }
+      /**
+       * countAt returns the count in a specific bucket
+       */
+      countAt(pos) {
+        return this._counts[pos];
+      }
+      /**
+       * growTo grows a backing array and copies old entries
+       * into their correct new positions.
+       */
+      growTo(newSize, oldPositiveLimit, newPositiveLimit) {
+        const tmp = new Array(newSize).fill(0);
+        tmp.splice(newPositiveLimit, this._counts.length - oldPositiveLimit, ...this._counts.slice(oldPositiveLimit));
+        tmp.splice(0, oldPositiveLimit, ...this._counts.slice(0, oldPositiveLimit));
+        this._counts = tmp;
+      }
+      /**
+       * reverse the items in the backing array in the range [from, limit).
+       */
+      reverse(from, limit) {
+        const num4 = Math.floor((from + limit) / 2) - from;
+        for (let i = 0; i < num4; i++) {
+          const tmp = this._counts[from + i];
+          this._counts[from + i] = this._counts[limit - i - 1];
+          this._counts[limit - i - 1] = tmp;
+        }
+      }
+      /**
+       * emptyBucket empties the count from a bucket, for
+       * moving into another.
+       */
+      emptyBucket(src) {
+        const tmp = this._counts[src];
+        this._counts[src] = 0;
+        return tmp;
+      }
+      /**
+       * increments a bucket by `increment`
+       */
+      increment(bucketIndex, increment) {
+        this._counts[bucketIndex] += increment;
+      }
+      /**
+       * decrements a bucket by `decrement`
+       */
+      decrement(bucketIndex, decrement) {
+        if (this._counts[bucketIndex] >= decrement) {
+          this._counts[bucketIndex] -= decrement;
+        } else {
+          this._counts[bucketIndex] = 0;
+        }
+      }
+      /**
+       * clone returns a deep copy of BucketsBacking
+       */
+      clone() {
+        return new _BucketsBacking([...this._counts]);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/ieee754.js
+var require_ieee754 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/ieee754.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isPowerOfTwo = exports.getNormalBase2 = exports.MIN_VALUE = exports.MAX_NORMAL_EXPONENT = exports.MIN_NORMAL_EXPONENT = void 0;
+    var EXPONENT_MASK = 2146435072;
+    var SIGNIFICAND_MASK = 1048575;
+    var EXPONENT_BIAS = 1023;
+    exports.MIN_NORMAL_EXPONENT = -EXPONENT_BIAS + 1;
+    exports.MAX_NORMAL_EXPONENT = EXPONENT_BIAS;
+    exports.MIN_VALUE = Math.pow(2, -1022);
+    var dv = new DataView(new ArrayBuffer(8));
+    function floatBits(value) {
+      dv.setFloat64(0, value);
+      return { hi: dv.getUint32(0), lo: dv.getUint32(4) };
+    }
+    function getNormalBase2(value) {
+      const { hi } = floatBits(value);
+      return ((hi & EXPONENT_MASK) >> 20) - EXPONENT_BIAS;
+    }
+    exports.getNormalBase2 = getNormalBase2;
+    function isPowerOfTwo(value) {
+      const { hi, lo } = floatBits(value);
+      return (hi & SIGNIFICAND_MASK) === 0 && lo === 0;
+    }
+    exports.isPowerOfTwo = isPowerOfTwo;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/util.js
+var require_util7 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/util.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.nextGreaterSquare = exports.ldexp = void 0;
+    function ldexp(frac, exp) {
+      if (frac === 0 || frac === Number.POSITIVE_INFINITY || frac === Number.NEGATIVE_INFINITY || Number.isNaN(frac)) {
+        return frac;
+      }
+      return frac * Math.pow(2, exp);
+    }
+    exports.ldexp = ldexp;
+    function nextGreaterSquare(v) {
+      v--;
+      v |= v >> 1;
+      v |= v >> 2;
+      v |= v >> 4;
+      v |= v >> 8;
+      v |= v >> 16;
+      v++;
+      return v;
+    }
+    exports.nextGreaterSquare = nextGreaterSquare;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/types.js
+var require_types5 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MappingError = void 0;
+    var MappingError = class extends Error {
+    };
+    exports.MappingError = MappingError;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/ExponentMapping.js
+var require_ExponentMapping = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/ExponentMapping.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ExponentMapping = void 0;
+    var ieee754 = require_ieee754();
+    var util = require_util7();
+    var types_1 = require_types5();
+    var ExponentMapping = class {
+      _shift;
+      constructor(scale) {
+        this._shift = -scale;
+      }
+      /**
+       * Maps positive floating point values to indexes corresponding to scale
+       * @param value
+       * @returns {number} index for provided value at the current scale
+       */
+      mapToIndex(value) {
+        if (value < ieee754.MIN_VALUE) {
+          return this._minNormalLowerBoundaryIndex();
+        }
+        const exp = ieee754.getNormalBase2(value);
+        const correction = ieee754.isPowerOfTwo(value) ? -1 : 0;
+        return exp + correction >> this._shift;
+      }
+      /**
+       * Returns the lower bucket boundary for the given index for scale
+       *
+       * @param index
+       * @returns {number}
+       */
+      lowerBoundary(index) {
+        const minIndex = this._minNormalLowerBoundaryIndex();
+        if (index < minIndex) {
+          throw new types_1.MappingError(`underflow: ${index} is < minimum lower boundary: ${minIndex}`);
+        }
+        const maxIndex = this._maxNormalLowerBoundaryIndex();
+        if (index > maxIndex) {
+          throw new types_1.MappingError(`overflow: ${index} is > maximum lower boundary: ${maxIndex}`);
+        }
+        return util.ldexp(1, index << this._shift);
+      }
+      /**
+       * The scale used by this mapping
+       * @returns {number}
+       */
+      get scale() {
+        if (this._shift === 0) {
+          return 0;
+        }
+        return -this._shift;
+      }
+      _minNormalLowerBoundaryIndex() {
+        let index = ieee754.MIN_NORMAL_EXPONENT >> this._shift;
+        if (this._shift < 2) {
+          index--;
+        }
+        return index;
+      }
+      _maxNormalLowerBoundaryIndex() {
+        return ieee754.MAX_NORMAL_EXPONENT >> this._shift;
+      }
+    };
+    exports.ExponentMapping = ExponentMapping;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/LogarithmMapping.js
+var require_LogarithmMapping = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/LogarithmMapping.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LogarithmMapping = void 0;
+    var ieee754 = require_ieee754();
+    var util = require_util7();
+    var types_1 = require_types5();
+    var LogarithmMapping = class {
+      _scale;
+      _scaleFactor;
+      _inverseFactor;
+      constructor(scale) {
+        this._scale = scale;
+        this._scaleFactor = util.ldexp(Math.LOG2E, scale);
+        this._inverseFactor = util.ldexp(Math.LN2, -scale);
+      }
+      /**
+       * Maps positive floating point values to indexes corresponding to scale
+       * @param value
+       * @returns {number} index for provided value at the current scale
+       */
+      mapToIndex(value) {
+        if (value <= ieee754.MIN_VALUE) {
+          return this._minNormalLowerBoundaryIndex() - 1;
+        }
+        if (ieee754.isPowerOfTwo(value)) {
+          const exp = ieee754.getNormalBase2(value);
+          return (exp << this._scale) - 1;
+        }
+        const index = Math.floor(Math.log(value) * this._scaleFactor);
+        const maxIndex = this._maxNormalLowerBoundaryIndex();
+        if (index >= maxIndex) {
+          return maxIndex;
+        }
+        return index;
+      }
+      /**
+       * Returns the lower bucket boundary for the given index for scale
+       *
+       * @param index
+       * @returns {number}
+       */
+      lowerBoundary(index) {
+        const maxIndex = this._maxNormalLowerBoundaryIndex();
+        if (index >= maxIndex) {
+          if (index === maxIndex) {
+            return 2 * Math.exp((index - (1 << this._scale)) / this._scaleFactor);
+          }
+          throw new types_1.MappingError(`overflow: ${index} is > maximum lower boundary: ${maxIndex}`);
+        }
+        const minIndex = this._minNormalLowerBoundaryIndex();
+        if (index <= minIndex) {
+          if (index === minIndex) {
+            return ieee754.MIN_VALUE;
+          } else if (index === minIndex - 1) {
+            return Math.exp((index + (1 << this._scale)) / this._scaleFactor) / 2;
+          }
+          throw new types_1.MappingError(`overflow: ${index} is < minimum lower boundary: ${minIndex}`);
+        }
+        return Math.exp(index * this._inverseFactor);
+      }
+      /**
+       * The scale used by this mapping
+       * @returns {number}
+       */
+      get scale() {
+        return this._scale;
+      }
+      _minNormalLowerBoundaryIndex() {
+        return ieee754.MIN_NORMAL_EXPONENT << this._scale;
+      }
+      _maxNormalLowerBoundaryIndex() {
+        return (ieee754.MAX_NORMAL_EXPONENT + 1 << this._scale) - 1;
+      }
+    };
+    exports.LogarithmMapping = LogarithmMapping;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/getMapping.js
+var require_getMapping = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/exponential-histogram/mapping/getMapping.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getMapping = void 0;
+    var ExponentMapping_1 = require_ExponentMapping();
+    var LogarithmMapping_1 = require_LogarithmMapping();
+    var types_1 = require_types5();
+    var MIN_SCALE = -10;
+    var MAX_SCALE = 20;
+    var PREBUILT_MAPPINGS = Array.from({ length: 31 }, (_, i) => {
+      if (i > 10) {
+        return new LogarithmMapping_1.LogarithmMapping(i - 10);
+      }
+      return new ExponentMapping_1.ExponentMapping(i - 10);
+    });
+    function getMapping(scale) {
+      if (scale > MAX_SCALE || scale < MIN_SCALE) {
+        throw new types_1.MappingError(`expected scale >= ${MIN_SCALE} && <= ${MAX_SCALE}, got: ${scale}`);
+      }
+      return PREBUILT_MAPPINGS[scale + 10];
+    }
+    exports.getMapping = getMapping;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/ExponentialHistogram.js
+var require_ExponentialHistogram = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/ExponentialHistogram.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ExponentialHistogramAggregator = exports.ExponentialHistogramAccumulation = void 0;
+    var types_1 = require_types4();
+    var MetricData_1 = require_MetricData();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var Buckets_1 = require_Buckets();
+    var getMapping_1 = require_getMapping();
+    var util_1 = require_util7();
+    var HighLow = class _HighLow {
+      static combine(h1, h2) {
+        return new _HighLow(Math.min(h1.low, h2.low), Math.max(h1.high, h2.high));
+      }
+      low;
+      high;
+      constructor(low, high) {
+        this.low = low;
+        this.high = high;
+      }
+    };
+    var MAX_SCALE = 20;
+    var DEFAULT_MAX_SIZE = 160;
+    var MIN_MAX_SIZE = 2;
+    var ExponentialHistogramAccumulation = class _ExponentialHistogramAccumulation {
+      startTime;
+      _maxSize;
+      _recordMinMax;
+      _sum;
+      _count;
+      _zeroCount;
+      _min;
+      _max;
+      _positive;
+      _negative;
+      _mapping;
+      constructor(startTime, maxSize = DEFAULT_MAX_SIZE, recordMinMax = true, sum = 0, count = 0, zeroCount = 0, min = Number.POSITIVE_INFINITY, max = Number.NEGATIVE_INFINITY, positive = new Buckets_1.Buckets(), negative = new Buckets_1.Buckets(), mapping = (0, getMapping_1.getMapping)(MAX_SCALE)) {
+        this.startTime = startTime;
+        this._maxSize = maxSize;
+        this._recordMinMax = recordMinMax;
+        this._sum = sum;
+        this._count = count;
+        this._zeroCount = zeroCount;
+        this._min = min;
+        this._max = max;
+        this._positive = positive;
+        this._negative = negative;
+        this._mapping = mapping;
+        if (this._maxSize < MIN_MAX_SIZE) {
+          api_1.diag.warn(`Exponential Histogram Max Size set to ${this._maxSize},                 changing to the minimum size of: ${MIN_MAX_SIZE}`);
+          this._maxSize = MIN_MAX_SIZE;
+        }
+      }
+      /**
+       * record updates a histogram with a single count
+       * @param {Number} value
+       */
+      record(value) {
+        this.updateByIncrement(value, 1);
+      }
+      /**
+       * Sets the start time for this accumulation
+       * @param {HrTime} startTime
+       */
+      setStartTime(startTime) {
+        this.startTime = startTime;
+      }
+      /**
+       * Returns the datapoint representation of this accumulation
+       * @param {HrTime} startTime
+       */
+      toPointValue() {
+        return {
+          hasMinMax: this._recordMinMax,
+          min: this.min,
+          max: this.max,
+          sum: this.sum,
+          positive: {
+            offset: this.positive.offset,
+            bucketCounts: this.positive.counts()
+          },
+          negative: {
+            offset: this.negative.offset,
+            bucketCounts: this.negative.counts()
+          },
+          count: this.count,
+          scale: this.scale,
+          zeroCount: this.zeroCount
+        };
+      }
+      /**
+       * @returns {Number} The sum of values recorded by this accumulation
+       */
+      get sum() {
+        return this._sum;
+      }
+      /**
+       * @returns {Number} The minimum value recorded by this accumulation
+       */
+      get min() {
+        return this._min;
+      }
+      /**
+       * @returns {Number} The maximum value recorded by this accumulation
+       */
+      get max() {
+        return this._max;
+      }
+      /**
+       * @returns {Number} The count of values recorded by this accumulation
+       */
+      get count() {
+        return this._count;
+      }
+      /**
+       * @returns {Number} The number of 0 values recorded by this accumulation
+       */
+      get zeroCount() {
+        return this._zeroCount;
+      }
+      /**
+       * @returns {Number} The scale used by this accumulation
+       */
+      get scale() {
+        if (this._count === this._zeroCount) {
+          return 0;
+        }
+        return this._mapping.scale;
+      }
+      /**
+       * positive holds the positive values
+       * @returns {Buckets}
+       */
+      get positive() {
+        return this._positive;
+      }
+      /**
+       * negative holds the negative values by their absolute value
+       * @returns {Buckets}
+       */
+      get negative() {
+        return this._negative;
+      }
+      /**
+       * updateByIncr supports updating a histogram with a non-negative
+       * increment.
+       * @param value
+       * @param increment
+       */
+      updateByIncrement(value, increment) {
+        if (!Number.isFinite(value)) {
+          return;
+        }
+        if (value > this._max) {
+          this._max = value;
+        }
+        if (value < this._min) {
+          this._min = value;
+        }
+        this._count += increment;
+        if (value === 0) {
+          this._zeroCount += increment;
+          return;
+        }
+        this._sum += value * increment;
+        if (value > 0) {
+          this._updateBuckets(this._positive, value, increment);
+        } else {
+          this._updateBuckets(this._negative, -value, increment);
+        }
+      }
+      /**
+       * merge combines data from previous value into self
+       * @param {ExponentialHistogramAccumulation} previous
+       */
+      merge(previous) {
+        if (this._count === 0) {
+          this._min = previous.min;
+          this._max = previous.max;
+        } else if (previous.count !== 0) {
+          if (previous.min < this.min) {
+            this._min = previous.min;
+          }
+          if (previous.max > this.max) {
+            this._max = previous.max;
+          }
+        }
+        this.startTime = previous.startTime;
+        this._sum += previous.sum;
+        this._count += previous.count;
+        this._zeroCount += previous.zeroCount;
+        const minScale = this._minScale(previous);
+        this._downscale(this.scale - minScale);
+        this._mergeBuckets(this.positive, previous, previous.positive, minScale);
+        this._mergeBuckets(this.negative, previous, previous.negative, minScale);
+      }
+      /**
+       * diff subtracts other from self
+       * @param {ExponentialHistogramAccumulation} other
+       */
+      diff(other) {
+        this._min = Infinity;
+        this._max = -Infinity;
+        this._sum -= other.sum;
+        this._count -= other.count;
+        this._zeroCount -= other.zeroCount;
+        const minScale = this._minScale(other);
+        this._downscale(this.scale - minScale);
+        this._diffBuckets(this.positive, other, other.positive, minScale);
+        this._diffBuckets(this.negative, other, other.negative, minScale);
+      }
+      /**
+       * clone returns a deep copy of self
+       * @returns {ExponentialHistogramAccumulation}
+       */
+      clone() {
+        return new _ExponentialHistogramAccumulation(this.startTime, this._maxSize, this._recordMinMax, this._sum, this._count, this._zeroCount, this._min, this._max, this.positive.clone(), this.negative.clone(), this._mapping);
+      }
+      /**
+       * _updateBuckets maps the incoming value to a bucket index for the current
+       * scale. If the bucket index is outside of the range of the backing array,
+       * it will rescale the backing array and update the mapping for the new scale.
+       */
+      _updateBuckets(buckets, value, increment) {
+        let index = this._mapping.mapToIndex(value);
+        let rescalingNeeded = false;
+        let high = 0;
+        let low = 0;
+        if (buckets.length === 0) {
+          buckets.indexStart = index;
+          buckets.indexEnd = buckets.indexStart;
+          buckets.indexBase = buckets.indexStart;
+        } else if (index < buckets.indexStart && buckets.indexEnd - index >= this._maxSize) {
+          rescalingNeeded = true;
+          low = index;
+          high = buckets.indexEnd;
+        } else if (index > buckets.indexEnd && index - buckets.indexStart >= this._maxSize) {
+          rescalingNeeded = true;
+          low = buckets.indexStart;
+          high = index;
+        }
+        if (rescalingNeeded) {
+          const change3 = this._changeScale(high, low);
+          this._downscale(change3);
+          index = this._mapping.mapToIndex(value);
+        }
+        this._incrementIndexBy(buckets, index, increment);
+      }
+      /**
+       * _incrementIndexBy increments the count of the bucket specified by `index`.
+       * If the index is outside of the range [buckets.indexStart, buckets.indexEnd]
+       * the boundaries of the backing array will be adjusted and more buckets will
+       * be added if needed.
+       */
+      _incrementIndexBy(buckets, index, increment) {
+        if (increment === 0) {
+          return;
+        }
+        if (buckets.length === 0) {
+          buckets.indexStart = buckets.indexEnd = buckets.indexBase = index;
+        }
+        if (index < buckets.indexStart) {
+          const span = buckets.indexEnd - index;
+          if (span >= buckets.backing.length) {
+            this._grow(buckets, span + 1);
+          }
+          buckets.indexStart = index;
+        } else if (index > buckets.indexEnd) {
+          const span = index - buckets.indexStart;
+          if (span >= buckets.backing.length) {
+            this._grow(buckets, span + 1);
+          }
+          buckets.indexEnd = index;
+        }
+        let bucketIndex = index - buckets.indexBase;
+        if (bucketIndex < 0) {
+          bucketIndex += buckets.backing.length;
+        }
+        buckets.incrementBucket(bucketIndex, increment);
+      }
+      /**
+       * grow resizes the backing array by doubling in size up to maxSize.
+       * This extends the array with a bunch of zeros and copies the
+       * existing counts to the same position.
+       */
+      _grow(buckets, needed) {
+        const size = buckets.backing.length;
+        const bias = buckets.indexBase - buckets.indexStart;
+        const oldPositiveLimit = size - bias;
+        let newSize = (0, util_1.nextGreaterSquare)(needed);
+        if (newSize > this._maxSize) {
+          newSize = this._maxSize;
+        }
+        const newPositiveLimit = newSize - bias;
+        buckets.backing.growTo(newSize, oldPositiveLimit, newPositiveLimit);
+      }
+      /**
+       * _changeScale computes how much downscaling is needed by shifting the
+       * high and low values until they are separated by no more than size.
+       */
+      _changeScale(high, low) {
+        let change3 = 0;
+        while (high - low >= this._maxSize) {
+          high >>= 1;
+          low >>= 1;
+          change3++;
+        }
+        return change3;
+      }
+      /**
+       * _downscale subtracts `change` from the current mapping scale.
+       */
+      _downscale(change3) {
+        if (change3 === 0) {
+          return;
+        }
+        if (change3 < 0) {
+          throw new Error(`impossible change of scale: ${this.scale}`);
+        }
+        const newScale = this._mapping.scale - change3;
+        this._positive.downscale(change3);
+        this._negative.downscale(change3);
+        this._mapping = (0, getMapping_1.getMapping)(newScale);
+      }
+      /**
+       * _minScale is used by diff and merge to compute an ideal combined scale
+       */
+      _minScale(other) {
+        const minScale = Math.min(this.scale, other.scale);
+        const highLowPos = HighLow.combine(this._highLowAtScale(this.positive, this.scale, minScale), this._highLowAtScale(other.positive, other.scale, minScale));
+        const highLowNeg = HighLow.combine(this._highLowAtScale(this.negative, this.scale, minScale), this._highLowAtScale(other.negative, other.scale, minScale));
+        return Math.min(minScale - this._changeScale(highLowPos.high, highLowPos.low), minScale - this._changeScale(highLowNeg.high, highLowNeg.low));
+      }
+      /**
+       * _highLowAtScale is used by diff and merge to compute an ideal combined scale.
+       */
+      _highLowAtScale(buckets, currentScale, newScale) {
+        if (buckets.length === 0) {
+          return new HighLow(0, -1);
+        }
+        const shift = currentScale - newScale;
+        return new HighLow(buckets.indexStart >> shift, buckets.indexEnd >> shift);
+      }
+      /**
+       * _mergeBuckets translates index values from another histogram and
+       * adds the values into the corresponding buckets of this histogram.
+       */
+      _mergeBuckets(ours, other, theirs, scale) {
+        const theirOffset = theirs.offset;
+        const theirChange = other.scale - scale;
+        for (let i = 0; i < theirs.length; i++) {
+          this._incrementIndexBy(ours, theirOffset + i >> theirChange, theirs.at(i));
+        }
+      }
+      /**
+       * _diffBuckets translates index values from another histogram and
+       * subtracts the values in the corresponding buckets of this histogram.
+       */
+      _diffBuckets(ours, other, theirs, scale) {
+        const theirOffset = theirs.offset;
+        const theirChange = other.scale - scale;
+        for (let i = 0; i < theirs.length; i++) {
+          const ourIndex = theirOffset + i >> theirChange;
+          let bucketIndex = ourIndex - ours.indexBase;
+          if (bucketIndex < 0) {
+            bucketIndex += ours.backing.length;
+          }
+          ours.decrementBucket(bucketIndex, theirs.at(i));
+        }
+        ours.trim();
+      }
+    };
+    exports.ExponentialHistogramAccumulation = ExponentialHistogramAccumulation;
+    var ExponentialHistogramAggregator = class {
+      kind = types_1.AggregatorKind.EXPONENTIAL_HISTOGRAM;
+      _maxSize;
+      _recordMinMax;
+      /**
+       * @param _maxSize Maximum number of buckets for each of the positive
+       *    and negative ranges, exclusive of the zero-bucket.
+       * @param _recordMinMax If set to true, min and max will be recorded.
+       *    Otherwise, min and max will not be recorded.
+       */
+      constructor(maxSize, recordMinMax) {
+        this._maxSize = maxSize;
+        this._recordMinMax = recordMinMax;
+      }
+      createAccumulation(startTime) {
+        return new ExponentialHistogramAccumulation(startTime, this._maxSize, this._recordMinMax);
+      }
+      /**
+       * Return the result of the merge of two exponential histogram accumulations.
+       */
+      merge(previous, delta) {
+        const result = delta.clone();
+        result.merge(previous);
+        return result;
+      }
+      /**
+       * Returns a new DELTA aggregation by comparing two cumulative measurements.
+       */
+      diff(previous, current) {
+        const result = current.clone();
+        result.diff(previous);
+        return result;
+      }
+      toMetricData(descriptor, aggregationTemporality, accumulationByAttributes, endTime) {
+        return {
+          descriptor,
+          aggregationTemporality,
+          dataPointType: MetricData_1.DataPointType.EXPONENTIAL_HISTOGRAM,
+          dataPoints: accumulationByAttributes.map(([attributes, accumulation]) => {
+            const pointValue = accumulation.toPointValue();
+            const allowsNegativeValues = descriptor.type === MetricData_1.InstrumentType.GAUGE || descriptor.type === MetricData_1.InstrumentType.UP_DOWN_COUNTER || descriptor.type === MetricData_1.InstrumentType.OBSERVABLE_GAUGE || descriptor.type === MetricData_1.InstrumentType.OBSERVABLE_UP_DOWN_COUNTER;
+            return {
+              attributes,
+              startTime: accumulation.startTime,
+              endTime,
+              value: {
+                min: pointValue.hasMinMax ? pointValue.min : void 0,
+                max: pointValue.hasMinMax ? pointValue.max : void 0,
+                sum: !allowsNegativeValues ? pointValue.sum : void 0,
+                positive: {
+                  offset: pointValue.positive.offset,
+                  bucketCounts: pointValue.positive.bucketCounts
+                },
+                negative: {
+                  offset: pointValue.negative.offset,
+                  bucketCounts: pointValue.negative.bucketCounts
+                },
+                count: pointValue.count,
+                scale: pointValue.scale,
+                zeroCount: pointValue.zeroCount
+              }
+            };
+          })
+        };
+      }
+    };
+    exports.ExponentialHistogramAggregator = ExponentialHistogramAggregator;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/LastValue.js
+var require_LastValue = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/LastValue.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LastValueAggregator = exports.LastValueAccumulation = void 0;
+    var types_1 = require_types4();
+    var core_1 = require_src();
+    var MetricData_1 = require_MetricData();
+    var LastValueAccumulation = class {
+      startTime;
+      _current;
+      sampleTime;
+      constructor(startTime, current = 0, sampleTime = [0, 0]) {
+        this.startTime = startTime;
+        this._current = current;
+        this.sampleTime = sampleTime;
+      }
+      record(value) {
+        this._current = value;
+        this.sampleTime = (0, core_1.millisToHrTime)(Date.now());
+      }
+      setStartTime(startTime) {
+        this.startTime = startTime;
+      }
+      toPointValue() {
+        return this._current;
+      }
+    };
+    exports.LastValueAccumulation = LastValueAccumulation;
+    var LastValueAggregator = class {
+      kind = types_1.AggregatorKind.LAST_VALUE;
+      createAccumulation(startTime) {
+        return new LastValueAccumulation(startTime);
+      }
+      /**
+       * Returns the result of the merge of the given accumulations.
+       *
+       * Return the newly captured (delta) accumulation for LastValueAggregator.
+       */
+      merge(previous, delta) {
+        const latestAccumulation = (0, core_1.hrTimeToMicroseconds)(delta.sampleTime) >= (0, core_1.hrTimeToMicroseconds)(previous.sampleTime) ? delta : previous;
+        return new LastValueAccumulation(previous.startTime, latestAccumulation.toPointValue(), latestAccumulation.sampleTime);
+      }
+      /**
+       * Returns a new DELTA aggregation by comparing two cumulative measurements.
+       *
+       * A delta aggregation is not meaningful to LastValueAggregator, just return
+       * the newly captured (delta) accumulation for LastValueAggregator.
+       */
+      diff(previous, current) {
+        const latestAccumulation = (0, core_1.hrTimeToMicroseconds)(current.sampleTime) >= (0, core_1.hrTimeToMicroseconds)(previous.sampleTime) ? current : previous;
+        return new LastValueAccumulation(current.startTime, latestAccumulation.toPointValue(), latestAccumulation.sampleTime);
+      }
+      toMetricData(descriptor, aggregationTemporality, accumulationByAttributes, endTime) {
+        return {
+          descriptor,
+          aggregationTemporality,
+          dataPointType: MetricData_1.DataPointType.GAUGE,
+          dataPoints: accumulationByAttributes.map(([attributes, accumulation]) => {
+            return {
+              attributes,
+              startTime: accumulation.startTime,
+              endTime,
+              value: accumulation.toPointValue()
+            };
+          })
+        };
+      }
+    };
+    exports.LastValueAggregator = LastValueAggregator;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/Sum.js
+var require_Sum = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/Sum.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SumAggregator = exports.SumAccumulation = void 0;
+    var types_1 = require_types4();
+    var MetricData_1 = require_MetricData();
+    var SumAccumulation = class {
+      startTime;
+      monotonic;
+      _current;
+      reset;
+      constructor(startTime, monotonic, current = 0, reset = false) {
+        this.startTime = startTime;
+        this.monotonic = monotonic;
+        this._current = current;
+        this.reset = reset;
+      }
+      record(value) {
+        if (this.monotonic && value < 0) {
+          return;
+        }
+        this._current += value;
+      }
+      setStartTime(startTime) {
+        this.startTime = startTime;
+      }
+      toPointValue() {
+        return this._current;
+      }
+    };
+    exports.SumAccumulation = SumAccumulation;
+    var SumAggregator = class {
+      kind = types_1.AggregatorKind.SUM;
+      monotonic;
+      constructor(monotonic) {
+        this.monotonic = monotonic;
+      }
+      createAccumulation(startTime) {
+        return new SumAccumulation(startTime, this.monotonic);
+      }
+      /**
+       * Returns the result of the merge of the given accumulations.
+       */
+      merge(previous, delta) {
+        const prevPv = previous.toPointValue();
+        const deltaPv = delta.toPointValue();
+        if (delta.reset) {
+          return new SumAccumulation(delta.startTime, this.monotonic, deltaPv, delta.reset);
+        }
+        return new SumAccumulation(previous.startTime, this.monotonic, prevPv + deltaPv);
+      }
+      /**
+       * Returns a new DELTA aggregation by comparing two cumulative measurements.
+       */
+      diff(previous, current) {
+        const prevPv = previous.toPointValue();
+        const currPv = current.toPointValue();
+        if (this.monotonic && prevPv > currPv) {
+          return new SumAccumulation(current.startTime, this.monotonic, currPv, true);
+        }
+        return new SumAccumulation(current.startTime, this.monotonic, currPv - prevPv);
+      }
+      toMetricData(descriptor, aggregationTemporality, accumulationByAttributes, endTime) {
+        return {
+          descriptor,
+          aggregationTemporality,
+          dataPointType: MetricData_1.DataPointType.SUM,
+          dataPoints: accumulationByAttributes.map(([attributes, accumulation]) => {
+            return {
+              attributes,
+              startTime: accumulation.startTime,
+              endTime,
+              value: accumulation.toPointValue()
+            };
+          }),
+          isMonotonic: this.monotonic
+        };
+      }
+    };
+    exports.SumAggregator = SumAggregator;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/index.js
+var require_aggregator = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/aggregator/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SumAggregator = exports.SumAccumulation = exports.LastValueAggregator = exports.LastValueAccumulation = exports.ExponentialHistogramAggregator = exports.ExponentialHistogramAccumulation = exports.HistogramAggregator = exports.HistogramAccumulation = exports.DropAggregator = void 0;
+    var Drop_1 = require_Drop();
+    Object.defineProperty(exports, "DropAggregator", { enumerable: true, get: function() {
+      return Drop_1.DropAggregator;
+    } });
+    var Histogram_1 = require_Histogram();
+    Object.defineProperty(exports, "HistogramAccumulation", { enumerable: true, get: function() {
+      return Histogram_1.HistogramAccumulation;
+    } });
+    Object.defineProperty(exports, "HistogramAggregator", { enumerable: true, get: function() {
+      return Histogram_1.HistogramAggregator;
+    } });
+    var ExponentialHistogram_1 = require_ExponentialHistogram();
+    Object.defineProperty(exports, "ExponentialHistogramAccumulation", { enumerable: true, get: function() {
+      return ExponentialHistogram_1.ExponentialHistogramAccumulation;
+    } });
+    Object.defineProperty(exports, "ExponentialHistogramAggregator", { enumerable: true, get: function() {
+      return ExponentialHistogram_1.ExponentialHistogramAggregator;
+    } });
+    var LastValue_1 = require_LastValue();
+    Object.defineProperty(exports, "LastValueAccumulation", { enumerable: true, get: function() {
+      return LastValue_1.LastValueAccumulation;
+    } });
+    Object.defineProperty(exports, "LastValueAggregator", { enumerable: true, get: function() {
+      return LastValue_1.LastValueAggregator;
+    } });
+    var Sum_1 = require_Sum();
+    Object.defineProperty(exports, "SumAccumulation", { enumerable: true, get: function() {
+      return Sum_1.SumAccumulation;
+    } });
+    Object.defineProperty(exports, "SumAggregator", { enumerable: true, get: function() {
+      return Sum_1.SumAggregator;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/Aggregation.js
+var require_Aggregation = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/Aggregation.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DEFAULT_AGGREGATION = exports.EXPONENTIAL_HISTOGRAM_AGGREGATION = exports.HISTOGRAM_AGGREGATION = exports.LAST_VALUE_AGGREGATION = exports.SUM_AGGREGATION = exports.DROP_AGGREGATION = exports.DefaultAggregation = exports.ExponentialHistogramAggregation = exports.ExplicitBucketHistogramAggregation = exports.HistogramAggregation = exports.LastValueAggregation = exports.SumAggregation = exports.DropAggregation = void 0;
+    var api = (init_esm(), __toCommonJS(esm_exports));
+    var aggregator_1 = require_aggregator();
+    var MetricData_1 = require_MetricData();
+    var DropAggregation = class _DropAggregation {
+      static DEFAULT_INSTANCE = new aggregator_1.DropAggregator();
+      createAggregator(_instrument) {
+        return _DropAggregation.DEFAULT_INSTANCE;
+      }
+    };
+    exports.DropAggregation = DropAggregation;
+    var SumAggregation = class _SumAggregation {
+      static MONOTONIC_INSTANCE = new aggregator_1.SumAggregator(true);
+      static NON_MONOTONIC_INSTANCE = new aggregator_1.SumAggregator(false);
+      createAggregator(instrument) {
+        switch (instrument.type) {
+          case MetricData_1.InstrumentType.COUNTER:
+          case MetricData_1.InstrumentType.OBSERVABLE_COUNTER:
+          case MetricData_1.InstrumentType.HISTOGRAM: {
+            return _SumAggregation.MONOTONIC_INSTANCE;
+          }
+          default: {
+            return _SumAggregation.NON_MONOTONIC_INSTANCE;
+          }
+        }
+      }
+    };
+    exports.SumAggregation = SumAggregation;
+    var LastValueAggregation = class _LastValueAggregation {
+      static DEFAULT_INSTANCE = new aggregator_1.LastValueAggregator();
+      createAggregator(_instrument) {
+        return _LastValueAggregation.DEFAULT_INSTANCE;
+      }
+    };
+    exports.LastValueAggregation = LastValueAggregation;
+    var HistogramAggregation = class _HistogramAggregation {
+      static DEFAULT_INSTANCE = new aggregator_1.HistogramAggregator([0, 5, 10, 25, 50, 75, 100, 250, 500, 750, 1e3, 2500, 5e3, 7500, 1e4], true);
+      createAggregator(_instrument) {
+        return _HistogramAggregation.DEFAULT_INSTANCE;
+      }
+    };
+    exports.HistogramAggregation = HistogramAggregation;
+    var ExplicitBucketHistogramAggregation = class {
+      _boundaries;
+      _recordMinMax;
+      /**
+       * @param boundaries the bucket boundaries of the histogram aggregation
+       * @param _recordMinMax If set to true, min and max will be recorded. Otherwise, min and max will not be recorded.
+       */
+      constructor(boundaries, recordMinMax = true) {
+        if (boundaries == null) {
+          throw new Error("ExplicitBucketHistogramAggregation should be created with explicit boundaries, if a single bucket histogram is required, please pass an empty array");
+        }
+        boundaries = boundaries.concat();
+        boundaries = boundaries.sort((a, b) => a - b);
+        const minusInfinityIndex = boundaries.lastIndexOf(-Infinity);
+        let infinityIndex = boundaries.indexOf(Infinity);
+        if (infinityIndex === -1) {
+          infinityIndex = void 0;
+        }
+        this._boundaries = boundaries.slice(minusInfinityIndex + 1, infinityIndex);
+        this._recordMinMax = recordMinMax;
+      }
+      createAggregator(_instrument) {
+        return new aggregator_1.HistogramAggregator(this._boundaries, this._recordMinMax);
+      }
+    };
+    exports.ExplicitBucketHistogramAggregation = ExplicitBucketHistogramAggregation;
+    var ExponentialHistogramAggregation = class {
+      _maxSize;
+      _recordMinMax;
+      constructor(maxSize = 160, recordMinMax = true) {
+        this._maxSize = maxSize;
+        this._recordMinMax = recordMinMax;
+      }
+      createAggregator(_instrument) {
+        return new aggregator_1.ExponentialHistogramAggregator(this._maxSize, this._recordMinMax);
+      }
+    };
+    exports.ExponentialHistogramAggregation = ExponentialHistogramAggregation;
+    var DefaultAggregation = class {
+      _resolve(instrument) {
+        switch (instrument.type) {
+          case MetricData_1.InstrumentType.COUNTER:
+          case MetricData_1.InstrumentType.UP_DOWN_COUNTER:
+          case MetricData_1.InstrumentType.OBSERVABLE_COUNTER:
+          case MetricData_1.InstrumentType.OBSERVABLE_UP_DOWN_COUNTER: {
+            return exports.SUM_AGGREGATION;
+          }
+          case MetricData_1.InstrumentType.GAUGE:
+          case MetricData_1.InstrumentType.OBSERVABLE_GAUGE: {
+            return exports.LAST_VALUE_AGGREGATION;
+          }
+          case MetricData_1.InstrumentType.HISTOGRAM: {
+            if (instrument.advice.explicitBucketBoundaries) {
+              return new ExplicitBucketHistogramAggregation(instrument.advice.explicitBucketBoundaries);
+            }
+            return exports.HISTOGRAM_AGGREGATION;
+          }
+        }
+        api.diag.warn(`Unable to recognize instrument type: ${instrument.type}`);
+        return exports.DROP_AGGREGATION;
+      }
+      createAggregator(instrument) {
+        return this._resolve(instrument).createAggregator(instrument);
+      }
+    };
+    exports.DefaultAggregation = DefaultAggregation;
+    exports.DROP_AGGREGATION = new DropAggregation();
+    exports.SUM_AGGREGATION = new SumAggregation();
+    exports.LAST_VALUE_AGGREGATION = new LastValueAggregation();
+    exports.HISTOGRAM_AGGREGATION = new HistogramAggregation();
+    exports.EXPONENTIAL_HISTOGRAM_AGGREGATION = new ExponentialHistogramAggregation();
+    exports.DEFAULT_AGGREGATION = new DefaultAggregation();
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/AggregationOption.js
+var require_AggregationOption = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/AggregationOption.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.toAggregation = exports.AggregationType = void 0;
+    var Aggregation_1 = require_Aggregation();
+    var AggregationType;
+    (function(AggregationType2) {
+      AggregationType2[AggregationType2["DEFAULT"] = 0] = "DEFAULT";
+      AggregationType2[AggregationType2["DROP"] = 1] = "DROP";
+      AggregationType2[AggregationType2["SUM"] = 2] = "SUM";
+      AggregationType2[AggregationType2["LAST_VALUE"] = 3] = "LAST_VALUE";
+      AggregationType2[AggregationType2["EXPLICIT_BUCKET_HISTOGRAM"] = 4] = "EXPLICIT_BUCKET_HISTOGRAM";
+      AggregationType2[AggregationType2["EXPONENTIAL_HISTOGRAM"] = 5] = "EXPONENTIAL_HISTOGRAM";
+    })(AggregationType || (exports.AggregationType = AggregationType = {}));
+    function toAggregation(option) {
+      switch (option.type) {
+        case AggregationType.DEFAULT:
+          return Aggregation_1.DEFAULT_AGGREGATION;
+        case AggregationType.DROP:
+          return Aggregation_1.DROP_AGGREGATION;
+        case AggregationType.SUM:
+          return Aggregation_1.SUM_AGGREGATION;
+        case AggregationType.LAST_VALUE:
+          return Aggregation_1.LAST_VALUE_AGGREGATION;
+        case AggregationType.EXPONENTIAL_HISTOGRAM: {
+          const expOption = option;
+          return new Aggregation_1.ExponentialHistogramAggregation(expOption.options?.maxSize, expOption.options?.recordMinMax);
+        }
+        case AggregationType.EXPLICIT_BUCKET_HISTOGRAM: {
+          const expOption = option;
+          if (expOption.options == null) {
+            return Aggregation_1.HISTOGRAM_AGGREGATION;
+          } else {
+            return new Aggregation_1.ExplicitBucketHistogramAggregation(expOption.options?.boundaries, expOption.options?.recordMinMax);
+          }
+        }
+        default:
+          throw new Error("Unsupported Aggregation");
+      }
+    }
+    exports.toAggregation = toAggregation;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/AggregationSelector.js
+var require_AggregationSelector = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/AggregationSelector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DEFAULT_AGGREGATION_TEMPORALITY_SELECTOR = exports.DEFAULT_AGGREGATION_SELECTOR = void 0;
+    var AggregationTemporality_1 = require_AggregationTemporality();
+    var AggregationOption_1 = require_AggregationOption();
+    var DEFAULT_AGGREGATION_SELECTOR = (_instrumentType) => {
+      return {
+        type: AggregationOption_1.AggregationType.DEFAULT
+      };
+    };
+    exports.DEFAULT_AGGREGATION_SELECTOR = DEFAULT_AGGREGATION_SELECTOR;
+    var DEFAULT_AGGREGATION_TEMPORALITY_SELECTOR = (_instrumentType) => AggregationTemporality_1.AggregationTemporality.CUMULATIVE;
+    exports.DEFAULT_AGGREGATION_TEMPORALITY_SELECTOR = DEFAULT_AGGREGATION_TEMPORALITY_SELECTOR;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/semconv.js
+var require_semconv4 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/semconv.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ATTR_ERROR_TYPE = exports.METRIC_OTEL_SDK_METRIC_READER_COLLECTION_DURATION = exports.OTEL_COMPONENT_TYPE_VALUE_PERIODIC_METRIC_READER = exports.ATTR_OTEL_COMPONENT_TYPE = exports.ATTR_OTEL_COMPONENT_NAME = void 0;
+    exports.ATTR_OTEL_COMPONENT_NAME = "otel.component.name";
+    exports.ATTR_OTEL_COMPONENT_TYPE = "otel.component.type";
+    exports.OTEL_COMPONENT_TYPE_VALUE_PERIODIC_METRIC_READER = "periodic_metric_reader";
+    exports.METRIC_OTEL_SDK_METRIC_READER_COLLECTION_DURATION = "otel.sdk.metric_reader.collection.duration";
+    exports.ATTR_ERROR_TYPE = "error.type";
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricReaderMetrics.js
+var require_MetricReaderMetrics = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricReaderMetrics.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MetricReaderMetrics = void 0;
+    var semconv_1 = require_semconv4();
+    var componentCounter2 = /* @__PURE__ */ new Map();
+    var MetricReaderMetrics = class {
+      collectionDuration;
+      standardAttrs;
+      constructor(componentType, meter) {
+        const counter = componentCounter2.get(componentType) ?? 0;
+        componentCounter2.set(componentType, counter + 1);
+        this.standardAttrs = {
+          [semconv_1.ATTR_OTEL_COMPONENT_TYPE]: componentType,
+          [semconv_1.ATTR_OTEL_COMPONENT_NAME]: `${componentType}/${counter}`
+        };
+        this.collectionDuration = meter.createHistogram(semconv_1.METRIC_OTEL_SDK_METRIC_READER_COLLECTION_DURATION, {
+          unit: "s",
+          description: "The duration of the collect operation of the metric reader.",
+          advice: {
+            explicitBucketBoundaries: []
+          }
+        });
+      }
+      recordCollection(durationSecs, error62) {
+        const attrs = error62 ? { ...this.standardAttrs, [semconv_1.ATTR_ERROR_TYPE]: error62 } : this.standardAttrs;
+        this.collectionDuration.record(durationSecs, attrs);
+      }
+    };
+    exports.MetricReaderMetrics = MetricReaderMetrics;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/version.js
+var require_version3 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/version.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.VERSION = void 0;
+    exports.VERSION = "2.12.0";
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricReader.js
+var require_MetricReader = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricReader.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MetricReader = void 0;
+    var api = (init_esm(), __toCommonJS(esm_exports));
+    var utils_1 = require_utils9();
+    var AggregationSelector_1 = require_AggregationSelector();
+    var MetricReaderMetrics_1 = require_MetricReaderMetrics();
+    var version_1 = require_version3();
+    var core_1 = require_src();
+    var MetricReader = class {
+      // Tracks the shutdown state.
+      // TODO: use BindOncePromise here once a new version of @opentelemetry/core is available.
+      _shutdown = false;
+      // Additional MetricProducers which will be combined with the SDK's output
+      _metricProducers;
+      // MetricProducer used by this instance which produces metrics from the SDK
+      _sdkMetricProducer;
+      // Metrics about the MetricReader itself
+      _selfObsMetrics;
+      _aggregationTemporalitySelector;
+      _aggregationSelector;
+      _cardinalitySelector;
+      _otelComponentType;
+      constructor(options) {
+        this._aggregationSelector = options?.aggregationSelector ?? AggregationSelector_1.DEFAULT_AGGREGATION_SELECTOR;
+        this._aggregationTemporalitySelector = options?.aggregationTemporalitySelector ?? AggregationSelector_1.DEFAULT_AGGREGATION_TEMPORALITY_SELECTOR;
+        this._metricProducers = options?.metricProducers ?? [];
+        this._cardinalitySelector = options?.cardinalitySelector;
+        this._otelComponentType = options?.otelComponentType ?? this.constructor.name;
+        this._selfObsMetrics = new MetricReaderMetrics_1.MetricReaderMetrics(this._otelComponentType, api.createNoopMeter());
+      }
+      setMetricProducer(metricProducer) {
+        if (this._sdkMetricProducer) {
+          throw new Error("MetricReader can not be bound to a MeterProvider again.");
+        }
+        this._sdkMetricProducer = metricProducer;
+        this.onInitialized();
+      }
+      _setSelfObsMeterProvider(meterProvider) {
+        const meter = meterProvider.getMeter("@opentelemetry/sdk-metrics", version_1.VERSION);
+        this._selfObsMetrics = new MetricReaderMetrics_1.MetricReaderMetrics(this._otelComponentType, meter);
+      }
+      selectAggregation(instrumentType) {
+        return this._aggregationSelector(instrumentType);
+      }
+      selectAggregationTemporality(instrumentType) {
+        return this._aggregationTemporalitySelector(instrumentType);
+      }
+      selectCardinalityLimit(instrumentType) {
+        return this._cardinalitySelector ? this._cardinalitySelector(instrumentType) : 2e3;
+      }
+      /**
+       * Handle once the SDK has initialized this {@link MetricReader}
+       * Overriding this method is optional.
+       */
+      onInitialized() {
+      }
+      async collect(options) {
+        if (this._sdkMetricProducer === void 0) {
+          throw new Error("MetricReader is not bound to a MetricProducer");
+        }
+        if (this._shutdown) {
+          throw new Error("MetricReader is shutdown");
+        }
+        const startTime = (0, core_1.hrTime)();
+        const [sdkCollectionResults, ...additionalCollectionResults] = await Promise.all([
+          this._sdkMetricProducer.collect({
+            timeoutMillis: options?.timeoutMillis
+          }),
+          ...this._metricProducers.map((producer) => producer.collect({
+            timeoutMillis: options?.timeoutMillis
+          }))
+        ]);
+        const endTime = (0, core_1.hrTime)();
+        const errors = sdkCollectionResults.errors.concat(additionalCollectionResults.flatMap((result) => result.errors));
+        const collectDuration = (0, core_1.hrTimeToSeconds)((0, core_1.hrTimeDuration)(startTime, endTime));
+        this._selfObsMetrics.recordCollection(collectDuration, errors.length > 0 ? errors[0].name ?? "collect_error" : void 0);
+        const resource = sdkCollectionResults.resourceMetrics.resource;
+        const scopeMetrics = sdkCollectionResults.resourceMetrics.scopeMetrics.concat(additionalCollectionResults.flatMap((result) => result.resourceMetrics.scopeMetrics));
+        return {
+          resourceMetrics: {
+            resource,
+            scopeMetrics
+          },
+          errors
+        };
+      }
+      async shutdown(options) {
+        if (this._shutdown) {
+          api.diag.error("Cannot call shutdown twice.");
+          return;
+        }
+        if (options?.timeoutMillis == null) {
+          await this.onShutdown();
+        } else {
+          await (0, utils_1.callWithTimeout)(this.onShutdown(), options.timeoutMillis);
+        }
+        this._shutdown = true;
+      }
+      async forceFlush(options) {
+        if (this._shutdown) {
+          api.diag.warn("Cannot forceFlush on already shutdown MetricReader.");
+          return;
+        }
+        if (options?.timeoutMillis == null) {
+          await this.onForceFlush();
+          return;
+        }
+        await (0, utils_1.callWithTimeout)(this.onForceFlush(), options.timeoutMillis);
+      }
+    };
+    exports.MetricReader = MetricReader;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricDataSplitter.js
+var require_MetricDataSplitter = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/MetricDataSplitter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.splitMetricData = void 0;
+    function splitMetricData(resourceMetrics, maxExportBatchSize) {
+      if (!Number.isInteger(maxExportBatchSize) || maxExportBatchSize <= 0) {
+        throw new Error("maxExportBatchSize must be a positive integer");
+      }
+      const batches = [];
+      let currentBatchPoints = 0;
+      let currentScopeMetrics = [];
+      function flush() {
+        if (currentScopeMetrics.length > 0) {
+          batches.push({
+            resource: resourceMetrics.resource,
+            scopeMetrics: currentScopeMetrics
+          });
+          currentScopeMetrics = [];
+          currentBatchPoints = 0;
+        }
+      }
+      for (const scopeMetric of resourceMetrics.scopeMetrics) {
+        let scopeMetricCopy = null;
+        for (const metric of scopeMetric.metrics) {
+          const dataPoints = metric.dataPoints;
+          if (dataPoints.length === 0) {
+            if (!scopeMetricCopy) {
+              scopeMetricCopy = { scope: scopeMetric.scope, metrics: [] };
+              currentScopeMetrics.push(scopeMetricCopy);
+            }
+            scopeMetricCopy.metrics.push(metric);
+            continue;
+          }
+          let offset = 0;
+          while (offset < dataPoints.length) {
+            const spaceLeft = maxExportBatchSize - currentBatchPoints;
+            const take = Math.min(spaceLeft, dataPoints.length - offset);
+            if (!scopeMetricCopy) {
+              scopeMetricCopy = { scope: scopeMetric.scope, metrics: [] };
+              currentScopeMetrics.push(scopeMetricCopy);
+            }
+            const metricCopy = {
+              ...metric,
+              dataPoints: dataPoints.slice(offset, offset + take)
+            };
+            scopeMetricCopy.metrics.push(metricCopy);
+            offset += take;
+            currentBatchPoints += take;
+            if (currentBatchPoints === maxExportBatchSize) {
+              flush();
+              scopeMetricCopy = null;
+            }
+          }
+        }
+      }
+      flush();
+      return batches;
+    }
+    exports.splitMetricData = splitMetricData;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/PeriodicExportingMetricReader.js
+var require_PeriodicExportingMetricReader = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/PeriodicExportingMetricReader.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PeriodicExportingMetricReader = void 0;
+    var api = (init_esm(), __toCommonJS(esm_exports));
+    var core_1 = require_src();
+    var MetricReader_1 = require_MetricReader();
+    var utils_1 = require_utils9();
+    var MetricData_1 = require_MetricData();
+    var MetricDataSplitter_1 = require_MetricDataSplitter();
+    var semconv_1 = require_semconv4();
+    var PeriodicExportingMetricReader = class extends MetricReader_1.MetricReader {
+      _interval;
+      _exporter;
+      _exportInterval;
+      _exportTimeout;
+      _maxExportBatchSize;
+      _ongoingExportPromise = null;
+      constructor(options) {
+        const { exporter, exportIntervalMillis = 6e4, metricProducers, cardinalityLimits, maxExportBatchSize } = options;
+        let { exportTimeoutMillis = 3e4 } = options;
+        super({
+          aggregationSelector: exporter.selectAggregation?.bind(exporter),
+          aggregationTemporalitySelector: exporter.selectAggregationTemporality?.bind(exporter),
+          otelComponentType: semconv_1.OTEL_COMPONENT_TYPE_VALUE_PERIODIC_METRIC_READER,
+          metricProducers,
+          cardinalitySelector: (instrumentType) => {
+            const limits = {
+              default: 2e3,
+              ...cardinalityLimits
+            };
+            switch (instrumentType) {
+              case MetricData_1.InstrumentType.COUNTER:
+                return limits.counter ?? limits.default;
+              case MetricData_1.InstrumentType.GAUGE:
+                return limits.gauge ?? limits.default;
+              case MetricData_1.InstrumentType.HISTOGRAM:
+                return limits.histogram ?? limits.default;
+              case MetricData_1.InstrumentType.OBSERVABLE_COUNTER:
+                return limits.observableCounter ?? limits.default;
+              case MetricData_1.InstrumentType.OBSERVABLE_UP_DOWN_COUNTER:
+                return limits.observableUpDownCounter ?? limits.default;
+              case MetricData_1.InstrumentType.OBSERVABLE_GAUGE:
+                return limits.observableGauge ?? limits.default;
+              case MetricData_1.InstrumentType.UP_DOWN_COUNTER:
+                return limits.upDownCounter ?? limits.default;
+              default:
+                return limits.default;
+            }
+          }
+        });
+        if (exportIntervalMillis <= 0) {
+          throw Error("exportIntervalMillis must be greater than 0");
+        }
+        if (exportTimeoutMillis <= 0) {
+          throw Error("exportTimeoutMillis must be greater than 0");
+        }
+        if (maxExportBatchSize !== void 0 && (!Number.isInteger(maxExportBatchSize) || maxExportBatchSize <= 0)) {
+          throw Error("maxExportBatchSize must be a positive integer");
+        }
+        if (exportIntervalMillis < exportTimeoutMillis) {
+          if ("exportIntervalMillis" in options && "exportTimeoutMillis" in options) {
+            throw Error("exportIntervalMillis must be greater than or equal to exportTimeoutMillis");
+          } else {
+            api.diag.info(`Timeout of ${exportTimeoutMillis} exceeds the interval of ${exportIntervalMillis}. Clamping timeout to interval duration.`);
+            exportTimeoutMillis = exportIntervalMillis;
+          }
+        }
+        this._exportInterval = exportIntervalMillis;
+        this._exportTimeout = exportTimeoutMillis;
+        this._exporter = exporter;
+        this._maxExportBatchSize = maxExportBatchSize;
+      }
+      async _runOnce() {
+        try {
+          await this._doRun();
+        } catch (err) {
+          (0, core_1.globalErrorHandler)(err);
+        }
+      }
+      async _doRun() {
+        if (this._ongoingExportPromise) {
+          api.diag.debug("PeriodicExportingMetricReader: export already in progress, skipping");
+          return;
+        }
+        const currentRun = async () => {
+          const { resourceMetrics, errors } = await this.collect({
+            timeoutMillis: this._exportTimeout
+          });
+          if (errors.length > 0) {
+            api.diag.error("PeriodicExportingMetricReader: metrics collection errors", ...errors);
+          }
+          if (resourceMetrics.resource.asyncAttributesPending) {
+            try {
+              await resourceMetrics.resource.waitForAsyncAttributes?.();
+            } catch (e2) {
+              api.diag.debug("Error while resolving async portion of resource: ", e2);
+              (0, core_1.globalErrorHandler)(e2);
+            }
+          }
+          if (resourceMetrics.scopeMetrics.length === 0) {
+            return;
+          }
+          const batches = this._maxExportBatchSize ? (0, MetricDataSplitter_1.splitMetricData)(resourceMetrics, this._maxExportBatchSize) : [resourceMetrics];
+          let anyErr = null;
+          for (const batch of batches) {
+            try {
+              const result = await (0, utils_1.callWithTimeout)(core_1.internal._export(this._exporter, batch), this._exportTimeout);
+              if (result.code !== core_1.ExportResultCode.SUCCESS) {
+                const err = new Error(`PeriodicExportingMetricReader: metrics export failed (error ${result.error})`);
+                anyErr = err;
+              }
+            } catch (e2) {
+              if (e2 instanceof utils_1.TimeoutError) {
+                api.diag.error(`PeriodicExportingMetricReader: metrics export timed out after ${this._exportTimeout}ms`);
+                break;
+              } else {
+                api.diag.error("PeriodicExportingMetricReader: metrics export threw error", e2);
+                anyErr = e2 instanceof Error ? e2 : new Error(String(e2));
+              }
+            }
+          }
+          if (anyErr) {
+            throw anyErr;
+          }
+        };
+        this._ongoingExportPromise = currentRun();
+        try {
+          await this._ongoingExportPromise;
+        } finally {
+          this._ongoingExportPromise = null;
+        }
+      }
+      onInitialized() {
+        this._interval = setInterval(() => {
+          void this._runOnce();
+        }, this._exportInterval);
+        if (typeof this._interval !== "number") {
+          this._interval.unref();
+        }
+      }
+      async onForceFlush() {
+        await this._awaitOngoingExport();
+        if (this._ongoingExportPromise) {
+          await this._awaitOngoingExport();
+        } else {
+          await this._runOnce();
+        }
+        await this._exporter.forceFlush();
+      }
+      /**
+       * Helper function to wait for an ongoing export to complete.
+       * Errors are swallowed and handled by the original _runOnce().
+       */
+      async _awaitOngoingExport() {
+        if (this._ongoingExportPromise) {
+          api.diag.debug("PeriodicExportingMetricReader: export already in progress, awaiting ongoing export");
+          try {
+            await this._ongoingExportPromise;
+          } catch {
+          }
+        }
+      }
+      async onShutdown() {
+        if (this._interval) {
+          clearInterval(this._interval);
+        }
+        await this.onForceFlush();
+        await this._exporter.shutdown();
+      }
+    };
+    exports.PeriodicExportingMetricReader = PeriodicExportingMetricReader;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/InMemoryMetricExporter.js
+var require_InMemoryMetricExporter = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/InMemoryMetricExporter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InMemoryMetricExporter = void 0;
+    var core_1 = require_src();
+    var InMemoryMetricExporter = class {
+      _shutdown = false;
+      _aggregationTemporality;
+      _metrics = [];
+      constructor(aggregationTemporality) {
+        this._aggregationTemporality = aggregationTemporality;
+      }
+      /**
+       * @inheritedDoc
+       */
+      export(metrics2, resultCallback) {
+        if (this._shutdown) {
+          setTimeout(() => resultCallback({ code: core_1.ExportResultCode.FAILED }), 0);
+          return;
+        }
+        this._metrics.push(metrics2);
+        setTimeout(() => resultCallback({ code: core_1.ExportResultCode.SUCCESS }), 0);
+      }
+      /**
+       * Returns all the collected resource metrics
+       * @returns ResourceMetrics[]
+       */
+      getMetrics() {
+        return this._metrics;
+      }
+      forceFlush() {
+        return Promise.resolve();
+      }
+      reset() {
+        this._metrics = [];
+      }
+      selectAggregationTemporality(_instrumentType) {
+        return this._aggregationTemporality;
+      }
+      shutdown() {
+        this._shutdown = true;
+        return Promise.resolve();
+      }
+    };
+    exports.InMemoryMetricExporter = InMemoryMetricExporter;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/export/ConsoleMetricExporter.js
+var require_ConsoleMetricExporter = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/export/ConsoleMetricExporter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ConsoleMetricExporter = void 0;
+    var core_1 = require_src();
+    var AggregationSelector_1 = require_AggregationSelector();
+    var ConsoleMetricExporter = class _ConsoleMetricExporter {
+      _shutdown = false;
+      _temporalitySelector;
+      constructor(options) {
+        this._temporalitySelector = options?.temporalitySelector ?? AggregationSelector_1.DEFAULT_AGGREGATION_TEMPORALITY_SELECTOR;
+      }
+      export(metrics2, resultCallback) {
+        if (this._shutdown) {
+          resultCallback({ code: core_1.ExportResultCode.FAILED });
+          return;
+        }
+        return _ConsoleMetricExporter._sendMetrics(metrics2, resultCallback);
+      }
+      forceFlush() {
+        return Promise.resolve();
+      }
+      selectAggregationTemporality(_instrumentType) {
+        return this._temporalitySelector(_instrumentType);
+      }
+      shutdown() {
+        this._shutdown = true;
+        return Promise.resolve();
+      }
+      static _sendMetrics(metrics2, done) {
+        for (const scopeMetrics of metrics2.scopeMetrics) {
+          for (const metric of scopeMetrics.metrics) {
+            console.dir({
+              descriptor: metric.descriptor,
+              dataPointType: metric.dataPointType,
+              dataPoints: metric.dataPoints
+            }, { depth: null });
+          }
+        }
+        done({ code: core_1.ExportResultCode.SUCCESS });
+      }
+    };
+    exports.ConsoleMetricExporter = ConsoleMetricExporter;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/ViewRegistry.js
+var require_ViewRegistry = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/ViewRegistry.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ViewRegistry = void 0;
+    var ViewRegistry = class {
+      _registeredViews = [];
+      addView(view) {
+        this._registeredViews.push(view);
+      }
+      findViews(instrument, meter) {
+        const views = this._registeredViews.filter((registeredView) => {
+          return this._matchInstrument(registeredView.instrumentSelector, instrument) && this._matchMeter(registeredView.meterSelector, meter);
+        });
+        return views;
+      }
+      _matchInstrument(selector, instrument) {
+        return (selector.getType() === void 0 || instrument.type === selector.getType()) && selector.getNameFilter().match(instrument.name) && selector.getUnitFilter().match(instrument.unit);
+      }
+      _matchMeter(selector, meter) {
+        return selector.getNameFilter().match(meter.name) && (meter.version === void 0 || selector.getVersionFilter().match(meter.version)) && (meter.schemaUrl === void 0 || selector.getSchemaUrlFilter().match(meter.schemaUrl));
+      }
+    };
+    exports.ViewRegistry = ViewRegistry;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/InstrumentDescriptor.js
+var require_InstrumentDescriptor = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/InstrumentDescriptor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isValidName = exports.isDescriptorCompatibleWith = exports.createInstrumentDescriptorWithView = exports.createInstrumentDescriptor = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var utils_1 = require_utils9();
+    function createInstrumentDescriptor(name2, type, options) {
+      if (!isValidName(name2)) {
+        api_1.diag.warn(`Invalid metric name: "${name2}". The metric name should be a ASCII string with a length no greater than 255 characters.`);
+      }
+      return {
+        name: name2,
+        type,
+        description: options?.description ?? "",
+        unit: options?.unit ?? "",
+        valueType: options?.valueType ?? api_1.ValueType.DOUBLE,
+        advice: options?.advice ?? {}
+      };
+    }
+    exports.createInstrumentDescriptor = createInstrumentDescriptor;
+    function createInstrumentDescriptorWithView(view, instrument) {
+      return {
+        name: view.name ?? instrument.name,
+        description: view.description ?? instrument.description,
+        type: instrument.type,
+        unit: instrument.unit,
+        valueType: instrument.valueType,
+        advice: instrument.advice
+      };
+    }
+    exports.createInstrumentDescriptorWithView = createInstrumentDescriptorWithView;
+    function isDescriptorCompatibleWith(descriptor, otherDescriptor) {
+      return (0, utils_1.equalsCaseInsensitive)(descriptor.name, otherDescriptor.name) && descriptor.unit === otherDescriptor.unit && descriptor.type === otherDescriptor.type && descriptor.valueType === otherDescriptor.valueType;
+    }
+    exports.isDescriptorCompatibleWith = isDescriptorCompatibleWith;
+    var NAME_REGEXP = /^[a-z][a-z0-9_.\-/]{0,254}$/i;
+    function isValidName(name2) {
+      return NAME_REGEXP.test(name2);
+    }
+    exports.isValidName = isValidName;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/Instruments.js
+var require_Instruments = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/Instruments.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.isObservableInstrument = exports.ObservableUpDownCounterInstrument = exports.ObservableGaugeInstrument = exports.ObservableCounterInstrument = exports.ObservableInstrument = exports.HistogramInstrument = exports.GaugeInstrument = exports.CounterInstrument = exports.UpDownCounterInstrument = exports.SyncInstrument = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var SyncInstrument = class {
+      _writableMetricStorage;
+      _descriptor;
+      constructor(writableMetricStorage, descriptor) {
+        this._writableMetricStorage = writableMetricStorage;
+        this._descriptor = descriptor;
+      }
+      _record(value, attributes = {}, context2) {
+        if (typeof value !== "number") {
+          api_1.diag.warn(`non-number value provided to metric ${this._descriptor.name}: ${value}`);
+          return;
+        }
+        if (this._descriptor.valueType === api_1.ValueType.INT && !Number.isInteger(value)) {
+          api_1.diag.warn(`INT value type cannot accept a floating-point value for ${this._descriptor.name}, ignoring the fractional digits.`);
+          value = Math.trunc(value);
+          if (!Number.isInteger(value)) {
+            return;
+          }
+        }
+        this._writableMetricStorage.record(value, attributes, context2, Date.now());
+      }
+    };
+    exports.SyncInstrument = SyncInstrument;
+    var UpDownCounterInstrument = class extends SyncInstrument {
+      /**
+       * Increment value of counter by the input. Inputs may be negative.
+       */
+      add(value, attributes, ctx) {
+        this._record(value, attributes, ctx);
+      }
+    };
+    exports.UpDownCounterInstrument = UpDownCounterInstrument;
+    var CounterInstrument = class extends SyncInstrument {
+      /**
+       * Increment value of counter by the input. Inputs may not be negative.
+       */
+      add(value, attributes, ctx) {
+        if (value < 0) {
+          api_1.diag.warn(`negative value provided to counter ${this._descriptor.name}: ${value}`);
+          return;
+        }
+        this._record(value, attributes, ctx);
+      }
+    };
+    exports.CounterInstrument = CounterInstrument;
+    var GaugeInstrument = class extends SyncInstrument {
+      /**
+       * Records a measurement.
+       */
+      record(value, attributes, ctx) {
+        this._record(value, attributes, ctx);
+      }
+    };
+    exports.GaugeInstrument = GaugeInstrument;
+    var HistogramInstrument = class extends SyncInstrument {
+      /**
+       * Records a measurement. Value of the measurement must not be negative.
+       */
+      record(value, attributes, ctx) {
+        if (value < 0) {
+          api_1.diag.warn(`negative value provided to histogram ${this._descriptor.name}: ${value}`);
+          return;
+        }
+        this._record(value, attributes, ctx);
+      }
+    };
+    exports.HistogramInstrument = HistogramInstrument;
+    var ObservableInstrument = class {
+      /** @internal */
+      _metricStorages;
+      /** @internal */
+      _descriptor;
+      _observableRegistry;
+      constructor(descriptor, metricStorages, observableRegistry) {
+        this._descriptor = descriptor;
+        this._metricStorages = metricStorages;
+        this._observableRegistry = observableRegistry;
+      }
+      /**
+       * @see {Observable.addCallback}
+       */
+      addCallback(callback) {
+        this._observableRegistry.addCallback(callback, this);
+      }
+      /**
+       * @see {Observable.removeCallback}
+       */
+      removeCallback(callback) {
+        this._observableRegistry.removeCallback(callback, this);
+      }
+    };
+    exports.ObservableInstrument = ObservableInstrument;
+    var ObservableCounterInstrument = class extends ObservableInstrument {
+    };
+    exports.ObservableCounterInstrument = ObservableCounterInstrument;
+    var ObservableGaugeInstrument = class extends ObservableInstrument {
+    };
+    exports.ObservableGaugeInstrument = ObservableGaugeInstrument;
+    var ObservableUpDownCounterInstrument = class extends ObservableInstrument {
+    };
+    exports.ObservableUpDownCounterInstrument = ObservableUpDownCounterInstrument;
+    function isObservableInstrument(it) {
+      return it instanceof ObservableInstrument;
+    }
+    exports.isObservableInstrument = isObservableInstrument;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/Meter.js
+var require_Meter = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/Meter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Meter = void 0;
+    var InstrumentDescriptor_1 = require_InstrumentDescriptor();
+    var Instruments_1 = require_Instruments();
+    var MetricData_1 = require_MetricData();
+    var Meter = class {
+      _meterSharedState;
+      constructor(meterSharedState) {
+        this._meterSharedState = meterSharedState;
+      }
+      /**
+       * Create a {@link Gauge} instrument.
+       */
+      createGauge(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.GAUGE, options);
+        const storage = this._meterSharedState.registerMetricStorage(descriptor);
+        return new Instruments_1.GaugeInstrument(storage, descriptor);
+      }
+      /**
+       * Create a {@link Histogram} instrument.
+       */
+      createHistogram(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.HISTOGRAM, options);
+        const storage = this._meterSharedState.registerMetricStorage(descriptor);
+        return new Instruments_1.HistogramInstrument(storage, descriptor);
+      }
+      /**
+       * Create a {@link Counter} instrument.
+       */
+      createCounter(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.COUNTER, options);
+        const storage = this._meterSharedState.registerMetricStorage(descriptor);
+        return new Instruments_1.CounterInstrument(storage, descriptor);
+      }
+      /**
+       * Create a {@link UpDownCounter} instrument.
+       */
+      createUpDownCounter(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.UP_DOWN_COUNTER, options);
+        const storage = this._meterSharedState.registerMetricStorage(descriptor);
+        return new Instruments_1.UpDownCounterInstrument(storage, descriptor);
+      }
+      /**
+       * Create a {@link ObservableGauge} instrument.
+       */
+      createObservableGauge(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.OBSERVABLE_GAUGE, options);
+        const storages = this._meterSharedState.registerAsyncMetricStorage(descriptor);
+        return new Instruments_1.ObservableGaugeInstrument(descriptor, storages, this._meterSharedState.observableRegistry);
+      }
+      /**
+       * Create a {@link ObservableCounter} instrument.
+       */
+      createObservableCounter(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.OBSERVABLE_COUNTER, options);
+        const storages = this._meterSharedState.registerAsyncMetricStorage(descriptor);
+        return new Instruments_1.ObservableCounterInstrument(descriptor, storages, this._meterSharedState.observableRegistry);
+      }
+      /**
+       * Create a {@link ObservableUpDownCounter} instrument.
+       */
+      createObservableUpDownCounter(name2, options) {
+        const descriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(name2, MetricData_1.InstrumentType.OBSERVABLE_UP_DOWN_COUNTER, options);
+        const storages = this._meterSharedState.registerAsyncMetricStorage(descriptor);
+        return new Instruments_1.ObservableUpDownCounterInstrument(descriptor, storages, this._meterSharedState.observableRegistry);
+      }
+      /**
+       * @see {@link Meter.addBatchObservableCallback}
+       */
+      addBatchObservableCallback(callback, observables) {
+        this._meterSharedState.observableRegistry.addBatchCallback(callback, observables);
+      }
+      /**
+       * @see {@link Meter.removeBatchObservableCallback}
+       */
+      removeBatchObservableCallback(callback, observables) {
+        this._meterSharedState.observableRegistry.removeBatchCallback(callback, observables);
+      }
+    };
+    exports.Meter = Meter;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/MetricStorage.js
+var require_MetricStorage = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/MetricStorage.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MetricStorage = void 0;
+    var InstrumentDescriptor_1 = require_InstrumentDescriptor();
+    var MetricStorage = class {
+      _instrumentDescriptor;
+      constructor(instrumentDescriptor) {
+        this._instrumentDescriptor = instrumentDescriptor;
+      }
+      getInstrumentDescriptor() {
+        return this._instrumentDescriptor;
+      }
+      updateDescription(description) {
+        this._instrumentDescriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(this._instrumentDescriptor.name, this._instrumentDescriptor.type, {
+          description,
+          valueType: this._instrumentDescriptor.valueType,
+          unit: this._instrumentDescriptor.unit,
+          advice: this._instrumentDescriptor.advice
+        });
+      }
+    };
+    exports.MetricStorage = MetricStorage;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/HashMap.js
+var require_HashMap = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/HashMap.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AttributeHashMap = exports.HashMap = void 0;
+    var utils_1 = require_utils9();
+    var HashMap = class {
+      _valueMap = /* @__PURE__ */ new Map();
+      _keyMap = /* @__PURE__ */ new Map();
+      _hash;
+      constructor(hash2) {
+        this._hash = hash2;
+      }
+      get(key, hashCode) {
+        hashCode ??= this._hash(key);
+        return this._valueMap.get(hashCode);
+      }
+      getOrDefault(key, defaultFactory) {
+        const hash2 = this._hash(key);
+        if (this._valueMap.has(hash2)) {
+          return this._valueMap.get(hash2);
+        }
+        const val = defaultFactory();
+        if (!this._keyMap.has(hash2)) {
+          this._keyMap.set(hash2, key);
+        }
+        this._valueMap.set(hash2, val);
+        return val;
+      }
+      set(key, value, hashCode) {
+        hashCode ??= this._hash(key);
+        if (!this._keyMap.has(hashCode)) {
+          this._keyMap.set(hashCode, key);
+        }
+        this._valueMap.set(hashCode, value);
+      }
+      has(key, hashCode) {
+        hashCode ??= this._hash(key);
+        return this._valueMap.has(hashCode);
+      }
+      *keys() {
+        const keyIterator = this._keyMap.entries();
+        let next = keyIterator.next();
+        while (next.done !== true) {
+          yield [next.value[1], next.value[0]];
+          next = keyIterator.next();
+        }
+      }
+      *entries() {
+        const valueIterator = this._valueMap.entries();
+        let next = valueIterator.next();
+        while (next.done !== true) {
+          yield [this._keyMap.get(next.value[0]), next.value[1], next.value[0]];
+          next = valueIterator.next();
+        }
+      }
+      get size() {
+        return this._valueMap.size;
+      }
+    };
+    exports.HashMap = HashMap;
+    var AttributeHashMap = class extends HashMap {
+      constructor() {
+        super(utils_1.hashAttributes);
+      }
+    };
+    exports.AttributeHashMap = AttributeHashMap;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/DeltaMetricProcessor.js
+var require_DeltaMetricProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/DeltaMetricProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DeltaMetricProcessor = void 0;
+    var core_1 = require_src();
+    var utils_1 = require_utils9();
+    var HashMap_1 = require_HashMap();
+    var DeltaMetricProcessor = class {
+      _activeCollectionStorage = new HashMap_1.AttributeHashMap();
+      // TODO: find a reasonable mean to clean the memo;
+      // https://github.com/open-telemetry/opentelemetry-specification/pull/2208
+      _cumulativeMemoStorage = new HashMap_1.AttributeHashMap();
+      _cardinalityLimit;
+      _overflowAttributes = { "otel.metric.overflow": true };
+      _overflowHashCode;
+      _aggregator;
+      constructor(aggregator, aggregationCardinalityLimit) {
+        this._aggregator = aggregator;
+        this._cardinalityLimit = (aggregationCardinalityLimit ?? 2e3) - 1;
+        this._overflowHashCode = (0, utils_1.hashAttributes)(this._overflowAttributes);
+      }
+      record(value, attributes, collectionTime) {
+        let accumulation = this._activeCollectionStorage.get(attributes);
+        if (!accumulation) {
+          const hrTime2 = (0, core_1.millisToHrTime)(collectionTime);
+          if (this._activeCollectionStorage.size >= this._cardinalityLimit) {
+            const overflowAccumulation = this._activeCollectionStorage.getOrDefault(this._overflowAttributes, () => this._aggregator.createAccumulation(hrTime2));
+            overflowAccumulation?.record(value);
+            return;
+          }
+          accumulation = this._aggregator.createAccumulation(hrTime2);
+          this._activeCollectionStorage.set(attributes, accumulation);
+        }
+        accumulation?.record(value);
+      }
+      batchCumulate(measurements, collectionTime) {
+        for (const [originalAttributes, value, originalHashCode] of measurements.entries()) {
+          let attributes = originalAttributes;
+          let hashCode = originalHashCode;
+          const accumulation = this._aggregator.createAccumulation(collectionTime);
+          accumulation?.record(value);
+          let delta = accumulation;
+          if (this._cumulativeMemoStorage.has(attributes, hashCode)) {
+            const previous = this._cumulativeMemoStorage.get(attributes, hashCode);
+            delta = this._aggregator.diff(previous, accumulation);
+          } else {
+            if (this._cumulativeMemoStorage.size >= this._cardinalityLimit) {
+              attributes = this._overflowAttributes;
+              hashCode = this._overflowHashCode;
+              if (this._cumulativeMemoStorage.has(attributes, hashCode)) {
+                const previous = this._cumulativeMemoStorage.get(attributes, hashCode);
+                delta = this._aggregator.diff(previous, accumulation);
+              }
+            }
+          }
+          if (this._activeCollectionStorage.has(attributes, hashCode)) {
+            const active = this._activeCollectionStorage.get(attributes, hashCode);
+            delta = this._aggregator.merge(active, delta);
+          }
+          this._cumulativeMemoStorage.set(attributes, accumulation, hashCode);
+          this._activeCollectionStorage.set(attributes, delta, hashCode);
+        }
+      }
+      /**
+       * Returns a collection of delta metrics. Start time is the when first
+       * time event collected.
+       */
+      collect() {
+        const unreportedDelta = this._activeCollectionStorage;
+        this._activeCollectionStorage = new HashMap_1.AttributeHashMap();
+        return unreportedDelta;
+      }
+    };
+    exports.DeltaMetricProcessor = DeltaMetricProcessor;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/TemporalMetricProcessor.js
+var require_TemporalMetricProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/TemporalMetricProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TemporalMetricProcessor = void 0;
+    var AggregationTemporality_1 = require_AggregationTemporality();
+    var HashMap_1 = require_HashMap();
+    var TemporalMetricProcessor = class _TemporalMetricProcessor {
+      _aggregator;
+      _unreportedAccumulations = /* @__PURE__ */ new Map();
+      _reportHistory = /* @__PURE__ */ new Map();
+      constructor(aggregator, collectorHandles) {
+        this._aggregator = aggregator;
+        collectorHandles.forEach((handle2) => {
+          this._unreportedAccumulations.set(handle2, []);
+        });
+      }
+      /**
+       * Builds the {@link MetricData} streams to report against a specific MetricCollector.
+       * @param collector The information of the MetricCollector.
+       * @param collectors The registered collectors.
+       * @param instrumentDescriptor The instrumentation descriptor that these metrics generated with.
+       * @param currentAccumulations The current accumulation of metric data from instruments.
+       * @param collectionTime The current collection timestamp.
+       * @returns The {@link MetricData} points or `null`.
+       */
+      buildMetrics(collector, instrumentDescriptor, currentAccumulations, collectionTime) {
+        this._stashAccumulations(currentAccumulations);
+        const unreportedAccumulations = this._getMergedUnreportedAccumulations(collector);
+        let result = unreportedAccumulations;
+        let aggregationTemporality;
+        if (this._reportHistory.has(collector)) {
+          const last = this._reportHistory.get(collector);
+          const lastCollectionTime = last.collectionTime;
+          aggregationTemporality = last.aggregationTemporality;
+          if (aggregationTemporality === AggregationTemporality_1.AggregationTemporality.CUMULATIVE) {
+            result = _TemporalMetricProcessor.merge(last.accumulations, unreportedAccumulations, this._aggregator);
+          } else {
+            result = _TemporalMetricProcessor.calibrateStartTime(last.accumulations, unreportedAccumulations, lastCollectionTime);
+          }
+        } else {
+          aggregationTemporality = collector.selectAggregationTemporality(instrumentDescriptor.type);
+        }
+        this._reportHistory.set(collector, {
+          accumulations: result,
+          collectionTime,
+          aggregationTemporality
+        });
+        const accumulationRecords = AttributesMapToAccumulationRecords(result);
+        if (accumulationRecords.length === 0) {
+          return void 0;
+        }
+        return this._aggregator.toMetricData(
+          instrumentDescriptor,
+          aggregationTemporality,
+          accumulationRecords,
+          /* endTime */
+          collectionTime
+        );
+      }
+      _stashAccumulations(currentAccumulation) {
+        const registeredCollectors = this._unreportedAccumulations.keys();
+        for (const collector of registeredCollectors) {
+          let stash = this._unreportedAccumulations.get(collector);
+          if (stash === void 0) {
+            stash = [];
+            this._unreportedAccumulations.set(collector, stash);
+          }
+          stash.push(currentAccumulation);
+        }
+      }
+      _getMergedUnreportedAccumulations(collector) {
+        let result = new HashMap_1.AttributeHashMap();
+        const unreportedList = this._unreportedAccumulations.get(collector);
+        this._unreportedAccumulations.set(collector, []);
+        if (unreportedList === void 0) {
+          return result;
+        }
+        for (const it of unreportedList) {
+          result = _TemporalMetricProcessor.merge(result, it, this._aggregator);
+        }
+        return result;
+      }
+      static merge(last, current, aggregator) {
+        const result = last;
+        const iterator = current.entries();
+        let next = iterator.next();
+        while (next.done !== true) {
+          const [key, record2, hash2] = next.value;
+          if (last.has(key, hash2)) {
+            const lastAccumulation = last.get(key, hash2);
+            const accumulation = aggregator.merge(lastAccumulation, record2);
+            result.set(key, accumulation, hash2);
+          } else {
+            result.set(key, record2, hash2);
+          }
+          next = iterator.next();
+        }
+        return result;
+      }
+      /**
+       * Calibrate the reported metric streams' startTime to lastCollectionTime. Leaves
+       * the new stream to be the initial observation time unchanged.
+       */
+      static calibrateStartTime(last, current, lastCollectionTime) {
+        for (const [key, hash2] of last.keys()) {
+          const currentAccumulation = current.get(key, hash2);
+          currentAccumulation?.setStartTime(lastCollectionTime);
+        }
+        return current;
+      }
+    };
+    exports.TemporalMetricProcessor = TemporalMetricProcessor;
+    function AttributesMapToAccumulationRecords(map2) {
+      return Array.from(map2.entries());
+    }
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/AsyncMetricStorage.js
+var require_AsyncMetricStorage = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/AsyncMetricStorage.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AsyncMetricStorage = void 0;
+    var MetricStorage_1 = require_MetricStorage();
+    var DeltaMetricProcessor_1 = require_DeltaMetricProcessor();
+    var TemporalMetricProcessor_1 = require_TemporalMetricProcessor();
+    var HashMap_1 = require_HashMap();
+    var AsyncMetricStorage = class extends MetricStorage_1.MetricStorage {
+      _aggregationCardinalityLimit;
+      _deltaMetricStorage;
+      _temporalMetricStorage;
+      _attributesProcessor;
+      constructor(_instrumentDescriptor, aggregator, attributesProcessor, collectorHandles, aggregationCardinalityLimit) {
+        super(_instrumentDescriptor);
+        this._aggregationCardinalityLimit = aggregationCardinalityLimit;
+        this._deltaMetricStorage = new DeltaMetricProcessor_1.DeltaMetricProcessor(aggregator, this._aggregationCardinalityLimit);
+        this._temporalMetricStorage = new TemporalMetricProcessor_1.TemporalMetricProcessor(aggregator, collectorHandles);
+        this._attributesProcessor = attributesProcessor;
+      }
+      record(measurements, observationTime) {
+        if (this._attributesProcessor === void 0) {
+          this._deltaMetricStorage.batchCumulate(measurements, observationTime);
+          return;
+        }
+        const processed = new HashMap_1.AttributeHashMap();
+        for (const [attributes, value] of measurements.entries()) {
+          processed.set(this._attributesProcessor.process(attributes), value);
+        }
+        this._deltaMetricStorage.batchCumulate(processed, observationTime);
+      }
+      /**
+       * Collects the metrics from this storage. The ObservableCallback is invoked
+       * during the collection.
+       *
+       * Note: This is a stateful operation and may reset any interval-related
+       * state for the MetricCollector.
+       */
+      collect(collector, collectionTime) {
+        const accumulations = this._deltaMetricStorage.collect();
+        return this._temporalMetricStorage.buildMetrics(collector, this._instrumentDescriptor, accumulations, collectionTime);
+      }
+    };
+    exports.AsyncMetricStorage = AsyncMetricStorage;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/RegistrationConflicts.js
+var require_RegistrationConflicts = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/RegistrationConflicts.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.getConflictResolutionRecipe = exports.getDescriptionResolutionRecipe = exports.getTypeConflictResolutionRecipe = exports.getUnitConflictResolutionRecipe = exports.getValueTypeConflictResolutionRecipe = exports.getIncompatibilityDetails = void 0;
+    function getIncompatibilityDetails(existing, otherDescriptor) {
+      let incompatibility = "";
+      if (existing.unit !== otherDescriptor.unit) {
+        incompatibility += `	- Unit '${existing.unit}' does not match '${otherDescriptor.unit}'
+`;
+      }
+      if (existing.type !== otherDescriptor.type) {
+        incompatibility += `	- Type '${existing.type}' does not match '${otherDescriptor.type}'
+`;
+      }
+      if (existing.valueType !== otherDescriptor.valueType) {
+        incompatibility += `	- Value Type '${existing.valueType}' does not match '${otherDescriptor.valueType}'
+`;
+      }
+      if (existing.description !== otherDescriptor.description) {
+        incompatibility += `	- Description '${existing.description}' does not match '${otherDescriptor.description}'
+`;
+      }
+      return incompatibility;
+    }
+    exports.getIncompatibilityDetails = getIncompatibilityDetails;
+    function getValueTypeConflictResolutionRecipe(existing, otherDescriptor) {
+      return `	- use valueType '${existing.valueType}' on instrument creation or use an instrument name other than '${otherDescriptor.name}'`;
+    }
+    exports.getValueTypeConflictResolutionRecipe = getValueTypeConflictResolutionRecipe;
+    function getUnitConflictResolutionRecipe(existing, otherDescriptor) {
+      return `	- use unit '${existing.unit}' on instrument creation or use an instrument name other than '${otherDescriptor.name}'`;
+    }
+    exports.getUnitConflictResolutionRecipe = getUnitConflictResolutionRecipe;
+    function getTypeConflictResolutionRecipe(existing, otherDescriptor) {
+      const selector = {
+        name: otherDescriptor.name,
+        type: otherDescriptor.type,
+        unit: otherDescriptor.unit
+      };
+      const selectorString = JSON.stringify(selector);
+      return `	- create a new view with a name other than '${existing.name}' and InstrumentSelector '${selectorString}'`;
+    }
+    exports.getTypeConflictResolutionRecipe = getTypeConflictResolutionRecipe;
+    function getDescriptionResolutionRecipe(existing, otherDescriptor) {
+      const selector = {
+        name: otherDescriptor.name,
+        type: otherDescriptor.type,
+        unit: otherDescriptor.unit
+      };
+      const selectorString = JSON.stringify(selector);
+      return `	- create a new view with a name other than '${existing.name}' and InstrumentSelector '${selectorString}'
+    	- OR - create a new view with the name ${existing.name} and description '${existing.description}' and InstrumentSelector ${selectorString}
+    	- OR - create a new view with the name ${otherDescriptor.name} and description '${existing.description}' and InstrumentSelector ${selectorString}`;
+    }
+    exports.getDescriptionResolutionRecipe = getDescriptionResolutionRecipe;
+    function getConflictResolutionRecipe(existing, otherDescriptor) {
+      if (existing.valueType !== otherDescriptor.valueType) {
+        return getValueTypeConflictResolutionRecipe(existing, otherDescriptor);
+      }
+      if (existing.unit !== otherDescriptor.unit) {
+        return getUnitConflictResolutionRecipe(existing, otherDescriptor);
+      }
+      if (existing.type !== otherDescriptor.type) {
+        return getTypeConflictResolutionRecipe(existing, otherDescriptor);
+      }
+      if (existing.description !== otherDescriptor.description) {
+        return getDescriptionResolutionRecipe(existing, otherDescriptor);
+      }
+      return "";
+    }
+    exports.getConflictResolutionRecipe = getConflictResolutionRecipe;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/MetricStorageRegistry.js
+var require_MetricStorageRegistry = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/MetricStorageRegistry.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MetricStorageRegistry = void 0;
+    var InstrumentDescriptor_1 = require_InstrumentDescriptor();
+    var api = (init_esm(), __toCommonJS(esm_exports));
+    var RegistrationConflicts_1 = require_RegistrationConflicts();
+    var MetricStorageRegistry = class _MetricStorageRegistry {
+      _sharedRegistry = /* @__PURE__ */ new Map();
+      _perCollectorRegistry = /* @__PURE__ */ new Map();
+      static create() {
+        return new _MetricStorageRegistry();
+      }
+      getStorages(collector) {
+        let storages = [];
+        for (const metricStorages of this._sharedRegistry.values()) {
+          storages = storages.concat(metricStorages);
+        }
+        const perCollectorStorages = this._perCollectorRegistry.get(collector);
+        if (perCollectorStorages != null) {
+          for (const metricStorages of perCollectorStorages.values()) {
+            storages = storages.concat(metricStorages);
+          }
+        }
+        return storages;
+      }
+      register(storage) {
+        this._registerStorage(storage, this._sharedRegistry);
+      }
+      registerForCollector(collector, storage) {
+        let storageMap = this._perCollectorRegistry.get(collector);
+        if (storageMap == null) {
+          storageMap = /* @__PURE__ */ new Map();
+          this._perCollectorRegistry.set(collector, storageMap);
+        }
+        this._registerStorage(storage, storageMap);
+      }
+      findOrUpdateCompatibleStorage(expectedDescriptor) {
+        const storages = this._sharedRegistry.get(expectedDescriptor.name);
+        if (storages === void 0) {
+          return null;
+        }
+        return this._findOrUpdateCompatibleStorage(expectedDescriptor, storages);
+      }
+      findOrUpdateCompatibleCollectorStorage(collector, expectedDescriptor) {
+        const storageMap = this._perCollectorRegistry.get(collector);
+        if (storageMap === void 0) {
+          return null;
+        }
+        const storages = storageMap.get(expectedDescriptor.name);
+        if (storages === void 0) {
+          return null;
+        }
+        return this._findOrUpdateCompatibleStorage(expectedDescriptor, storages);
+      }
+      _registerStorage(storage, storageMap) {
+        const descriptor = storage.getInstrumentDescriptor();
+        const storages = storageMap.get(descriptor.name);
+        if (storages === void 0) {
+          storageMap.set(descriptor.name, [storage]);
+          return;
+        }
+        storages.push(storage);
+      }
+      _findOrUpdateCompatibleStorage(expectedDescriptor, existingStorages) {
+        let compatibleStorage = null;
+        for (const existingStorage of existingStorages) {
+          const existingDescriptor = existingStorage.getInstrumentDescriptor();
+          if ((0, InstrumentDescriptor_1.isDescriptorCompatibleWith)(existingDescriptor, expectedDescriptor)) {
+            if (existingDescriptor.description !== expectedDescriptor.description) {
+              if (expectedDescriptor.description.length > existingDescriptor.description.length) {
+                existingStorage.updateDescription(expectedDescriptor.description);
+              }
+              api.diag.warn("A view or instrument with the name ", expectedDescriptor.name, " has already been registered, but has a different description and is incompatible with another registered view.\n", "Details:\n", (0, RegistrationConflicts_1.getIncompatibilityDetails)(existingDescriptor, expectedDescriptor), "The longer description will be used.\nTo resolve the conflict:", (0, RegistrationConflicts_1.getConflictResolutionRecipe)(existingDescriptor, expectedDescriptor));
+            }
+            compatibleStorage = existingStorage;
+          } else {
+            api.diag.warn("A view or instrument with the name ", expectedDescriptor.name, " has already been registered and is incompatible with another registered view.\n", "Details:\n", (0, RegistrationConflicts_1.getIncompatibilityDetails)(existingDescriptor, expectedDescriptor), "To resolve the conflict:\n", (0, RegistrationConflicts_1.getConflictResolutionRecipe)(existingDescriptor, expectedDescriptor));
+          }
+        }
+        return compatibleStorage;
+      }
+    };
+    exports.MetricStorageRegistry = MetricStorageRegistry;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/MultiWritableMetricStorage.js
+var require_MultiWritableMetricStorage = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/MultiWritableMetricStorage.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MultiMetricStorage = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var MultiMetricStorage = class {
+      _backingStorages;
+      hasAttributeProcessor;
+      constructor(backingStorages) {
+        this._backingStorages = backingStorages;
+        this.hasAttributeProcessor = backingStorages.some((s2) => s2.hasAttributeProcessor);
+      }
+      record(value, attributes, context2, recordTime) {
+        if (this.hasAttributeProcessor && context2 === void 0) {
+          context2 = api_1.context.active();
+        }
+        const storages = this._backingStorages;
+        for (let i = 0; i < storages.length; i++) {
+          storages[i].record(value, attributes, context2, recordTime);
+        }
+      }
+    };
+    exports.MultiMetricStorage = MultiMetricStorage;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/ObservableResult.js
+var require_ObservableResult = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/ObservableResult.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.BatchObservableResultImpl = exports.ObservableResultImpl = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var HashMap_1 = require_HashMap();
+    var Instruments_1 = require_Instruments();
+    var ObservableResultImpl = class {
+      /**
+       * @internal
+       */
+      _buffer = new HashMap_1.AttributeHashMap();
+      _instrumentName;
+      _valueType;
+      constructor(instrumentName, valueType) {
+        this._instrumentName = instrumentName;
+        this._valueType = valueType;
+      }
+      /**
+       * Observe a measurement of the value associated with the given attributes.
+       */
+      observe(value, attributes = {}) {
+        if (typeof value !== "number") {
+          api_1.diag.warn(`non-number value provided to metric ${this._instrumentName}: ${value}`);
+          return;
+        }
+        if (this._valueType === api_1.ValueType.INT && !Number.isInteger(value)) {
+          api_1.diag.warn(`INT value type cannot accept a floating-point value for ${this._instrumentName}, ignoring the fractional digits.`);
+          value = Math.trunc(value);
+          if (!Number.isInteger(value)) {
+            return;
+          }
+        }
+        this._buffer.set(attributes, value);
+      }
+    };
+    exports.ObservableResultImpl = ObservableResultImpl;
+    var BatchObservableResultImpl = class {
+      /**
+       * @internal
+       */
+      _buffer = /* @__PURE__ */ new Map();
+      /**
+       * Observe a measurement of the value associated with the given attributes.
+       */
+      observe(metric, value, attributes = {}) {
+        if (!(0, Instruments_1.isObservableInstrument)(metric)) {
+          return;
+        }
+        let map2 = this._buffer.get(metric);
+        if (map2 == null) {
+          map2 = new HashMap_1.AttributeHashMap();
+          this._buffer.set(metric, map2);
+        }
+        if (typeof value !== "number") {
+          api_1.diag.warn(`non-number value provided to metric ${metric._descriptor.name}: ${value}`);
+          return;
+        }
+        if (metric._descriptor.valueType === api_1.ValueType.INT && !Number.isInteger(value)) {
+          api_1.diag.warn(`INT value type cannot accept a floating-point value for ${metric._descriptor.name}, ignoring the fractional digits.`);
+          value = Math.trunc(value);
+          if (!Number.isInteger(value)) {
+            return;
+          }
+        }
+        map2.set(attributes, value);
+      }
+    };
+    exports.BatchObservableResultImpl = BatchObservableResultImpl;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/ObservableRegistry.js
+var require_ObservableRegistry = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/ObservableRegistry.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ObservableRegistry = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var Instruments_1 = require_Instruments();
+    var ObservableResult_1 = require_ObservableResult();
+    var utils_1 = require_utils9();
+    var ObservableRegistry = class {
+      _callbacks = [];
+      _batchCallbacks = [];
+      addCallback(callback, instrument) {
+        const idx = this._findCallback(callback, instrument);
+        if (idx >= 0) {
+          return;
+        }
+        this._callbacks.push({ callback, instrument });
+      }
+      removeCallback(callback, instrument) {
+        const idx = this._findCallback(callback, instrument);
+        if (idx < 0) {
+          return;
+        }
+        this._callbacks.splice(idx, 1);
+      }
+      addBatchCallback(callback, instruments) {
+        const observableInstruments = new Set(instruments.filter(Instruments_1.isObservableInstrument));
+        if (observableInstruments.size === 0) {
+          api_1.diag.error("BatchObservableCallback is not associated with valid instruments", instruments);
+          return;
+        }
+        const idx = this._findBatchCallback(callback, observableInstruments);
+        if (idx >= 0) {
+          return;
+        }
+        this._batchCallbacks.push({ callback, instruments: observableInstruments });
+      }
+      removeBatchCallback(callback, instruments) {
+        const observableInstruments = new Set(instruments.filter(Instruments_1.isObservableInstrument));
+        const idx = this._findBatchCallback(callback, observableInstruments);
+        if (idx < 0) {
+          return;
+        }
+        this._batchCallbacks.splice(idx, 1);
+      }
+      /**
+       * @returns a promise of rejected reasons for invoking callbacks.
+       */
+      async observe(collectionTime, timeoutMillis) {
+        const callbackFutures = this._observeCallbacks(collectionTime, timeoutMillis);
+        const batchCallbackFutures = this._observeBatchCallbacks(collectionTime, timeoutMillis);
+        const results = await Promise.allSettled([
+          ...callbackFutures,
+          ...batchCallbackFutures
+        ]);
+        const rejections = results.filter((result) => result.status === "rejected").map((result) => result.reason);
+        return rejections;
+      }
+      _observeCallbacks(observationTime, timeoutMillis) {
+        return this._callbacks.map(async ({ callback, instrument }) => {
+          const observableResult = new ObservableResult_1.ObservableResultImpl(instrument._descriptor.name, instrument._descriptor.valueType);
+          let callPromise = Promise.resolve(callback(observableResult));
+          if (timeoutMillis != null) {
+            callPromise = (0, utils_1.callWithTimeout)(callPromise, timeoutMillis);
+          }
+          await callPromise;
+          instrument._metricStorages.forEach((metricStorage) => {
+            metricStorage.record(observableResult._buffer, observationTime);
+          });
+        });
+      }
+      _observeBatchCallbacks(observationTime, timeoutMillis) {
+        return this._batchCallbacks.map(async ({ callback, instruments }) => {
+          const observableResult = new ObservableResult_1.BatchObservableResultImpl();
+          let callPromise = Promise.resolve(callback(observableResult));
+          if (timeoutMillis != null) {
+            callPromise = (0, utils_1.callWithTimeout)(callPromise, timeoutMillis);
+          }
+          await callPromise;
+          instruments.forEach((instrument) => {
+            const buffer = observableResult._buffer.get(instrument);
+            if (buffer == null) {
+              return;
+            }
+            instrument._metricStorages.forEach((metricStorage) => {
+              metricStorage.record(buffer, observationTime);
+            });
+          });
+        });
+      }
+      _findCallback(callback, instrument) {
+        return this._callbacks.findIndex((record2) => {
+          return record2.callback === callback && record2.instrument === instrument;
+        });
+      }
+      _findBatchCallback(callback, instruments) {
+        return this._batchCallbacks.findIndex((record2) => {
+          return record2.callback === callback && (0, utils_1.setEquals)(record2.instruments, instruments);
+        });
+      }
+    };
+    exports.ObservableRegistry = ObservableRegistry;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/SyncMetricStorage.js
+var require_SyncMetricStorage = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/SyncMetricStorage.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SyncMetricStorage = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var MetricStorage_1 = require_MetricStorage();
+    var DeltaMetricProcessor_1 = require_DeltaMetricProcessor();
+    var TemporalMetricProcessor_1 = require_TemporalMetricProcessor();
+    var SyncMetricStorage = class extends MetricStorage_1.MetricStorage {
+      _aggregationCardinalityLimit;
+      _deltaMetricStorage;
+      _temporalMetricStorage;
+      _attributesProcessor;
+      constructor(instrumentDescriptor, aggregator, attributesProcessor, collectorHandles, aggregationCardinalityLimit) {
+        super(instrumentDescriptor);
+        this._aggregationCardinalityLimit = aggregationCardinalityLimit;
+        this._deltaMetricStorage = new DeltaMetricProcessor_1.DeltaMetricProcessor(aggregator, this._aggregationCardinalityLimit);
+        this._temporalMetricStorage = new TemporalMetricProcessor_1.TemporalMetricProcessor(aggregator, collectorHandles);
+        this._attributesProcessor = attributesProcessor;
+        this.hasAttributeProcessor = attributesProcessor !== void 0;
+      }
+      hasAttributeProcessor;
+      record(value, attributes, context2, recordTime) {
+        if (this._attributesProcessor !== void 0) {
+          attributes = this._attributesProcessor.process(attributes, context2 ?? api_1.context.active());
+        }
+        this._deltaMetricStorage.record(value, attributes, recordTime);
+      }
+      /**
+       * Collects the metrics from this storage.
+       *
+       * Note: This is a stateful operation and may reset any interval-related
+       * state for the MetricCollector.
+       */
+      collect(collector, collectionTime) {
+        const accumulations = this._deltaMetricStorage.collect();
+        return this._temporalMetricStorage.buildMetrics(collector, this._instrumentDescriptor, accumulations, collectionTime);
+      }
+    };
+    exports.SyncMetricStorage = SyncMetricStorage;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/MeterSharedState.js
+var require_MeterSharedState = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/MeterSharedState.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MeterSharedState = void 0;
+    var InstrumentDescriptor_1 = require_InstrumentDescriptor();
+    var Meter_1 = require_Meter();
+    var AsyncMetricStorage_1 = require_AsyncMetricStorage();
+    var MetricStorageRegistry_1 = require_MetricStorageRegistry();
+    var MultiWritableMetricStorage_1 = require_MultiWritableMetricStorage();
+    var ObservableRegistry_1 = require_ObservableRegistry();
+    var SyncMetricStorage_1 = require_SyncMetricStorage();
+    var MeterSharedState = class {
+      metricStorageRegistry = new MetricStorageRegistry_1.MetricStorageRegistry();
+      observableRegistry = new ObservableRegistry_1.ObservableRegistry();
+      meter;
+      _meterProviderSharedState;
+      _instrumentationScope;
+      constructor(meterProviderSharedState, instrumentationScope) {
+        this.meter = new Meter_1.Meter(this);
+        this._meterProviderSharedState = meterProviderSharedState;
+        this._instrumentationScope = instrumentationScope;
+      }
+      registerMetricStorage(descriptor) {
+        const storages = this._registerMetricStorage(descriptor, SyncMetricStorage_1.SyncMetricStorage);
+        if (storages.length === 1) {
+          return storages[0];
+        }
+        return new MultiWritableMetricStorage_1.MultiMetricStorage(storages);
+      }
+      registerAsyncMetricStorage(descriptor) {
+        const storages = this._registerMetricStorage(descriptor, AsyncMetricStorage_1.AsyncMetricStorage);
+        return storages;
+      }
+      /**
+       * @param collector opaque handle of {@link MetricCollector} which initiated the collection.
+       * @param collectionTime the HrTime at which the collection was initiated.
+       * @param options options for collection.
+       * @returns the list of metric data collected.
+       */
+      async collect(collector, collectionTime, options) {
+        const errors = await this.observableRegistry.observe(collectionTime, options?.timeoutMillis);
+        const storages = this.metricStorageRegistry.getStorages(collector);
+        if (storages.length === 0) {
+          return null;
+        }
+        const metricDataList = [];
+        storages.forEach((metricStorage) => {
+          const metricData = metricStorage.collect(collector, collectionTime);
+          if (metricData != null) {
+            metricDataList.push(metricData);
+          }
+        });
+        if (metricDataList.length === 0) {
+          return { errors };
+        }
+        return {
+          scopeMetrics: {
+            scope: this._instrumentationScope,
+            metrics: metricDataList
+          },
+          errors
+        };
+      }
+      _registerMetricStorage(descriptor, MetricStorageType) {
+        const views = this._meterProviderSharedState.viewRegistry.findViews(descriptor, this._instrumentationScope);
+        let storages = views.map((view) => {
+          const viewDescriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptorWithView)(view, descriptor);
+          const compatibleStorage = this.metricStorageRegistry.findOrUpdateCompatibleStorage(viewDescriptor);
+          if (compatibleStorage != null) {
+            return compatibleStorage;
+          }
+          const aggregator = view.aggregation.createAggregator(viewDescriptor);
+          const viewStorage = new MetricStorageType(viewDescriptor, aggregator, view.attributesProcessor, this._meterProviderSharedState.metricCollectors, view.aggregationCardinalityLimit);
+          this.metricStorageRegistry.register(viewStorage);
+          return viewStorage;
+        });
+        if (storages.length === 0) {
+          const perCollectorAggregations = this._meterProviderSharedState.selectAggregations(descriptor.type);
+          const collectorStorages = perCollectorAggregations.map(([collector, aggregation]) => {
+            const compatibleStorage = this.metricStorageRegistry.findOrUpdateCompatibleCollectorStorage(collector, descriptor);
+            if (compatibleStorage != null) {
+              return compatibleStorage;
+            }
+            const aggregator = aggregation.createAggregator(descriptor);
+            const cardinalityLimit = collector.selectCardinalityLimit(descriptor.type);
+            const storage = new MetricStorageType(descriptor, aggregator, void 0, [collector], cardinalityLimit);
+            this.metricStorageRegistry.registerForCollector(collector, storage);
+            return storage;
+          });
+          storages = storages.concat(collectorStorages);
+        }
+        return storages;
+      }
+    };
+    exports.MeterSharedState = MeterSharedState;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/MeterProviderSharedState.js
+var require_MeterProviderSharedState = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/MeterProviderSharedState.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MeterProviderSharedState = void 0;
+    var utils_1 = require_utils9();
+    var ViewRegistry_1 = require_ViewRegistry();
+    var MeterSharedState_1 = require_MeterSharedState();
+    var AggregationOption_1 = require_AggregationOption();
+    var MeterProviderSharedState = class {
+      viewRegistry = new ViewRegistry_1.ViewRegistry();
+      metricCollectors = [];
+      meterSharedStates = /* @__PURE__ */ new Map();
+      resource;
+      constructor(resource) {
+        this.resource = resource;
+      }
+      getMeterSharedState(instrumentationScope) {
+        const id = (0, utils_1.instrumentationScopeId)(instrumentationScope);
+        let meterSharedState = this.meterSharedStates.get(id);
+        if (meterSharedState == null) {
+          meterSharedState = new MeterSharedState_1.MeterSharedState(this, instrumentationScope);
+          this.meterSharedStates.set(id, meterSharedState);
+        }
+        return meterSharedState;
+      }
+      selectAggregations(instrumentType) {
+        const result = [];
+        for (const collector of this.metricCollectors) {
+          result.push([
+            collector,
+            (0, AggregationOption_1.toAggregation)(collector.selectAggregation(instrumentType))
+          ]);
+        }
+        return result;
+      }
+    };
+    exports.MeterProviderSharedState = MeterProviderSharedState;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/state/MetricCollector.js
+var require_MetricCollector = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/state/MetricCollector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MetricCollector = void 0;
+    var core_1 = require_src();
+    var MetricCollector = class {
+      _sharedState;
+      _metricReader;
+      constructor(sharedState, metricReader) {
+        this._sharedState = sharedState;
+        this._metricReader = metricReader;
+      }
+      async collect(options) {
+        const collectionTime = (0, core_1.millisToHrTime)(Date.now());
+        const scopeMetrics = [];
+        const errors = [];
+        const meterCollectionPromises = Array.from(this._sharedState.meterSharedStates.values()).map(async (meterSharedState) => {
+          const current = await meterSharedState.collect(this, collectionTime, options);
+          if (current?.scopeMetrics != null) {
+            scopeMetrics.push(current.scopeMetrics);
+          }
+          if (current?.errors != null) {
+            errors.push(...current.errors);
+          }
+        });
+        await Promise.all(meterCollectionPromises);
+        return {
+          resourceMetrics: {
+            resource: this._sharedState.resource,
+            scopeMetrics
+          },
+          errors
+        };
+      }
+      /**
+       * Delegates for MetricReader.forceFlush.
+       */
+      async forceFlush(options) {
+        await this._metricReader.forceFlush(options);
+      }
+      /**
+       * Delegates for MetricReader.shutdown.
+       */
+      async shutdown(options) {
+        await this._metricReader.shutdown(options);
+      }
+      selectAggregationTemporality(instrumentType) {
+        return this._metricReader.selectAggregationTemporality(instrumentType);
+      }
+      selectAggregation(instrumentType) {
+        return this._metricReader.selectAggregation(instrumentType);
+      }
+      /**
+       * Select the cardinality limit for the given {@link InstrumentType} for this
+       * collector.
+       */
+      selectCardinalityLimit(instrumentType) {
+        return this._metricReader.selectCardinalityLimit?.(instrumentType) ?? 2e3;
+      }
+    };
+    exports.MetricCollector = MetricCollector;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/Predicate.js
+var require_Predicate = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/Predicate.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ExactPredicate = exports.PatternPredicate = void 0;
+    var ESCAPE2 = /[\^$\\.+?()[\]{}|]/g;
+    var PatternPredicate = class _PatternPredicate {
+      _matchAll;
+      _regexp;
+      constructor(pattern) {
+        if (pattern === "*") {
+          this._matchAll = true;
+          this._regexp = /.*/;
+        } else {
+          this._matchAll = false;
+          this._regexp = new RegExp(_PatternPredicate.escapePattern(pattern));
+        }
+      }
+      match(str) {
+        if (this._matchAll) {
+          return true;
+        }
+        return this._regexp.test(str);
+      }
+      static escapePattern(pattern) {
+        return `^${pattern.replace(ESCAPE2, "\\$&").replace("*", ".*")}$`;
+      }
+      static hasWildcard(pattern) {
+        return pattern.includes("*");
+      }
+    };
+    exports.PatternPredicate = PatternPredicate;
+    var ExactPredicate = class {
+      _matchAll;
+      _pattern;
+      constructor(pattern) {
+        this._matchAll = pattern === void 0;
+        this._pattern = pattern;
+      }
+      match(str) {
+        if (this._matchAll) {
+          return true;
+        }
+        if (str === this._pattern) {
+          return true;
+        }
+        return false;
+      }
+    };
+    exports.ExactPredicate = ExactPredicate;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/AttributesProcessor.js
+var require_AttributesProcessor = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/AttributesProcessor.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createDenyListAttributesProcessor = exports.createAllowListAttributesProcessor = exports.createMultiAttributesProcessor = exports.createNoopAttributesProcessor = void 0;
+    var NoopAttributesProcessor = class {
+      process(incoming, _context) {
+        return incoming;
+      }
+    };
+    var MultiAttributesProcessor = class {
+      _processors;
+      constructor(processors) {
+        this._processors = processors;
+      }
+      process(incoming, context2) {
+        let filteredAttributes = incoming;
+        for (const processor of this._processors) {
+          filteredAttributes = processor.process(filteredAttributes, context2);
+        }
+        return filteredAttributes;
+      }
+    };
+    var AllowListProcessor = class {
+      _allowedAttributeNames;
+      constructor(allowedAttributeNames) {
+        this._allowedAttributeNames = new Set(allowedAttributeNames);
+      }
+      process(incoming, _context) {
+        const filteredAttributes = {};
+        for (const attributeName in incoming) {
+          if (Object.prototype.hasOwnProperty.call(incoming, attributeName) && this._allowedAttributeNames.has(attributeName)) {
+            filteredAttributes[attributeName] = incoming[attributeName];
+          }
+        }
+        return filteredAttributes;
+      }
+    };
+    var DenyListProcessor = class {
+      _deniedAttributeNames;
+      constructor(deniedAttributeNames) {
+        this._deniedAttributeNames = new Set(deniedAttributeNames);
+      }
+      process(incoming, _context) {
+        const filteredAttributes = {};
+        for (const attributeName in incoming) {
+          if (Object.prototype.hasOwnProperty.call(incoming, attributeName) && !this._deniedAttributeNames.has(attributeName)) {
+            filteredAttributes[attributeName] = incoming[attributeName];
+          }
+        }
+        return filteredAttributes;
+      }
+    };
+    function createNoopAttributesProcessor() {
+      return NOOP;
+    }
+    exports.createNoopAttributesProcessor = createNoopAttributesProcessor;
+    function createMultiAttributesProcessor(processors) {
+      return new MultiAttributesProcessor(processors);
+    }
+    exports.createMultiAttributesProcessor = createMultiAttributesProcessor;
+    function createAllowListAttributesProcessor(attributeAllowList) {
+      return new AllowListProcessor(attributeAllowList);
+    }
+    exports.createAllowListAttributesProcessor = createAllowListAttributesProcessor;
+    function createDenyListAttributesProcessor(attributeDenyList) {
+      return new DenyListProcessor(attributeDenyList);
+    }
+    exports.createDenyListAttributesProcessor = createDenyListAttributesProcessor;
+    var NOOP = new NoopAttributesProcessor();
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/InstrumentSelector.js
+var require_InstrumentSelector = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/InstrumentSelector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InstrumentSelector = void 0;
+    var Predicate_1 = require_Predicate();
+    var InstrumentSelector = class {
+      _nameFilter;
+      _type;
+      _unitFilter;
+      constructor(criteria) {
+        this._nameFilter = new Predicate_1.PatternPredicate(criteria?.name ?? "*");
+        this._type = criteria?.type;
+        this._unitFilter = new Predicate_1.ExactPredicate(criteria?.unit);
+      }
+      getType() {
+        return this._type;
+      }
+      getNameFilter() {
+        return this._nameFilter;
+      }
+      getUnitFilter() {
+        return this._unitFilter;
+      }
+    };
+    exports.InstrumentSelector = InstrumentSelector;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/MeterSelector.js
+var require_MeterSelector = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/MeterSelector.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MeterSelector = void 0;
+    var Predicate_1 = require_Predicate();
+    var MeterSelector = class {
+      _nameFilter;
+      _versionFilter;
+      _schemaUrlFilter;
+      constructor(criteria) {
+        this._nameFilter = new Predicate_1.ExactPredicate(criteria?.name);
+        this._versionFilter = new Predicate_1.ExactPredicate(criteria?.version);
+        this._schemaUrlFilter = new Predicate_1.ExactPredicate(criteria?.schemaUrl);
+      }
+      getNameFilter() {
+        return this._nameFilter;
+      }
+      /**
+       * TODO: semver filter? no spec yet.
+       */
+      getVersionFilter() {
+        return this._versionFilter;
+      }
+      getSchemaUrlFilter() {
+        return this._schemaUrlFilter;
+      }
+    };
+    exports.MeterSelector = MeterSelector;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/view/View.js
+var require_View = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/view/View.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.View = void 0;
+    var Predicate_1 = require_Predicate();
+    var AttributesProcessor_1 = require_AttributesProcessor();
+    var InstrumentSelector_1 = require_InstrumentSelector();
+    var MeterSelector_1 = require_MeterSelector();
+    var AggregationOption_1 = require_AggregationOption();
+    function isSelectorNotProvided(options) {
+      return options.instrumentName == null && options.instrumentType == null && options.instrumentUnit == null && options.meterName == null && options.meterVersion == null && options.meterSchemaUrl == null;
+    }
+    function validateViewOptions(viewOptions) {
+      if (isSelectorNotProvided(viewOptions)) {
+        throw new Error("Cannot create view with no selector arguments supplied");
+      }
+      if (viewOptions.name != null && (viewOptions?.instrumentName == null || Predicate_1.PatternPredicate.hasWildcard(viewOptions.instrumentName))) {
+        throw new Error("Views with a specified name must be declared with an instrument selector that selects at most one instrument per meter.");
+      }
+    }
+    var View2 = class {
+      name;
+      description;
+      aggregation;
+      attributesProcessor;
+      instrumentSelector;
+      meterSelector;
+      aggregationCardinalityLimit;
+      /**
+       * Create a new {@link View} instance.
+       *
+       * Parameters can be categorized as two types:
+       *  Instrument selection criteria: Used to describe the instrument(s) this view will be applied to.
+       *  Will be treated as additive (the Instrument has to meet all the provided criteria to be selected).
+       *
+       *  Metric stream altering: Alter the metric stream of instruments selected by instrument selection criteria.
+       *
+       * @param viewOptions {@link ViewOptions} for altering the metric stream and instrument selection.
+       * @param viewOptions.name
+       * Alters the metric stream:
+       *  This will be used as the name of the metrics stream.
+       *  If not provided, the original Instrument name will be used.
+       * @param viewOptions.description
+       * Alters the metric stream:
+       *  This will be used as the description of the metrics stream.
+       *  If not provided, the original Instrument description will be used by default.
+       * @param viewOptions.attributesProcessors
+       * Alters the metric stream:
+       *  If provided, the attributes will be modified as defined by the added processors.
+       *  If not provided, all attribute keys will be used by default.
+       * @param viewOptions.aggregationCardinalityLimit
+       * Alters the metric stream:
+       *  Sets a limit on the number of unique attribute combinations (cardinality) that can be aggregated.
+       *  If not provided, the default limit of 2000 will be used.
+       * @param viewOptions.aggregation
+       * Alters the metric stream:
+       *  Alters the {@link Aggregation} of the metric stream.
+       * @param viewOptions.instrumentName
+       * Instrument selection criteria:
+       *  Original name of the Instrument(s) with wildcard support.
+       * @param viewOptions.instrumentType
+       * Instrument selection criteria:
+       *  The original type of the Instrument(s).
+       * @param viewOptions.instrumentUnit
+       * Instrument selection criteria:
+       *  The unit of the Instrument(s).
+       * @param viewOptions.meterName
+       * Instrument selection criteria:
+       *  The name of the Meter. No wildcard support, name must match the meter exactly.
+       * @param viewOptions.meterVersion
+       * Instrument selection criteria:
+       *  The version of the Meter. No wildcard support, version must match exactly.
+       * @param viewOptions.meterSchemaUrl
+       * Instrument selection criteria:
+       *  The schema URL of the Meter. No wildcard support, schema URL must match exactly.
+       *
+       * @example
+       * // Create a view that changes the Instrument 'my.instrument' to use to an
+       * // ExplicitBucketHistogramAggregation with the boundaries [20, 30, 40]
+       * new View({
+       *   aggregation: new ExplicitBucketHistogramAggregation([20, 30, 40]),
+       *   instrumentName: 'my.instrument'
+       * })
+       */
+      constructor(viewOptions) {
+        validateViewOptions(viewOptions);
+        if (viewOptions.attributesProcessors != null) {
+          this.attributesProcessor = (0, AttributesProcessor_1.createMultiAttributesProcessor)(viewOptions.attributesProcessors);
+        } else {
+          this.attributesProcessor = (0, AttributesProcessor_1.createNoopAttributesProcessor)();
+        }
+        this.name = viewOptions.name;
+        this.description = viewOptions.description;
+        this.aggregation = (0, AggregationOption_1.toAggregation)(viewOptions.aggregation ?? { type: AggregationOption_1.AggregationType.DEFAULT });
+        this.instrumentSelector = new InstrumentSelector_1.InstrumentSelector({
+          name: viewOptions.instrumentName,
+          type: viewOptions.instrumentType,
+          unit: viewOptions.instrumentUnit
+        });
+        this.meterSelector = new MeterSelector_1.MeterSelector({
+          name: viewOptions.meterName,
+          version: viewOptions.meterVersion,
+          schemaUrl: viewOptions.meterSchemaUrl
+        });
+        this.aggregationCardinalityLimit = viewOptions.aggregationCardinalityLimit;
+      }
+    };
+    exports.View = View2;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/MeterProvider.js
+var require_MeterProvider = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/MeterProvider.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MeterProvider = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var resources_1 = require_src2();
+    var MetricReader_1 = require_MetricReader();
+    var MeterProviderSharedState_1 = require_MeterProviderSharedState();
+    var MetricCollector_1 = require_MetricCollector();
+    var View_1 = require_View();
+    var MeterProvider = class {
+      _sharedState;
+      _shutdown = false;
+      constructor(options) {
+        this._sharedState = new MeterProviderSharedState_1.MeterProviderSharedState(options?.resource ?? (0, resources_1.defaultResource)());
+        if (options?.views != null && options.views.length > 0) {
+          for (const viewOption of options.views) {
+            this._sharedState.viewRegistry.addView(new View_1.View(viewOption));
+          }
+        }
+        if (options?.readers != null && options.readers.length > 0) {
+          for (const metricReader of options.readers) {
+            const collector = new MetricCollector_1.MetricCollector(this._sharedState, metricReader);
+            metricReader.setMetricProducer(collector);
+            this._sharedState.metricCollectors.push(collector);
+            if (options.sdkMetricsEnabled && metricReader instanceof MetricReader_1.MetricReader) {
+              metricReader._setSelfObsMeterProvider(this);
+            }
+          }
+        }
+      }
+      /**
+       * Get a meter with the configuration of the MeterProvider.
+       */
+      getMeter(name2, version2 = "", options = {}) {
+        if (this._shutdown) {
+          api_1.diag.warn("A shutdown MeterProvider cannot provide a Meter");
+          return (0, api_1.createNoopMeter)();
+        }
+        return this._sharedState.getMeterSharedState({
+          name: name2,
+          version: version2,
+          schemaUrl: options.schemaUrl
+        }).meter;
+      }
+      /**
+       * Shut down the MeterProvider and all registered
+       * MetricReaders.
+       *
+       * Returns a promise which is resolved when all flushes are complete.
+       */
+      async shutdown(options) {
+        if (this._shutdown) {
+          api_1.diag.warn("shutdown may only be called once per MeterProvider");
+          return;
+        }
+        this._shutdown = true;
+        await Promise.all(this._sharedState.metricCollectors.map((collector) => {
+          return collector.shutdown(options);
+        }));
+      }
+      /**
+       * Notifies all registered MetricReaders to flush any buffered data.
+       *
+       * Returns a promise which is resolved when all flushes are complete.
+       */
+      async forceFlush(options) {
+        if (this._shutdown) {
+          api_1.diag.warn("invalid attempt to force flush after MeterProvider shutdown");
+          return;
+        }
+        await Promise.all(this._sharedState.metricCollectors.map((collector) => {
+          return collector.forceFlush(options);
+        }));
+      }
+    };
+    exports.MeterProvider = MeterProvider;
+  }
+});
+
+// node_modules/@opentelemetry/sdk-metrics/build/src/index.js
+var require_src5 = __commonJS({
+  "node_modules/@opentelemetry/sdk-metrics/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.TimeoutError = exports.createDenyListAttributesProcessor = exports.createAllowListAttributesProcessor = exports.AggregationType = exports.MeterProvider = exports.ConsoleMetricExporter = exports.InMemoryMetricExporter = exports.PeriodicExportingMetricReader = exports.MetricReader = exports.InstrumentType = exports.DataPointType = exports.AggregationTemporality = void 0;
+    var AggregationTemporality_1 = require_AggregationTemporality();
+    Object.defineProperty(exports, "AggregationTemporality", { enumerable: true, get: function() {
+      return AggregationTemporality_1.AggregationTemporality;
+    } });
+    var MetricData_1 = require_MetricData();
+    Object.defineProperty(exports, "DataPointType", { enumerable: true, get: function() {
+      return MetricData_1.DataPointType;
+    } });
+    Object.defineProperty(exports, "InstrumentType", { enumerable: true, get: function() {
+      return MetricData_1.InstrumentType;
+    } });
+    var MetricReader_1 = require_MetricReader();
+    Object.defineProperty(exports, "MetricReader", { enumerable: true, get: function() {
+      return MetricReader_1.MetricReader;
+    } });
+    var PeriodicExportingMetricReader_1 = require_PeriodicExportingMetricReader();
+    Object.defineProperty(exports, "PeriodicExportingMetricReader", { enumerable: true, get: function() {
+      return PeriodicExportingMetricReader_1.PeriodicExportingMetricReader;
+    } });
+    var InMemoryMetricExporter_1 = require_InMemoryMetricExporter();
+    Object.defineProperty(exports, "InMemoryMetricExporter", { enumerable: true, get: function() {
+      return InMemoryMetricExporter_1.InMemoryMetricExporter;
+    } });
+    var ConsoleMetricExporter_1 = require_ConsoleMetricExporter();
+    Object.defineProperty(exports, "ConsoleMetricExporter", { enumerable: true, get: function() {
+      return ConsoleMetricExporter_1.ConsoleMetricExporter;
+    } });
+    var MeterProvider_1 = require_MeterProvider();
+    Object.defineProperty(exports, "MeterProvider", { enumerable: true, get: function() {
+      return MeterProvider_1.MeterProvider;
+    } });
+    var AggregationOption_1 = require_AggregationOption();
+    Object.defineProperty(exports, "AggregationType", { enumerable: true, get: function() {
+      return AggregationOption_1.AggregationType;
+    } });
+    var AttributesProcessor_1 = require_AttributesProcessor();
+    Object.defineProperty(exports, "createAllowListAttributesProcessor", { enumerable: true, get: function() {
+      return AttributesProcessor_1.createAllowListAttributesProcessor;
+    } });
+    Object.defineProperty(exports, "createDenyListAttributesProcessor", { enumerable: true, get: function() {
+      return AttributesProcessor_1.createDenyListAttributesProcessor;
+    } });
+    var utils_1 = require_utils9();
+    Object.defineProperty(exports, "TimeoutError", { enumerable: true, get: function() {
+      return utils_1.TimeoutError;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/metrics-serializer.js
+var require_metrics_serializer = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/metrics-serializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serializeMetricsExportRequest = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var sdk_metrics_1 = require_src5();
+    var common_serializer_1 = require_common_serializer();
+    var protobuf_size_estimator_1 = require_protobuf_size_estimator();
+    var protobuf_writer_1 = require_protobuf_writer();
+    function serializeNumberDataPoint(writer, dataPoint, valueType) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      writer.writeTag(2, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, dataPoint.startTime);
+      writer.writeTag(3, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, dataPoint.endTime);
+      if (valueType === api_1.ValueType.INT) {
+        writer.writeTag(6, 1);
+        writer.writeSfixed64(dataPoint.value);
+      } else {
+        writer.writeTag(4, 1);
+        writer.writeDouble(dataPoint.value);
+      }
+      if (dataPoint.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, dataPoint.attributes, 7);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeHistogramDataPoint(writer, dataPoint) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      const histogram = dataPoint.value;
+      writer.writeTag(2, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, dataPoint.startTime);
+      writer.writeTag(3, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, dataPoint.endTime);
+      writer.writeTag(4, 1);
+      writer.writeFixed64(histogram.count >>> 0, histogram.count / 4294967296 >>> 0);
+      if (histogram.sum !== void 0) {
+        writer.writeTag(5, 1);
+        writer.writeDouble(histogram.sum);
+      }
+      if (histogram.buckets.counts.length > 0) {
+        writer.writeTag(6, 2);
+        const countsStart = writer.startLengthDelimited();
+        const countsStartPos = writer.pos;
+        for (const count of histogram.buckets.counts) {
+          writer.writeFixed64(count >>> 0, count / 4294967296 >>> 0);
+        }
+        writer.finishLengthDelimited(countsStart, writer.pos - countsStartPos);
+      }
+      if (histogram.buckets.boundaries.length > 0) {
+        writer.writeTag(7, 2);
+        const boundsStart = writer.startLengthDelimited();
+        const boundsStartPos = writer.pos;
+        for (const bound of histogram.buckets.boundaries) {
+          writer.writeDouble(bound);
+        }
+        writer.finishLengthDelimited(boundsStart, writer.pos - boundsStartPos);
+      }
+      if (dataPoint.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, dataPoint.attributes, 9);
+      }
+      if (histogram.min !== void 0) {
+        writer.writeTag(11, 1);
+        writer.writeDouble(histogram.min);
+      }
+      if (histogram.max !== void 0) {
+        writer.writeTag(12, 1);
+        writer.writeDouble(histogram.max);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeExponentialBuckets(writer, offset, bucketCounts) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      if (offset !== 0) {
+        writer.writeTag(1, 0);
+        writer.writeSint32(offset);
+      }
+      if (bucketCounts.length > 0) {
+        writer.writeTag(2, 2);
+        const bcStart = writer.startLengthDelimited();
+        const bcStartPos = writer.pos;
+        for (const count of bucketCounts) {
+          writer.writeVarint(count);
+        }
+        writer.finishLengthDelimited(bcStart, writer.pos - bcStartPos);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeExponentialHistogramDataPoint(writer, dataPoint) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      const histogram = dataPoint.value;
+      if (dataPoint.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, dataPoint.attributes, 1);
+      }
+      writer.writeTag(2, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, dataPoint.startTime);
+      writer.writeTag(3, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, dataPoint.endTime);
+      writer.writeTag(4, 1);
+      writer.writeFixed64(histogram.count >>> 0, histogram.count / 4294967296 >>> 0);
+      if (histogram.sum !== void 0) {
+        writer.writeTag(5, 1);
+        writer.writeDouble(histogram.sum);
+      }
+      if (histogram.scale !== 0) {
+        writer.writeTag(6, 0);
+        writer.writeSint32(histogram.scale);
+      }
+      writer.writeTag(7, 1);
+      writer.writeFixed64(histogram.zeroCount >>> 0, histogram.zeroCount / 4294967296 >>> 0);
+      writer.writeTag(8, 2);
+      serializeExponentialBuckets(writer, histogram.positive.offset, histogram.positive.bucketCounts);
+      writer.writeTag(9, 2);
+      serializeExponentialBuckets(writer, histogram.negative.offset, histogram.negative.bucketCounts);
+      if (histogram.min !== void 0) {
+        writer.writeTag(12, 1);
+        writer.writeDouble(histogram.min);
+      }
+      if (histogram.max !== void 0) {
+        writer.writeTag(13, 1);
+        writer.writeDouble(histogram.max);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeMetric(writer, metricData) {
+      const metricStart = writer.startLengthDelimited();
+      const metricStartPos = writer.pos;
+      writer.writeTag(1, 2);
+      writer.writeString(metricData.descriptor.name);
+      if (metricData.descriptor.description) {
+        writer.writeTag(2, 2);
+        writer.writeString(metricData.descriptor.description);
+      }
+      if (metricData.descriptor.unit) {
+        writer.writeTag(3, 2);
+        writer.writeString(metricData.descriptor.unit);
+      }
+      switch (metricData.dataPointType) {
+        case sdk_metrics_1.DataPointType.GAUGE:
+          writer.writeTag(5, 2);
+          serializeGauge(writer, metricData);
+          break;
+        case sdk_metrics_1.DataPointType.SUM:
+          writer.writeTag(7, 2);
+          serializeSum(writer, metricData);
+          break;
+        case sdk_metrics_1.DataPointType.HISTOGRAM:
+          writer.writeTag(9, 2);
+          serializeHistogramMetric(writer, metricData);
+          break;
+        case sdk_metrics_1.DataPointType.EXPONENTIAL_HISTOGRAM:
+          writer.writeTag(10, 2);
+          serializeExponentialHistogramMetric(writer, metricData);
+          break;
+        default: {
+          const _exhaustive = metricData;
+          void _exhaustive;
+        }
+      }
+      writer.finishLengthDelimited(metricStart, writer.pos - metricStartPos);
+    }
+    function serializeGauge(writer, metricData) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      for (const dataPoint of metricData.dataPoints) {
+        writer.writeTag(1, 2);
+        serializeNumberDataPoint(writer, dataPoint, metricData.descriptor.valueType);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeSum(writer, metricData) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      for (const dataPoint of metricData.dataPoints) {
+        writer.writeTag(1, 2);
+        serializeNumberDataPoint(writer, dataPoint, metricData.descriptor.valueType);
+      }
+      const temporality = toProtoAggregationTemporality(metricData.aggregationTemporality);
+      if (temporality !== 0) {
+        writer.writeTag(2, 0);
+        writer.writeVarint(temporality);
+      }
+      if (metricData.isMonotonic) {
+        writer.writeTag(3, 0);
+        writer.writeVarint(1);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeHistogramMetric(writer, metricData) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      for (const dataPoint of metricData.dataPoints) {
+        writer.writeTag(1, 2);
+        serializeHistogramDataPoint(writer, dataPoint);
+      }
+      const temporality = toProtoAggregationTemporality(metricData.aggregationTemporality);
+      if (temporality !== 0) {
+        writer.writeTag(2, 0);
+        writer.writeVarint(temporality);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeExponentialHistogramMetric(writer, metricData) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      for (const dataPoint of metricData.dataPoints) {
+        writer.writeTag(1, 2);
+        serializeExponentialHistogramDataPoint(writer, dataPoint);
+      }
+      const temporality = toProtoAggregationTemporality(metricData.aggregationTemporality);
+      if (temporality !== 0) {
+        writer.writeTag(2, 0);
+        writer.writeVarint(temporality);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function serializeScopeMetrics(writer, scopeMetrics) {
+      const scopeStart = writer.startLengthDelimited();
+      const scopeStartPos = writer.pos;
+      (0, common_serializer_1.writeInstrumentationScope)(writer, scopeMetrics.scope, 1);
+      for (const metric of scopeMetrics.metrics) {
+        writer.writeTag(2, 2);
+        serializeMetric(writer, metric);
+      }
+      if (scopeMetrics.scope.schemaUrl) {
+        writer.writeTag(3, 2);
+        writer.writeString(scopeMetrics.scope.schemaUrl);
+      }
+      writer.finishLengthDelimited(scopeStart, writer.pos - scopeStartPos);
+    }
+    function serializeResourceMetrics(writer, resourceMetrics) {
+      const start = writer.startLengthDelimited();
+      const startPos = writer.pos;
+      (0, common_serializer_1.writeResource)(writer, resourceMetrics.resource, 1);
+      for (const scopeMetrics of resourceMetrics.scopeMetrics) {
+        writer.writeTag(2, 2);
+        serializeScopeMetrics(writer, scopeMetrics);
+      }
+      if (resourceMetrics.resource.schemaUrl) {
+        writer.writeTag(3, 2);
+        writer.writeString(resourceMetrics.resource.schemaUrl);
+      }
+      writer.finishLengthDelimited(start, writer.pos - startPos);
+    }
+    function toProtoAggregationTemporality(temporality) {
+      switch (temporality) {
+        case sdk_metrics_1.AggregationTemporality.DELTA:
+          return 1;
+        case sdk_metrics_1.AggregationTemporality.CUMULATIVE:
+          return 2;
+        default:
+          return 0;
+      }
+    }
+    function serializeMetricsExportRequest(resourceMetrics) {
+      const estimator = new protobuf_size_estimator_1.ProtobufSizeEstimator();
+      estimator.writeTag(1, 2);
+      serializeResourceMetrics(estimator, resourceMetrics);
+      const writer = new protobuf_writer_1.ProtobufWriter(estimator.pos);
+      writer.writeTag(1, 2);
+      serializeResourceMetrics(writer, resourceMetrics);
+      return writer.finish();
+    }
+    exports.serializeMetricsExportRequest = serializeMetricsExportRequest;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/response-deserializer.js
+var require_response_deserializer2 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/response-deserializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.deserializeExportMetricsServiceResponse = void 0;
+    var protobuf_reader_1 = require_protobuf_reader();
+    function deserializePartialSuccess(data) {
+      const reader = new protobuf_reader_1.ProtobufReader(data);
+      const result = {};
+      while (!reader.isAtEnd()) {
+        const { fieldNumber, wireType } = reader.readTag();
+        switch (fieldNumber) {
+          case 1:
+            if (wireType === 0) {
+              result.rejectedDataPoints = reader.readVarint();
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          case 2:
+            if (wireType === 2) {
+              result.errorMessage = reader.readString();
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          default:
+            reader.skip(wireType);
+            break;
+        }
+      }
+      return result;
+    }
+    function deserializeExportMetricsServiceResponse(data) {
+      const reader = new protobuf_reader_1.ProtobufReader(data);
+      const result = {};
+      while (!reader.isAtEnd()) {
+        const { fieldNumber, wireType } = reader.readTag();
+        switch (fieldNumber) {
+          case 1:
+            if (wireType === 2) {
+              result.partialSuccess = deserializePartialSuccess(reader.readBytes());
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          default:
+            reader.skip(wireType);
+            break;
+        }
+      }
+      return result;
+    }
+    exports.deserializeExportMetricsServiceResponse = deserializeExportMetricsServiceResponse;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/metrics.js
+var require_metrics3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/metrics.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufMetricsSerializer = void 0;
+    var metrics_serializer_1 = require_metrics_serializer();
+    var response_deserializer_1 = require_response_deserializer2();
+    exports.ProtobufMetricsSerializer = {
+      serializeRequest: (arg) => {
+        return (0, metrics_serializer_1.serializeMetricsExportRequest)(arg);
+      },
+      deserializeResponse: (arg) => {
+        return (0, response_deserializer_1.deserializeExportMetricsServiceResponse)(arg);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/index.js
+var require_protobuf2 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/protobuf/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufMetricsSerializer = void 0;
+    var metrics_1 = require_metrics3();
+    Object.defineProperty(exports, "ProtobufMetricsSerializer", { enumerable: true, get: function() {
+      return metrics_1.ProtobufMetricsSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/trace-serializer.js
+var require_trace_serializer = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/trace-serializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.serializeTraceExportRequest = void 0;
+    var protobuf_writer_1 = require_protobuf_writer();
+    var hex_to_binary_1 = require_hex_to_binary();
+    var common_serializer_1 = require_common_serializer();
+    var protobuf_size_estimator_1 = require_protobuf_size_estimator();
+    var SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK = 256;
+    var SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK = 512;
+    function buildSpanFlags(traceFlags, isRemote) {
+      let flags = traceFlags & 255 | SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK;
+      if (isRemote) {
+        flags |= SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK;
+      }
+      return flags;
+    }
+    function serializeStatus(writer, status) {
+      const statusStart = writer.startLengthDelimited();
+      const statusStartPos = writer.pos;
+      if (status.message) {
+        writer.writeTag(2, 2);
+        writer.writeString(status.message);
+      }
+      writer.writeTag(3, 0);
+      writer.writeVarint(status.code);
+      writer.finishLengthDelimited(statusStart, writer.pos - statusStartPos);
+    }
+    function serializeEvent(writer, event) {
+      const eventStart = writer.startLengthDelimited();
+      const eventStartPos = writer.pos;
+      writer.writeTag(1, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, event.time);
+      writer.writeTag(2, 2);
+      writer.writeString(event.name);
+      if (event.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, event.attributes, 3);
+      }
+      writer.writeTag(4, 0);
+      writer.writeVarint(event.droppedAttributesCount || 0);
+      writer.finishLengthDelimited(eventStart, writer.pos - eventStartPos);
+    }
+    function serializeLink(writer, link) {
+      const linkStart = writer.startLengthDelimited();
+      const linkStartPos = writer.pos;
+      const context2 = link.context;
+      writer.writeTag(1, 2);
+      writer.writeBytes((0, hex_to_binary_1.hexToBinary)(context2.traceId));
+      writer.writeTag(2, 2);
+      writer.writeBytes((0, hex_to_binary_1.hexToBinary)(context2.spanId));
+      const linkTraceState = context2.traceState?.serialize();
+      if (linkTraceState) {
+        writer.writeTag(3, 2);
+        writer.writeString(linkTraceState);
+      }
+      if (link.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, link.attributes, 4);
+      }
+      writer.writeTag(5, 0);
+      writer.writeVarint(link.droppedAttributesCount || 0);
+      const linkFlags = buildSpanFlags(context2.traceFlags, context2.isRemote);
+      if (linkFlags) {
+        writer.writeTag(6, 5);
+        writer.writeFixed32(linkFlags);
+      }
+      writer.finishLengthDelimited(linkStart, writer.pos - linkStartPos);
+    }
+    function serializeSpan(writer, span) {
+      const spanStart = writer.startLengthDelimited();
+      const spanStartPos = writer.pos;
+      const ctx = span.spanContext();
+      writer.writeTag(1, 2);
+      writer.writeBytes((0, hex_to_binary_1.hexToBinary)(ctx.traceId));
+      writer.writeTag(2, 2);
+      writer.writeBytes((0, hex_to_binary_1.hexToBinary)(ctx.spanId));
+      const traceState = ctx.traceState?.serialize();
+      if (traceState) {
+        writer.writeTag(3, 2);
+        writer.writeString(traceState);
+      }
+      if (span.parentSpanContext?.spanId) {
+        writer.writeTag(4, 2);
+        writer.writeBytes((0, hex_to_binary_1.hexToBinary)(span.parentSpanContext.spanId));
+      }
+      writer.writeTag(5, 2);
+      writer.writeString(span.name);
+      const kind = span.kind == null ? 0 : span.kind + 1;
+      if (kind !== 0) {
+        writer.writeTag(6, 0);
+        writer.writeVarint(kind);
+      }
+      writer.writeTag(7, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, span.startTime);
+      writer.writeTag(8, 1);
+      (0, common_serializer_1.writeHrTimeAsFixed64)(writer, span.endTime);
+      if (span.attributes) {
+        (0, common_serializer_1.writeAttributes)(writer, span.attributes, 9);
+      }
+      writer.writeTag(10, 0);
+      writer.writeVarint(span.droppedAttributesCount);
+      for (const event of span.events) {
+        writer.writeTag(11, 2);
+        serializeEvent(writer, event);
+      }
+      writer.writeTag(12, 0);
+      writer.writeVarint(span.droppedEventsCount);
+      for (const link of span.links) {
+        writer.writeTag(13, 2);
+        serializeLink(writer, link);
+      }
+      writer.writeTag(14, 0);
+      writer.writeVarint(span.droppedLinksCount);
+      writer.writeTag(15, 2);
+      serializeStatus(writer, span.status);
+      const flags = buildSpanFlags(ctx.traceFlags, span.parentSpanContext?.isRemote);
+      if (flags) {
+        writer.writeTag(16, 5);
+        writer.writeFixed32(flags);
+      }
+      writer.finishLengthDelimited(spanStart, writer.pos - spanStartPos);
+    }
+    function serializeScopeSpans(writer, scope, spans) {
+      const scopeSpansStart = writer.startLengthDelimited();
+      const scopeSpansStartPos = writer.pos;
+      (0, common_serializer_1.writeInstrumentationScope)(writer, scope, 1);
+      for (const span of spans) {
+        writer.writeTag(2, 2);
+        serializeSpan(writer, span);
+      }
+      if (scope.schemaUrl) {
+        writer.writeTag(3, 2);
+        writer.writeString(scope.schemaUrl);
+      }
+      writer.finishLengthDelimited(scopeSpansStart, writer.pos - scopeSpansStartPos);
+    }
+    function serializeResourceSpans(writer, resource, scopeMap) {
+      const resourceSpansStart = writer.startLengthDelimited();
+      const resourceSpansStartPos = writer.pos;
+      (0, common_serializer_1.writeResource)(writer, resource, 1);
+      for (const scopeSpans of scopeMap.values()) {
+        writer.writeTag(2, 2);
+        const scope = scopeSpans[0].instrumentationScope;
+        serializeScopeSpans(writer, scope, scopeSpans);
+      }
+      if (resource.schemaUrl) {
+        writer.writeTag(3, 2);
+        writer.writeString(resource.schemaUrl);
+      }
+      writer.finishLengthDelimited(resourceSpansStart, writer.pos - resourceSpansStartPos);
+    }
+    function createResourceMap(spans) {
+      const resourceMap = /* @__PURE__ */ new Map();
+      for (const span of spans) {
+        const resource = span.resource;
+        const scope = span.instrumentationScope;
+        let scopeMap = resourceMap.get(resource);
+        if (!scopeMap) {
+          scopeMap = /* @__PURE__ */ new Map();
+          resourceMap.set(resource, scopeMap);
+        }
+        let records = scopeMap.get(scope);
+        if (!records) {
+          records = [];
+          scopeMap.set(scope, records);
+        }
+        records.push(span);
+      }
+      return resourceMap;
+    }
+    function serializeTraceExportRequest(spans) {
+      const resourceMap = createResourceMap(spans);
+      const estimator = new protobuf_size_estimator_1.ProtobufSizeEstimator();
+      for (const [resource, scopeMap] of resourceMap) {
+        estimator.writeTag(1, 2);
+        serializeResourceSpans(estimator, resource, scopeMap);
+      }
+      const writer = new protobuf_writer_1.ProtobufWriter(estimator.pos);
+      for (const [resource, scopeMap] of resourceMap) {
+        writer.writeTag(1, 2);
+        serializeResourceSpans(writer, resource, scopeMap);
+      }
+      return writer.finish();
+    }
+    exports.serializeTraceExportRequest = serializeTraceExportRequest;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/response-deserializer.js
+var require_response_deserializer3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/response-deserializer.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.deserializeExportTraceServiceResponse = void 0;
+    var protobuf_reader_1 = require_protobuf_reader();
+    function deserializePartialSuccess(data) {
+      const reader = new protobuf_reader_1.ProtobufReader(data);
+      const result = {};
+      while (!reader.isAtEnd()) {
+        const { fieldNumber, wireType } = reader.readTag();
+        switch (fieldNumber) {
+          case 1:
+            if (wireType === 0) {
+              result.rejectedSpans = reader.readVarint();
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          case 2:
+            if (wireType === 2) {
+              result.errorMessage = reader.readString();
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          default:
+            reader.skip(wireType);
+            break;
+        }
+      }
+      return result;
+    }
+    function deserializeExportTraceServiceResponse(data) {
+      const reader = new protobuf_reader_1.ProtobufReader(data);
+      const result = {};
+      while (!reader.isAtEnd()) {
+        const { fieldNumber, wireType } = reader.readTag();
+        switch (fieldNumber) {
+          case 1:
+            if (wireType === 2) {
+              result.partialSuccess = deserializePartialSuccess(reader.readBytes());
+            } else {
+              reader.skip(wireType);
+            }
+            break;
+          default:
+            reader.skip(wireType);
+            break;
+        }
+      }
+      return result;
+    }
+    exports.deserializeExportTraceServiceResponse = deserializeExportTraceServiceResponse;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/trace.js
+var require_trace2 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/trace.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufTraceSerializer = void 0;
+    var trace_serializer_1 = require_trace_serializer();
+    var response_deserializer_1 = require_response_deserializer3();
+    exports.ProtobufTraceSerializer = {
+      serializeRequest: (arg) => {
+        return (0, trace_serializer_1.serializeTraceExportRequest)(arg);
+      },
+      deserializeResponse: (arg) => {
+        return (0, response_deserializer_1.deserializeExportTraceServiceResponse)(arg);
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/index.js
+var require_protobuf3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/protobuf/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ProtobufTraceSerializer = void 0;
+    var trace_1 = require_trace2();
+    Object.defineProperty(exports, "ProtobufTraceSerializer", { enumerable: true, get: function() {
+      return trace_1.ProtobufTraceSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/internal.js
+var require_internal = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/internal.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.toAnyValue = exports.toKeyValue = exports.toAttributes = exports.createInstrumentationScope = exports.createResource = void 0;
+    function createResource(resource, encoder) {
+      const result = {
+        attributes: toAttributes(resource.attributes, encoder),
+        droppedAttributesCount: 0
+      };
+      const schemaUrl = resource.schemaUrl;
+      if (schemaUrl && schemaUrl !== "")
+        result.schemaUrl = schemaUrl;
+      return result;
+    }
+    exports.createResource = createResource;
+    function createInstrumentationScope(scope, encoder) {
+      const result = {
+        name: scope.name,
+        version: scope.version
+      };
+      if (scope.attributes && Object.keys(scope.attributes).length > 0) {
+        result.attributes = toAttributes(scope.attributes, encoder);
+        result.droppedAttributesCount = scope.droppedAttributesCount ?? 0;
+      }
+      return result;
+    }
+    exports.createInstrumentationScope = createInstrumentationScope;
+    function toAttributes(attributes, encoder) {
+      return Object.keys(attributes).map((key) => toKeyValue(key, attributes[key], encoder));
+    }
+    exports.toAttributes = toAttributes;
+    function toKeyValue(key, value, encoder) {
+      return {
+        key,
+        value: toAnyValue(value, encoder)
+      };
+    }
+    exports.toKeyValue = toKeyValue;
+    function toAnyValue(value, encoder) {
+      const t = typeof value;
+      if (t === "string")
+        return { stringValue: value };
+      if (t === "number") {
+        if (!Number.isInteger(value))
+          return { doubleValue: value };
+        return { intValue: value };
+      }
+      if (t === "boolean")
+        return { boolValue: value };
+      if (value instanceof Uint8Array)
+        return { bytesValue: encoder.encodeUint8Array(value) };
+      if (Array.isArray(value)) {
+        const values = new Array(value.length);
+        for (let i = 0; i < value.length; i++) {
+          values[i] = toAnyValue(value[i], encoder);
+        }
+        return { arrayValue: { values } };
+      }
+      if (t === "object" && value != null) {
+        const keys2 = Object.keys(value);
+        const values = new Array(keys2.length);
+        for (let i = 0; i < keys2.length; i++) {
+          values[i] = {
+            key: keys2[i],
+            value: toAnyValue(value[keys2[i]], encoder)
+          };
+        }
+        return { kvlistValue: { values } };
+      }
+      return {};
+    }
+    exports.toAnyValue = toAnyValue;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/internal.js
+var require_internal2 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/internal.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createExportLogsServiceRequest = void 0;
+    var internal_1 = require_internal();
+    function createExportLogsServiceRequest(logRecords, encoder) {
+      return {
+        resourceLogs: logRecordsToResourceLogs(logRecords, encoder)
+      };
+    }
+    exports.createExportLogsServiceRequest = createExportLogsServiceRequest;
+    function createResourceMap(logRecords) {
+      const resourceMap = /* @__PURE__ */ new Map();
+      for (const record2 of logRecords) {
+        const { resource, instrumentationScope } = record2;
+        let ismMap = resourceMap.get(resource);
+        if (!ismMap) {
+          ismMap = /* @__PURE__ */ new Map();
+          resourceMap.set(resource, ismMap);
+        }
+        let records = ismMap.get(instrumentationScope);
+        if (!records) {
+          records = [];
+          ismMap.set(instrumentationScope, records);
+        }
+        records.push(record2);
+      }
+      return resourceMap;
+    }
+    function logRecordsToResourceLogs(logRecords, encoder) {
+      const resourceMap = createResourceMap(logRecords);
+      return Array.from(resourceMap, ([resource, ismMap]) => {
+        const processedResource = (0, internal_1.createResource)(resource, encoder);
+        return {
+          resource: processedResource,
+          scopeLogs: Array.from(ismMap, ([, scopeLogs]) => {
+            return {
+              scope: (0, internal_1.createInstrumentationScope)(scopeLogs[0].instrumentationScope, encoder),
+              logRecords: scopeLogs.map((log) => toLogRecord(log, encoder)),
+              schemaUrl: scopeLogs[0].instrumentationScope.schemaUrl
+            };
+          }),
+          schemaUrl: processedResource.schemaUrl
+        };
+      });
+    }
+    function toLogRecord(log, encoder) {
+      return {
+        timeUnixNano: encoder.encodeHrTime(log.hrTime),
+        observedTimeUnixNano: encoder.encodeHrTime(log.hrTimeObserved),
+        severityNumber: toSeverityNumber(log.severityNumber),
+        severityText: log.severityText,
+        body: (0, internal_1.toAnyValue)(log.body, encoder),
+        eventName: log.eventName,
+        attributes: (0, internal_1.toAttributes)(log.attributes, encoder),
+        droppedAttributesCount: log.droppedAttributesCount,
+        flags: log.spanContext?.traceFlags,
+        traceId: encoder.encodeOptionalSpanContext(log.spanContext?.traceId),
+        spanId: encoder.encodeOptionalSpanContext(log.spanContext?.spanId)
+      };
+    }
+    function toSeverityNumber(severityNumber) {
+      return severityNumber;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/common/utils.js
+var require_utils10 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/common/utils.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JSON_ENCODER = exports.PROTOBUF_ENCODER = exports.encodeAsString = exports.encodeAsLongBits = exports.toLongBits = exports.hrTimeToNanos = void 0;
+    var core_1 = require_src();
+    var hex_to_binary_1 = require_hex_to_binary();
+    function hrTimeToNanos(hrTime2) {
+      const NANOSECONDS = BigInt(1e9);
+      return BigInt(Math.trunc(hrTime2[0])) * NANOSECONDS + BigInt(Math.trunc(hrTime2[1]));
+    }
+    exports.hrTimeToNanos = hrTimeToNanos;
+    function toLongBits(value) {
+      const low = Number(BigInt.asUintN(32, value));
+      const high = Number(BigInt.asUintN(32, value >> BigInt(32)));
+      return { low, high };
+    }
+    exports.toLongBits = toLongBits;
+    function encodeAsLongBits(hrTime2) {
+      const nanos = hrTimeToNanos(hrTime2);
+      return toLongBits(nanos);
+    }
+    exports.encodeAsLongBits = encodeAsLongBits;
+    function encodeAsString(hrTime2) {
+      const nanos = hrTimeToNanos(hrTime2);
+      return nanos.toString();
+    }
+    exports.encodeAsString = encodeAsString;
+    var encodeTimestamp = typeof BigInt !== "undefined" ? encodeAsString : core_1.hrTimeToNanoseconds;
+    function identity(value) {
+      return value;
+    }
+    function optionalHexToBinary(str) {
+      if (str === void 0)
+        return void 0;
+      return (0, hex_to_binary_1.hexToBinary)(str);
+    }
+    exports.PROTOBUF_ENCODER = {
+      encodeHrTime: encodeAsLongBits,
+      encodeSpanContext: hex_to_binary_1.hexToBinary,
+      encodeOptionalSpanContext: optionalHexToBinary,
+      encodeUint8Array: identity
+    };
+    exports.JSON_ENCODER = {
+      encodeHrTime: encodeTimestamp,
+      encodeSpanContext: identity,
+      encodeOptionalSpanContext: identity,
+      encodeUint8Array: (bytes) => {
+        if (typeof Buffer !== "undefined") {
+          return Buffer.from(bytes).toString("base64");
+        }
+        const chars = new Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) {
+          chars[i] = String.fromCharCode(bytes[i]);
+        }
+        return btoa(chars.join(""));
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/json/logs.js
+var require_logs4 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/json/logs.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonLogsSerializer = void 0;
+    var internal_1 = require_internal2();
+    var utils_1 = require_utils10();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    exports.JsonLogsSerializer = {
+      serializeRequest: (arg) => {
+        const request2 = (0, internal_1.createExportLogsServiceRequest)(arg, utils_1.JSON_ENCODER);
+        const encoder = new TextEncoder();
+        return encoder.encode(JSON.stringify(request2));
+      },
+      deserializeResponse: (arg) => {
+        if (arg.length === 0) {
+          return {};
+        }
+        const decoder = new TextDecoder();
+        try {
+          return JSON.parse(decoder.decode(arg));
+        } catch (err) {
+          api_1.diag.warn(`Failed to parse logs export response: ${err.message}. Returning empty response`);
+          return {};
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/logs/json/index.js
+var require_json = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/logs/json/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonLogsSerializer = void 0;
+    var logs_1 = require_logs4();
+    Object.defineProperty(exports, "JsonLogsSerializer", { enumerable: true, get: function() {
+      return logs_1.JsonLogsSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/internal-types.js
+var require_internal_types = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/internal-types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.EAggregationTemporality = void 0;
+    var EAggregationTemporality;
+    (function(EAggregationTemporality2) {
+      EAggregationTemporality2[EAggregationTemporality2["AGGREGATION_TEMPORALITY_UNSPECIFIED"] = 0] = "AGGREGATION_TEMPORALITY_UNSPECIFIED";
+      EAggregationTemporality2[EAggregationTemporality2["AGGREGATION_TEMPORALITY_DELTA"] = 1] = "AGGREGATION_TEMPORALITY_DELTA";
+      EAggregationTemporality2[EAggregationTemporality2["AGGREGATION_TEMPORALITY_CUMULATIVE"] = 2] = "AGGREGATION_TEMPORALITY_CUMULATIVE";
+    })(EAggregationTemporality || (exports.EAggregationTemporality = EAggregationTemporality = {}));
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/internal.js
+var require_internal3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/internal.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createExportMetricsServiceRequest = exports.toMetric = exports.toScopeMetrics = exports.toResourceMetrics = void 0;
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    var sdk_metrics_1 = require_src5();
+    var internal_types_1 = require_internal_types();
+    var internal_1 = require_internal();
+    function toResourceMetrics(resourceMetrics, encoder) {
+      const processedResource = (0, internal_1.createResource)(resourceMetrics.resource, encoder);
+      return {
+        resource: processedResource,
+        schemaUrl: processedResource.schemaUrl,
+        scopeMetrics: toScopeMetrics(resourceMetrics.scopeMetrics, encoder)
+      };
+    }
+    exports.toResourceMetrics = toResourceMetrics;
+    function toScopeMetrics(scopeMetrics, encoder) {
+      return Array.from(scopeMetrics.map((metrics2) => ({
+        scope: (0, internal_1.createInstrumentationScope)(metrics2.scope, encoder),
+        metrics: metrics2.metrics.map((metricData) => toMetric(metricData, encoder)),
+        schemaUrl: metrics2.scope.schemaUrl
+      })));
+    }
+    exports.toScopeMetrics = toScopeMetrics;
+    function toMetric(metricData, encoder) {
+      const out = {
+        name: metricData.descriptor.name,
+        description: metricData.descriptor.description,
+        unit: metricData.descriptor.unit
+      };
+      const aggregationTemporality = toAggregationTemporality(metricData.aggregationTemporality);
+      switch (metricData.dataPointType) {
+        case sdk_metrics_1.DataPointType.SUM:
+          out.sum = {
+            aggregationTemporality,
+            isMonotonic: metricData.isMonotonic,
+            dataPoints: toSingularDataPoints(metricData, encoder)
+          };
+          break;
+        case sdk_metrics_1.DataPointType.GAUGE:
+          out.gauge = {
+            dataPoints: toSingularDataPoints(metricData, encoder)
+          };
+          break;
+        case sdk_metrics_1.DataPointType.HISTOGRAM:
+          out.histogram = {
+            aggregationTemporality,
+            dataPoints: toHistogramDataPoints(metricData, encoder)
+          };
+          break;
+        case sdk_metrics_1.DataPointType.EXPONENTIAL_HISTOGRAM:
+          out.exponentialHistogram = {
+            aggregationTemporality,
+            dataPoints: toExponentialHistogramDataPoints(metricData, encoder)
+          };
+          break;
+      }
+      return out;
+    }
+    exports.toMetric = toMetric;
+    function toSingularDataPoint(dataPoint, valueType, encoder) {
+      const out = {
+        attributes: (0, internal_1.toAttributes)(dataPoint.attributes, encoder),
+        startTimeUnixNano: encoder.encodeHrTime(dataPoint.startTime),
+        timeUnixNano: encoder.encodeHrTime(dataPoint.endTime)
+      };
+      switch (valueType) {
+        case api_1.ValueType.INT:
+          out.asInt = dataPoint.value;
+          break;
+        case api_1.ValueType.DOUBLE:
+          out.asDouble = dataPoint.value;
+          break;
+      }
+      return out;
+    }
+    function toSingularDataPoints(metricData, encoder) {
+      return metricData.dataPoints.map((dataPoint) => {
+        return toSingularDataPoint(dataPoint, metricData.descriptor.valueType, encoder);
+      });
+    }
+    function toHistogramDataPoints(metricData, encoder) {
+      return metricData.dataPoints.map((dataPoint) => {
+        const histogram = dataPoint.value;
+        return {
+          attributes: (0, internal_1.toAttributes)(dataPoint.attributes, encoder),
+          bucketCounts: histogram.buckets.counts,
+          explicitBounds: histogram.buckets.boundaries,
+          count: histogram.count,
+          sum: histogram.sum,
+          min: histogram.min,
+          max: histogram.max,
+          startTimeUnixNano: encoder.encodeHrTime(dataPoint.startTime),
+          timeUnixNano: encoder.encodeHrTime(dataPoint.endTime)
+        };
+      });
+    }
+    function toExponentialHistogramDataPoints(metricData, encoder) {
+      return metricData.dataPoints.map((dataPoint) => {
+        const histogram = dataPoint.value;
+        return {
+          attributes: (0, internal_1.toAttributes)(dataPoint.attributes, encoder),
+          count: histogram.count,
+          min: histogram.min,
+          max: histogram.max,
+          sum: histogram.sum,
+          positive: {
+            offset: histogram.positive.offset,
+            bucketCounts: histogram.positive.bucketCounts
+          },
+          negative: {
+            offset: histogram.negative.offset,
+            bucketCounts: histogram.negative.bucketCounts
+          },
+          scale: histogram.scale,
+          zeroCount: histogram.zeroCount,
+          startTimeUnixNano: encoder.encodeHrTime(dataPoint.startTime),
+          timeUnixNano: encoder.encodeHrTime(dataPoint.endTime)
+        };
+      });
+    }
+    function toAggregationTemporality(temporality) {
+      switch (temporality) {
+        case sdk_metrics_1.AggregationTemporality.DELTA:
+          return internal_types_1.EAggregationTemporality.AGGREGATION_TEMPORALITY_DELTA;
+        case sdk_metrics_1.AggregationTemporality.CUMULATIVE:
+          return internal_types_1.EAggregationTemporality.AGGREGATION_TEMPORALITY_CUMULATIVE;
+      }
+    }
+    function createExportMetricsServiceRequest(resourceMetrics, encoder) {
+      return {
+        resourceMetrics: resourceMetrics.map((metrics2) => toResourceMetrics(metrics2, encoder))
+      };
+    }
+    exports.createExportMetricsServiceRequest = createExportMetricsServiceRequest;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/json/metrics.js
+var require_metrics4 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/json/metrics.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonMetricsSerializer = void 0;
+    var internal_1 = require_internal3();
+    var utils_1 = require_utils10();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    exports.JsonMetricsSerializer = {
+      serializeRequest: (arg) => {
+        const request2 = (0, internal_1.createExportMetricsServiceRequest)([arg], utils_1.JSON_ENCODER);
+        const encoder = new TextEncoder();
+        return encoder.encode(JSON.stringify(request2));
+      },
+      deserializeResponse: (arg) => {
+        if (arg.length === 0) {
+          return {};
+        }
+        const decoder = new TextDecoder();
+        try {
+          return JSON.parse(decoder.decode(arg));
+        } catch (err) {
+          api_1.diag.warn(`Failed to parse metrics export response: ${err.message}. Returning empty response`);
+          return {};
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/metrics/json/index.js
+var require_json2 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/metrics/json/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonMetricsSerializer = void 0;
+    var metrics_1 = require_metrics4();
+    Object.defineProperty(exports, "JsonMetricsSerializer", { enumerable: true, get: function() {
+      return metrics_1.JsonMetricsSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/internal.js
+var require_internal4 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/internal.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.createExportTraceServiceRequest = exports.toOtlpSpanEvent = exports.toOtlpLink = exports.sdkSpanToOtlpSpan = void 0;
+    var internal_1 = require_internal();
+    var SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK = 256;
+    var SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK = 512;
+    function buildSpanFlagsFrom(traceFlags, isRemote) {
+      let flags = traceFlags & 255 | SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK;
+      if (isRemote) {
+        flags |= SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK;
+      }
+      return flags;
+    }
+    function sdkSpanToOtlpSpan(span, encoder) {
+      const ctx = span.spanContext();
+      const status = span.status;
+      const parentSpanId = span.parentSpanContext?.spanId ? encoder.encodeSpanContext(span.parentSpanContext?.spanId) : void 0;
+      return {
+        traceId: encoder.encodeSpanContext(ctx.traceId),
+        spanId: encoder.encodeSpanContext(ctx.spanId),
+        parentSpanId,
+        traceState: ctx.traceState?.serialize(),
+        name: span.name,
+        // Span kind is offset by 1 because the API does not define a value for unset
+        kind: span.kind == null ? 0 : span.kind + 1,
+        startTimeUnixNano: encoder.encodeHrTime(span.startTime),
+        endTimeUnixNano: encoder.encodeHrTime(span.endTime),
+        attributes: (0, internal_1.toAttributes)(span.attributes, encoder),
+        droppedAttributesCount: span.droppedAttributesCount,
+        events: span.events.map((event) => toOtlpSpanEvent(event, encoder)),
+        droppedEventsCount: span.droppedEventsCount,
+        status: {
+          // API and proto enums share the same values
+          code: status.code,
+          message: status.message
+        },
+        links: span.links.map((link) => toOtlpLink(link, encoder)),
+        droppedLinksCount: span.droppedLinksCount,
+        flags: buildSpanFlagsFrom(ctx.traceFlags, span.parentSpanContext?.isRemote)
+      };
+    }
+    exports.sdkSpanToOtlpSpan = sdkSpanToOtlpSpan;
+    function toOtlpLink(link, encoder) {
+      return {
+        attributes: link.attributes ? (0, internal_1.toAttributes)(link.attributes, encoder) : [],
+        spanId: encoder.encodeSpanContext(link.context.spanId),
+        traceId: encoder.encodeSpanContext(link.context.traceId),
+        traceState: link.context.traceState?.serialize(),
+        droppedAttributesCount: link.droppedAttributesCount || 0,
+        flags: buildSpanFlagsFrom(link.context.traceFlags, link.context.isRemote)
+      };
+    }
+    exports.toOtlpLink = toOtlpLink;
+    function toOtlpSpanEvent(timedEvent, encoder) {
+      return {
+        attributes: timedEvent.attributes ? (0, internal_1.toAttributes)(timedEvent.attributes, encoder) : [],
+        name: timedEvent.name,
+        timeUnixNano: encoder.encodeHrTime(timedEvent.time),
+        droppedAttributesCount: timedEvent.droppedAttributesCount || 0
+      };
+    }
+    exports.toOtlpSpanEvent = toOtlpSpanEvent;
+    function createExportTraceServiceRequest(spans, encoder) {
+      return {
+        resourceSpans: spanRecordsToResourceSpans(spans, encoder)
+      };
+    }
+    exports.createExportTraceServiceRequest = createExportTraceServiceRequest;
+    function createResourceMap(readableSpans) {
+      const resourceMap = /* @__PURE__ */ new Map();
+      for (const record2 of readableSpans) {
+        let ilsMap = resourceMap.get(record2.resource);
+        if (!ilsMap) {
+          ilsMap = /* @__PURE__ */ new Map();
+          resourceMap.set(record2.resource, ilsMap);
+        }
+        const instrumentationScopeKey = `${record2.instrumentationScope.name}@${record2.instrumentationScope.version || ""}:${record2.instrumentationScope.schemaUrl || ""}`;
+        let records = ilsMap.get(instrumentationScopeKey);
+        if (!records) {
+          records = [];
+          ilsMap.set(instrumentationScopeKey, records);
+        }
+        records.push(record2);
+      }
+      return resourceMap;
+    }
+    function spanRecordsToResourceSpans(readableSpans, encoder) {
+      const resourceMap = createResourceMap(readableSpans);
+      const out = [];
+      const entryIterator = resourceMap.entries();
+      let entry = entryIterator.next();
+      while (!entry.done) {
+        const [resource, ilmMap] = entry.value;
+        const scopeResourceSpans = [];
+        const ilmIterator = ilmMap.values();
+        let ilmEntry = ilmIterator.next();
+        while (!ilmEntry.done) {
+          const scopeSpans = ilmEntry.value;
+          if (scopeSpans.length > 0) {
+            const spans = scopeSpans.map((readableSpan) => sdkSpanToOtlpSpan(readableSpan, encoder));
+            scopeResourceSpans.push({
+              scope: (0, internal_1.createInstrumentationScope)(scopeSpans[0].instrumentationScope, encoder),
+              spans,
+              schemaUrl: scopeSpans[0].instrumentationScope.schemaUrl
+            });
+          }
+          ilmEntry = ilmIterator.next();
+        }
+        const processedResource = (0, internal_1.createResource)(resource, encoder);
+        const transformedSpans = {
+          resource: processedResource,
+          scopeSpans: scopeResourceSpans,
+          schemaUrl: processedResource.schemaUrl
+        };
+        out.push(transformedSpans);
+        entry = entryIterator.next();
+      }
+      return out;
+    }
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/json/trace.js
+var require_trace3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/json/trace.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonTraceSerializer = void 0;
+    var internal_1 = require_internal4();
+    var utils_1 = require_utils10();
+    var api_1 = (init_esm(), __toCommonJS(esm_exports));
+    exports.JsonTraceSerializer = {
+      serializeRequest: (arg) => {
+        const request2 = (0, internal_1.createExportTraceServiceRequest)(arg, utils_1.JSON_ENCODER);
+        const encoder = new TextEncoder();
+        return encoder.encode(JSON.stringify(request2));
+      },
+      deserializeResponse: (arg) => {
+        if (arg.length === 0) {
+          return {};
+        }
+        const decoder = new TextDecoder();
+        try {
+          return JSON.parse(decoder.decode(arg));
+        } catch (err) {
+          api_1.diag.warn(`Failed to parse trace export response: ${err.message}. Returning empty response`);
+          return {};
+        }
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/trace/json/index.js
+var require_json3 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/trace/json/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonTraceSerializer = void 0;
+    var trace_1 = require_trace3();
+    Object.defineProperty(exports, "JsonTraceSerializer", { enumerable: true, get: function() {
+      return trace_1.JsonTraceSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-transformer/build/src/index.js
+var require_src6 = __commonJS({
+  "node_modules/@opentelemetry/otlp-transformer/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JsonTraceSerializer = exports.JsonMetricsSerializer = exports.JsonLogsSerializer = exports.ProtobufTraceSerializer = exports.ProtobufMetricsSerializer = exports.ProtobufLogsSerializer = exports.LogsExporterMetricsHelper = exports.TraceExporterMetricsHelper = exports.MetricsExporterMetricsHelper = void 0;
+    var metrics_1 = require_metrics2();
+    Object.defineProperty(exports, "MetricsExporterMetricsHelper", { enumerable: true, get: function() {
+      return metrics_1.MetricsExporterMetricsHelper;
+    } });
+    var trace_1 = require_trace();
+    Object.defineProperty(exports, "TraceExporterMetricsHelper", { enumerable: true, get: function() {
+      return trace_1.TraceExporterMetricsHelper;
+    } });
+    var logs_1 = require_logs();
+    Object.defineProperty(exports, "LogsExporterMetricsHelper", { enumerable: true, get: function() {
+      return logs_1.LogsExporterMetricsHelper;
+    } });
+    var protobuf_1 = require_protobuf();
+    Object.defineProperty(exports, "ProtobufLogsSerializer", { enumerable: true, get: function() {
+      return protobuf_1.ProtobufLogsSerializer;
+    } });
+    var protobuf_2 = require_protobuf2();
+    Object.defineProperty(exports, "ProtobufMetricsSerializer", { enumerable: true, get: function() {
+      return protobuf_2.ProtobufMetricsSerializer;
+    } });
+    var protobuf_3 = require_protobuf3();
+    Object.defineProperty(exports, "ProtobufTraceSerializer", { enumerable: true, get: function() {
+      return protobuf_3.ProtobufTraceSerializer;
+    } });
+    var json_1 = require_json();
+    Object.defineProperty(exports, "JsonLogsSerializer", { enumerable: true, get: function() {
+      return json_1.JsonLogsSerializer;
+    } });
+    var json_2 = require_json2();
+    Object.defineProperty(exports, "JsonMetricsSerializer", { enumerable: true, get: function() {
+      return json_2.JsonMetricsSerializer;
+    } });
+    var json_3 = require_json3();
+    Object.defineProperty(exports, "JsonTraceSerializer", { enumerable: true, get: function() {
+      return json_3.JsonTraceSerializer;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/util.js
+function validateAndNormalizeHeaders(partialHeaders) {
+  const headers = {};
+  Object.entries(partialHeaders ?? {}).forEach(([key, value]) => {
+    if (typeof value !== "undefined") {
+      headers[key] = String(value);
+    } else {
+      diag2.warn(`Header "${key}" has invalid value (${value}) and will be ignored`);
+    }
+  });
+  return headers;
+}
+var init_util2 = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/util.js"() {
+    init_esm();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/otlp-http-configuration.js
+function mergeHeaders(userProvidedHeaders, fallbackHeaders, defaultHeaders) {
+  return async () => {
+    const requiredHeaders = {
+      ...await defaultHeaders()
+    };
+    const headers = {};
+    if (fallbackHeaders != null) {
+      Object.assign(headers, await fallbackHeaders());
+    }
+    if (userProvidedHeaders != null) {
+      Object.assign(headers, validateAndNormalizeHeaders(await userProvidedHeaders()));
+    }
+    return Object.assign(headers, requiredHeaders);
+  };
+}
+function validateUserProvidedUrl(url2) {
+  if (url2 == null) {
+    return void 0;
+  }
+  try {
+    const base = globalThis.location?.href;
+    return new URL(url2, base).href;
+  } catch {
+    throw new Error(`Configuration: Could not parse user-provided export URL: '${url2}'`);
+  }
+}
+function mergeOtlpHttpConfigurationWithDefaults(userProvidedConfiguration, fallbackConfiguration, defaultConfiguration) {
+  return {
+    ...mergeOtlpSharedConfigurationWithDefaults(userProvidedConfiguration, fallbackConfiguration, defaultConfiguration),
+    headers: mergeHeaders(userProvidedConfiguration.headers, fallbackConfiguration.headers, defaultConfiguration.headers),
+    url: validateUserProvidedUrl(userProvidedConfiguration.url) ?? fallbackConfiguration.url ?? defaultConfiguration.url
+  };
+}
+function getHttpConfigurationDefaults(requiredHeaders, signalResourcePath) {
+  return {
+    ...getSharedConfigurationDefaults(),
+    headers: async () => requiredHeaders,
+    url: "http://localhost:4318/" + signalResourcePath
+  };
+}
+var init_otlp_http_configuration = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/otlp-http-configuration.js"() {
+    init_shared_configuration();
+    init_util2();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/otlp-node-http-configuration.js
+function httpAgentFactoryFromOptions(options) {
+  return async (protocol) => {
+    const isInsecure = protocol === "http:";
+    const module = isInsecure ? import("http") : import("https");
+    const { Agent: Agent2 } = await module;
+    if (isInsecure) {
+      const { ca, cert, key, ...insecureOptions } = options;
+      return new Agent2(insecureOptions);
+    }
+    return new Agent2(options);
+  };
+}
+function mergeOtlpNodeHttpConfigurationWithDefaults(userProvidedConfiguration, fallbackConfiguration, defaultConfiguration) {
+  return {
+    ...mergeOtlpHttpConfigurationWithDefaults(userProvidedConfiguration, fallbackConfiguration, defaultConfiguration),
+    agentFactory: userProvidedConfiguration.agentFactory ?? fallbackConfiguration.agentFactory ?? defaultConfiguration.agentFactory,
+    userAgent: userProvidedConfiguration.userAgent
+  };
+}
+function getNodeHttpConfigurationDefaults(requiredHeaders, signalResourcePath) {
+  return {
+    ...getHttpConfigurationDefaults(requiredHeaders, signalResourcePath),
+    agentFactory: httpAgentFactoryFromOptions({ keepAlive: true })
+  };
+}
+var init_otlp_node_http_configuration = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/otlp-node-http-configuration.js"() {
+    init_otlp_http_configuration();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/is-export-retryable.js
+function isExportHTTPErrorRetryable(statusCode) {
+  return statusCode === 429 || statusCode === 502 || statusCode === 503 || statusCode === 504;
+}
+function parseRetryAfterToMills(retryAfter) {
+  if (retryAfter == null) {
+    return void 0;
+  }
+  const seconds = Number.parseInt(retryAfter, 10);
+  if (Number.isInteger(seconds)) {
+    return seconds > 0 ? seconds * 1e3 : -1;
+  }
+  const delay = new Date(retryAfter).getTime() - Date.now();
+  if (delay >= 0) {
+    return delay;
+  }
+  return 0;
+}
+var init_is_export_retryable = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/is-export-retryable.js"() {
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/transport/http-transport-utils.js
+import * as zlib from "zlib";
+import { Readable as Readable2 } from "stream";
+function sendWithHttp(request2, url2, headers, compression, userAgent, agent2, data, timeoutMillis) {
+  return new Promise((resolve5) => {
+    const parsedUrl = new URL(url2);
+    if (userAgent) {
+      headers["User-Agent"] = `${userAgent} ${DEFAULT_USER_AGENT}`;
+    } else {
+      headers["User-Agent"] = DEFAULT_USER_AGENT;
+    }
+    const options = {
+      method: "POST",
+      headers,
+      agent: agent2
+    };
+    const req = request2(parsedUrl, options, (res) => {
+      const responseData = [];
+      let responseSize = 0;
+      res.on("data", (chunk) => {
+        responseSize += chunk.length;
+        if (responseSize > MAX_RESPONSE_BODY_SIZE) {
+          const sizeError = new Error(`OTLP export response body exceeded size limit of ${MAX_RESPONSE_BODY_SIZE} bytes`);
+          resolve5({ status: "failure", error: sizeError });
+          res.destroy();
+          return;
+        }
+        responseData.push(chunk);
+      });
+      res.on("end", () => {
+        if (res.statusCode && res.statusCode <= 299) {
+          resolve5({
+            status: "success",
+            data: Buffer.concat(responseData)
+          });
+        } else if (res.statusCode && isExportHTTPErrorRetryable(res.statusCode)) {
+          resolve5({
+            status: "retryable",
+            retryInMillis: parseRetryAfterToMills(res.headers["retry-after"])
+          });
+        } else {
+          const error62 = new OTLPExporterError(res.statusMessage, res.statusCode, Buffer.concat(responseData).toString());
+          resolve5({
+            status: "failure",
+            error: error62
+          });
+        }
+      });
+      res.on("error", (error62) => {
+        if (res.statusCode && res.statusCode <= 299) {
+          resolve5({
+            status: "success"
+          });
+        } else if (res.statusCode && isExportHTTPErrorRetryable(res.statusCode)) {
+          resolve5({
+            status: "retryable",
+            error: error62,
+            retryInMillis: parseRetryAfterToMills(res.headers["retry-after"])
+          });
+        } else {
+          resolve5({
+            status: "failure",
+            error: error62
+          });
+        }
+      });
+    });
+    req.setTimeout(timeoutMillis, () => {
+      req.destroy();
+      resolve5({
+        status: "retryable",
+        error: new Error("Request timed out")
+      });
+    });
+    req.on("error", (error62) => {
+      if (isHttpTransportNetworkErrorRetryable(error62)) {
+        resolve5({
+          status: "retryable",
+          error: error62
+        });
+      } else {
+        resolve5({
+          status: "failure",
+          error: error62
+        });
+      }
+    });
+    compressAndSend(req, compression, data, (error62) => {
+      resolve5({
+        status: "failure",
+        error: error62
+      });
+    });
+  });
+}
+function compressAndSend(req, compression, data, onError) {
+  let dataStream = readableFromUint8Array(data);
+  if (compression === "gzip") {
+    req.setHeader("Content-Encoding", "gzip");
+    dataStream = dataStream.on("error", onError).pipe(zlib.createGzip()).on("error", onError);
+  }
+  dataStream.pipe(req).on("error", onError);
+}
+function readableFromUint8Array(buff) {
+  const readable = new Readable2();
+  readable.push(buff);
+  readable.push(null);
+  return readable;
+}
+function isHttpTransportNetworkErrorRetryable(error62) {
+  const RETRYABLE_NETWORK_ERROR_CODES = /* @__PURE__ */ new Set([
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "EPIPE",
+    "ETIMEDOUT",
+    "EAI_AGAIN",
+    "ENOTFOUND",
+    "ENETUNREACH",
+    "EHOSTUNREACH"
+  ]);
+  if ("code" in error62 && typeof error62.code === "string") {
+    return RETRYABLE_NETWORK_ERROR_CODES.has(error62.code);
+  }
+  return false;
+}
+var DEFAULT_USER_AGENT, MAX_RESPONSE_BODY_SIZE;
+var init_http_transport_utils = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/transport/http-transport-utils.js"() {
+    init_is_export_retryable();
+    init_types2();
+    init_version2();
+    DEFAULT_USER_AGENT = `OTel-OTLP-Exporter-JavaScript/${VERSION2}`;
+    MAX_RESPONSE_BODY_SIZE = 4 * 1024 * 1024;
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/transport/http-exporter-transport.js
+async function requestFunctionFactory(protocol) {
+  const module = protocol === "http:" ? import("http") : import("https");
+  const { request: request2 } = await module;
+  return request2;
+}
+function createHttpExporterTransport(parameters) {
+  return new HttpExporterTransport(parameters);
+}
+var HttpExporterTransport;
+var init_http_exporter_transport = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/transport/http-exporter-transport.js"() {
+    init_http_transport_utils();
+    HttpExporterTransport = class {
+      _utils = null;
+      _parameters;
+      constructor(parameters) {
+        this._parameters = parameters;
+      }
+      async send(data, timeoutMillis) {
+        const { agent: agent2, request: request2 } = await this._loadUtils();
+        const headers = await this._parameters.headers();
+        return sendWithHttp(request2, this._parameters.url, headers, this._parameters.compression, this._parameters.userAgent, agent2, data, timeoutMillis);
+      }
+      shutdown() {
+      }
+      async _loadUtils() {
+        let utils = this._utils;
+        if (utils === null) {
+          const protocol = new URL(this._parameters.url).protocol;
+          const [agent2, request2] = await Promise.all([
+            this._parameters.agentFactory(protocol),
+            requestFunctionFactory(protocol)
+          ]);
+          utils = this._utils = { agent: agent2, request: request2 };
+        }
+        return utils;
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/retrying-transport.js
+function getJitter() {
+  return Math.random() * (2 * JITTER) - JITTER;
+}
+function createRetryingTransport(options) {
+  return new RetryingTransport(options.transport);
+}
+var MAX_ATTEMPTS2, INITIAL_BACKOFF, MAX_BACKOFF, BACKOFF_MULTIPLIER, JITTER, RetryingTransport;
+var init_retrying_transport = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/retrying-transport.js"() {
+    init_esm();
+    MAX_ATTEMPTS2 = 5;
+    INITIAL_BACKOFF = 1e3;
+    MAX_BACKOFF = 5e3;
+    BACKOFF_MULTIPLIER = 1.5;
+    JITTER = 0.2;
+    RetryingTransport = class {
+      _transport;
+      constructor(transport) {
+        this._transport = transport;
+      }
+      retry(data, timeoutMillis, inMillis) {
+        return new Promise((resolve5, reject) => {
+          setTimeout(() => {
+            this._transport.send(data, timeoutMillis).then(resolve5, reject);
+          }, inMillis);
+        });
+      }
+      async send(data, timeoutMillis) {
+        let attempts = MAX_ATTEMPTS2;
+        let nextBackoff = INITIAL_BACKOFF;
+        const deadline = Date.now() + timeoutMillis;
+        let result = await this._transport.send(data, timeoutMillis);
+        while (result.status === "retryable" && attempts > 0) {
+          attempts--;
+          const backoff = Math.max(Math.min(nextBackoff * (1 + getJitter()), MAX_BACKOFF), 0);
+          nextBackoff = nextBackoff * BACKOFF_MULTIPLIER;
+          const retryInMillis = result.retryInMillis ?? backoff;
+          const remainingTimeoutMillis = deadline - Date.now();
+          if (retryInMillis > remainingTimeoutMillis) {
+            diag2.info(`Export retry time ${Math.round(retryInMillis)}ms exceeds remaining timeout ${Math.round(remainingTimeoutMillis)}ms, not retrying further.`);
+            return result;
+          }
+          diag2.verbose(`Scheduling export retry in ${Math.round(retryInMillis)}ms`);
+          result = await this.retry(data, remainingTimeoutMillis, retryInMillis);
+        }
+        if (result.status === "success") {
+          diag2.verbose(`Export succeeded after ${MAX_ATTEMPTS2 - attempts} retry attempts.`);
+        } else if (result.status === "retryable") {
+          diag2.info(`Export failed after maximum retry attempts (${MAX_ATTEMPTS2}).`);
+        } else {
+          diag2.info(`Export failed with non-retryable error: ${result.error}`);
+        }
+        return result;
+      }
+      shutdown() {
+        return this._transport.shutdown();
+      }
+    };
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/otlp-http-export-delegate.js
+function createOtlpHttpExporterMetrics(metricsComponentType, exporterMetricsHelper, url2, meterProvider) {
+  return new ExporterMetrics({
+    componentType: metricsComponentType,
+    metricsHelper: exporterMetricsHelper,
+    url: url2,
+    meterProvider,
+    responseAttributesFromError: (error62) => {
+      if (!error62) {
+        return {
+          [ATTR_HTTP_RESPONSE_STATUS_CODE]: 200
+        };
+      }
+      if (!(error62 instanceof OTLPExporterError)) {
+        return {};
+      }
+      return {
+        [ATTR_HTTP_RESPONSE_STATUS_CODE]: error62.code
+      };
+    }
+  });
+}
+function createOtlpHttpExportDelegate(options, serializer, metricsComponentType, exporterMetricsHelper, meterProvider) {
+  return createOtlpExportDelegate({
+    transport: createRetryingTransport({
+      transport: createHttpExporterTransport(options)
+    }),
+    serializer,
+    promiseHandler: createBoundedQueueExportPromiseHandler(options),
+    metrics: createOtlpHttpExporterMetrics(metricsComponentType, exporterMetricsHelper, options.url, meterProvider)
+  }, { timeout: options.timeoutMillis });
+}
+var init_otlp_http_export_delegate = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/otlp-http-export-delegate.js"() {
+    init_otlp_export_delegate();
+    init_http_exporter_transport();
+    init_bounded_queue_export_promise_handler();
+    init_retrying_transport();
+    init_types2();
+    init_semconv2();
+    init_ExporterMetrics();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/shared-env-configuration.js
+function parseAndValidateTimeoutFromEnv(timeoutEnvVar) {
+  const envTimeout = (0, import_core11.getNumberFromEnv)(timeoutEnvVar);
+  if (envTimeout != null) {
+    if (Number.isFinite(envTimeout) && envTimeout > 0) {
+      return envTimeout;
+    }
+    diag2.warn(`Configuration: ${timeoutEnvVar} is invalid, expected number greater than 0 (actual: ${envTimeout})`);
+  }
+  return void 0;
+}
+function getTimeoutFromEnv(signalIdentifier) {
+  const specificTimeout = parseAndValidateTimeoutFromEnv(`OTEL_EXPORTER_OTLP_${signalIdentifier}_TIMEOUT`);
+  const nonSpecificTimeout = parseAndValidateTimeoutFromEnv("OTEL_EXPORTER_OTLP_TIMEOUT");
+  return specificTimeout ?? nonSpecificTimeout;
+}
+function parseAndValidateCompressionFromEnv(compressionEnvVar) {
+  const compression = (0, import_core11.getStringFromEnv)(compressionEnvVar)?.trim();
+  if (compression == null || compression === "none" || compression === "gzip") {
+    return compression;
+  }
+  diag2.warn(`Configuration: ${compressionEnvVar} is invalid, expected 'none' or 'gzip' (actual: '${compression}')`);
+  return void 0;
+}
+function getCompressionFromEnv(signalIdentifier) {
+  const specificCompression = parseAndValidateCompressionFromEnv(`OTEL_EXPORTER_OTLP_${signalIdentifier}_COMPRESSION`);
+  const nonSpecificCompression = parseAndValidateCompressionFromEnv("OTEL_EXPORTER_OTLP_COMPRESSION");
+  return specificCompression ?? nonSpecificCompression;
+}
+function getSharedConfigurationFromEnvironment(signalIdentifier) {
+  return {
+    timeoutMillis: getTimeoutFromEnv(signalIdentifier),
+    compression: getCompressionFromEnv(signalIdentifier)
+  };
+}
+var import_core11;
+var init_shared_env_configuration = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/shared-env-configuration.js"() {
+    import_core11 = __toESM(require_src());
+    init_esm();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/otlp-node-http-env-configuration.js
+import * as fs2 from "fs";
+import * as path2 from "path";
+function getStaticHeadersFromEnv(signalIdentifier) {
+  const signalSpecificRawHeaders = (0, import_core12.getStringFromEnv)(`OTEL_EXPORTER_OTLP_${signalIdentifier}_HEADERS`);
+  const nonSignalSpecificRawHeaders = (0, import_core12.getStringFromEnv)("OTEL_EXPORTER_OTLP_HEADERS");
+  const signalSpecificHeaders = (0, import_core12.parseKeyPairsIntoRecord)(signalSpecificRawHeaders);
+  const nonSignalSpecificHeaders = (0, import_core12.parseKeyPairsIntoRecord)(nonSignalSpecificRawHeaders);
+  if (Object.keys(signalSpecificHeaders).length === 0 && Object.keys(nonSignalSpecificHeaders).length === 0) {
+    return void 0;
+  }
+  return Object.assign({}, (0, import_core12.parseKeyPairsIntoRecord)(nonSignalSpecificRawHeaders), (0, import_core12.parseKeyPairsIntoRecord)(signalSpecificRawHeaders));
+}
+function appendRootPathToUrlIfNeeded(url2) {
+  try {
+    const parsedUrl = new URL(url2);
+    return parsedUrl.toString();
+  } catch {
+    diag2.warn(`Configuration: Could not parse environment-provided export URL: '${url2}', falling back to undefined`);
+    return void 0;
+  }
+}
+function appendResourcePathToUrl(url2, path3) {
+  try {
+    new URL(url2);
+  } catch {
+    diag2.warn(`Configuration: Could not parse environment-provided export URL: '${url2}', falling back to undefined`);
+    return void 0;
+  }
+  if (!url2.endsWith("/")) {
+    url2 = url2 + "/";
+  }
+  url2 += path3;
+  try {
+    new URL(url2);
+  } catch {
+    diag2.warn(`Configuration: Provided URL appended with '${path3}' is not a valid URL, using 'undefined' instead of '${url2}'`);
+    return void 0;
+  }
+  return url2;
+}
+function getNonSpecificUrlFromEnv(signalResourcePath) {
+  const envUrl = (0, import_core12.getStringFromEnv)("OTEL_EXPORTER_OTLP_ENDPOINT");
+  if (envUrl === void 0) {
+    return void 0;
+  }
+  return appendResourcePathToUrl(envUrl, signalResourcePath);
+}
+function getSpecificUrlFromEnv(signalIdentifier) {
+  const envUrl = (0, import_core12.getStringFromEnv)(`OTEL_EXPORTER_OTLP_${signalIdentifier}_ENDPOINT`);
+  if (envUrl === void 0) {
+    return void 0;
+  }
+  return appendRootPathToUrlIfNeeded(envUrl);
+}
+function readFileFromEnv(signalSpecificEnvVar, nonSignalSpecificEnvVar, warningMessage) {
+  const signalSpecificPath = (0, import_core12.getStringFromEnv)(signalSpecificEnvVar);
+  const nonSignalSpecificPath = (0, import_core12.getStringFromEnv)(nonSignalSpecificEnvVar);
+  const filePath = signalSpecificPath ?? nonSignalSpecificPath;
+  if (filePath != null) {
+    try {
+      return fs2.readFileSync(path2.resolve(process.cwd(), filePath));
+    } catch {
+      diag2.warn(warningMessage);
+      return void 0;
+    }
+  } else {
+    return void 0;
+  }
+}
+function getClientCertificateFromEnv(signalIdentifier) {
+  return readFileFromEnv(`OTEL_EXPORTER_OTLP_${signalIdentifier}_CLIENT_CERTIFICATE`, "OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE", "Failed to read client certificate chain file");
+}
+function getClientKeyFromEnv(signalIdentifier) {
+  return readFileFromEnv(`OTEL_EXPORTER_OTLP_${signalIdentifier}_CLIENT_KEY`, "OTEL_EXPORTER_OTLP_CLIENT_KEY", "Failed to read client certificate private key file");
+}
+function getRootCertificateFromEnv(signalIdentifier) {
+  return readFileFromEnv(`OTEL_EXPORTER_OTLP_${signalIdentifier}_CERTIFICATE`, "OTEL_EXPORTER_OTLP_CERTIFICATE", "Failed to read root certificate file");
+}
+function getNodeHttpConfigurationFromEnvironment(signalIdentifier, signalResourcePath) {
+  return {
+    ...getSharedConfigurationFromEnvironment(signalIdentifier),
+    url: getSpecificUrlFromEnv(signalIdentifier) ?? getNonSpecificUrlFromEnv(signalResourcePath),
+    headers: wrapStaticHeadersInFunction(getStaticHeadersFromEnv(signalIdentifier)),
+    agentFactory: httpAgentFactoryFromOptions({
+      keepAlive: true,
+      ca: getRootCertificateFromEnv(signalIdentifier),
+      cert: getClientCertificateFromEnv(signalIdentifier),
+      key: getClientKeyFromEnv(signalIdentifier)
+    })
+  };
+}
+var import_core12;
+var init_otlp_node_http_env_configuration = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/otlp-node-http-env-configuration.js"() {
+    import_core12 = __toESM(require_src());
+    init_esm();
+    init_shared_env_configuration();
+    init_shared_configuration();
+    init_otlp_node_http_configuration();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/convert-legacy-http-options.js
+function convertLegacyHeaders(config2) {
+  if (typeof config2.headers === "function") {
+    return config2.headers;
+  }
+  return wrapStaticHeadersInFunction(config2.headers);
+}
+var init_convert_legacy_http_options = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/convert-legacy-http-options.js"() {
+    init_shared_configuration();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/convert-legacy-node-http-options.js
+function convertLegacyAgentOptions(config2) {
+  if (typeof config2.httpAgentOptions === "function") {
+    return config2.httpAgentOptions;
+  }
+  let legacy = config2.httpAgentOptions;
+  if (config2.keepAlive != null) {
+    legacy = { keepAlive: config2.keepAlive, ...legacy };
+  }
+  if (legacy != null) {
+    return httpAgentFactoryFromOptions(legacy);
+  } else {
+    return void 0;
+  }
+}
+function convertLegacyHttpOptions(config2, signalIdentifier, signalResourcePath, requiredHeaders) {
+  if (config2.metadata) {
+    diag2.warn("Metadata cannot be set when using http");
+  }
+  return mergeOtlpNodeHttpConfigurationWithDefaults({
+    url: config2.url,
+    headers: convertLegacyHeaders(config2),
+    concurrencyLimit: config2.concurrencyLimit,
+    timeoutMillis: config2.timeoutMillis,
+    compression: config2.compression,
+    agentFactory: convertLegacyAgentOptions(config2),
+    userAgent: config2.userAgent
+  }, getNodeHttpConfigurationFromEnvironment(signalIdentifier, signalResourcePath), getNodeHttpConfigurationDefaults(requiredHeaders, signalResourcePath));
+}
+var init_convert_legacy_node_http_options = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/configuration/convert-legacy-node-http-options.js"() {
+    init_esm();
+    init_otlp_node_http_configuration();
+    init_index_node_http();
+    init_otlp_node_http_env_configuration();
+    init_convert_legacy_http_options();
+  }
+});
+
+// node_modules/@opentelemetry/otlp-exporter-base/build/esm/index-node-http.js
+var index_node_http_exports = {};
+__export(index_node_http_exports, {
+  convertLegacyHttpOptions: () => convertLegacyHttpOptions,
+  createOtlpHttpExportDelegate: () => createOtlpHttpExportDelegate,
+  createOtlpHttpExporterMetrics: () => createOtlpHttpExporterMetrics,
+  getSharedConfigurationFromEnvironment: () => getSharedConfigurationFromEnvironment,
+  httpAgentFactoryFromOptions: () => httpAgentFactoryFromOptions
+});
+var init_index_node_http = __esm({
+  "node_modules/@opentelemetry/otlp-exporter-base/build/esm/index-node-http.js"() {
+    init_otlp_node_http_configuration();
+    init_otlp_http_export_delegate();
+    init_shared_env_configuration();
+    init_convert_legacy_node_http_options();
+  }
+});
+
+// node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/semconv.js
+var require_semconv5 = __commonJS({
+  "node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/semconv.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTEL_COMPONENT_TYPE_VALUE_OTLP_HTTP_SPAN_EXPORTER = void 0;
+    exports.OTEL_COMPONENT_TYPE_VALUE_OTLP_HTTP_SPAN_EXPORTER = "otlp_http_span_exporter";
+  }
+});
+
+// node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/platform/node/OTLPTraceExporter.js
+var require_OTLPTraceExporter = __commonJS({
+  "node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/platform/node/OTLPTraceExporter.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTLPTraceExporter = void 0;
+    var otlp_exporter_base_1 = (init_esm2(), __toCommonJS(esm_exports2));
+    var otlp_transformer_1 = require_src6();
+    var node_http_1 = (init_index_node_http(), __toCommonJS(index_node_http_exports));
+    var semconv_1 = require_semconv5();
+    var OTLPTraceExporter = class extends otlp_exporter_base_1.OTLPExporterBase {
+      constructor(config2 = {}) {
+        super((0, node_http_1.createOtlpHttpExportDelegate)((0, node_http_1.convertLegacyHttpOptions)(config2, "TRACES", "v1/traces", {
+          "Content-Type": "application/json"
+        }), otlp_transformer_1.JsonTraceSerializer, semconv_1.OTEL_COMPONENT_TYPE_VALUE_OTLP_HTTP_SPAN_EXPORTER, otlp_transformer_1.TraceExporterMetricsHelper, config2.selfObsMeterProvider));
+      }
+    };
+    exports.OTLPTraceExporter = OTLPTraceExporter;
+  }
+});
+
+// node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/platform/node/index.js
+var require_node4 = __commonJS({
+  "node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/platform/node/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTLPTraceExporter = void 0;
+    var OTLPTraceExporter_1 = require_OTLPTraceExporter();
+    Object.defineProperty(exports, "OTLPTraceExporter", { enumerable: true, get: function() {
+      return OTLPTraceExporter_1.OTLPTraceExporter;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/platform/index.js
+var require_platform4 = __commonJS({
+  "node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/platform/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTLPTraceExporter = void 0;
+    var node_1 = require_node4();
+    Object.defineProperty(exports, "OTLPTraceExporter", { enumerable: true, get: function() {
+      return node_1.OTLPTraceExporter;
+    } });
+  }
+});
+
+// node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/index.js
+var require_src7 = __commonJS({
+  "node_modules/@opentelemetry/exporter-trace-otlp-http/build/src/index.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.OTLPTraceExporter = void 0;
+    var platform_1 = require_platform4();
+    Object.defineProperty(exports, "OTLPTraceExporter", { enumerable: true, get: function() {
+      return platform_1.OTLPTraceExporter;
+    } });
+  }
+});
+
+// src/telemetry/otel.ts
+var otel_exports = {};
+__export(otel_exports, {
+  NOOP_SINK: () => NOOP_SINK,
+  clientAttributes: () => clientAttributes,
+  createTracer: () => createTracer,
+  genAiProvider: () => genAiProvider,
+  inputTokens: () => inputTokens,
+  operationOf: () => operationOf,
+  serverAttributes: () => serverAttributes
+});
+function operationOf(surface) {
+  return surface === "anthropic-count-tokens" ? "count_tokens" : "chat";
+}
+function genAiProvider(surface) {
+  return surface === "openai-responses" ? "openai" : "anthropic";
+}
+function inputTokens(u) {
+  return u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
+}
+function usageAttrs(r) {
+  const u = r.outcome.usage;
+  if (!u) return {};
+  return {
+    [GEN_AI.usageInputTokens]: inputTokens(u),
+    [GEN_AI.usageOutputTokens]: u.output,
+    [GEN_AI.usageCacheReadInputTokens]: u.cacheRead,
+    [GEN_AI.usageCacheWriteInputTokens]: u.cacheWrite5m + u.cacheWrite1h
+  };
+}
+function serverAttributes(r) {
+  const a = {
+    [TOKENYARD2.tenant]: label(r.tenant),
+    [TOKENYARD2.decision]: r.decision.action,
+    [TOKENYARD2.policyRevision]: label(r.policy.revision),
+    [TOKENYARD2.priceTable]: label(r.outcome.priceTable),
+    [TOKENYARD2.costBasis]: r.outcome.costBasis,
+    "http.response.status_code": r.outcome.status
+  };
+  if (r.team) a[TOKENYARD2.team] = label(r.team);
+  if (r.decision.route) a[TOKENYARD2.route] = label(r.decision.route);
+  if (r.decision.reason) a["tokenyard.decision.reason"] = label(r.decision.reason);
+  if (r.attribution.requestClass) a[TOKENYARD2.requestClass] = label(r.attribution.requestClass);
+  if (r.attribution.agent) a[TOKENYARD2.agentId] = r.attribution.agent;
+  if (r.attribution.session) a[GEN_AI.conversationId] = r.attribution.session;
+  if (r.outcome.costMicroUsd !== null) a[TOKENYARD2.costUsd] = r.outcome.costMicroUsd / 1e6;
+  if (r.outcome.addedTtfbMs !== null) a[TOKENYARD2.addedTtfbMs] = r.outcome.addedTtfbMs;
+  if (r.outcome.errorClass) a[GEN_AI.errorType] = label(r.outcome.errorClass);
+  return a;
+}
+function clientAttributes(r, attempt, answered) {
+  const model = r.features.model;
+  const a = {
+    [GEN_AI.operationName]: operationOf(r.surface),
+    [GEN_AI.providerName]: genAiProvider(r.surface),
+    [GEN_AI.requestStream]: r.features.stream
+  };
+  if (model) a[GEN_AI.requestModel] = label(model);
+  const provider2 = attempt?.provider ?? r.outcome.provider;
+  if (provider2) a[TOKENYARD2.provider] = label(provider2);
+  if (r.attribution.session) a[GEN_AI.conversationId] = r.attribution.session;
+  if (attempt?.status != null) a["http.response.status_code"] = attempt.status;
+  if (attempt?.errorType) a[GEN_AI.errorType] = label(attempt.errorType);
+  else if (attempt?.status != null && attempt.status >= 400) a[GEN_AI.errorType] = String(attempt.status);
+  if (answered) {
+    if (r.outcome.upstreamModel) a[GEN_AI.responseModel] = label(r.outcome.upstreamModel);
+    if (r.outcome.ttfbMs !== null) a[GEN_AI.responseTimeToFirstChunk] = r.outcome.ttfbMs / 1e3;
+    Object.assign(a, usageAttrs(r));
+  }
+  return a;
+}
+async function createTracer(endpoint, opts = {}) {
+  if (endpoint === null && opts.exporter === void 0) return NOOP_SINK;
+  const [api, base, resources] = await Promise.all([Promise.resolve().then(() => (init_esm(), esm_exports)), Promise.resolve().then(() => __toESM(require_index_shim(), 1)), Promise.resolve().then(() => __toESM(require_src2(), 1))]);
+  let exporter = opts.exporter;
+  if (exporter === void 0) {
+    const { OTLPTraceExporter } = await Promise.resolve().then(() => __toESM(require_src7(), 1));
+    const url2 = endpoint.replace(/\/+$/, "");
+    exporter = new OTLPTraceExporter({ url: url2.endsWith("/v1/traces") ? url2 : `${url2}/v1/traces` });
+  }
+  const processor = opts.exporter !== void 0 ? new base.SimpleSpanProcessor(exporter) : new base.BatchSpanProcessor(exporter);
+  const provider2 = new base.BasicTracerProvider({
+    resource: resources.resourceFromAttributes({ "service.name": "tokenyard" }),
+    spanProcessors: [processor]
+  });
+  const tracer = provider2.getTracer("tokenyard");
+  const { SpanKind: SpanKind2, SpanStatusCode: SpanStatusCode2, trace: trace2, ROOT_CONTEXT: ROOT_CONTEXT2 } = api;
+  return {
+    requestSpan(r, attempts) {
+      const start = Date.parse(r.ts);
+      const end = start + r.outcome.totalMs;
+      const server = tracer.startSpan(`tokenyard ${r.surface}`, { kind: SpanKind2.SERVER, startTime: start, attributes: serverAttributes(r) }, ROOT_CONTEXT2);
+      if (r.outcome.status >= 500) server.setStatus({ code: SpanStatusCode2.ERROR });
+      const ctx = trace2.setSpan(ROOT_CONTEXT2, server);
+      const list3 = attempts && attempts.length > 0 ? [...attempts] : r.outcome.provider !== null ? [null] : [];
+      const op = operationOf(r.surface);
+      const name2 = `${op} ${label(r.features.model)}`.trim();
+      list3.forEach((attempt, i) => {
+        const answered = attempt === null ? true : i === list3.length - 1 && r.outcome.provider === attempt.provider;
+        const s2 = tracer.startSpan(
+          name2,
+          { kind: SpanKind2.CLIENT, startTime: attempt?.startMs ?? start, attributes: { ...clientAttributes(r, attempt, answered), [TOKENYARD2.attempt]: i + 1 } },
+          ctx
+        );
+        const status = attempt === null ? r.outcome.status : attempt.status;
+        if (status === null || status >= 400) s2.setStatus({ code: SpanStatusCode2.ERROR });
+        s2.end(attempt?.endMs ?? end);
+      });
+      server.end(end);
+    },
+    shutdown: () => provider2.shutdown()
+  };
+}
+var NOOP_SINK, label;
+var init_otel = __esm({
+  "src/telemetry/otel.ts"() {
+    "use strict";
+    init_sanitize();
+    init_semconv();
+    NOOP_SINK = { requestSpan: () => void 0, shutdown: () => Promise.resolve() };
+    label = (v) => sanitizeHeaderValue(v).value;
+  }
+});
+
 // src/mock/openai.ts
 import { createServer as createServer3 } from "node:http";
 function parseBody2(body) {
@@ -103602,8 +120033,8 @@ async function startOpenAIMock(opts = {}) {
   let respCount = 0;
   const cache = /* @__PURE__ */ new Map();
   async function respond(rec, res) {
-    const path2 = rec.pathAndQuery.split("?")[0];
-    if (rec.method !== "POST" || path2 !== "/responses" && path2 !== "/v1/responses") {
+    const path3 = rec.pathAndQuery.split("?")[0];
+    if (rec.method !== "POST" || path3 !== "/responses" && path3 !== "/v1/responses") {
       res.writeHead(404, { "content-type": "application/json" }).end('{"error":{"message":"not found","type":"invalid_request_error","param":null,"code":"unknown_url"}}');
       return;
     }
@@ -103658,9 +120089,9 @@ async function startOpenAIMock(opts = {}) {
     else events.push(ev("response.completed", { response: response("completed", true) }));
     let closed = false;
     res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve4) => {
-      if (closed || res.destroyed) return resolve4();
-      res.write(chunk, () => resolve4());
+    const write = (chunk) => new Promise((resolve5) => {
+      if (closed || res.destroyed) return resolve5();
+      res.write(chunk, () => resolve5());
     });
     if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
     if (closed) return;
@@ -103692,7 +120123,7 @@ async function startOpenAIMock(opts = {}) {
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve4) => server.listen(opts.port ?? 0, "127.0.0.1", resolve4));
+  await new Promise((resolve5) => server.listen(opts.port ?? 0, "127.0.0.1", resolve5));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -103701,8 +120132,8 @@ async function startOpenAIMock(opts = {}) {
       scenario = s2;
     },
     close() {
-      return new Promise((resolve4) => {
-        server.close(() => resolve4());
+      return new Promise((resolve5) => {
+        server.close(() => resolve5());
         server.closeAllConnections();
       });
     }
@@ -104291,10 +120722,10 @@ function blockName(plan, f, reason, admission) {
 async function* iterate(xs) {
   yield* xs;
 }
-function admitOrder(window) {
-  return window.map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r })).sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i).map(({ i, at }) => ({ i, at }));
+function admitOrder(window2) {
+  return window2.map((r, i) => ({ i, at: Date.parse(r.ts) + Math.max(0, r.decision.admitOffsetMs ?? 0), r })).sort((a, b) => a.at - b.at || cmp(a.r.instance, b.r.instance) || (a.r.decision.admitSeq ?? 0) - (b.r.decision.admitSeq ?? 0) || a.i - b.i).map(({ i, at }) => ({ i, at }));
 }
-async function simulate(policy2, which, window, warm, startMs, ratios) {
+async function simulate(policy2, which, window2, warm, startMs, ratios) {
   let now = startMs;
   const store = createSimStore(() => now);
   await store.seed(await warmupEntries(iterate(warm), policy2, startMs));
@@ -104358,8 +120789,8 @@ async function simulate(policy2, which, window, warm, startMs, ratios) {
   const outcomes = [];
   const cuts = [];
   const sessions = /* @__PURE__ */ new Map();
-  for (const { i, at: ms } of admitOrder(window)) {
-    const r = window[i];
+  for (const { i, at: ms } of admitOrder(window2)) {
+    const r = window2[i];
     await drain(ms);
     now = ms;
     const session = r.attribution.session;
@@ -104401,7 +120832,7 @@ async function simulate(policy2, which, window, warm, startMs, ratios) {
   await drain(Number.POSITIVE_INFINITY);
   return { outcomes, cuts };
 }
-function totals(outcomes, window) {
+function totals(outcomes, window2) {
   let costMicroUsd2 = 0;
   let estimated = false;
   let forwarded = 0;
@@ -104413,7 +120844,7 @@ function totals(outcomes, window) {
     forwarded++;
     costMicroUsd2 += o.cost.costMicroUsd;
     estimated ||= o.cost.estimated;
-    bases.add(window[i].outcome.costBasis);
+    bases.add(window2[i].outcome.costBasis);
   });
   const costBasis = bases.size > 1 ? "mixed" : bases.has("api-equivalent") ? "api-equivalent" : "billed";
   return { costMicroUsd: costMicroUsd2, costBasis, estimated, forwarded, blocked };
@@ -104433,12 +120864,12 @@ async function replay(o) {
   const sinceMs = o.sinceMs ?? (firstManifest ? Date.parse(firstManifest.since) : all[0]?.ms ?? 0);
   const untilMs = firstManifest ? Math.max(...manifests.map((m) => Date.parse(m.until))) : all.at(-1)?.ms ?? sinceMs;
   const warm = all.filter((x) => x.ms < sinceMs).map((x) => x.r);
-  const window = all.filter((x) => x.ms >= sinceMs).map((x) => x.r);
-  const base = await simulate(o.base, "base", window, warm, sinceMs, new OutputRatios([...warm, ...window], o.base.prices));
-  const head = await simulate(o.head, "head", window, warm, sinceMs, new OutputRatios([...warm, ...window], o.head.prices));
+  const window2 = all.filter((x) => x.ms >= sinceMs).map((x) => x.r);
+  const base = await simulate(o.base, "base", window2, warm, sinceMs, new OutputRatios([...warm, ...window2], o.base.prices));
+  const head = await simulate(o.head, "head", window2, warm, sinceMs, new OutputRatios([...warm, ...window2], o.head.prices));
   let compared = 0;
   const reasons = [];
-  window.forEach((r, i) => {
+  window2.forEach((r, i) => {
     const replayed = base.outcomes[i]?.decision ?? null;
     if (r.policy.revision !== o.base.revision || r.decision.preDecision || replayed === null) return;
     compared++;
@@ -104446,10 +120877,10 @@ async function replay(o) {
     if (d !== null) reasons.push(d);
   });
   const disagreements = countBy(reasons, (x) => [x]).map((g) => ({ reason: g.item, count: g.count })).sort((a, b) => b.count - a.count || cmp(a.reason, b.reason));
-  if (compared === 0) disagreements.push({ reason: `no request in the window was recorded under the base revision ${o.base.revision}`, count: window.length });
+  if (compared === 0) disagreements.push({ reason: `no request in the window was recorded under the base revision ${o.base.revision}`, count: window2.length });
   const agreement = compared === 0 ? 0 : (compared - reasons.length) / compared;
   const rerouted = [];
-  window.forEach((r, i) => {
+  window2.forEach((r, i) => {
     const b = base.outcomes[i];
     const h = head.outcomes[i];
     if (b?.kind !== "forward" || h?.kind !== "forward") return;
@@ -104464,7 +120895,7 @@ async function replay(o) {
     { which: "base", outcomes: base.outcomes },
     { which: "head", outcomes: head.outcomes }
   ];
-  const blocks = both.flatMap(({ which, outcomes }) => outcomes.flatMap((x, i) => x.kind === "block" ? [{ which, x, r: window[i] }] : []));
+  const blocks = both.flatMap(({ which, outcomes }) => outcomes.flatMap((x, i) => x.kind === "block" ? [{ which, x, r: window2[i] }] : []));
   const blocked = countBy(blocks, (b) => [b.which, b.x.reason, b.x.name]).map((g) => ({ policy: g.item.which, reason: g.item.x.reason, name: g.item.x.name, count: g.count })).sort((a, b) => cmp(a.policy, b.policy) || b.count - a.count || cmp(a.reason, b.reason) || cmp(a.name, b.name));
   const hits = /* @__PURE__ */ new Map();
   for (const b of blocks) {
@@ -104478,12 +120909,12 @@ async function replay(o) {
   }
   const budgetHits = [...hits.values()].sort((a, b) => cmp(a.policy, b.policy) || cmp(a.budget, b.budget) || cmp(a.scopeValue, b.scopeValue)).map((h) => ({ policy: h.policy, budget: h.budget, scopeValue: h.scopeValue, firstHitTs: new Date(h.firstMs).toISOString(), days: h.days.size }));
   const forwardedCosts = [...base.outcomes, ...head.outcomes].flatMap((x) => x.kind === "forward" && x.cost ? [x.cost] : []);
-  const baseTotals = totals(base.outcomes, window);
-  const headTotals = totals(head.outcomes, window);
+  const baseTotals = totals(base.outcomes, window2);
+  const headTotals = totals(head.outcomes, window2);
   const counterBlock = blocks.some((b) => b.x.reason === "budget" || b.x.reason === "rate" || b.x.reason === "streams");
   const switchedModel = forwardedCosts.some((c) => c.modelChanged);
   const exactness = exactnessRows({
-    routes: window.length > 0,
+    routes: window2.length > 0,
     counters: counterBlock || base.cuts.length + head.cuts.length > 0,
     costSameModel: forwardedCosts.some((c) => !c.modelChanged),
     costModelChange: switchedModel,
@@ -104495,9 +120926,9 @@ async function replay(o) {
     schemaVersion: 1,
     window: { sinceMs, untilMs },
     tenant: o.tenant,
-    requests: window.length,
-    sessions: new Set(window.flatMap((r) => r.attribution.session === null ? [] : [r.attribution.session])).size,
-    fidelity: { agreement, disagreements, missingInstances: missingInstances(manifests, window) },
+    requests: window2.length,
+    sessions: new Set(window2.flatMap((r) => r.attribution.session === null ? [] : [r.attribution.session])).size,
+    fidelity: { agreement, disagreements, missingInstances: missingInstances(manifests, window2) },
     base: baseTotals,
     head: headTotals,
     rerouted: countBy(rerouted, (x) => [x.fromRoute, x.toRoute, x.requestClass ?? "\0"]).map((g) => ({ ...g.item, count: g.count })).sort((a, b) => b.count - a.count || cmp(a.fromRoute, b.fromRoute) || cmp(a.toRoute, b.toRoute) || cmp(a.requestClass ?? "", b.requestClass ?? "")),
@@ -104522,10 +120953,10 @@ var init_engine = __esm({
     init_fidelity();
     init_sim_store();
     RawTraceDirError = class extends Error {
-      constructor(path2) {
-        const what = path2 === null ? "the traces hold lines of raw per-instance files (segment, heartbeat or shutdown records)" : `${path2} is a directory of raw per-instance trace files`;
+      constructor(path3) {
+        const what = path3 === null ? "the traces hold lines of raw per-instance files (segment, heartbeat or shutdown records)" : `${path3} is a directory of raw per-instance trace files`;
         super(`${what}; replay needs one merged set, because a partial set would undercount budgets. Run tokenyard traces export --trace-dir <dir> --since 7d --out traces.ndjson and pass that file`);
-        this.path = path2;
+        this.path = path3;
         this.name = "RawTraceDirError";
       }
       path;
@@ -104856,7 +121287,7 @@ __export(harness_exports, {
 });
 import { randomBytes as randomBytes5 } from "node:crypto";
 import { access, constants as constants4, readdir as readdir2 } from "node:fs/promises";
-import { closeSync as closeSync2, existsSync as existsSync2, openSync as openSync2, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync as closeSync2, existsSync as existsSync2, openSync as openSync2, readFileSync as readFileSync2, unlinkSync, writeSync } from "node:fs";
 import { hostname as hostname3 } from "node:os";
 import { dirname as dirname2, join as join8 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104866,7 +121297,7 @@ function packageRoot() {
     const pkg = join8(dir, "package.json");
     if (existsSync2(pkg)) {
       try {
-        if (JSON.parse(readFileSync(pkg, "utf8")).name === PACKAGE_NAME) return dir;
+        if (JSON.parse(readFileSync2(pkg, "utf8")).name === PACKAGE_NAME) return dir;
       } catch {
       }
     }
@@ -104880,10 +121311,10 @@ function defaultLivePaths() {
   return { traceDir: join8(root, ".live", "traces"), policyDir: join8(root, "test", "live") };
 }
 function acquireLock(traceDir) {
-  const path2 = join8(traceDir, LIVE_LOCK_FILE);
+  const path3 = join8(traceDir, LIVE_LOCK_FILE);
   for (let attempt = 0; ; attempt++) {
     try {
-      const fd = openSync2(path2, "wx");
+      const fd = openSync2(path3, "wx");
       try {
         writeSync(fd, `${process.pid}
 `);
@@ -104895,14 +121326,14 @@ function acquireLock(traceDir) {
       if (e2.code !== "EEXIST" || attempt > 0) throw e2;
       let holder = Number.NaN;
       try {
-        holder = Number.parseInt(readFileSync(path2, "utf8").trim(), 10);
+        holder = Number.parseInt(readFileSync2(path3, "utf8").trim(), 10);
       } catch {
       }
       if (Number.isInteger(holder) && holder > 0 && alive(holder)) {
-        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path2})`);
+        throw new Error(`tokenyard live: another live harness (pid ${holder}) is running on ${traceDir}; stop it first (lock ${path3})`);
       }
       try {
-        unlinkSync(path2);
+        unlinkSync(path3);
       } catch {
       }
     }
@@ -104913,7 +121344,7 @@ function acquireLock(traceDir) {
     released = true;
     process.off("exit", release);
     try {
-      if (readFileSync(path2, "utf8").trim() === String(process.pid)) unlinkSync(path2);
+      if (readFileSync2(path3, "utf8").trim() === String(process.pid)) unlinkSync(path3);
     } catch {
     }
   };
@@ -105145,7 +121576,7 @@ __export(replay_input_exports, {
 import { execFileSync } from "node:child_process";
 import { lstat as lstat4, stat as stat2 } from "node:fs/promises";
 import { lstatSync as lstatSync2, realpathSync as realpathSync2 } from "node:fs";
-import { dirname as dirname3, isAbsolute as isAbsolute2, join as join9, relative as relative2, resolve as resolve3, sep as sep2 } from "node:path";
+import { dirname as dirname3, isAbsolute as isAbsolute2, join as join9, relative as relative2, resolve as resolve4, sep as sep2 } from "node:path";
 async function openReplayTraces(paths, o = {}) {
   for (const p of paths) {
     await checkPath(o.root ?? cliRoot(p), p);
@@ -105155,8 +121586,8 @@ async function openReplayTraces(paths, o = {}) {
 }
 function locateRepoDir(dir, workspace) {
   if (workspace !== null) {
-    const root = resolve3(workspace);
-    const abs = resolve3(dir);
+    const root = resolve4(workspace);
+    const abs = resolve4(dir);
     const rel = relative2(root, abs);
     if (rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) throw new Error(`policy directory ${JSON.stringify(dir)} is outside the workspace`);
     let cur = root;
@@ -105171,8 +121602,8 @@ function locateRepoDir(dir, workspace) {
     }
     return { top: realpathSync2(root), rel: rel.split(sep2).join("/"), label: dir };
   }
-  const top = realpathSync2(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: resolve3(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim());
-  return { top, rel: relative2(top, realpathSync2(resolve3(dir))).split(sep2).join("/"), label: dir };
+  const top = realpathSync2(execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: resolve4(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim());
+  return { top, rel: relative2(top, realpathSync2(resolve4(dir))).split(sep2).join("/"), label: dir };
 }
 function gitIn(repo, args) {
   return execFileSync("git", ["-c", "safe.bareRepository=explicit", "--git-dir", join9(repo.top, ".git"), "--work-tree", repo.top, ...args], {
@@ -105398,13 +121829,13 @@ __export(main_exports, {
 });
 import { appendFile, readFile as readFile2 } from "node:fs/promises";
 import { join as join10 } from "node:path";
-import { Readable as Readable2, Transform as Transform2 } from "node:stream";
+import { Readable as Readable3, Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 async function readEvent(env) {
-  const path2 = env.GITHUB_EVENT_PATH;
-  if (!path2) return null;
+  const path3 = env.GITHUB_EVENT_PATH;
+  if (!path3) return null;
   try {
-    const ev = JSON.parse(await readFile2(path2, "utf8"));
+    const ev = JSON.parse(await readFile2(path3, "utf8"));
     const pr = ev.pull_request;
     if (!pr) return null;
     const headRepo = pr.head?.repo;
@@ -105427,7 +121858,7 @@ async function download(url2, token, root, dest) {
       cb(seen > MAX_TRACES_BYTES ? new Error("traces download is larger than 512 MiB") : null, chunk);
     }
   });
-  await pipeline2(Readable2.fromWeb(res.body), cap2, await createWriteStreamUnder(root, dest));
+  await pipeline2(Readable3.fromWeb(res.body), cap2, await createWriteStreamUnder(root, dest));
 }
 function clip(body) {
   if (body.length <= MAX_COMMENT) return body;
@@ -105513,15 +121944,15 @@ async function runAction(env, gh) {
 }
 function githubClient(env) {
   const api = (env.GITHUB_API_URL || "https://api.github.com").replace(/\/+$/, "");
-  const call = async (method, path2, body) => {
+  const call = async (method, path3, body) => {
     const token = input2(env, "token");
     if (token === "") throw new Error("the token input is empty");
-    const res = await fetch(`${api}${path2}`, {
+    const res = await fetch(`${api}${path3}`, {
       method,
       headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "user-agent": "tokenyard-action", ...body === void 0 ? {} : { "content-type": "application/json" } },
       ...body === void 0 ? {} : { body: JSON.stringify(body) }
     });
-    if (!res.ok) throw new Error(`GitHub API ${method} ${path2} answered HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`GitHub API ${method} ${path3} answered HTTP ${res.status}`);
     return res.status === 204 ? null : res.json();
   };
   const target = async () => {
@@ -108695,9 +125126,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [path]
    * @return {(string|null|Command)}
    */
-  executableDir(path2) {
-    if (path2 === void 0) return this._executableDir;
-    this._executableDir = path2;
+  executableDir(path3) {
+    if (path3 === void 0) return this._executableDir;
+    this._executableDir = path3;
     return this;
   }
   /**
@@ -108708,14 +125139,14 @@ Expecting one of '${allowedValues.join("', '")}'`);
    */
   helpInformation(contextOptions) {
     const helper = this.createHelp();
-    const context = this._getOutputContext(contextOptions);
+    const context2 = this._getOutputContext(contextOptions);
     helper.prepareContext({
-      error: context.error,
-      helpWidth: context.helpWidth,
-      outputHasColors: context.hasColors
+      error: context2.error,
+      helpWidth: context2.helpWidth,
+      outputHasColors: context2.hasColors
     });
     const text2 = helper.formatHelp(this, helper);
-    if (context.hasColors) return text2;
+    if (context2.hasColors) return text2;
     return this._outputConfiguration.stripColor(text2);
   }
   /**
@@ -108883,15 +125314,15 @@ Expecting one of '${allowedValues.join("', '")}'`);
 Expecting one of '${allowedValues.join("', '")}'`);
     }
     const helpEvent = `${position}Help`;
-    this.on(helpEvent, (context) => {
+    this.on(helpEvent, (context2) => {
       let helpStr;
       if (typeof text2 === "function") {
-        helpStr = text2({ error: context.error, command: context.command });
+        helpStr = text2({ error: context2.error, command: context2.command });
       } else {
         helpStr = text2;
       }
       if (helpStr) {
-        context.write(`${helpStr}
+        context2.write(`${helpStr}
 `);
       }
     });
@@ -108984,6 +125415,10 @@ var package_default = {
     "check:secrets": "node scripts/check-no-secrets.mjs"
   },
   devDependencies: {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@types/node": "^22.20.5",
     commander: "^15.0.0",
     esbuild: "^0.28.2",
@@ -109075,7 +125510,7 @@ program2.command("mock").description("run the deterministic mock Anthropic provi
 program2.command("serve").description("run the gateway").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--host <host>", "address to bind", "127.0.0.1").option("--base-path <path>", "mount prefix stripped before path matching").option(
   "--dev-upstream <url>",
   "development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)"
-).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)").action(async (o) => {
+).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt <salt>", "HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs --trace-salt").option("--metrics-port <n>", "serve /metrics, /healthz and /readyz on this port only; /metrics is then a 404 on --port (default: /metrics on --port)").option("--metrics-host <host>", "address to bind for --metrics-port", "127.0.0.1").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)").action(async (o) => {
   if (!o.devUpstream && !o.policy && !o.policyUrl) {
     console.error("tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)");
     process.exit(1);
@@ -109108,6 +125543,19 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   }
   if (o.traceDir && !traceSalt) {
     console.error("tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)");
+    process.exit(1);
+  }
+  const otlpEndpoint = o.otlpEndpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? null;
+  if (otlpEndpoint !== null && !/^https?:\/\/[^\s]+$/.test(otlpEndpoint)) {
+    console.error("tokenyard serve: --otlp-endpoint must be an http:// or https:// URL");
+    process.exit(1);
+  }
+  if (otlpEndpoint !== null && !traceSalt) {
+    console.error("tokenyard serve: --otlp-endpoint needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids on spans are HMAC pseudonyms)");
+    process.exit(1);
+  }
+  if (o.metricsPort !== void 0 && !/^\d+$/.test(o.metricsPort)) {
+    console.error("tokenyard serve: --metrics-port must be a port number");
     process.exit(1);
   }
   const { hostname: hostname4 } = await import("node:os");
@@ -109146,9 +125594,21 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   const { openCounterStore: openCounterStore2, SWEEP_INTERVAL_MS: SWEEP_INTERVAL_MS2, warmUpFromTraces: warmUpFromTraces2 } = await Promise.resolve().then(() => (init_open_store(), open_store_exports));
   const { startSweeper: startSweeper2 } = await Promise.resolve().then(() => (init_sweeper(), sweeper_exports));
   const runtime = createGatewayRuntime2();
+  const { createMetrics: createMetrics2, registerCollectors: registerCollectors2 } = await Promise.resolve().then(() => (init_metrics(), metrics_exports));
+  const { createTracer: createTracer2 } = await Promise.resolve().then(() => (init_otel(), otel_exports));
+  const metrics2 = createMetrics2();
+  const spans = await createTracer2(otlpEndpoint);
+  registerCollectors2(metrics2, {
+    revision: () => activePolicy().revision,
+    ...loader ? { loadErrors: () => loader.loadErrors } : {},
+    ...writer ? { traceDrops: () => writer.dropped } : {}
+  });
   let counters;
   try {
-    counters = await openCounterStore2({ kind: o.store, ...redisUrl ? { redisUrl } : {}, instance: instanceId, onSwept: runtime.onSwept });
+    counters = await openCounterStore2({ kind: o.store, ...redisUrl ? { redisUrl } : {}, instance: instanceId, onSwept: (ids) => {
+      runtime.onSwept(ids);
+      metrics2.inc("tokenyard_swept_total", {}, ids.length);
+    } });
     if (o.traceDir) {
       const n2 = await warmUpFromTraces2(counters.store, o.traceDir, activePolicy(), Date.now());
       if (n2 > 0) console.error(`tokenyard: warm-up seeded ${n2} budget counter(s) from ${o.traceDir}`);
@@ -109164,7 +125624,10 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     onTick: () => {
       if (++ticks % 2 === 0) writer?.heartbeat();
     },
-    onError: (e2) => console.error(`tokenyard: sweeper: ${e2 instanceof Error ? e2.message : String(e2)}`)
+    onError: (e2) => {
+      metrics2.inc("tokenyard_sweeper_errors_total");
+      console.error(`tokenyard: sweeper: ${e2 instanceof Error ? e2.message : String(e2)}`);
+    }
   });
   const gw = createGateway2({
     policy: activePolicy,
@@ -109176,12 +125639,16 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     newId: () => ulid4(),
     basePath: o.basePath ?? null,
     bodyCapBytes: DEFAULT_BODY_CAP_BYTES2,
-    experimentalSubscription: o.experimentalSubscription === true
+    experimentalSubscription: o.experimentalSubscription === true,
+    metrics: metrics2,
+    ...otlpEndpoint !== null ? { spans } : {},
+    ...o.metricsPort !== void 0 ? { metricsOnOtherPort: true } : {}
   });
   console.log(await gw.listen(Number(o.port), o.host));
+  if (o.metricsPort !== void 0) console.error(`tokenyard: metrics on ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)}/metrics`);
   const stop = () => {
     stopSweeper();
-    void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => counters.close()).then(() => process.exit(0));
+    void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => void 0)).then(() => counters.close()).then(() => process.exit(0));
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);

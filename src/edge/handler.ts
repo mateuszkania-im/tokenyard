@@ -24,7 +24,7 @@ import { modelsListBody } from '../surfaces/anthropic-models.js';
 import { extractResponsesFeatures } from '../surfaces/openai-responses.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { Breaker } from '../upstream/breaker.js';
-import { ChainError, runChain, workspaceOf } from '../upstream/chain.js';
+import { type AttemptInfo, ChainError, runChain, workspaceOf } from '../upstream/chain.js';
 import type { UpstreamResponse } from '../upstream/forward.js';
 import { RetryBudget } from '../upstream/retry-budget.js';
 import { readAttribution, type RawAttribution } from './attribution.js';
@@ -32,6 +32,9 @@ import { extractCredentials, hashKey } from './auth.js';
 import { BodyTooLargeError, readBody } from './body.js';
 import { anthropicError, type ErrorEnvelope, type ErrorReply, ownError, retryable } from './errors.js';
 import { clientHeaders, upstreamHeaders } from './headers.js';
+import { createRequestRecorder, type Metrics } from '../telemetry/metrics.js';
+import type { SpanSink } from '../telemetry/otel.js';
+import { matchOps, serveOps } from './ops.js';
 import { matchRoute } from './paths.js';
 import { buildTraceRecord, parseClient } from './trace-record.js';
 
@@ -71,11 +74,33 @@ export interface GatewayDeps {
   admitTimeoutMs?: number;
   /** Where provider credentials (`credential: { env }`) are read inside this process (default `process.env`). */
   env?: NodeJS.ProcessEnv;
+  /** Prometheus metrics (spec 12.2). Served at /metrics on this port unless `metricsOnOtherPort` is set. */
+  metrics?: Metrics;
+  /** OTel span sink (spec 12.2); like traces it needs a `traceSalt`, since spans carry the pseudonyms. */
+  spans?: SpanSink;
+  /** /metrics is answered by the separate ops listener only (`serve --metrics-port`); on this port it is a 404 like any other path. */
+  metricsOnOtherPort?: boolean;
 }
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
 
 class StoreTimeoutError extends Error {}
+
+const recorders = new WeakMap<Metrics, ReturnType<typeof createRequestRecorder>>();
+
+/** Metrics and spans from the finished request's record. Never throws: telemetry must not turn a served request into an error. */
+function emitTelemetry(deps: GatewayDeps, policy: CompiledPolicy, rec: Omit<TraceRecord, 'instance' | 'seq'>, attempts?: AttemptInfo[]): void {
+  try {
+    if (deps.metrics) {
+      let record = recorders.get(deps.metrics);
+      if (!record) recorders.set(deps.metrics, (record = createRequestRecorder(deps.metrics)));
+      record(rec, policy.prices);
+    }
+    deps.spans?.requestSpan(rec, attempts);
+  } catch {
+    // dropped on purpose
+  }
+}
 
 /** Rejects with StoreTimeoutError when `p` takes longer than `ms`; `p` keeps running. */
 function withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -193,6 +218,8 @@ export interface RequestOutcome {
   costModifiers?: string[];
   /** When admit was called, in ms after the request started, and the process's admit call number: replay admits in this order. */
   admitAt?: { offsetMs: number; seq: number };
+  /** Upstream attempts as the forwarder saw them (spans only; not part of the trace record). */
+  attemptLog?: AttemptInfo[];
 }
 
 function sendError(req: IncomingMessage, res: ServerResponse, e: ErrorReply, closeConnection = false): void {
@@ -341,6 +368,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   }
   if (held.admitted) {
     held.settled = true;
+    deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
     let actual = cost ?? 0;
     if (costFailed) {
       actual = held.est;
@@ -353,6 +381,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
       result = await withDeadline((deps.store as CounterStore).settle(o.id, actual), deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS);
     } catch {
       result = 'failed'; // the record stays; the sweeper settles it at the estimate
+      deps.metrics?.inc('tokenyard_store_down_total', { op: 'settle' });
     }
     // Swept here (onSwept), or the record was already gone ('unknown': swept by another instance), or it is left for
     // the sweeper ('failed'): in each case the sweeper settles it at its estimate.
@@ -369,6 +398,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   if (r?.usage && f?.boundKind === 'bytes' && totalInput(r.usage, o.surface) > f.inputTokensBound) {
     o.boundExceeded = true;
     runtime.boundViolations++;
+    deps.metrics?.inc('tokenyard_bound_violations_total');
     if (!runtime.bytesBoundOff) {
       runtime.bytesBoundOff = true;
       console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) until restart`);
@@ -376,7 +406,11 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
   }
   try {
     deps.onSettled?.(o);
-    if (deps.traces) deps.traces.write(buildTraceRecord(o, deps.traceSalt ?? ''));
+    if (deps.traces || deps.metrics || deps.spans) {
+      const rec = buildTraceRecord(o, deps.traceSalt ?? '');
+      emitTelemetry(deps, policy, rec, o.attemptLog);
+      deps.traces?.write(rec);
+    }
   } catch {
     // a failing trace sink must not turn a served request into an error
   }
@@ -433,8 +467,10 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   }
   const envelope: ErrorEnvelope = match.surface === 'openai-responses' ? 'openai' : 'anthropic';
   held.envelope = envelope;
-  const own = (status: number, type: string, reason: string, message: string, retryAfterS: number | null = null, opts: { shouldRetry?: boolean } = {}): ErrorReply =>
-    ownError(envelope, status, type, reason, message, retryAfterS, id, opts);
+  const own = (status: number, type: string, reason: string, message: string, retryAfterS: number | null = null, opts: { shouldRetry?: boolean } = {}): ErrorReply => {
+    if (opts.shouldRetry === false) deps.metrics?.inc('tokenyard_should_retry_refusals_total', { reason });
+    return ownError(envelope, status, type, reason, message, retryAfterS, id, opts);
+  };
   if (match.surface === 'hello') {
     req.resume();
     res.writeHead(200, { 'content-length': '0' }).end();
@@ -583,10 +619,12 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
       // An admit that lands after the deadline reserved for a request handled as store-down: release it at once.
       pending.then((late) => (late.admitted ? store.settle(id, 0) : undefined)).catch(() => undefined);
+      deps.metrics?.inc('tokenyard_store_down_total', { op: 'admit' });
     }
   }
   held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? (plan.reservations[0]?.estMicroUsd ?? 0) : 0;
+  if (held.admitted) deps.metrics?.inc('tokenyard_reservations_open', {}, 1);
   const admitted = {
     reservedMicroUsd: held.est,
     ...(admission ? { audit: admission.audit } : {}),
@@ -631,6 +669,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   let up: UpstreamResponse;
   let answered: ProviderSpec = provider;
   let attempts: number;
+  const attemptLog: AttemptInfo[] = [];
   const forwardedAt = deps.clock();
   try {
     const r = await runChain(plan, policy, { method, pathAndQuery: match.pathAndQuery, headers: headersFor(provider), body: upstreamBody }, ac.signal, {
@@ -638,6 +677,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       tenant: key.tenant,
       clock: deps.clock,
       headersFor,
+      onAttempt: (a) => attemptLog.push(a),
     });
     up = r.response;
     attempts = r.attempt;
@@ -645,12 +685,12 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   } catch (err) {
     // Nothing came back, so nothing was billed: the reservation settles at 0 and the slot is freed.
     const n = err instanceof ChainError ? err.attempts : 1;
-    const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider.name, attempts: n };
+    const common = { ...decided, ...admitted, provider: err instanceof ChainError && err.provider ? err.provider : provider.name, attempts: n, attemptLog };
     if (ac.signal.aborted) return early({ ...common, status: 499, aborted: true, errorClass: 'client_abort' });
     sendError(req, res, own(502, 'api_error', 'upstream-unreachable', `upstream ${common.provider} is unreachable`));
     return early({ ...common, status: 502, errorClass: 'upstream_unreachable' });
   }
-  const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider) };
+  const answer = { provider: answered.name, attempts, cacheColdRisk: workspaceOf(answered) !== workspaceOf(provider), attemptLog };
   if (ac.signal.aborted) {
     up.body.on('error', () => undefined);
     up.body.destroy();
@@ -704,7 +744,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
 }
 
 export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
-  if (deps.traces && !deps.traceSalt) throw new Error('traces need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
+  if ((deps.traces || deps.spans) && !deps.traceSalt) throw new Error('traces and spans need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
   if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ?? randomBytes(16).toString('hex') };
   const runtime = deps.runtime ?? createGatewayRuntime();
   const admitTimeoutMs = deps.admitTimeoutMs ?? DEFAULT_ADMIT_TIMEOUT_MS;
@@ -713,11 +753,18 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
   const failureState = (policy: CompiledPolicy): FailureState => {
     const settings = JSON.stringify([policy.failure.breaker, policy.failure.retryBudgetRatio]);
     if (state?.settings !== settings) {
-      state = { settings, failure: { breaker: new Breaker(policy.failure.breaker, deps.clock), retry: new RetryBudget(policy.failure.retryBudgetRatio, deps.clock) } };
+      const onOpen = (scope: 'provider' | 'credential'): void => deps.metrics?.inc('tokenyard_breaker_opens_total', { scope });
+      state = { settings, failure: { breaker: new Breaker(policy.failure.breaker, deps.clock, onOpen), retry: new RetryBudget(policy.failure.retryBudgetRatio, deps.clock) } };
     }
     return state.failure;
   };
   return (req, res) => {
+    // Ops endpoints come first and need no policy: /readyz must answer (503) before one has loaded.
+    const ops = matchOps(req.method ?? 'GET', req.url ?? '/', deps.basePath);
+    if (ops !== null && !(ops === 'metrics' && deps.metricsOnOtherPort)) {
+      serveOps({ ...deps, admitTimeoutMs }, ops, req, res).catch(() => res.destroy());
+      return;
+    }
     const id = deps.newId();
     const held: Held = { plan: null, features: null, admitted: false, est: 0, settled: false, envelope: 'anthropic', known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
@@ -726,11 +773,12 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
       // (and the live cap across runs) counts it.
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
+        deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
         const known = held.known;
         void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs)
           .then((r) => r === 'settled', () => false)
           .then((settled) => {
-            if (known === null || !deps.traces) return;
+            if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
             const swept = runtime.takeSwept(id) || !settled;
             let now = known.startedAt;
             try {
@@ -738,26 +786,26 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
             } catch {
               // the clock is what failed; the line still goes out
             }
-            deps.traces.write(
-              buildTraceRecord(
-                {
-                  ...known,
-                  status: 500,
-                  usage: null,
-                  aborted: false,
-                  ttfbMs: null,
-                  totalMs: Math.max(0, now - known.startedAt),
-                  costMicroUsd: held.est,
-                  addedTtfbMs: null,
-                  errorClass: 'internal_error',
-                  settledAtEstimate: true,
-                  settledBy: swept ? 'sweeper' : 'request',
-                  chargedMicroUsd: held.est,
-                  overrun: false,
-                },
-                deps.traceSalt ?? '',
-              ),
+            const rec = buildTraceRecord(
+              {
+                ...known,
+                status: 500,
+                usage: null,
+                aborted: false,
+                ttfbMs: null,
+                totalMs: Math.max(0, now - known.startedAt),
+                costMicroUsd: held.est,
+                addedTtfbMs: null,
+                errorClass: 'internal_error',
+                settledAtEstimate: true,
+                settledBy: swept ? 'sweeper' : 'request',
+                chargedMicroUsd: held.est,
+                overrun: false,
+              },
+              deps.traceSalt ?? '',
             );
+            emitTelemetry(deps, deps.policy(), rec);
+            deps.traces?.write(rec);
           })
           .catch(() => undefined);
       }

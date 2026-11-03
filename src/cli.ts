@@ -36,9 +36,12 @@ program
   .option('--trace-dir <dir>', 'write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson')
   .option('--instance-id <id>', 'instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)')
   .option('--trace-salt <salt>', 'HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
+  .option('--otlp-endpoint <url>', 'export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs --trace-salt')
+  .option('--metrics-port <n>', 'serve /metrics, /healthz and /readyz on this port only; /metrics is then a 404 on --port (default: /metrics on --port)')
+  .option('--metrics-host <host>', 'address to bind for --metrics-port', '127.0.0.1')
   .option('--store <kind>', 'counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis', 'memory')
   .option('--redis-url <url>', 'Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; store: string; redisUrl?: string }) => {
+  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; store: string; redisUrl?: string; otlpEndpoint?: string; metricsPort?: string; metricsHost: string }) => {
     if (!o.devUpstream && !o.policy && !o.policyUrl) {
       console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
       process.exit(1);
@@ -72,6 +75,19 @@ program
     }
     if (o.traceDir && !traceSalt) {
       console.error('tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)');
+      process.exit(1);
+    }
+    const otlpEndpoint = o.otlpEndpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? null;
+    if (otlpEndpoint !== null && !/^https?:\/\/[^\s]+$/.test(otlpEndpoint)) {
+      console.error('tokenyard serve: --otlp-endpoint must be an http:// or https:// URL');
+      process.exit(1);
+    }
+    if (otlpEndpoint !== null && !traceSalt) {
+      console.error('tokenyard serve: --otlp-endpoint needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids on spans are HMAC pseudonyms)');
+      process.exit(1);
+    }
+    if (o.metricsPort !== undefined && !/^\d+$/.test(o.metricsPort)) {
+      console.error('tokenyard serve: --metrics-port must be a port number');
       process.exit(1);
     }
     const { hostname } = await import('node:os');
@@ -112,9 +128,21 @@ program
     const { openCounterStore, SWEEP_INTERVAL_MS, warmUpFromTraces } = await import('./limits/open-store.js');
     const { startSweeper } = await import('./limits/sweeper.js');
     const runtime = createGatewayRuntime();
+    const { createMetrics, registerCollectors } = await import('./telemetry/metrics.js');
+    const { createTracer } = await import('./telemetry/otel.js');
+    const metrics = createMetrics();
+    const spans = await createTracer(otlpEndpoint); // loads the OpenTelemetry packages only when an endpoint is set
+    registerCollectors(metrics, {
+      revision: () => activePolicy().revision,
+      ...(loader ? { loadErrors: () => (loader as import('./policy-loader/loader.js').PolicyLoader).loadErrors } : {}),
+      ...(writer ? { traceDrops: () => writer.dropped } : {}),
+    });
     let counters: import('./limits/open-store.js').OpenedStore;
     try {
-      counters = await openCounterStore({ kind: o.store, ...(redisUrl ? { redisUrl } : {}), instance: instanceId, onSwept: runtime.onSwept });
+      counters = await openCounterStore({ kind: o.store, ...(redisUrl ? { redisUrl } : {}), instance: instanceId, onSwept: (ids) => {
+          runtime.onSwept(ids);
+          metrics.inc('tokenyard_swept_total', {}, ids.length);
+        } });
       if (o.traceDir) {
         const n = await warmUpFromTraces(counters.store, o.traceDir, activePolicy(), Date.now());
         if (n > 0) console.error(`tokenyard: warm-up seeded ${n} budget counter(s) from ${o.traceDir}`);
@@ -130,7 +158,10 @@ program
       onTick: () => {
         if (++ticks % 2 === 0) writer?.heartbeat();
       },
-      onError: (e) => console.error(`tokenyard: sweeper: ${e instanceof Error ? e.message : String(e)}`),
+      onError: (e) => {
+        metrics.inc('tokenyard_sweeper_errors_total');
+        console.error(`tokenyard: sweeper: ${e instanceof Error ? e.message : String(e)}`);
+      },
     });
     const gw = createGateway({
       policy: activePolicy,
@@ -143,11 +174,15 @@ program
       basePath: o.basePath ?? null,
       bodyCapBytes: DEFAULT_BODY_CAP_BYTES,
       experimentalSubscription: o.experimentalSubscription === true,
+      metrics,
+      ...(otlpEndpoint !== null ? { spans } : {}),
+      ...(o.metricsPort !== undefined ? { metricsOnOtherPort: true } : {}),
     });
     console.log(await gw.listen(Number(o.port), o.host));
+    if (o.metricsPort !== undefined) console.error(`tokenyard: metrics on ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)}/metrics`);
     const stop = (): void => {
       stopSweeper();
-      void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => counters.close()).then(() => process.exit(0));
+      void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => undefined)).then(() => counters.close()).then(() => process.exit(0));
     };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);

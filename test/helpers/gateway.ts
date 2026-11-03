@@ -4,12 +4,14 @@ import type { CounterStore } from '../../src/limits/store.js';
 
 export interface TestGateway {
   url: string;
+  /** The ops listener (`opsListener: true`): /metrics, /healthz, /readyz only. */
+  opsUrl?: string;
   close(): Promise<void>;
 }
 
 /** Start a gateway on an ephemeral port with deterministic ids; no traces unless `traces` is given (with a `traceSalt`). */
 export async function startGateway(o: {
-  policy: CompiledPolicy;
+  policy: CompiledPolicy | (() => CompiledPolicy);
   bodyCapBytes?: number;
   basePath?: string | null;
   store?: CounterStore | null;
@@ -19,10 +21,14 @@ export async function startGateway(o: {
   traceSalt?: string;
   runtime?: GatewayDeps['runtime'];
   admitTimeoutMs?: number;
+  metrics?: GatewayDeps['metrics'];
+  spans?: GatewayDeps['spans'];
+  /** Serve /metrics on a second listener only. */
+  opsListener?: boolean;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
-    policy: () => o.policy,
+    policy: typeof o.policy === 'function' ? o.policy : () => o.policy as CompiledPolicy,
     store: o.store ?? null,
     traces: o.traces ?? null,
     traceSalt: o.traceSalt,
@@ -34,7 +40,11 @@ export async function startGateway(o: {
     onSettled: o.onSettled,
     runtime: o.runtime,
     ...(o.admitTimeoutMs !== undefined ? { admitTimeoutMs: o.admitTimeoutMs } : {}),
+    ...(o.metrics ? { metrics: o.metrics } : {}),
+    ...(o.spans ? { spans: o.spans } : {}),
+    ...(o.opsListener ? { metricsOnOtherPort: true } : {}),
   });
   const url = await gw.listen(0, '127.0.0.1');
-  return { url, close: () => gw.close() };
+  const opsUrl = o.opsListener ? await gw.listenOps(0, '127.0.0.1') : undefined;
+  return { url, ...(opsUrl ? { opsUrl } : {}), close: () => gw.close() };
 }

@@ -29,6 +29,10 @@
     "check:secrets": "node scripts/check-no-secrets.mjs"
   },
   "devDependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@types/node": "^22.20.5",
     "commander": "^15.0.0",
     "esbuild": "^0.28.2",

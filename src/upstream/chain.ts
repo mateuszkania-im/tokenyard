@@ -9,7 +9,19 @@ export const MAX_ATTEMPTS = 3;
 const RETRYABLE = new Set([500, 502, 503, 504, 529]);
 const SPEND_CAP_PROBE_BYTES = 64 * 1024;
 
+/** One upstream attempt, for spans: when it started, when headers arrived (or it failed), and what came back. */
+export interface AttemptInfo {
+  provider: string;
+  startMs: number;
+  endMs: number;
+  /** Null when no response came (connect error, timeout). */
+  status: number | null;
+  errorType?: string;
+}
+
 export interface ChainDeps {
+  /** Called once per attempt as it ends, with wall-clock times. */
+  onAttempt?: (a: AttemptInfo) => void;
   breaker: Breaker;
   retry: RetryBudget;
   /** Retry budget scope. */
@@ -95,6 +107,13 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
   const { breaker, retry, tenant, clock } = deps;
   const fallbackOn429 = policy.routes.find((r) => r.name === plan.route)?.fallbackOn429 === true;
   const openMs = policy.failure.breaker.openSeconds * 1000;
+  const note = (a: AttemptInfo): void => {
+    try {
+      deps.onAttempt?.(a);
+    } catch {
+      // telemetry must not change what the chain does
+    }
+  };
   retry.request(tenant);
 
   let attempts = 0;
@@ -118,9 +137,11 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
     attempts++;
     lastProvider = provider.name;
     let res: UpstreamResponse;
+    const startMs = Date.now(); // span times are wall time, whatever the injected clock is
     try {
       res = await forward(provider, { ...req, headers }, signal);
     } catch (err) {
+      note({ provider: provider.name, startMs, endMs: Date.now(), status: null, errorType: signal.aborted ? 'client_abort' : 'upstream_unreachable' });
       if (signal.aborted) {
         if (held) discard(held.response);
         throw new ChainError(attempts, provider.name, err);
@@ -130,11 +151,12 @@ export async function runChain(plan: Plan, policy: CompiledPolicy, req: ForwardR
       continue;
     }
 
+    note({ provider: provider.name, startMs, endMs: Date.now(), status: res.status });
     const checked = await checkSpendCap(res);
     res = checked.response;
     let retryable = RETRYABLE.has(res.status);
     if (checked.spendCap) {
-      breaker.open(credKey, clock() + openMs); // this credential only, never the provider for everyone
+      breaker.open(credKey, clock() + openMs, 'credential'); // this credential only, never the provider for everyone
       retryable = true;
     } else if (res.status === 429 && fallbackOn429) {
       retryable = true;

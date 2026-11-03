@@ -22,6 +22,8 @@ export class Breaker {
   constructor(
     private readonly o: BreakerOptions,
     private readonly clock: () => number,
+    /** Called when the breaker opens, with the scope: the provider's health, or one credential (spend cap). */
+    private readonly onOpen?: (scope: 'provider' | 'credential') => void,
   ) {}
 
   private state(provider: string): State {
@@ -59,8 +61,13 @@ export class Breaker {
   }
 
   /** Opens the breaker until `untilMs` (a spend-cap 429 does this for `openSeconds`). */
-  open(provider: string, untilMs: number): void {
+  open(provider: string, untilMs: number, scope: 'provider' | 'credential' = 'provider'): void {
     const s = this.state(provider);
+    try {
+      this.onOpen?.(scope);
+    } catch {
+      // a metrics hook must not break the breaker
+    }
     s.openUntil = untilMs;
     s.halfOpen = false;
     s.events = [];
