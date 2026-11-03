@@ -436,6 +436,8 @@ The estimator calibration rows at the end of the Measured block come from the sa
 
 Failure behaviour is tested the same way, against mocks: provider 5xx and 529, drops mid-stream, slow headers, refused and reset connections, clients that leave at any point or stop reading, Redis paused or unreachable under load, policy files caught mid-write and a flapping policy URL. After each scenario every request has exactly one trace line, is charged at least what the provider billed, fell back only before the first byte, and leaves nothing reserved. Scenarios, results and the fixes they led to: [docs/chaos.md](docs/chaos.md) (`npm run test:chaos`).
 
+Invariants that must hold for any input are property tests and fuzzers with fixed seeds: budgets never above their limit and always released, the memory and Redis stores agreeing on the same operations, concurrent admits on one key matching a sequential model, replay reproducing every recorded decision of random request mixes, and the SSE parser, policy YAML loader, attribution headers, anonymizer and secret scanner under hostile input. List, seeds and findings: [docs/testing.md](docs/testing.md) (`npm run test:fuzz`).
+
 Client versions checked by hand: Claude Code 2.1.316 (against the mock, then the live sessions above) and Codex 0.166.0 (live, one task). Every new client release can add fields, headers and beta values; the suite is re-run on new versions and the versions are recorded in that file.
 
 ## Budgets
@@ -528,6 +530,7 @@ npm ci
 npm test                 # unit, conformance, budget proof (memory store), docs checks
 npm run test:redis       # Redis store, G4 on Redis and taint (starts a throwaway local Redis in Docker)
 npm run test:chaos       # chaos and failure scenarios, long runs and Redis outages included (docs/chaos.md)
+npm run test:fuzz        # property tests and fuzzers with 20 times the runs, Redis included (docs/testing.md)
 npm run typecheck && npm run lint
 npm run build            # rebuild bin/tokenyard.mjs; commit it with any change under src/
 npm run check:bundle     # fails when the committed bundle is stale
