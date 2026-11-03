@@ -102,6 +102,7 @@ export function featuresOf(r: TraceRecord): RequestFeatures {
     toolCount: r.features.toolCount,
     thinking: r.features.thinking,
     fastMode: r.features.fastMode === true,
+    ...(r.features.compaction === true ? { compaction: true } : {}),
     ...(r.features.serviceTier !== undefined ? { serviceTier: r.features.serviceTier } : {}),
     attribution: {
       session: a.session,

@@ -51,8 +51,16 @@ function extrasOf(x: Extras): Pick<UsageResult, 'fast' | 'serverToolUses' | 'inf
   return { ...(x.fast ? { fast: true as const } : {}), ...(x.web > 0 ? { serverToolUses: { web_search: x.web } } : {}), ...(x.geo !== null ? { inferenceGeo: x.geo } : {}) };
 }
 
-/** Overlay the fields present in an Anthropic usage object onto u. Returns true when output_tokens was present. */
+/** Overlay the fields present in an Anthropic usage object onto u, iterations summed. Returns true when output_tokens was present. */
 function applyUsage(u: Usage, raw: unknown): boolean {
+  if (!isObj(raw)) return false;
+  const had = applyBuckets(u, raw);
+  sumIterations(u, raw.iterations);
+  return had;
+}
+
+/** The token buckets of one usage object (top level or one iteration). Returns true when output_tokens was present. */
+function applyBuckets(u: Usage, raw: unknown): boolean {
   if (!isObj(raw)) return false;
   const input = num(raw.input_tokens);
   if (input !== undefined) u.input = input;
@@ -74,6 +82,23 @@ function applyUsage(u: Usage, raw: unknown): boolean {
   const output = num(raw.output_tokens);
   if (output !== undefined) u.output = output;
   return output !== undefined;
+}
+
+/**
+ * Compaction (threshold and on demand) runs extra sampling iterations whose usage the top-level fields leave out:
+ * "To calculate total tokens consumed and billed for a request, sum across all entries in the usage.iterations array"
+ * (https://platform.claude.com/docs/en/build-with-claude/compaction-threshold#understanding-usage). Each bucket becomes
+ * the larger of the top-level value and the sum over the iterations, so a field an iteration leaves out is never lost.
+ */
+function sumIterations(u: Usage, iterations: unknown): void {
+  if (!Array.isArray(iterations) || iterations.length === 0) return;
+  const sum = emptyUsage();
+  for (const it of iterations) {
+    const one = emptyUsage();
+    applyBuckets(one, it);
+    for (const k of Object.keys(sum) as Array<keyof Usage>) sum[k] += one[k];
+  }
+  for (const k of Object.keys(sum) as Array<keyof Usage>) u[k] = Math.max(u[k], sum[k]);
 }
 
 const emptyUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 });

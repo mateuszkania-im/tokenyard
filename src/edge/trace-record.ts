@@ -62,6 +62,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       prefixHash: o.features.prefixHash,
       contextCompacted: false,
       ...(o.features.fastMode ? { fastMode: true as const } : {}),
+      ...(o.features.compaction ? { compaction: true as const } : {}),
       ...(o.features.serviceTier !== undefined ? { serviceTier: o.features.serviceTier } : {}),
     },
     // The message index stays out: it is for the error message only.

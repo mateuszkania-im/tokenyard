@@ -49,6 +49,17 @@ function hasExpandingField(parsed: Obj, tools: unknown[]): boolean {
   return false;
 }
 
+/**
+ * Threshold compaction (`compact_20260112` and later `compact_*` edits): "Compaction requires an additional sampling
+ * step" and "might occur multiple times within a single request" with server tools, checked at the start of each
+ * sampling iteration (https://platform.claude.com/docs/en/build-with-claude/compaction-threshold). Any edit that is
+ * not a known clearing edit counts, so a renamed compaction edit is still reserved for.
+ */
+function hasCompaction(cm: unknown): boolean {
+  if (!isObj(cm) || !Array.isArray(cm.edits)) return false;
+  return cm.edits.some((e) => !(isObj(e) && typeof e.type === 'string' && CLEARING_EDIT_PREFIXES.some((p) => (e.type as string).startsWith(p))));
+}
+
 function emptyFeatures(bodyBytes: number, parseError: boolean): ExtractedFeatures {
   return {
     model: null,
@@ -129,6 +140,7 @@ export function extractAnthropicFeatures(body: Buffer): ExtractedFeatures {
     expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
     fastMode: parsed.speed !== undefined && parsed.speed !== null && parsed.speed !== 'standard',
     ...(typeof parsed.inference_geo === 'string' ? { inferenceGeo: parsed.inference_geo } : {}),
+    ...(hasCompaction(parsed.context_management) ? { compaction: true as const } : {}),
     parseError: false,
     ...turnRanges(body, messages),
     ...(hasAmbiguousKeys(body) ? { ambiguousKeys: true as const } : {}),

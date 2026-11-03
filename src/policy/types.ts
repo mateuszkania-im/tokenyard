@@ -148,6 +148,7 @@ export interface RequestFeatures {
   maxOutputTokens: number | null;
   serverTools: Array<{ type: string; maxUses: number | null }>;
   toolCount: number; thinking: boolean;
+  compaction?: boolean;                // not in spec 6.5: threshold compaction may add a compaction iteration per sampling iteration (A4)
   fastMode: boolean;                   // body selects fast mode (speed "fast"); priced at the model's fast rates (Task 9)
   serviceTier?: string;                // not in spec 6.5: OpenAI service_tier other than default (auto, priority, flex, ...)
   attribution: {

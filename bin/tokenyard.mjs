@@ -29875,8 +29875,8 @@ function worstCaseMicroUsd(f, m, t, o) {
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
+  let iterations = 1;
   if (f.serverTools.length > 0) {
-    let iterations = 1;
     for (const tool of f.serverTools) {
       const key = serverToolKey(tool.type);
       const price2 = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
@@ -29894,6 +29894,10 @@ function worstCaseMicroUsd(f, m, t, o) {
     }
     inputTokens2 = iterations * m.maxContextTokens;
     outputTokens2 = iterations * m.maxOutputTokens;
+  }
+  if (f.compaction === true) {
+    inputTokens2 += iterations * m.maxContextTokens;
+    outputTokens2 += iterations * m.maxOutputTokens;
   }
   const tier = f.serviceTier ?? null;
   const tokenMicro = (inputTokens2 * inputTokenRate(f, m, fast, tier) + outputTokens2 * maxOutputRate(m, fast, tier)) * modifierProduct(t);
@@ -30187,6 +30191,7 @@ function buildFeatures(x, key, attr, hits, prices, id, ts, surface, o = {}) {
     toolCount: x.toolCount,
     thinking: x.thinking,
     fastMode: x.fastMode,
+    ...x.compaction ? { compaction: true } : {},
     ...x.serviceTier !== void 0 ? { serviceTier: x.serviceTier } : {},
     attribution: {
       session: attr.session,
@@ -30548,6 +30553,12 @@ function extrasOf(x) {
 }
 function applyUsage(u, raw) {
   if (!isObj2(raw)) return false;
+  const had = applyBuckets(u, raw);
+  sumIterations(u, raw.iterations);
+  return had;
+}
+function applyBuckets(u, raw) {
+  if (!isObj2(raw)) return false;
   const input3 = num(raw.input_tokens);
   if (input3 !== void 0) u.input = input3;
   const read = num(raw.cache_read_input_tokens);
@@ -30568,6 +30579,16 @@ function applyUsage(u, raw) {
   const output2 = num(raw.output_tokens);
   if (output2 !== void 0) u.output = output2;
   return output2 !== void 0;
+}
+function sumIterations(u, iterations) {
+  if (!Array.isArray(iterations) || iterations.length === 0) return;
+  const sum = emptyUsage();
+  for (const it of iterations) {
+    const one = emptyUsage();
+    applyBuckets(one, it);
+    for (const k of Object.keys(sum)) sum[k] += one[k];
+  }
+  for (const k of Object.keys(sum)) u[k] = Math.max(u[k], sum[k]);
 }
 function parseAnthropicJsonUsage(body) {
   const none = {
@@ -30984,6 +31005,10 @@ function hasExpandingField(parsed, tools) {
   }
   return false;
 }
+function hasCompaction(cm) {
+  if (!isObj4(cm) || !Array.isArray(cm.edits)) return false;
+  return cm.edits.some((e2) => !(isObj4(e2) && typeof e2.type === "string" && CLEARING_EDIT_PREFIXES.some((p) => e2.type.startsWith(p))));
+}
 function emptyFeatures(bodyBytes, parseError) {
   return {
     model: null,
@@ -31048,6 +31073,7 @@ function extractAnthropicFeatures(body) {
     expandsServerSide: blockTypes.some((t) => EXPANDING_BLOCKS.has(t)) || hasExpandingField(parsed, tools),
     fastMode: parsed.speed !== void 0 && parsed.speed !== null && parsed.speed !== "standard",
     ...typeof parsed.inference_geo === "string" ? { inferenceGeo: parsed.inference_geo } : {},
+    ...hasCompaction(parsed.context_management) ? { compaction: true } : {},
     parseError: false,
     ...turnRanges(body, messages),
     ...hasAmbiguousKeys(body) ? { ambiguousKeys: true } : {}
@@ -58320,6 +58346,7 @@ function buildTraceRecord(o, salt) {
       prefixHash: o.features.prefixHash,
       contextCompacted: false,
       ...o.features.fastMode ? { fastMode: true } : {},
+      ...o.features.compaction ? { compaction: true } : {},
       ...o.features.serviceTier !== void 0 ? { serviceTier: o.features.serviceTier } : {}
     },
     // The message index stays out: it is for the error message only.
@@ -120738,6 +120765,7 @@ function featuresOf(r) {
     toolCount: r.features.toolCount,
     thinking: r.features.thinking,
     fastMode: r.features.fastMode === true,
+    ...r.features.compaction === true ? { compaction: true } : {},
     ...r.features.serviceTier !== void 0 ? { serviceTier: r.features.serviceTier } : {},
     attribution: {
       session: a.session,

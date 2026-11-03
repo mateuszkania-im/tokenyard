@@ -21,6 +21,8 @@ export interface TraceRecord {
               contextCompacted: boolean;
               /** Not in spec 9.1: set (true) when the body selected fast mode; the reservation is priced at fast rates (replay reproduces it). */
               fastMode?: true;
+              /** Not in spec 9.1: set (true) when the body enabled threshold compaction; the reservation counts its iterations (replay reproduces it). */
+              compaction?: true;
               /** Not in spec 9.1: the OpenAI service_tier the request asked for, when not default (replay prices the reservation with it). */
               serviceTier?: string };
   guardrail: { hits: Array<{ rule: string; action: 'block' | 'warn' | 'redact'; valueHmac: string; where: 'last-turn' | 'history' }> };

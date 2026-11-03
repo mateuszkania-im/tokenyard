@@ -25,6 +25,11 @@ export interface ExtractedFeatures {
   serviceTier?: string;
   /** `inference_geo` when it is a string (for example "us"); it selects a price modifier (`inferenceGeoUs`). Absent otherwise. */
   inferenceGeo?: string;
+  /**
+   * The body enables threshold compaction (a `compact_*` edit in `context_management.edits`): the provider may run a
+   * compaction sampling iteration before each sampling iteration. Absent otherwise.
+   */
+  compaction?: true;
   parseError: boolean;
   /**
    * Byte range of the newest user-role message in the original body and its index in `messages`, for the guardrail

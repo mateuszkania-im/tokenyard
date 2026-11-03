@@ -155,8 +155,8 @@ export function worstCaseMicroUsd(
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
+  let iterations = 1;
   if (f.serverTools.length > 0) {
-    let iterations = 1;
     for (const tool of f.serverTools) {
       const key = serverToolKey(tool.type);
       const price = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : undefined;
@@ -174,6 +174,12 @@ export function worstCaseMicroUsd(
     }
     inputTokens = iterations * m.maxContextTokens;
     outputTokens = iterations * m.maxOutputTokens;
+  }
+  // Threshold compaction: before each sampling iteration the provider may run a compaction iteration over the whole
+  // context, and its summary has no documented limit below the model's output cap (A4).
+  if (f.compaction === true) {
+    inputTokens += iterations * m.maxContextTokens;
+    outputTokens += iterations * m.maxOutputTokens;
   }
   const tier = f.serviceTier ?? null;
   const tokenMicro = (inputTokens * inputTokenRate(f, m, fast, tier) + outputTokens * maxOutputRate(m, fast, tier)) * modifierProduct(t);

@@ -64,6 +64,7 @@ export function buildFeatures(
     toolCount: x.toolCount,
     thinking: x.thinking,
     fastMode: x.fastMode,
+    ...(x.compaction ? { compaction: true } : {}),
     ...(x.serviceTier !== undefined ? { serviceTier: x.serviceTier } : {}),
     attribution: {
       session: attr.session,
