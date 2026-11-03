@@ -11,10 +11,13 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
     // Children and wildcard listeners started by tests are tracked; leftovers fail the run (test/setup/process-guard.ts).
-    globalSetup: ['test/setup/global-guard.ts'],
+    // CPU-time bounds scale under coverage instrumentation (test/helpers/timing.ts); coverage-flag.ts hands the tests
+    // the resolved coverage.enabled.
+    globalSetup: ['test/setup/global-guard.ts', 'test/setup/coverage-flag.ts'],
     setupFiles: ['test/setup/process-guard.ts'],
-    // CPU-time bounds scale under coverage instrumentation (test/helpers/timing.ts).
-    env: process.argv.includes('--coverage') ? { TOKENYARD_COVERAGE: '1' } : {},
+    // The CPU-time bounds read the process CPU time, which is one test file's work only with one file per process
+    // (test/helpers/timing.ts). Vitest's default pool is forks today; pinned so a change of default cannot break that.
+    pool: 'forks',
     // `npm run test:coverage`: V8 coverage of src (tests that run the bundle in a child process add nothing here).
     coverage: {
       provider: 'v8',
