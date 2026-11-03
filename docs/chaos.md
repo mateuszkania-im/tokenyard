@@ -58,14 +58,14 @@ section.
 | 2 | Long: 20 seeds of 300 such requests, with resets (`test:chaos`) | client.test.ts | invariants hold |
 | 2 | Slow consumer (paused reader) on a 64 MiB stream | client.test.ts | upstream paused by backpressure (no progress while paused, under 16 MiB written), gateway heap plus buffers grew under 32 MiB, the stream then completes and settles |
 | 2 | Slow consumer that leaves while paused | client.test.ts | upstream aborted, charged at the reservation |
-| 3 | Redis `docker pause` for 1.2 s under load | redis.test.ts | 171 requests: 116 answered 200, 55 refused 503 (budgets closed); the last ten after unpause all 200; nothing left after a sweep; R11 latch and session markers still there |
+| 3 | Redis `docker pause` for 1.2 s under load | redis.test.ts | 177 requests: 120 answered 200, 57 refused 503 (budgets closed); the last ten after unpause all 200; nothing left after a sweep; budget spent equals, reservation by reservation, the actual cost (settled by its request, or a timed-out settle that landed after the unpause: 9 of them) or the estimate (swept: none), so a second charge of 21 micro-USD fails it; R11 latch and session markers still there |
 | 3 | Redis connections killed and reconnects refused for 800 ms under load | redis.test.ts | 251 requests: 167 x 200, 84 x 503; 17 reservations left by failed settles swept at their estimate; budget spent equals the sum of the trace charges exactly (no double charge) |
 | 4 | Policy file caught mid-write that still validates (budgets not written yet) | reload.test.ts | never activated (finding 2) |
 | 4 | Empty policy file | reload.test.ts | old revision serves, one load error |
 | 4 | Under load: in-place, empty and atomic writes of the policy directory, 300 requests | reload.test.ts | all 200, one line each, store clean |
 | 4 | Under load: policy URL flapping (good, corrupted, 500, connection reset, other good bundle, truncated), 300 requests | reload.test.ts | all 200, the last good policy serves, load errors counted, store clean |
 | 5 | Request on an idle keep-alive socket while the gateway is blocked across the idle close | keep-alive.test.ts | answered (finding 1) |
-| 5 | Under load: 1.1 MB requests keep the gateway busy, 16 probe connections reuse sockets around the idle close (`test:chaos`, 40 s) | keep-alive.test.ts | separate client workers: 982 requests, 0 resets; one busy client worker (as the V2 soak client): 983 requests, 1 reset on a reused socket (see finding 1) |
+| 5 | Under load: 1.1 MB requests keep the gateway busy, 16 probe connections reuse sockets around the idle close (`test:chaos`, 40 s) | keep-alive.test.ts | separate client workers: 982 requests, 0 resets; one busy client worker (as the V2 soak client): 983 requests, 1 reset on a reused socket (see finding 1); both held to at most 0.5%, resets on reused sockets only |
 | 6 | Body cap vs scan time | s-v3-1-scan-budget.test.ts | escape budget (finding 3) |
 | 6 | 32 MiB of short strings, bare tokens or dense key matches; last turn and history; both routes | s-v3-3-scan-memory.test.ts | 413 `scan-budget`, nothing sent, loop held under 1 s, peak RSS under 400 MB (finding 4) |
 | 6 | Bodies at and just over the value, run and match budgets | s-v3-3-scan-work-budget.test.ts | refused over, served at (finding 4) |
@@ -104,7 +104,9 @@ the sweeper settles it at its estimate, and the store and the trace lines agree 
    policy directory file by file; a prefix of policy.yaml that still validates (the budgets section not written yet)
    was activated and written as last-known-good, so the gateway briefly ran without budgets. A changed directory now
    activates only when a second read one settle interval later (the 250 ms watch debounce) finds the same bundle;
-   otherwise another read follows. At start it retries up to 20 times. A writer slower than the settle interval can
+   otherwise another read follows, and a second read that fails (a file caught mid-write after the first read passed)
+   counts as one more such pair. At start it retries up to 20 times; later, every 20 unstable pairs in a row count one
+   policy load error and report the revision that keeps serving. A writer slower than the settle interval can
    still be caught; write policy files atomically (a temporary file and a rename, as `git checkout` and most editors
    do). Policy URLs are not affected: a bundle carries its own sha256 and a cut one does not parse.
 3. **Body cap vs scan time (S-V3-1): escape budget.** Measured on 32 MiB bodies: plain text scans in 0.10 s on a
