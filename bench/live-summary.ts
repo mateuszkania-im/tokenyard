@@ -23,22 +23,53 @@ const RAW_DIR = join(ROOT, '.live', 'traces');
 const RAW_NAMES = join(ROOT, '.live', 'raw-names.json');
 
 /**
- * Claude Code's own `total_cost_usd` per session, as printed by `claude -p`, from test/live/claude-code.live.md (run 1,
- * 2026-11-02). Sessions are numbered in the order they started, as in that log.
+ * Claude Code's own `total_cost_usd` per session, as printed by `claude -p` (for a resumed session, the figure printed
+ * after its last turn), from test/live/claude-code.live.md: run 1 (2026-11-02) sessions 1 to 5, run 2 (2026-11-03)
+ * sessions 6 to 11. Sessions are numbered in the order they started, as in that log. Session 10 was refused at its
+ * first request and printed 0.
  */
-const CLAUDE_CODE_REPORTED = [0.1713382, 0.09903, 0.158844, 0.0746165, 0.0123766];
-/** Client versions are dropped by --anonymize; these are the versions the live logs name. */
+const CLAUDE_CODE_REPORTED = [0.1713382, 0.09903, 0.158844, 0.0746165, 0.0123766, 0.002156575, 0.012180325, 0.1019788, 0.010197095, 0, 0.002589415];
 /**
- * The live cap of each Claude Code harness start, in start order: `TOKENYARD_LIVE_BUDGET_USD` lowered from the shell
- * for each start to keep the runs small (test/live/claude-code.live.md, run 1: 3, then 5, then 8). The budget is
- * cumulative: each start seeds the spend of the earlier runs. Codex ran under 3.5 (test/live/codex.live.md).
+ * The live cap of each harness start that served a request other than Codex's, in start order:
+ * `TOKENYARD_LIVE_BUDGET_USD` set from the shell for each start (test/live/claude-code.live.md: run 1 lowered it to 3,
+ * then 5, then 8 to keep the runs small; run 2 started at 8.53, the most that run could take, then at the spent amount
+ * plus about 3 and 8 cents for the budget block checks). The budget is cumulative: each start seeds the spend of the
+ * earlier runs. The Codex-only starts of run 1 ran under 3.5 (test/live/codex.live.md).
  */
-const CLAUDE_CODE_RUN_CAPS_USD = [3, 5, 8];
+const CLAUDE_CODE_RUN_CAPS_USD = [3, 5, 8, 8.53, 0.704842, 0.754842];
 const CODEX_RUN_CAP_USD = 3.5;
+/** Client versions are dropped by --anonymize; these are the versions the live logs name, per run. */
+const RUNS = [
+  { run: 1, from: '2026-11-02T00:00:00.000Z', until: '2026-11-03T12:00:00.000Z', clients: { 'claude-code': '2.1.316', codex: '0.166.0' } },
+  { run: 2, from: '2026-11-03T12:00:00.000Z', until: '2026-11-17T00:00:00.000Z', clients: { 'claude-code': '2.1.317', codex: '0.166.0' } },
+] as const;
 const CLIENTS = [
-  { agent: 'claude-code', version: '2.1.316', log: 'test/live/claude-code.live.md' },
-  { agent: 'codex', version: '0.166.0', log: 'test/live/codex.live.md' },
-];
+  { agent: 'claude-code', log: 'test/live/claude-code.live.md' },
+  { agent: 'codex', log: 'test/live/codex.live.md' },
+] as const;
+/**
+ * Run 2 measurements that no trace holds, copied from test/live/claude-code.live.md (run 2) and labelled as such:
+ * Claude Code's own OTel `api_request` events joined to the trace records, and the same scripted session sent once
+ * through the gateway and once direct (the direct run is outside the gateway, so its spend is listed separately).
+ */
+const RUN2_FROM_LOG = {
+  source: 'test/live/claude-code.live.md, run 2 (copied from the log; no trace holds OTel events or the direct run)',
+  otel: {
+    apiRequestEvents: 42,
+    joined: 42,
+    otelCostUsd: 0.12910221,
+    tokenyardCostUsd: 0.129104,
+    deltaMicroUsd: 1.79,
+    deltaPct: 0.00139,
+    maxPerRequestDeltaMicroUsd: 0.495,
+  },
+  cacheBaseline: {
+    what: 'the same 5-turn scripted Messages session on Haiku 5.5, a 13,500-token cached system block, each run with its own nonce so both start cold',
+    gatewayCacheReadShare: 0.7994087,
+    directCacheReadShare: 0.7994088,
+    directSpendUsd: 0.002236,
+  },
+};
 
 const usd = (micro: number): number => round(micro / 1_000_000, 6);
 
@@ -86,6 +117,9 @@ function worstCase(r: TraceRecord, t: PriceTable): number | null {
 }
 
 const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+const days = (rs: readonly TraceRecord[]): string[] => [...new Set(rs.map((r) => r.ts.slice(0, 10)))].sort();
+/** The run (RUNS) a record belongs to, by its time. */
+const runOf = (r: TraceRecord): number | null => RUNS.find((x) => r.ts >= x.from && r.ts < x.until)?.run ?? null;
 
 async function main(): Promise<void> {
   const rs = await requests([EXPORT]);
@@ -100,6 +134,7 @@ async function main(): Promise<void> {
     const cost = sum(b.map((r) => r.outcome.costMicroUsd ?? 0));
     return {
       session: i + 1,
+      run: runOf(s[0] as TraceRecord),
       models: [...new Set(s.map((r) => r.features.model))],
       requests: s.length,
       billed: b.length,
@@ -140,11 +175,11 @@ async function main(): Promise<void> {
   // Spend already charged when a request arrived: every earlier charge in the export (the cap is cumulative).
   const spentBefore = (r: TraceRecord): number => sum(rs.filter((x) => x.ts < r.ts).map((x) => x.outcome.chargedMicroUsd ?? 0));
 
-  const refusedGroups = new Map<string, { what: string; model: string; boundKind: string; requests: number; reservationUsd: number | null; runCapUsd: number | null; spentBeforeUsd: { min: number; max: number } }>();
+  const refusedGroups = new Map<string, { what: string; client: string; model: string; maxOutputTokens: number | null; boundKind: string; requests: number; reservationUsd: number | null; runCapUsd: number | null; spentBeforeUsd: { min: number; max: number } }>();
   for (const r of rs.filter((x) => x.decision.action === 'block' && x.decision.reason === 'budget')) {
     const what = r.features.serverTools.length > 0 ? `server tools ${r.features.serverTools.map((t) => `${t.type} (max_uses ${t.maxUses})`).join(', ')}` : 'no server tools';
     const cap = capOf(r.instance);
-    const k = `${what}|${r.features.model}|${r.features.boundKind}|${cap}`;
+    const k = `${what}|${r.client.agent}|${r.features.model}|${r.features.boundKind}|${r.features.maxOutputTokens}|${cap}`;
     const g = refusedGroups.get(k);
     const micro = worstCase(r, table);
     const spent = usd(spentBefore(r));
@@ -152,16 +187,60 @@ async function main(): Promise<void> {
       g.requests++;
       g.spentBeforeUsd = { min: Math.min(g.spentBeforeUsd.min, spent), max: Math.max(g.spentBeforeUsd.max, spent) };
     } else {
-      refusedGroups.set(k, { what, model: r.features.model, boundKind: r.features.boundKind, requests: 1, reservationUsd: micro === null ? null : usd(micro), runCapUsd: cap, spentBeforeUsd: { min: spent, max: spent } });
+      refusedGroups.set(k, { what, client: r.client.agent, model: r.features.model, maxOutputTokens: r.features.maxOutputTokens, boundKind: r.features.boundKind, requests: 1, reservationUsd: micro === null ? null : usd(micro), runCapUsd: cap, spentBeforeUsd: { min: spent, max: spent } });
     }
   }
+
+  // Each harness start: its cap, the spend it seeded from earlier starts and the spend when it stopped; the cap is
+  // enforced by tokenyard, so the spend at the end is never above the cap.
+  const startRows = starts.map((id, i) => {
+    const before = sum(rs.filter((r) => starts.indexOf(r.instance) < i).map((r) => r.outcome.chargedMicroUsd ?? 0));
+    const own = rs.filter((r) => r.instance === id);
+    const after = before + sum(own.map((r) => r.outcome.chargedMicroUsd ?? 0));
+    const cap = capOf(id);
+    return {
+      start: i + 1,
+      run: runOf(own[0] as TraceRecord),
+      capUsd: cap,
+      spentAtStartUsd: usd(before),
+      spentAtEndUsd: usd(after),
+      withinCap: cap === null ? null : after <= Math.round(cap * 1_000_000),
+      requests: own.length,
+      refusedByBudget: own.filter((r) => r.decision.action === 'block' && r.decision.reason === 'budget').length,
+    };
+  });
+  const runs = RUNS.map((run) => {
+    const xs = rs.filter((r) => runOf(r) === run.run);
+    const ccRun = xs.filter((r) => r.client.agent === 'claude-code');
+    return {
+      run: run.run,
+      days: days(xs),
+      records: xs.length,
+      billed: xs.filter(billed).length,
+      spendUsd: usd(sum(xs.map((r) => r.outcome.chargedMicroUsd ?? 0))),
+      claudeCodeSessions: sessions.filter((x) => x.run === run.run).map((x) => x.session),
+      claudeCodeBilled: ccRun.filter(billed).length,
+      claudeCodeCostUsd: usd(sum(ccRun.map((r) => r.outcome.costMicroUsd ?? 0))),
+      codexCostUsd: usd(sum(xs.filter((r) => r.client.agent === 'codex').map((r) => r.outcome.costMicroUsd ?? 0))),
+      claudeCodeCacheHitRatio: cacheHitRatio(ccRun),
+      codexBilled: xs.filter((r) => r.client.agent === 'codex' && billed(r)).length,
+      codexCacheHitRatio: cacheHitRatio(xs.filter((r) => r.client.agent === 'codex')),
+      requestClasses: Object.fromEntries(
+        [...new Set(ccRun.filter(billed).map((r) => r.attribution.requestClass))].sort().map((c) => [c, ccRun.filter((r) => billed(r) && r.attribution.requestClass === c).length]),
+      ),
+    };
+  });
 
   const codex = rs.filter((r) => r.client.agent === 'codex');
   const summary = {
     source: 'examples/live/live.ndjson.gz: tokenyard traces export --anonymize of the local live runs (spec 14.1); aggregates by bench/live-summary.ts',
     priceTable: `test/live/prices.yaml, version ${table.version}`,
     dates: 'UTC',
-    clients: CLIENTS.map((c) => ({ ...c, days: [...new Set(rs.filter((r) => r.client.agent === c.agent).map((r) => r.ts.slice(0, 10)))] })),
+    clients: RUNS.flatMap((run) =>
+      CLIENTS.map((c) => ({ ...c, run: run.run, version: run.clients[c.agent], days: days(rs.filter((r) => r.client.agent === c.agent && runOf(r) === run.run)) })),
+    ).filter((c) => c.days.length > 0),
+    runs,
+    starts: startRows,
     records: rs.length,
     forwarded: rs.filter((r) => r.decision.action === 'forward').length,
     blocked: rs.filter((r) => r.decision.action === 'block').length,
@@ -206,6 +285,7 @@ async function main(): Promise<void> {
       source: 'test/live/claude-code.live.md and test/live/codex.live.md: TOKENYARD_LIVE_BUDGET_USD of each harness start, lowered from the shell; the cap is cumulative over all live runs',
     },
     refusedByBudget: [...refusedGroups.values()],
+    run2FromLog: RUN2_FROM_LOG,
     refusedByBudgetNote: 'reservationUsd is what the worst-case estimator computes from the traced features with the price table above (refused records carry no reservation); a request is refused when its reservation is larger than the run cap in total, or larger than the cap minus spent and reserved',
   };
   writeFileSync(SUMMARY, `${JSON.stringify(summary, null, 2)}\n`);
