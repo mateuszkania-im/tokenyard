@@ -23,6 +23,8 @@ export interface UsageResult {
   serviceTier?: string;
   /** `usage.server_tool_use` counts by price table tool name (`web_search_requests` is `web_search`). Absent when none. */
   serverToolUses?: Record<string, number>;
+  /** `usage.inference_geo` as the response reports it (a workspace default geo applies without a request field). */
+  inferenceGeo?: string;
 }
 
 type Obj = Record<string, unknown>;
@@ -34,6 +36,7 @@ const num = (v: unknown): number | undefined =>
 interface Extras {
   fast: boolean;
   web: number;
+  geo: string | null;
 }
 
 function applyExtras(x: Extras, raw: unknown): void {
@@ -41,10 +44,11 @@ function applyExtras(x: Extras, raw: unknown): void {
   if (typeof raw.speed === 'string') x.fast = raw.speed === 'fast';
   const web = isObj(raw.server_tool_use) ? num(raw.server_tool_use.web_search_requests) : undefined;
   if (web !== undefined) x.web = web;
+  if (typeof raw.inference_geo === 'string') x.geo = raw.inference_geo;
 }
 
-function extrasOf(x: Extras): Pick<UsageResult, 'fast' | 'serverToolUses'> {
-  return { ...(x.fast ? { fast: true as const } : {}), ...(x.web > 0 ? { serverToolUses: { web_search: x.web } } : {}) };
+function extrasOf(x: Extras): Pick<UsageResult, 'fast' | 'serverToolUses' | 'inferenceGeo'> {
+  return { ...(x.fast ? { fast: true as const } : {}), ...(x.web > 0 ? { serverToolUses: { web_search: x.web } } : {}), ...(x.geo !== null ? { inferenceGeo: x.geo } : {}) };
 }
 
 /** Overlay the fields present in an Anthropic usage object onto u. Returns true when output_tokens was present. */
@@ -81,7 +85,7 @@ export class AnthropicUsageAccumulator {
   private chars = 0;
   private error: string | null = null;
   private model: string | null = null;
-  private extras: Extras = { fast: false, web: 0 };
+  private extras: Extras = { fast: false, web: 0, geo: null };
 
   onEvent(e: SseEvent): void {
     let d: unknown;
@@ -170,7 +174,7 @@ export function parseAnthropicJsonUsage(body: Buffer): UsageResult {
   if (!isObj(d.usage)) return { ...none, responseModel };
   const usage = emptyUsage();
   applyUsage(usage, d.usage);
-  const extras: Extras = { fast: false, web: 0 };
+  const extras: Extras = { fast: false, web: 0, geo: null };
   applyExtras(extras, d.usage);
   return { ...none, usage, source: 'final', sawStop: true, responseModel, ...extrasOf(extras) };
 }

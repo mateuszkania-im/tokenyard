@@ -321,10 +321,15 @@ interface Held {
 const totalInput = (u: NonNullable<UsageResult['usage']>, surface: Surface): number =>
   u.input + u.cacheRead + (surface === 'openai-responses' ? 0 : u.cacheWrite5m + u.cacheWrite1h);
 
-/** Price table modifiers the request selects: `inference_geo: "us"` is `inferenceGeoUs`; a geo without an entry has none. */
-function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures): string[] {
-  if (x.inferenceGeo === undefined || x.inferenceGeo === '') return [];
-  const geo = x.inferenceGeo.toLowerCase();
+/**
+ * Price table modifiers the request was billed with: `inference_geo: "us"` is `inferenceGeoUs`; a geo without an entry
+ * has none. The geo the response reports wins over the request's (a workspace `default_inference_geo` applies to
+ * requests that name none); the reservation already assumes every modifier above 1.
+ */
+function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures, r: UsageResult | null): string[] {
+  const reported = r?.inferenceGeo ?? x.inferenceGeo;
+  if (reported === undefined || reported === '') return [];
+  const geo = reported.toLowerCase();
   const name = `inferenceGeo${geo.charAt(0).toUpperCase()}${geo.slice(1)}`;
   return Object.hasOwn(policy.prices.modifiers, name) ? [name] : [];
 }
@@ -338,7 +343,7 @@ function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { us
     fast: r.fast === true || x.fastMode,
     // The tier the response reports it was served on, else the one asked for (`auto` with no answer throws: estimate).
     serviceTier: billedServiceTier(r, x) ?? null,
-    modifiers: requestModifiers(policy, x),
+    modifiers: requestModifiers(policy, x, r),
     ...(r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}),
   });
 }
@@ -349,7 +354,7 @@ function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { us
  */
 async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy: CompiledPolicy, held: Held, outcome: RequestOutcome): Promise<void> {
   const o: RequestOutcome = { ...outcome };
-  o.costModifiers = requestModifiers(policy, o.features);
+  o.costModifiers = requestModifiers(policy, o.features, o.usage);
   const r = o.usage;
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost: number | null = null;
