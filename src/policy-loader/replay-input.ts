@@ -8,7 +8,7 @@ import { readLedger } from '../ledger/reader.js';
 import type { LedgerLine } from '../ledger/record.js';
 import { buildBundle } from '../policy/bundle.js';
 import { compilePolicy } from '../policy/compile.js';
-import { parsePolicyFiles, policyFileNames, POLICY_FILE, PolicyLoadError } from '../policy/load-dir.js';
+import { parsePolicyFiles, parsePolicyText, policyFileNames, POLICY_FILE, PolicyLoadError, type ParsedPolicyText, type PolicySource } from '../policy/load-dir.js';
 import type { CompiledPolicy } from '../policy/types.js';
 import { RawTraceDirError } from '../replay/engine.js';
 import { loadPolicyDir } from './load-dir.js';
@@ -87,7 +87,7 @@ export function resolveGitCommit(ref: string, repo: RepoDir): string | null {
 }
 
 /** Policy files of the directory at git ref `ref` (`git show <commit>:<path>`); the ref is resolved to a commit id first. */
-function filesAtRef(ref: string, repo: RepoDir): Record<string, string> {
+function filesAtRef(ref: string, repo: RepoDir): { files: Record<string, string>; parsed: ParsedPolicyText } {
   const commit = resolveGitCommit(ref, repo);
   if (commit === null) throw new Error(`--base ${JSON.stringify(ref)} is not a policy directory and not a git ref`);
   const show = (name: string): string | undefined => {
@@ -100,12 +100,19 @@ function filesAtRef(ref: string, repo: RepoDir): Record<string, string> {
   const policy = show(POLICY_FILE);
   if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${repo.label} at ${ref} (${commit})` }]);
   const files: Record<string, string> = { [POLICY_FILE]: policy };
-  for (const name of policyFileNames(policy)) {
+  const parsed = parsePolicyText(policy);
+  for (const name of policyFileNames(parsed)) {
     if (name === POLICY_FILE) continue;
     const text = show(name);
     if (text !== undefined) files[name] = text;
   }
-  return files;
+  return { files, parsed };
+}
+
+/** The policy source of the directory at `ref`, each file parsed once. */
+function sourceAtRef(dirLabel: string, ref: string, repo: RepoDir): PolicySource {
+  const { files, parsed } = filesAtRef(ref, repo);
+  return parsePolicyFiles(dirLabel, files, parsed);
 }
 
 /**
@@ -113,7 +120,7 @@ function filesAtRef(ref: string, repo: RepoDir): Record<string, string> {
  * tree that happens to be named like the commit or its branch is never consulted (the Action uses this for the base).
  */
 export function loadPolicyAtCommit(o: { commit: string; repo: RepoDir; experimentalSubscription: boolean }): CompiledPolicy {
-  const src = parsePolicyFiles(join(o.repo.top, o.repo.rel, `@${o.commit}`), filesAtRef(o.commit, o.repo));
+  const src = sourceAtRef(join(o.repo.top, o.repo.rel, `@${o.commit}`), o.commit, o.repo);
   const revision = buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
@@ -125,7 +132,7 @@ export function loadPolicyAtCommit(o: { commit: string; repo: RepoDir; experimen
  */
 export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean; root?: string }): Promise<CompiledPolicy> {
   const isDir = await stat(o.source).then((s) => s.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source, o.root === undefined ? {} : { root: o.root }) : parsePolicyFiles(join(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
+  const src = isDir ? await loadPolicyDir(o.source, o.root === undefined ? {} : { root: o.root }) : sourceAtRef(join(o.headDir, `@${o.source}`), o.source, locateRepoDir(o.headDir, null));
   const revision = o.revision ?? buildBundle(src, { createdAt: '1970-01-01T00:00:00.000Z' }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }

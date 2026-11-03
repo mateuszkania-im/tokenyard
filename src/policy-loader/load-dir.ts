@@ -4,7 +4,7 @@ import { lstat, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { checkPath, cliRoot } from '../fsutil/safe-path.js';
 import { MAX_YAML_BYTES } from '../policy/safe-yaml.js';
-import { parsePolicyFiles, policyFileNames, POLICY_FILE, PolicyLoadError, type PolicySource } from '../policy/load-dir.js';
+import { parsePolicyFiles, parsePolicyText, policyFileNames, POLICY_FILE, PolicyLoadError, type PolicySource } from '../policy/load-dir.js';
 
 /**
  * One policy file as text, or undefined when it does not exist. Only a regular file that is not a symbolic link is read
@@ -48,12 +48,14 @@ export async function loadPolicyDir(dir: string, o: { root?: string } = {}): Pro
   const policy = await readOrMissing(dir, POLICY_FILE);
   if (policy === undefined) throw new PolicyLoadError('E_FILE_MISSING', POLICY_FILE, [{ path: '', message: `${POLICY_FILE} not found in ${dir}` }]);
   files[POLICY_FILE] = policy;
-  for (const name of policyFileNames(policy)) {
+  // policy.yaml is parsed once: for the names of the other files and for the policy itself.
+  const parsed = parsePolicyText(policy);
+  for (const name of policyFileNames(parsed)) {
     if (name === POLICY_FILE) continue;
     const text = await readOrMissing(dir, name);
     if (text !== undefined) files[name] = text;
   }
-  return parsePolicyFiles(dir, files);
+  return parsePolicyFiles(dir, files, parsed);
 }
 
 export { PolicyLoadError, type PolicySource };

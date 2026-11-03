@@ -47,32 +47,48 @@ export function normalizeText(text: string): string {
 
 const bare = (ref: string): string => ref.replace(/^\.\//, '');
 
+/** policy.yaml parsed once: the loader reads the file names from it and parsePolicyFiles reuses it for the same text. */
+export interface ParsedPolicyText {
+  /** The text after normalizeText. */
+  text: string;
+  result: { ok: true; value: unknown } | { ok: false; error: unknown };
+}
+
+export function parsePolicyText(policyText: string): ParsedPolicyText {
+  const text = normalizeText(policyText);
+  try {
+    return { text, result: { ok: true, value: parseYamlSafe(text) } };
+  } catch (error) {
+    return { text, result: { ok: false, error } };
+  }
+}
+
 /**
  * The file names the loader must read: policy.yaml plus the files its `pricing` and `keys` fields name
  * (defaults prices.yaml and keys.yaml). A policy that does not parse yields the defaults; parsePolicyFiles reports the real error.
  */
-export function policyFileNames(policyText: string): string[] {
+export function policyFileNames(policy: string | ParsedPolicyText): string[] {
   let pricing = DEFAULT_PRICES;
   let keys = DEFAULT_KEYS;
-  try {
-    const raw = parseYamlSafe(normalizeText(policyText));
-    if (typeof raw === 'object' && raw !== null) {
-      const r = raw as Record<string, unknown>;
-      if (typeof r.pricing === 'string' && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.pricing)) pricing = bare(r.pricing);
-      if (typeof r.keys === 'string' && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.keys)) keys = bare(r.keys);
-    }
-  } catch {
-    // reported by parsePolicyFiles
+  const { result } = typeof policy === 'string' ? parsePolicyText(policy) : policy;
+  if (result.ok && typeof result.value === 'object' && result.value !== null) {
+    const r = result.value as Record<string, unknown>;
+    if (typeof r.pricing === 'string' && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.pricing)) pricing = bare(r.pricing);
+    if (typeof r.keys === 'string' && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.keys)) keys = bare(r.keys);
   }
   return [...new Set([POLICY_FILE, pricing, keys])];
+}
+
+function rethrowYaml(file: string, e: unknown): never {
+  if (e instanceof YamlError) throw new PolicyLoadError(e.code, file, [{ path: '', message: e.message }]);
+  throw e;
 }
 
 function yamlOf(file: string, text: string): unknown {
   try {
     return parseYamlSafe(text);
   } catch (e) {
-    if (e instanceof YamlError) throw new PolicyLoadError(e.code, file, [{ path: '', message: e.message }]);
-    throw e;
+    return rethrowYaml(file, e);
   }
 }
 
@@ -81,8 +97,11 @@ const cap = (x: string, n: number): string => (x.length > n ? `${x.slice(0, n)}.
 const pathOf = (p: ReadonlyArray<PropertyKey>): string => p.reduce<string>((s, k) => (typeof k === 'number' ? `${s}[${k}]` : s ? `${s}.${cap(String(k), 64)}` : cap(String(k), 64)), '');
 const messageOf = (m: string): string => cap(m.replace(/"([^"]{64})[^"]*"/g, '"$1..."'), 300);
 
-/** `files` maps file names (as the policy names them, without `./`) to their raw text. Throws PolicyLoadError. */
-export function parsePolicyFiles(dir: string, files: Record<string, string>): PolicySource {
+/**
+ * `files` maps file names (as the policy names them, without `./`) to their raw text. `parsed` is policy.yaml as the
+ * caller already parsed it (parsePolicyText); it is used only when its text is the same. Throws PolicyLoadError.
+ */
+export function parsePolicyFiles(dir: string, files: Record<string, string>, parsed?: ParsedPolicyText): PolicySource {
   const get = (name: string): string => {
     const text = Object.hasOwn(files, name) ? files[name] : undefined;
     if (text === undefined) throw new PolicyLoadError('E_FILE_MISSING', name, [{ path: '', message: `${name} not found in ${dir}` }]);
@@ -90,7 +109,9 @@ export function parsePolicyFiles(dir: string, files: Record<string, string>): Po
   };
 
   const policyText = get(POLICY_FILE);
-  const p = policySchema.safeParse(yamlOf(POLICY_FILE, policyText));
+  const reuse = parsed !== undefined && parsed.text === policyText ? parsed.result : null;
+  const policyValue = reuse === null ? yamlOf(POLICY_FILE, policyText) : reuse.ok ? reuse.value : rethrowYaml(POLICY_FILE, reuse.error);
+  const p = policySchema.safeParse(policyValue);
   if (!p.success) throw new PolicyLoadError('E_SCHEMA', POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: messageOf(i.message) })));
   const policy = p.data;
 

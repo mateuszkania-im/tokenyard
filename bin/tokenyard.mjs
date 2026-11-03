@@ -2145,7 +2145,7 @@ var require_identity = __commonJS({
     var isPair = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === PAIR;
     var isScalar2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SCALAR;
     var isSeq = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SEQ;
-    function isCollection(node2) {
+    function isCollection2(node2) {
       if (node2 && typeof node2 === "object")
         switch (node2[NODE_TYPE]) {
           case MAP:
@@ -2165,7 +2165,7 @@ var require_identity = __commonJS({
         }
       return false;
     }
-    var hasAnchor = (node2) => (isScalar2(node2) || isCollection(node2)) && !!node2.anchor;
+    var hasAnchor = (node2) => (isScalar2(node2) || isCollection2(node2)) && !!node2.anchor;
     exports.ALIAS = ALIAS;
     exports.DOC = DOC;
     exports.MAP = MAP;
@@ -2175,7 +2175,7 @@ var require_identity = __commonJS({
     exports.SEQ = SEQ;
     exports.hasAnchor = hasAnchor;
     exports.isAlias = isAlias;
-    exports.isCollection = isCollection;
+    exports.isCollection = isCollection2;
     exports.isDocument = isDocument;
     exports.isMap = isMap;
     exports.isNode = isNode;
@@ -3861,13 +3861,13 @@ var require_addPairToJSMap = __commonJS({
       else if (merge2.isMergeKey(ctx, key))
         merge2.addMergeToJSMap(ctx, map2, value);
       else {
-        const jsKey = toJS.toJS(key, "", ctx);
+        const jsKey2 = toJS.toJS(key, "", ctx);
         if (map2 instanceof Map) {
-          map2.set(jsKey, toJS.toJS(value, jsKey, ctx));
+          map2.set(jsKey2, toJS.toJS(value, jsKey2, ctx));
         } else if (map2 instanceof Set) {
-          map2.add(jsKey);
+          map2.add(jsKey2);
         } else {
-          const stringKey = stringifyKey(key, jsKey, ctx);
+          const stringKey = stringifyKey(key, jsKey2, ctx);
           const jsValue = toJS.toJS(value, stringKey, ctx);
           if (stringKey in map2)
             Object.defineProperty(map2, stringKey, {
@@ -3882,11 +3882,11 @@ var require_addPairToJSMap = __commonJS({
       }
       return map2;
     }
-    function stringifyKey(key, jsKey, ctx) {
-      if (jsKey === null)
+    function stringifyKey(key, jsKey2, ctx) {
+      if (jsKey2 === null)
         return "";
-      if (typeof jsKey !== "object")
-        return String(jsKey);
+      if (typeof jsKey2 !== "object")
+        return String(jsKey2);
       if (identity.isNode(key) && ctx?.doc) {
         const strCtx = stringify.createStringifyContext(ctx.doc, {});
         strCtx.anchors = /* @__PURE__ */ new Set();
@@ -3904,7 +3904,7 @@ var require_addPairToJSMap = __commonJS({
         }
         return strKey;
       }
-      return JSON.stringify(jsKey);
+      return JSON.stringify(jsKey2);
     }
     exports.addPairToJSMap = addPairToJSMap;
   }
@@ -7724,7 +7724,7 @@ var require_cst = __commonJS({
     var DOCUMENT = "";
     var FLOW_END = "";
     var SCALAR = "";
-    var isCollection = (token) => !!token && "items" in token;
+    var isCollection2 = (token) => !!token && "items" in token;
     var isScalar2 = (token) => !!token && (token.type === "scalar" || token.type === "single-quoted-scalar" || token.type === "double-quoted-scalar" || token.type === "block-scalar");
     function prettyToken(token) {
       switch (token) {
@@ -7808,7 +7808,7 @@ var require_cst = __commonJS({
     exports.DOCUMENT = DOCUMENT;
     exports.FLOW_END = FLOW_END;
     exports.SCALAR = SCALAR;
-    exports.isCollection = isCollection;
+    exports.isCollection = isCollection2;
     exports.isScalar = isScalar2;
     exports.prettyToken = prettyToken;
     exports.tokenType = tokenType;
@@ -9463,19 +9463,37 @@ function parseYamlSafe(text2) {
   if (text2.length > MAX_YAML_BYTES) throw new YamlError("E_YAML_UNSAFE", `file is larger than ${MAX_YAML_BYTES} bytes`);
   let doc;
   try {
-    doc = (0, import_yaml.parseDocument)(text2, { uniqueKeys: true, merge: false });
+    doc = (0, import_yaml.parseDocument)(text2, { uniqueKeys: false, merge: false, version: "1.2" });
   } catch (e2) {
     throw new YamlError("E_YAML_SYNTAX", e2 instanceof Error ? e2.message : String(e2));
   }
   const first2 = doc.errors[0];
   if (first2) throw new YamlError("E_YAML_SYNTAX", first2.message.split("\n")[0] ?? "syntax error");
+  const yaml = doc.directives?.yaml;
+  const tags = doc.directives?.tags ?? DEFAULT_TAGS;
+  const customTags = Object.keys(tags).some((k) => k !== "!!" || tags[k] !== DEFAULT_TAGS["!!"]);
+  if (yaml?.explicit && yaml.version !== "1.2" || customTags || doc.warnings.some((w) => w.code === "BAD_DIRECTIVE")) {
+    throw new YamlError("E_YAML_UNSAFE", "YAML directives other than %YAML 1.2 are not allowed in policy files");
+  }
+  let nodes = 0;
   (0, import_yaml.visit)(doc, {
+    Node: () => {
+      if (++nodes > MAX_YAML_NODES) throw new YamlError("E_YAML_UNSAFE", `document has more than ${MAX_YAML_NODES} nodes`);
+    },
     Alias: () => {
       throw new YamlError("E_YAML_UNSAFE", "YAML aliases are not allowed in policy files");
     },
-    Pair: (_k, pair) => {
-      if ((0, import_yaml.isScalar)(pair.key) && pair.key.value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
-      if ((0, import_yaml.isScalar)(pair.key) && pair.key.value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
+    Map: (_k, map2) => {
+      const seen = /* @__PURE__ */ new Set();
+      for (const pair of map2.items) {
+        if ((0, import_yaml.isCollection)(pair.key)) throw new YamlError("E_YAML_UNSAFE", "mappings and sequences are not allowed as keys");
+        const value = (0, import_yaml.isScalar)(pair.key) ? pair.key.value : pair.key;
+        if (value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
+        if (value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
+        const key = jsKey(value);
+        if (seen.has(key)) throw new YamlError("E_YAML_SYNTAX", `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
+        seen.add(key);
+      }
     }
   });
   try {
@@ -9484,7 +9502,7 @@ function parseYamlSafe(text2) {
     throw new YamlError("E_YAML_SYNTAX", e2 instanceof Error ? e2.message : String(e2));
   }
 }
-var import_yaml, YamlError, MAX_YAML_BYTES;
+var import_yaml, YamlError, MAX_YAML_BYTES, MAX_YAML_NODES, DEFAULT_TAGS, jsKey;
 var init_safe_yaml = __esm({
   "src/policy/safe-yaml.ts"() {
     "use strict";
@@ -9498,6 +9516,9 @@ var init_safe_yaml = __esm({
       code;
     };
     MAX_YAML_BYTES = 1e6;
+    MAX_YAML_NODES = 2e5;
+    DEFAULT_TAGS = { "!!": "tag:yaml.org,2002:" };
+    jsKey = (value) => value === null || value === void 0 ? "" : String(value);
   }
 });
 
@@ -59947,41 +59968,52 @@ __export(load_dir_exports, {
   PolicyLoadError: () => PolicyLoadError,
   normalizeText: () => normalizeText,
   parsePolicyFiles: () => parsePolicyFiles,
+  parsePolicyText: () => parsePolicyText,
   policyFileNames: () => policyFileNames
 });
 function normalizeText(text2) {
   return (text2.charCodeAt(0) === 65279 ? text2.slice(1) : text2).replace(/\r\n/g, "\n");
 }
-function policyFileNames(policyText) {
+function parsePolicyText(policyText) {
+  const text2 = normalizeText(policyText);
+  try {
+    return { text: text2, result: { ok: true, value: parseYamlSafe(text2) } };
+  } catch (error62) {
+    return { text: text2, result: { ok: false, error: error62 } };
+  }
+}
+function policyFileNames(policy2) {
   let pricing = DEFAULT_PRICES;
   let keys2 = DEFAULT_KEYS;
-  try {
-    const raw = parseYamlSafe(normalizeText(policyText));
-    if (typeof raw === "object" && raw !== null) {
-      const r = raw;
-      if (typeof r.pricing === "string" && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.pricing)) pricing = bare(r.pricing);
-      if (typeof r.keys === "string" && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.keys)) keys2 = bare(r.keys);
-    }
-  } catch {
+  const { result } = typeof policy2 === "string" ? parsePolicyText(policy2) : policy2;
+  if (result.ok && typeof result.value === "object" && result.value !== null) {
+    const r = result.value;
+    if (typeof r.pricing === "string" && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.pricing)) pricing = bare(r.pricing);
+    if (typeof r.keys === "string" && /^(\.\/)?[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$/.test(r.keys)) keys2 = bare(r.keys);
   }
   return [.../* @__PURE__ */ new Set([POLICY_FILE, pricing, keys2])];
+}
+function rethrowYaml(file2, e2) {
+  if (e2 instanceof YamlError) throw new PolicyLoadError(e2.code, file2, [{ path: "", message: e2.message }]);
+  throw e2;
 }
 function yamlOf(file2, text2) {
   try {
     return parseYamlSafe(text2);
   } catch (e2) {
-    if (e2 instanceof YamlError) throw new PolicyLoadError(e2.code, file2, [{ path: "", message: e2.message }]);
-    throw e2;
+    return rethrowYaml(file2, e2);
   }
 }
-function parsePolicyFiles(dir, files) {
+function parsePolicyFiles(dir, files, parsed) {
   const get = (name2) => {
     const text2 = Object.hasOwn(files, name2) ? files[name2] : void 0;
     if (text2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", name2, [{ path: "", message: `${name2} not found in ${dir}` }]);
     return normalizeText(text2);
   };
   const policyText = get(POLICY_FILE);
-  const p = policySchema.safeParse(yamlOf(POLICY_FILE, policyText));
+  const reuse = parsed !== void 0 && parsed.text === policyText ? parsed.result : null;
+  const policyValue = reuse === null ? yamlOf(POLICY_FILE, policyText) : reuse.ok ? reuse.value : rethrowYaml(POLICY_FILE, reuse.error);
+  const p = policySchema.safeParse(policyValue);
   if (!p.success) throw new PolicyLoadError("E_SCHEMA", POLICY_FILE, p.error.issues.map((i) => ({ path: pathOf(i.path), message: messageOf(i.message) })));
   const policy2 = p.data;
   const pricesName = bare(policy2.pricing);
@@ -60263,12 +60295,13 @@ async function loadPolicyDir(dir, o = {}) {
   const policy2 = await readOrMissing(dir, POLICY_FILE);
   if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${dir}` }]);
   files[POLICY_FILE] = policy2;
-  for (const name2 of policyFileNames(policy2)) {
+  const parsed = parsePolicyText(policy2);
+  for (const name2 of policyFileNames(parsed)) {
     if (name2 === POLICY_FILE) continue;
     const text2 = await readOrMissing(dir, name2);
     if (text2 !== void 0) files[name2] = text2;
   }
-  return parsePolicyFiles(dir, files);
+  return parsePolicyFiles(dir, files, parsed);
 }
 var init_load_dir2 = __esm({
   "src/policy-loader/load-dir.ts"() {
@@ -122320,21 +122353,26 @@ function filesAtRef(ref, repo) {
   const policy2 = show(POLICY_FILE);
   if (policy2 === void 0) throw new PolicyLoadError("E_FILE_MISSING", POLICY_FILE, [{ path: "", message: `${POLICY_FILE} not found in ${repo.label} at ${ref} (${commit})` }]);
   const files = { [POLICY_FILE]: policy2 };
-  for (const name2 of policyFileNames(policy2)) {
+  const parsed = parsePolicyText(policy2);
+  for (const name2 of policyFileNames(parsed)) {
     if (name2 === POLICY_FILE) continue;
     const text2 = show(name2);
     if (text2 !== void 0) files[name2] = text2;
   }
-  return files;
+  return { files, parsed };
+}
+function sourceAtRef(dirLabel, ref, repo) {
+  const { files, parsed } = filesAtRef(ref, repo);
+  return parsePolicyFiles(dirLabel, files, parsed);
 }
 function loadPolicyAtCommit(o) {
-  const src = parsePolicyFiles(join9(o.repo.top, o.repo.rel, `@${o.commit}`), filesAtRef(o.commit, o.repo));
+  const src = sourceAtRef(join9(o.repo.top, o.repo.rel, `@${o.commit}`), o.commit, o.repo);
   const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 async function loadReplayPolicy(o) {
   const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source, o.root === void 0 ? {} : { root: o.root }) : parsePolicyFiles(join9(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
+  const src = isDir ? await loadPolicyDir(o.source, o.root === void 0 ? {} : { root: o.root }) : sourceAtRef(join9(o.headDir, `@${o.source}`), o.source, locateRepoDir(o.headDir, null));
   const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
