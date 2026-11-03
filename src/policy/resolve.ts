@@ -72,6 +72,9 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
       const where = at === undefined ? '' : ` (message ${at})`;
       return block(400, 'invalid_request_error', 'taint', `this session's history${where} holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
     }
+    case 'duplicate':
+      // A second admit under an id that already holds a reservation: never forwarded on the first one's reservation.
+      return block(409, 'invalid_request_error', 'duplicate', `request id ${plan.id} already holds a reservation; it was not sent again`);
   }
 }
 

@@ -63,7 +63,7 @@ A low agreement or any missing instance means the diff should not be trusted.
   provider or model changes, each side reads `route (provider, model)`.
 - `blocked`: `{ policy, reason, name, count }`, base first, then most frequent. `reason` is the policy block reason
   (`no-route`, `model-not-allowed`, `server-tool-not-allowed`, `server-tool-no-max-uses`, `secret`, `taint`,
-  `budget`, `rate`, `streams`, `store-down`, `unpriced`); `name` is the budget, limit or rule, the model, or the
+  `budget`, `rate`, `streams`, `store-down`, `unpriced`, `duplicate`); `name` is the budget, limit or rule, the model, or the
   server tool types, and empty when there is none.
 - `cutSessions`: `{ policy, session, team, repo, requestClass, requestIndex, cause, droppedRequests,
   droppedCostMicroUsd }`, base first, then in time order. A session is cut when the policy blocks a request the gateway

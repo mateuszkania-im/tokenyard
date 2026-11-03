@@ -30423,6 +30423,8 @@ function failedBlock(plan, failed) {
       const where = at === void 0 ? "" : ` (message ${at})`;
       return block(400, "invalid_request_error", "taint", `this session's history${where} holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
     }
+    case "duplicate":
+      return block(409, "invalid_request_error", "duplicate", `request id ${plan.id} already holds a reservation; it was not sent again`);
   }
 }
 function oversizedReservation(plan) {
@@ -58006,7 +58008,8 @@ var init_errors3 = __esm({
       "budget",
       "unpriced",
       "server-tool-no-max-uses",
-      "server-tool-not-allowed"
+      "server-tool-not-allowed",
+      "duplicate"
     ]);
     retryable = (reason) => !NOT_RETRYABLE.has(reason);
   }
@@ -60027,7 +60030,7 @@ function createMemoryStore(o) {
   function admitNow(plan, now) {
     const tenant = planTenant(plan);
     if (tenant === null) return NOTHING;
-    if (reservations.has(plan.id)) return NOTHING;
+    if (reservations.has(plan.id)) return refused({ kind: "duplicate", name: "duplicate" });
     const t = plan.taint;
     if (t !== null) {
       const first2 = t.add[0];
@@ -105399,7 +105402,7 @@ function createRedisStore(client, o) {
           open5.set(plan.id, tenant);
           return { admitted: true, failed: null, audit, totals: totals3 };
         case "dup":
-          return NOTHING2;
+          return { admitted: false, failed: { kind: "duplicate", name: "duplicate" }, audit: [], totals: [] };
         case "taint":
           return { admitted: false, failed: { kind: "taint", name: "taint", rule: reply.rule ?? "", ...reply.h ? { valueHmac: reply.h } : {} }, audit: [], totals: [] };
         case "rate":
@@ -125541,7 +125544,7 @@ var package_default = {
     typecheck: "tsc --noEmit",
     lint: "oxlint",
     test: "vitest run",
-    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts",
+    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts",
     bench: "tsx bench/run.ts",
     "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
     live: "node --env-file=.env bin/tokenyard.mjs live",

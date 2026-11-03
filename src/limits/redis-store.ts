@@ -99,7 +99,8 @@ export function createRedisStore(client: Client, o: { deadlineMs: number; onSwep
           open.set(plan.id, tenant);
           return { admitted: true, failed: null, audit, totals };
         case 'dup':
-          return NOTHING;
+          // The id already holds a reservation: refused, never admitted on the first request's reservation.
+          return { admitted: false, failed: { kind: 'duplicate', name: 'duplicate' }, audit: [], totals: [] };
         case 'taint':
           return { admitted: false, failed: { kind: 'taint', name: 'taint', rule: reply.rule ?? '', ...(reply.h ? { valueHmac: reply.h } : {}) }, audit: [], totals: [] };
         case 'rate':

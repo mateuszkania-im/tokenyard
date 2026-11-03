@@ -16,7 +16,8 @@ export type BlockReason =
   | 'store-down'
   | 'unpriced'
   | 'server-tool-no-max-uses'
-  | 'server-tool-not-allowed';         // not in spec 6.5: a server tool type the matched route does not list
+  | 'server-tool-not-allowed'          // not in spec 6.5: a server tool type the matched route does not list
+  | 'duplicate';                       // not in spec 6.5: admit found a reservation under this id already (never admitted twice)
 
 /** A note carried on a plan: guardrail warns and what the reservation could not bound. */
 export type Warning =
@@ -187,7 +188,7 @@ export interface Plan {
 
 export interface Admission {           // returned by CounterStore.admit(plan)
   admitted: boolean;
-  failed: { kind: 'budget' | 'rate' | 'streams' | 'taint'; name: string; spentMicroUsd?: number; retryAfterMs?: number; rule?: string;
+  failed: { kind: 'budget' | 'rate' | 'streams' | 'taint' | 'duplicate'; name: string; spentMicroUsd?: number; retryAfterMs?: number; rule?: string;
             valueHmac?: string } | null;   // not in spec 6.5: the tainted HMAC a history hit matched, to name its message
   audit: Array<{ name: string; wouldFail: boolean }>;
   totals: Array<{ key: string; spentMicroUsd: number; reservedMicroUsd: number; limitMicroUsd: number }>;  // post-admit, enforced levels
@@ -196,7 +197,7 @@ export interface Admission {           // returned by CounterStore.admit(plan)
 
 export interface Decision {
   action: 'forward' | 'block';
-  block: { status: 400 | 403 | 429 | 503; type: string; reason: BlockReason; message: string; retryAfterS: number | null } | null;
+  block: { status: 400 | 403 | 409 | 429 | 503; type: string; reason: BlockReason; message: string; retryAfterS: number | null } | null;
   plan: Plan;
   admission: Admission | null;
 }

@@ -6,7 +6,7 @@ import type { BlockReason } from '../policy/types.js';
  * minutes). Rate, stream and store-down blocks clear with time and keep their `retry-after`.
  */
 const NOT_RETRYABLE: ReadonlySet<BlockReason> = new Set<BlockReason>([
-  'no-route', 'model-not-allowed', 'secret', 'taint', 'budget', 'unpriced', 'server-tool-no-max-uses', 'server-tool-not-allowed',
+  'no-route', 'model-not-allowed', 'secret', 'taint', 'budget', 'unpriced', 'server-tool-no-max-uses', 'server-tool-not-allowed', 'duplicate',
 ]);
 export const retryable = (reason: BlockReason): boolean => !NOT_RETRYABLE.has(reason);
 

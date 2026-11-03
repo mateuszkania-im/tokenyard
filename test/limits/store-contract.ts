@@ -85,7 +85,7 @@ export function runStoreContract(name: string, make: (o?: { onSwept?: (ids: stri
     expect((await s.snapshot([aud.key]))[aud.key]).toEqual({ spent: 0, reserved: 100 });
   });
 
-  test(`${name}: duplicate admit for the same id makes no second reservation`, async () => {
+  test(`${name}: duplicate admit for the same id is refused and makes no second reservation`, async () => {
     const s = await make();
     const t = freshTenant();
     const org = level(t, 'org', 10_000, 100);
@@ -93,7 +93,8 @@ export function runStoreContract(name: string, make: (o?: { onSwept?: (ids: stri
     const rid = id();
     expect((await s.admit({ ...p, id: rid })).admitted).toBe(true);
     const again = await s.admit({ ...p, id: rid });
-    expect(again.admitted).toBe(true);
+    expect(again.admitted).toBe(false);
+    expect(again.failed?.kind).toBe('duplicate');
     expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 0, reserved: 100 });
   });
 

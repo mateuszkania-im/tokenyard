@@ -74,7 +74,8 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
   function admitNow(plan: Plan, now: number): Admission {
     const tenant = planTenant(plan);
     if (tenant === null) return NOTHING;
-    if (reservations.has(plan.id)) return NOTHING; // duplicate admit for this id: no second reservation
+    // A duplicate admit for this id is refused: answering admitted would forward it without a reservation of its own.
+    if (reservations.has(plan.id)) return refused({ kind: 'duplicate', name: 'duplicate' });
 
     // 0) Taint. A last-turn block writes its HMACs and nothing else; otherwise any history HMAC in the set blocks.
     const t = plan.taint;
