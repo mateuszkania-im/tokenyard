@@ -9,7 +9,7 @@ import { redactCredentialEcho } from '../guardrails/credential-echo.js';
 import { PII_RULES } from '../guardrails/pii.js';
 import { type RedactionHit, redactionHits, redactProductBody } from '../guardrails/redact.js';
 import { DEFAULT_RULES } from '../guardrails/rules.js';
-import { findSpans, scanBody } from '../guardrails/scan.js';
+import { countEscapesUpTo, findSpans, SCAN_ESCAPE_BUDGET, scanBody } from '../guardrails/scan.js';
 import { buildFeatures, decide, enforcedLevelApplies } from '../policy/decide.js';
 import { bodyShapeRefusal } from '../surfaces/body-shape.js';
 import { modelsForKey } from '../policy/match.js';
@@ -728,8 +728,16 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);
 
-  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan.
+  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan. A body whose scanned part
+  // holds more escapes than the scan budget is refused first: decoding them would hold the event loop (S-V3-1). The
+  // scanned part is the last turn, or the whole body on product routes (redaction) and for a body that cannot be trusted.
   const product = key.kind === 'service';
+  const scanned = product || features.parseError || features.ambiguousKeys === true ? { start: 0, end: body.length } : features.lastTurn;
+  if (scanned && countEscapesUpTo(body, scanned, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
+    const msg = `the part of the request body tokenyard scans for secrets holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences; send the text unescaped where JSON allows it, or split the request`;
+    sendError(req, res, own(413, 'request_too_large', 'scan-budget', msg, null, { shouldRetry: false }));
+    return early({ features, status: 413, decision: { action: 'block', reason: 'scan-budget' }, errorClass: 'request_too_large' });
+  }
   const guard = scanGuardrails(policy, product, body, features, deps.guardrailSalt ?? '');
 
   // 6. Decide. A reservation that cannot be priced (the estimator throws) fails closed: refused before admit, so nothing

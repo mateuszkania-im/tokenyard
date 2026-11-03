@@ -1899,7 +1899,10 @@ function shannonEntropy(s2) {
   return h;
 }
 function utf8Latin1(cp) {
-  return Buffer.from(String.fromCodePoint(cp), "utf8").toString("latin1");
+  if (cp < 128) return String.fromCharCode(cp);
+  if (cp < 2048) return String.fromCharCode(192 | cp >> 6, 128 | cp & 63);
+  if (cp < 65536) return String.fromCharCode(224 | cp >> 12, 128 | cp >> 6 & 63, 128 | cp & 63);
+  return String.fromCharCode(240 | cp >> 18, 128 | cp >> 12 & 63, 128 | cp >> 6 & 63, 128 | cp & 63);
 }
 function hex4(b, i) {
   if (i + 4 > b.length) return -1;
@@ -2089,6 +2092,17 @@ function matchView(view, rule, crossingOnly, out, body, quotedOnly, present) {
     out.push({ rule, start: first2.start, end: last.end, value, segments });
   }
 }
+function countEscapesUpTo(body, range, max) {
+  let n2 = 0;
+  let p = range.start;
+  while (n2 <= max) {
+    const e2 = body.indexOf(92, p);
+    if (e2 < 0 || e2 >= range.end) break;
+    n2++;
+    p = e2 + 2;
+  }
+  return n2;
+}
 function findSpans(body, rules, opts = {}) {
   const q = opts.quotedOnly === true;
   const range = opts.range ?? { start: 0, end: body.length };
@@ -2152,7 +2166,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter;
+var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter, SCAN_ESCAPE_BUDGET;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
@@ -2229,6 +2243,7 @@ var init_scan = __esm({
     keywordRegex = /* @__PURE__ */ new Map();
     globalRegex = /* @__PURE__ */ new WeakMap();
     isDelimiter = (c) => c === void 0 || isWs(c) || isStructural(c);
+    SCAN_ESCAPE_BUDGET = 1024 * 1024;
   }
 });
 
@@ -59442,6 +59457,12 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   await readLatch(deps, runtime);
   const features = extractFeatures(surface, body);
   const product = key.kind === "service";
+  const scanned = product || features.parseError || features.ambiguousKeys === true ? { start: 0, end: body.length } : features.lastTurn;
+  if (scanned && countEscapesUpTo(body, scanned, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
+    const msg = `the part of the request body tokenyard scans for secrets holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences; send the text unescaped where JSON allows it, or split the request`;
+    sendError(req, res, own2(413, "request_too_large", "scan-budget", msg, null, { shouldRetry: false }));
+    return early({ features, status: 413, decision: { action: "block", reason: "scan-budget" }, errorClass: "request_too_large" });
+  }
   const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? "");
   const featuresFor = (x) => buildFeatures(x, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
   let f;

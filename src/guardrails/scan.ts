@@ -116,9 +116,12 @@ class View {
   }
 }
 
-/** UTF-8 bytes of a code point as latin1 characters. */
+/** UTF-8 bytes of a code point as latin1 characters, computed (V3: one Buffer per `\u` escape cost more than the scan). */
 function utf8Latin1(cp: number): string {
-  return Buffer.from(String.fromCodePoint(cp), 'utf8').toString('latin1');
+  if (cp < 0x80) return String.fromCharCode(cp);
+  if (cp < 0x800) return String.fromCharCode(0xc0 | (cp >> 6), 0x80 | (cp & 0x3f));
+  if (cp < 0x10000) return String.fromCharCode(0xe0 | (cp >> 12), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
+  return String.fromCharCode(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 0x3f), 0x80 | ((cp >> 6) & 0x3f), 0x80 | (cp & 0x3f));
 }
 
 function hex4(b: Buffer, i: number): number {
@@ -352,6 +355,28 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
     if (rule.bareNumber && segments.some((g) => g.bare) && !bareNumberOk(body, rule, value, segments, quotedOnly)) continue;
     out.push({ rule, start: first.start, end: last.end, value, segments });
   }
+}
+
+/**
+ * Most JSON escapes the scanned part of a body may hold (S-V3-1). Each escape is decoded on its own, about 0.1 us on a
+ * coding-agent route and 0.2 us on a product route against about 3 ns per plain byte, so 32 MiB of escapes held the
+ * event loop for 1.0 to 2.9 s. With 1 Mi escapes a 32 MiB body scans in at most about 0.27 s (coding agent) and 0.7 s
+ * (product), measured. JSON-encoded source code holds one escape per 16 to 30 bytes, so the scanned part may hold 16
+ * to 30 MiB of it; on coding-agent routes that part is only the last turn.
+ */
+export const SCAN_ESCAPE_BUDGET = 1024 * 1024;
+
+/** Backslash escapes in `body[range)`, counted up to `max + 1` and no further; an escaped backslash counts once. */
+export function countEscapesUpTo(body: Buffer, range: Range, max: number): number {
+  let n = 0;
+  let p = range.start;
+  while (n <= max) {
+    const e = body.indexOf(0x5c, p);
+    if (e < 0 || e >= range.end) break;
+    n++;
+    p = e + 2;
+  }
+  return n;
 }
 
 /**
