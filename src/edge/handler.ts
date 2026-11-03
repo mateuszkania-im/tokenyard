@@ -1061,18 +1061,20 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
         deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
         const known = held.known;
         const charge = atEstimateCharge(held.plan, held.est);
+        // The end is read together with the admit count, before settle is called, as on the main path: an admit issued
+        // while settle runs then has a higher admitSeq and an end no earlier than this one (V4 review M1).
         const settleSeq = runtime.admits;
+        let now = known?.startedAt ?? 0;
+        try {
+          now = deps.clock();
+        } catch {
+          // the clock is what failed; the line still goes out
+        }
         void withDeadline(deps.store.settle(id, charge), admitTimeoutMs)
           .then((r) => r === 'settled', () => false)
           .then((settled) => {
             if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
             const swept = runtime.takeSwept(id) || !settled;
-            let now = known.startedAt;
-            try {
-              now = deps.clock();
-            } catch {
-              // the clock is what failed; the line still goes out
-            }
             const current = deps.policy();
             const rec = buildTraceRecord(
               {

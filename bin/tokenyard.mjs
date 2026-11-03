@@ -59890,14 +59890,14 @@ function createHandler(deps) {
         const known = held.known;
         const charge = atEstimateCharge(held.plan, held.est);
         const settleSeq = runtime.admits;
+        let now = known?.startedAt ?? 0;
+        try {
+          now = deps.clock();
+        } catch {
+        }
         void withDeadline(deps.store.settle(id, charge), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
           if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
           const swept = runtime.takeSwept(id) || !settled;
-          let now = known.startedAt;
-          try {
-            now = deps.clock();
-          } catch {
-          }
           const current = deps.policy();
           const rec = buildTraceRecord(
             {

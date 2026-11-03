@@ -592,3 +592,52 @@ test('a fault after admit queues a trace line with chargedMicroUsd equal to the 
   expect(spy.settles).toEqual([{ id: 'req_1', actual: est, result: 'settled' }]);
 });
 
+// V4 review M1: the fault path read the admit count before settle but the clock after settle resolved, so its recorded
+// end could fall after admits it had not counted. Both are now read before settle is called.
+test('a fault after admit records the end it had when it called settle, with the admit count of that moment', async () => {
+  let n = 0;
+  let faults = 0;
+  const up = await raw((req, res) => {
+    req.resume();
+    if (n === 1) faults = 2;
+    res.writeHead(200, { 'content-type': 'application/json' }).end(json('claude-haiku-5-5', { input_tokens: 5, output_tokens: 1 }));
+  });
+  const inner = createMemoryStore({ clock: Date.now });
+  let settleCalledAt = 0;
+  const store: CounterStore = Object.assign(Object.create(inner) as CounterStore, {
+    admit: inner.admit.bind(inner),
+    settle: async (id: string, actual: number) => {
+      settleCalledAt = Date.now();
+      await new Promise((r) => setTimeout(r, 80));
+      return inner.settle(id, actual);
+    },
+  });
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const traces: Rec[] = [];
+  const policy = testPolicy({ upstream: up.url });
+  const gw = createGateway({
+    policy: () => policy,
+    store,
+    traces: { write: (r) => (traces.push(r), true) },
+    traceSalt: 's',
+    clock: () => {
+      if (faults > 0) {
+        faults--;
+        throw new Error('injected fault');
+      }
+      return Date.now();
+    },
+    newId: () => `req_${++n}`,
+    basePath: null,
+    bodyCapBytes: 1 << 20,
+  });
+  const url = await gw.listen(0);
+  closers.push(gw.close);
+  await sendTolerant(url, '/v1/messages', authHeaders, msgBody({ model: 'claude-haiku-5-5' }));
+  await expect.poll(() => traces.length).toBe(1);
+  const t = traces[0] as Rec;
+  expect(t.outcome.errorClass).toBe('internal_error');
+  expect(t.outcome.settleSeq).toBe(1);
+  expect(settleCalledAt).toBeGreaterThan(0);
+  expect(Date.parse(t.ts) + t.outcome.totalMs).toBeLessThanOrEqual(settleCalledAt);
+});
