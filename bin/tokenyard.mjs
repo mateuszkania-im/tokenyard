@@ -340,7 +340,7 @@ function escapeMarkdown(s2, max = 256) {
     else if (isControl(code2)) continue;
     else out += MD_ENTITY[ch] ?? ch;
   }
-  return out.replace(/[0-9a-fA-F]{7,}/g, (run) => run.match(/.{1,6}/g)?.join(ZERO_WIDTH_SPACE) ?? run).replace(/([A-Za-z])-(?=\d)/g, `$1-${ZERO_WIDTH_SPACE}`);
+  return out.replace(/[0-9a-fA-F]{7,}/g, (run2) => run2.match(/.{1,6}/g)?.join(ZERO_WIDTH_SPACE) ?? run2).replace(/([A-Za-z])-(?=\d)/g, `$1-${ZERO_WIDTH_SPACE}`);
 }
 var isControl, MAX_LABEL_LENGTH, ZERO_WIDTH_SPACE, MD_ENTITY;
 var init_sanitize = __esm({
@@ -29399,7 +29399,7 @@ function visit2(schema, fnOrHandlers) {
     return h ? h(node2, rewritten) : node2;
   };
   const cache = /* @__PURE__ */ new Map();
-  function run(s2) {
+  function run2(s2) {
     const cached2 = cache.get(s2);
     if (cached2 === RESOLVING) {
       return new $ZodLazy({
@@ -29425,21 +29425,21 @@ function visit2(schema, fnOrHandlers) {
         let changed = false;
         const newShape = {};
         for (const k of keys2) {
-          const mapped = run(oldShape[k]);
+          const mapped = run2(oldShape[k]);
           if (mapped !== oldShape[k])
             changed = true;
           newShape[k] = mapped;
         }
         let newCatchall = def.catchall;
         if (def.catchall) {
-          newCatchall = run(def.catchall);
+          newCatchall = run2(def.catchall);
           if (newCatchall !== def.catchall)
             changed = true;
         }
         return changed ? clone(s2, { ...def, shape: newShape, catchall: newCatchall }) : s2;
       }
       case "array": {
-        const mapped = run(def.element);
+        const mapped = run2(def.element);
         return mapped === def.element ? s2 : clone(s2, { ...def, element: mapped });
       }
       case "tuple": {
@@ -29447,14 +29447,14 @@ function visit2(schema, fnOrHandlers) {
         let changed = false;
         const newItems = [];
         for (const item of oldItems) {
-          const mapped = run(item);
+          const mapped = run2(item);
           if (mapped !== item)
             changed = true;
           newItems.push(mapped);
         }
         let newRest = def.rest;
         if (def.rest) {
-          newRest = run(def.rest);
+          newRest = run2(def.rest);
           if (newRest !== def.rest)
             changed = true;
         }
@@ -29462,12 +29462,12 @@ function visit2(schema, fnOrHandlers) {
       }
       case "record":
       case "map": {
-        const newKey = run(def.keyType);
-        const newVal = run(def.valueType);
+        const newKey = run2(def.keyType);
+        const newVal = run2(def.valueType);
         return newKey === def.keyType && newVal === def.valueType ? s2 : clone(s2, { ...def, keyType: newKey, valueType: newVal });
       }
       case "set": {
-        const newVal = run(def.valueType);
+        const newVal = run2(def.valueType);
         return newVal === def.valueType ? s2 : clone(s2, { ...def, valueType: newVal });
       }
       case "union": {
@@ -29475,7 +29475,7 @@ function visit2(schema, fnOrHandlers) {
         let changed = false;
         const newOptions = [];
         for (const opt of oldOptions) {
-          const mapped = run(opt);
+          const mapped = run2(opt);
           if (mapped !== opt)
             changed = true;
           newOptions.push(mapped);
@@ -29483,8 +29483,8 @@ function visit2(schema, fnOrHandlers) {
         return changed ? clone(s2, { ...def, options: newOptions }) : s2;
       }
       case "intersection": {
-        const newLeft = run(def.left);
-        const newRight = run(def.right);
+        const newLeft = run2(def.left);
+        const newRight = run2(def.right);
         return newLeft === def.left && newRight === def.right ? s2 : clone(s2, { ...def, left: newLeft, right: newRight });
       }
       case "optional":
@@ -29496,23 +29496,23 @@ function visit2(schema, fnOrHandlers) {
       case "nonoptional":
       case "promise":
       case "success": {
-        const newInner = run(def.innerType);
+        const newInner = run2(def.innerType);
         return newInner === def.innerType ? s2 : clone(s2, { ...def, innerType: newInner });
       }
       case "pipe": {
-        const newIn = run(def.in);
-        const newOut = run(def.out);
+        const newIn = run2(def.in);
+        const newOut = run2(def.out);
         return newIn === def.in && newOut === def.out ? s2 : clone(s2, { ...def, in: newIn, out: newOut });
       }
       case "function": {
-        const newInput = run(def.input);
-        const newOutput = run(def.output);
+        const newInput = run2(def.input);
+        const newOutput = run2(def.output);
         return newInput === def.input && newOutput === def.output ? s2 : clone(s2, { ...def, input: newInput, output: newOutput });
       }
       case "lazy": {
         const original = def.getter;
         const { _cachedInner, ...rest } = def;
-        return clone(s2, { ...rest, getter: () => run(original()) });
+        return clone(s2, { ...rest, getter: () => run2(original()) });
       }
       // A leaf by choice: `parts` are regex fragments, not data positions.
       case "template_literal":
@@ -29543,7 +29543,7 @@ function visit2(schema, fnOrHandlers) {
       }
     }
   }
-  return run(schema);
+  return run2(schema);
 }
 var RESOLVING;
 var init_visit = __esm({
@@ -60481,7 +60481,7 @@ var init_loader = __esm({
       }
       /** Serialised: loads never overlap. With `throwOnError` the failure is also thrown (start); it is always counted. */
       reload(trigger, throwOnError) {
-        const run = this.queue.then(async () => {
+        const run2 = this.queue.then(async () => {
           if (this.stopped) return;
           try {
             const got = await this.fetch();
@@ -60506,8 +60506,8 @@ var init_loader = __esm({
             if (throwOnError) throw e2;
           }
         });
-        this.queue = run.catch(() => void 0);
-        return run;
+        this.queue = run2.catch(() => void 0);
+        return run2;
       }
       async fetch() {
         if (this.o.dir) return { bundle: buildBundle(await loadPolicyDir(this.o.dir), { createdAt: (/* @__PURE__ */ new Date()).toISOString() }), etag: null };
@@ -105974,7 +105974,7 @@ function createRedisStore(client, o) {
       throw e2;
     }
   );
-  async function run(s2, keys2, args) {
+  async function run2(s2, keys2, args) {
     await load();
     const tail = [String(keys2.length), ...keys2, ...args];
     try {
@@ -106006,7 +106006,7 @@ function createRedisStore(client, o) {
         s: plan.streamSlots.map((s2) => ({ n: s2.limit, m: s2.max })),
         ...plan.taint ? { t: { c: plan.taint.check, a: plan.taint.add.map((a) => [a.valueHmac, a.rule]), ttl: plan.taint.ttlMs } } : {}
       };
-      const reply = JSON.parse(String(await run(ADMIT, keys2, [JSON.stringify(arg)])));
+      const reply = JSON.parse(String(await run2(ADMIT, keys2, [JSON.stringify(arg)])));
       const audit = list(reply.audit).map(([name3, wouldFail]) => ({ name: name3, wouldFail }));
       const totals3 = list(reply.totals).map(([key, s2, r, l]) => ({ key, spentMicroUsd: Number(s2), reservedMicroUsd: Number(r), limitMicroUsd: Number(l) }));
       const name2 = reply.name ?? "";
@@ -106032,7 +106032,7 @@ function createRedisStore(client, o) {
       assertMicroUsd(actualMicroUsd, "actual cost");
       const tenant = open5.get(id);
       if (tenant === void 0) return "unknown";
-      const done = await run(SETTLE, [reservationKey(tenant, id), deadlinesKey(tenant)], [String(actualMicroUsd)]);
+      const done = await run2(SETTLE, [reservationKey(tenant, id), deadlinesKey(tenant)], [String(actualMicroUsd)]);
       open5.delete(id);
       return Number(done) === 1 ? "settled" : "unknown";
     },
@@ -106044,7 +106044,7 @@ function createRedisStore(client, o) {
         cursor = String(next);
         for (const key of found.map(String).filter((k) => DEADLINES.test(k))) {
           for (; ; ) {
-            const done = list(await run(SWEEP, [key], [String(SWEEP_BATCH)])).map(String);
+            const done = list(await run2(SWEEP, [key], [String(SWEEP_BATCH)])).map(String);
             n2 += done.length;
             const ids = done.map((resKey) => decodeURIComponent(resKey.slice(resKey.lastIndexOf(":") + 1)));
             for (const id of ids) open5.delete(id);
@@ -106074,7 +106074,7 @@ function createRedisStore(client, o) {
         if (tenantOfKey(e2.key) === null) throw new Error(`counter key without a tenant tag: ${e2.key}`);
         assertMicroUsd(e2.spentMicroUsd, "seeded spend");
       }
-      await Promise.all(entries.filter((e2) => e2.ttlMs > 0).map((e2) => run(SEED, [e2.key], [String(e2.spentMicroUsd), String(Math.ceil(e2.ttlMs))])));
+      await Promise.all(entries.filter((e2) => e2.ttlMs > 0).map((e2) => run2(SEED, [e2.key], [String(e2.spentMicroUsd), String(Math.ceil(e2.ttlMs))])));
     }
   };
 }
@@ -122646,6 +122646,7 @@ __export(main_exports, {
   githubClient: () => githubClient,
   runAction: () => runAction
 });
+import { randomBytes as randomBytes6 } from "node:crypto";
 import { appendFile, readFile as readFile2 } from "node:fs/promises";
 import { join as join10 } from "node:path";
 import { Readable as Readable4, Transform as Transform2 } from "node:stream";
@@ -122698,10 +122699,19 @@ async function publish(env, gh, body, wantComment, fork) {
     if (existing) await gh.updateComment(existing.id, clip(body));
     else await gh.createComment(clip(body));
   } catch (e2) {
-    console.error(`tokenyard action: could not post the comment (${e2 instanceof Error ? e2.message : String(e2)}); the job summary has the result`);
+    logError(`tokenyard action: could not post the comment (${e2 instanceof Error ? e2.message : String(e2)}); the job summary has the result`);
   }
 }
 async function runAction(env, gh) {
+  const token = randomBytes6(16).toString("hex");
+  console.log(`::stop-commands::${token}`);
+  try {
+    return await run(env, gh);
+  } finally {
+    console.log(`::${token}::`);
+  }
+}
+async function run(env, gh) {
   try {
     const event = await readEvent(env);
     const fork = event === null ? (env.GITHUB_EVENT_NAME ?? "").startsWith("pull_request") : event.fork;
@@ -122723,7 +122733,7 @@ async function runAction(env, gh) {
       errors = e2.issues.map((i) => ({ code: e2.code, path: i.path, message: i.message }));
     }
     if (errors.length > 0) {
-      for (const i of errors) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+      for (const i of errors) logError(`error ${i.code} ${i.path}: ${i.message}`);
       const body2 = [COMMENT_MARKER, "### tokenyard policy replay", "", `Policy check failed: ${errors.length} error${errors.length === 1 ? "" : "s"}. Replay did not run.`, "", ...errors.slice(0, 20).map((i) => `- ${escapeMarkdown(i.code)} ${escapeMarkdown(i.path)}: ${escapeMarkdown(i.message, 400)}`), ""].join("\n");
       await publish(env, gh, body2, wantComment, fork);
       return 1;
@@ -122757,7 +122767,7 @@ async function runAction(env, gh) {
     await publish(env, gh, body, wantComment, fork);
     return result.gates.failed.length > 0 ? 1 : 0;
   } catch (e2) {
-    console.error(`tokenyard action: ${e2 instanceof Error ? e2.message : String(e2)}`);
+    logError(`tokenyard action: ${e2 instanceof Error ? e2.message : String(e2)}`);
     return 1;
   }
 }
@@ -122814,7 +122824,7 @@ function githubClient(env) {
     }
   };
 }
-var MAX_COMMENT, MAX_TRACES_BYTES, input2;
+var MAX_COMMENT, MAX_TRACES_BYTES, input2, logLine, logError;
 var init_main = __esm({
   "src/action/main.ts"() {
     "use strict";
@@ -122831,6 +122841,8 @@ var init_main = __esm({
     MAX_COMMENT = 6e4;
     MAX_TRACES_BYTES = 512 * 1024 * 1024;
     input2 = (env, name2) => (env[`INPUT_${name2.toUpperCase().replace(/ /g, "_")}`] ?? "").trim();
+    logLine = (s2) => stripControls(s2.replace(/[\r\n\t\u2028\u2029]/g, " "));
+    logError = (s2) => console.error(logLine(s2));
   }
 });
 

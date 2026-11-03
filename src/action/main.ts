@@ -1,6 +1,7 @@
 // Spec 9.5 and 11: the GitHub Action (`tokenyard action`, started as the node24 `main` of action.yml). It reads policy
 // files as data through the safe loader and git refs through the hardened replay-input path, and never executes
 // anything that comes from the pull request. Fork PRs get the job summary only: no comment, no trace token, no API token.
+import { randomBytes } from 'node:crypto';
 import { appendFile, readFile } from 'node:fs/promises';
 import { createWriteStreamUnder, isUnder, writeFileUnder } from '../fsutil/safe-path.js';
 import { join } from 'node:path';
@@ -14,7 +15,7 @@ import { validatePolicy } from '../policy/validate.js';
 import { replay } from '../replay/engine.js';
 import { renderJson } from '../replay/render-json.js';
 import { COMMENT_MARKER, renderMarkdown } from '../replay/render-markdown.js';
-import { escapeMarkdown } from '../report/sanitize.js';
+import { escapeMarkdown, stripControls } from '../report/sanitize.js';
 
 export interface Gh {
   listComments(): Promise<Array<{ id: number; body: string }>>;
@@ -68,6 +69,14 @@ async function download(url: string, token: string | null, root: string, dest: s
   await pipeline(Readable.fromWeb(res.body as never), cap, await createWriteStreamUnder(root, dest));
 }
 
+/**
+ * One log line from text that may come from the pull request: line breaks, tabs and line or paragraph separators become
+ * spaces and other control characters are dropped, so nothing PR-controlled starts a line the runner reads as a
+ * workflow command (C1). Every console write of the Action goes through this.
+ */
+const logLine = (s: string): string => stripControls(s.replace(/[\r\n\t\u2028\u2029]/g, ' '));
+const logError = (s: string): void => console.error(logLine(s));
+
 function clip(body: string): string {
   if (body.length <= MAX_COMMENT) return body;
   return `${body.slice(0, MAX_COMMENT)}\n\n</details>\n\n(comment cut at ${MAX_COMMENT} characters; the full result is in replay.json)\n`;
@@ -82,12 +91,26 @@ async function publish(env: NodeJS.ProcessEnv, gh: Gh, body: string, wantComment
     if (existing) await gh.updateComment(existing.id, clip(body));
     else await gh.createComment(clip(body));
   } catch (e) {
-    console.error(`tokenyard action: could not post the comment (${e instanceof Error ? e.message : String(e)}); the job summary has the result`);
+    logError(`tokenyard action: could not post the comment (${e instanceof Error ? e.message : String(e)}); the job summary has the result`);
   }
 }
 
-/** Runs the Action; returns the exit code (1 when the policy check fails or a ci.failOn gate is exceeded). */
+/**
+ * Runs the Action; returns the exit code (1 when the policy check fails or a ci.failOn gate is exceeded). The runner
+ * does not process workflow commands for the whole run: it starts with `::stop-commands::<random token>` and ends with
+ * `::<token>::`, the only two lines that begin with `::` (C1). Outputs go through the GITHUB_OUTPUT file, never a command.
+ */
 export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number> {
+  const token = randomBytes(16).toString('hex');
+  console.log(`::stop-commands::${token}`);
+  try {
+    return await run(env, gh);
+  } finally {
+    console.log(`::${token}::`);
+  }
+}
+
+async function run(env: NodeJS.ProcessEnv, gh: Gh): Promise<number> {
   try {
     const event = await readEvent(env);
     // Fail closed: a pull request event whose payload cannot be read is treated as a fork.
@@ -114,7 +137,7 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
       errors = e.issues.map((i) => ({ code: e.code, path: i.path, message: i.message }));
     }
     if (errors.length > 0) {
-      for (const i of errors) console.error(`error ${i.code} ${i.path}: ${i.message}`);
+      for (const i of errors) logError(`error ${i.code} ${i.path}: ${i.message}`);
       const body = [COMMENT_MARKER, '### tokenyard policy replay', '', `Policy check failed: ${errors.length} error${errors.length === 1 ? '' : 's'}. Replay did not run.`, '', ...errors.slice(0, 20).map((i) => `- ${escapeMarkdown(i.code)} ${escapeMarkdown(i.path)}: ${escapeMarkdown(i.message, 400)}`), ''].join('\n');
       await publish(env, gh, body, wantComment, fork);
       return 1;
@@ -155,7 +178,7 @@ export async function runAction(env: NodeJS.ProcessEnv, gh: Gh): Promise<number>
     await publish(env, gh, body, wantComment, fork);
     return result.gates.failed.length > 0 ? 1 : 0;
   } catch (e) {
-    console.error(`tokenyard action: ${e instanceof Error ? e.message : String(e)}`);
+    logError(`tokenyard action: ${e instanceof Error ? e.message : String(e)}`);
     return 1;
   }
 }
