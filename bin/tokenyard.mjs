@@ -1929,15 +1929,15 @@ function decodeEscape(b, e2, end) {
   }
   return { text: utf8Latin1(u >= 55296 && u <= 57343 ? 65533 : u), next: e2 + 6 };
 }
-function rawViews(body, start, end) {
-  const all = new View();
-  all.push(body.toString("latin1", start, end), start, end, PLAIN);
-  const decoded = new View();
+function rawViews(body, start, end, budget2) {
+  const all = new View(budget2);
+  all.pushBytes(body, start, end, PLAIN);
+  const decoded = new View(budget2);
   let p = start;
   while (p < end) {
     const esc2 = body.indexOf(92, p);
     const stop = esc2 < 0 || esc2 >= end ? end : esc2;
-    if (stop > p) decoded.push(body.toString("latin1", p, stop), p, stop, PLAIN);
+    if (stop > p) decoded.pushBytes(body, p, stop, PLAIN);
     if (stop >= end) break;
     const d = decodeEscape(body, stop, end);
     decoded.push(d.text, stop, d.next, ESCAPE);
@@ -1945,12 +1945,10 @@ function rawViews(body, start, end) {
   }
   return { all, joined: null, decoded };
 }
-function buildViews(body, start, end, messages, raw) {
-  if (raw) return rawViews(body, start, end);
-  const src = body.toString("latin1", start, end);
-  const latin1 = (from, to) => src.slice(from - start, to - start);
-  const all = new View();
-  const joined = messages && messages.length > 0 ? new View() : null;
+function buildViews(body, start, end, messages, raw, budget2) {
+  if (raw) return rawViews(body, start, end, budget2);
+  const all = new View(budget2);
+  const joined = messages && messages.length > 0 ? new View(budget2) : null;
   let lastKey = null;
   let group = -1;
   let pending = null;
@@ -1984,7 +1982,7 @@ function buildViews(body, start, end, messages, raw) {
         let j = i + 1;
         while (j < q && !isWs(body[j]) && !isStructural(body[j])) j++;
         opening(i);
-        all.push(latin1(i, j), i, j, BARE);
+        all.pushBytes(body, i, j, BARE);
         afterColon = false;
         i = j;
       }
@@ -2000,13 +1998,13 @@ function buildViews(body, start, end, messages, raw) {
       const quote = nextQuote(p);
       const esc2 = nextBs(p);
       if (esc2 >= 0 && esc2 < quote) {
-        if (esc2 > p) all.push(latin1(p, esc2), p, esc2, PLAIN);
+        if (esc2 > p) all.pushBytes(body, p, esc2, PLAIN);
         const d = decodeEscape(body, esc2, end);
         all.push(d.text, esc2, d.next, ESCAPE);
         p = d.next;
         continue;
       }
-      if (quote > p) all.push(latin1(p, quote), p, quote, PLAIN);
+      if (quote > p) all.pushBytes(body, p, quote, PLAIN);
       close = quote;
       break;
     }
@@ -2053,11 +2051,17 @@ function keywordsIn(text2, keywords) {
   if (keywords.includes("")) found.add("");
   const list3 = keywords.filter((k) => k.length > 0);
   if (list3.length === 0) return found;
-  const re2 = keywordAlternation(list3);
-  re2.lastIndex = 0;
-  for (let m = re2.exec(text2); m !== null; m = re2.exec(text2)) {
-    found.add(m[0]);
-    re2.lastIndex = m.index + 1;
+  let left = list3;
+  let from = 0;
+  while (left.length > 0) {
+    const re2 = keywordAlternation(left);
+    re2.lastIndex = from;
+    const m = re2.exec(text2);
+    if (m === null) break;
+    const hit = m[0];
+    found.add(hit);
+    from = m.index + 1;
+    left = left.filter((k) => k !== hit);
   }
   for (const k of list3) if (!found.has(k) && [...found].some((f) => f.startsWith(k))) found.add(k);
   return found;
@@ -2075,12 +2079,13 @@ function bareNumberOk(body, rule, value, segments, quotedOnly) {
   const g = segments[0];
   return isDelimiter(g.start > 0 ? body[g.start - 1] : void 0) && isDelimiter(body[g.end]) && rule.bareNumber(value);
 }
-function matchView(view, rule, crossingOnly, out, body, quotedOnly, present) {
+function matchView(view, rule, crossingOnly, out, body, quotedOnly, present, budget2) {
   if (rule.keywords.length > 0 && !rule.keywords.some((k) => present.has(k))) return;
   const text2 = view.text;
   const re2 = globalOf(rule);
   re2.lastIndex = 0;
   for (let m = re2.exec(text2); m !== null; m = re2.exec(text2)) {
+    budget2.match();
     if (m[0].length === 0) {
       re2.lastIndex++;
       continue;
@@ -2114,7 +2119,8 @@ function findSpans(body, rules, opts = {}) {
   const range = opts.range ?? { start: 0, end: body.length };
   const out = [];
   if (rules.length === 0 || range.end <= range.start) return out;
-  const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
+  const budget2 = opts.budget ?? new ScanBudget();
+  const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true, budget2);
   const keywords = [...new Set(rules.flatMap((r) => r.keywords))];
   const lazy2 = (v) => {
     let set2 = null;
@@ -2125,12 +2131,12 @@ function findSpans(body, rules, opts = {}) {
   const inDecoded = decoded ? lazy2(decoded) : null;
   for (const rule of rules) {
     const start = out.length;
-    matchView(all, rule, false, out, body, q, inAll());
-    if (joined && inJoined) matchView(joined, rule, true, out, body, q, inJoined());
+    matchView(all, rule, false, out, body, q, inAll(), budget2);
+    if (joined && inJoined) matchView(joined, rule, true, out, body, q, inJoined(), budget2);
     if (decoded && inDecoded) {
       const before = out.length;
       const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
-      matchView(decoded, rule, false, out, body, q, inDecoded());
+      matchView(decoded, rule, false, out, body, q, inDecoded(), budget2);
       const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
       out.push(...fresh);
     }
@@ -2159,8 +2165,9 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   ] : [{ where: "history", range: { start: 0, end: body.length }, rules: historyRules, messages: opts.messages }];
   const hits = [];
   const seen = /* @__PURE__ */ new Set();
+  const budget2 = opts.budget ?? new ScanBudget();
   for (const region of regions) {
-    for (const s2 of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, ...region.messages ? { messages: region.messages } : {} })) {
+    for (const s2 of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, budget: budget2, ...region.messages ? { messages: region.messages } : {} })) {
       const valueHmac = opts.valueHmac === false ? "" : pseudonym(salt, s2.value);
       const id = `${s2.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;
@@ -2172,7 +2179,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter, SCAN_ESCAPE_BUDGET;
+var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, SCAN_RUN_BUDGET, SCAN_MATCH_BUDGET, ScanBudgetError, ScanBudget, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter, SCAN_ESCAPE_BUDGET;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
@@ -2185,54 +2192,130 @@ var init_scan = __esm({
     MEMBER = ": ";
     PIECE_KEYS = /* @__PURE__ */ new Set(["text", "content", "thinking"]);
     SIMPLE_ESCAPES = { 34: '"', 92: "\\", 47: "/", 98: "\b", 102: "\f", 110: "\n", 114: "\r", 116: "	" };
+    SCAN_RUN_BUDGET = 3 * 1024 * 1024;
+    SCAN_MATCH_BUDGET = 64 * 1024;
+    ScanBudgetError = class extends Error {
+      constructor(counter, limit) {
+        super(`the secret scan stopped after ${limit} ${counter === "runs" ? "decoded string pieces" : "rule matches"}`);
+        this.counter = counter;
+        this.limit = limit;
+        this.name = "ScanBudgetError";
+      }
+      counter;
+      limit;
+    };
+    ScanBudget = class {
+      constructor(runLimit = SCAN_RUN_BUDGET, matchLimit = SCAN_MATCH_BUDGET) {
+        this.runLimit = runLimit;
+        this.matchLimit = matchLimit;
+        this.runsLeft = runLimit;
+        this.matchesLeft = matchLimit;
+      }
+      runLimit;
+      matchLimit;
+      runsLeft;
+      matchesLeft;
+      run() {
+        if (--this.runsLeft < 0) throw new ScanBudgetError("runs", this.runLimit);
+      }
+      match() {
+        if (--this.matchesLeft < 0) throw new ScanBudgetError("matches", this.matchLimit);
+      }
+      /** Work done so far (tests and benchmarks show how far ordinary bodies stay below the caps). */
+      used() {
+        return { runs: this.runLimit - this.runsLeft, matches: this.matchLimit - this.matchesLeft };
+      }
+    };
     View = class {
-      parts = [];
+      constructor(budget2) {
+        this.budget = budget2;
+      }
+      budget;
+      buf = Buffer.allocUnsafe(256);
       /** Stride 4: text start, byte start, byte end, kind. */
-      runs = [];
+      runs = new Uint32Array(64);
+      count = 0;
       length = 0;
       textCache = null;
+      /** Room for one more run of `chars` characters; counts the run against the budget first. */
+      open(chars, bStart, bEnd, kind) {
+        this.budget.run();
+        if ((this.count + 1) * 4 > this.runs.length) {
+          const next = new Uint32Array(this.runs.length * 2);
+          next.set(this.runs);
+          this.runs = next;
+        }
+        if (this.length + chars > this.buf.length) {
+          const next = Buffer.allocUnsafe(Math.max(this.buf.length * 2, this.length + chars));
+          this.buf.copy(next, 0, 0, this.length);
+          this.buf = next;
+        }
+        const r = this.count * 4;
+        this.runs[r] = this.length;
+        this.runs[r + 1] = bStart;
+        this.runs[r + 2] = bEnd;
+        this.runs[r + 3] = kind;
+        this.count++;
+        this.textCache = null;
+        const at = this.length;
+        this.length += chars;
+        return at;
+      }
+      /** A run of decoded text (latin1: one character per byte). */
       push(text2, bStart, bEnd, kind) {
         if (text2.length === 0) return;
-        this.parts.push(text2);
-        this.runs.push(this.length, bStart, bEnd, kind);
-        this.length += text2.length;
-        this.textCache = null;
+        const at = this.open(text2.length, bStart, bEnd, kind);
+        for (let k = 0; k < text2.length; k++) this.buf[at + k] = text2.charCodeAt(k);
+      }
+      /** A run whose text is the body's own bytes `[bStart, bEnd)`. */
+      pushBytes(body, bStart, bEnd, kind) {
+        if (bEnd <= bStart) return;
+        const at = this.open(bEnd - bStart, bStart, bEnd, kind);
+        body.copy(this.buf, at, bStart, bEnd);
       }
       runCount() {
-        return this.parts.length;
+        return this.count;
+      }
+      textStart(k) {
+        return k < this.count ? this.runs[k * 4] : this.length;
       }
       /** Decoded text of runs `[from, to)`. */
       textOf(from, to) {
-        return this.parts.slice(from, to).join("");
+        return this.buf.toString("latin1", this.textStart(from), this.textStart(to));
       }
       copyRuns(from, to, into) {
-        for (let k = from; k < to; k++) into.push(this.parts[k], this.runs[k * 4 + 1], this.runs[k * 4 + 2], this.runs[k * 4 + 3]);
+        for (let k = from; k < to; k++) {
+          const t = this.textStart(k);
+          const tEnd = this.textStart(k + 1);
+          const at = into.open(tEnd - t, this.runs[k * 4 + 1], this.runs[k * 4 + 2], this.runs[k * 4 + 3]);
+          this.buf.copy(into.buf, at, t, tEnd);
+        }
       }
       separate(at, text2 = SEP) {
         if (this.length > 0) this.push(text2, at, at, SEPARATOR);
       }
       get text() {
-        this.textCache ??= this.parts.join("");
+        this.textCache ??= this.buf.toString("latin1", 0, this.length);
         return this.textCache;
       }
       /** Byte ranges of decoded `[s, e)`; a separator or a gap between strings starts a new range. */
       segments(s2, e2) {
         const r = this.runs;
         let lo = 0;
-        let hi = r.length / 4 - 1;
+        let hi = this.count - 1;
         while (lo < hi) {
           const mid = lo + hi + 1 >> 1;
           if (r[mid * 4] <= s2) lo = mid;
           else hi = mid - 1;
         }
         const out = [];
-        for (let k = lo; k * 4 < r.length; k++) {
+        for (let k = lo; k < this.count; k++) {
           const t = r[k * 4];
           if (t >= e2) break;
           const b = r[k * 4 + 1];
           const bEnd = r[k * 4 + 2];
           const kind = r[k * 4 + 3];
-          const tl = this.parts[k].length;
+          const tl = this.textStart(k + 1) - t;
           if (kind === SEPARATOR) continue;
           const linear = kind === PLAIN || kind === BARE;
           const from = linear ? b + Math.max(s2, t) - t : b;
@@ -30931,12 +31014,40 @@ function duplicateTopLevelKey(b, keys2) {
   }
   return dup;
 }
-var QUOTE, BACKSLASH;
+function countJsonValuesUpTo(b, max) {
+  let n2 = 0;
+  let i = 0;
+  const len = b.length;
+  while (i < len && n2 <= max) {
+    const k = BYTE_CLASS[b[i]];
+    if (k === 1) {
+      i++;
+    } else if (k === 3) {
+      n2++;
+      i = skipString(b, i);
+    } else if (k === 2) {
+      n2++;
+      i++;
+    } else {
+      n2++;
+      i++;
+      while (i < len && BYTE_CLASS[b[i]] === 0) i++;
+    }
+  }
+  return n2;
+}
+var QUOTE, BACKSLASH, BODY_VALUE_BUDGET, BYTE_CLASS;
 var init_json_ranges = __esm({
   "src/surfaces/json-ranges.ts"() {
     "use strict";
     QUOTE = 34;
     BACKSLASH = 92;
+    BODY_VALUE_BUDGET = 1024 * 1024;
+    BYTE_CLASS = new Uint8Array(256);
+    for (const c of [32, 9, 10, 13, 125, 93, 44, 58]) BYTE_CLASS[c] = 1;
+    BYTE_CLASS[123] = 2;
+    BYTE_CLASS[91] = 2;
+    BYTE_CLASS[QUOTE] = 3;
   }
 });
 
@@ -59512,14 +59623,26 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     return early({ status: 499, aborted: true, errorClass: "client_abort" });
   }
   await readLatch(deps, runtime);
+  const scanBudgetExit = (msg, features2) => {
+    sendError(req, res, own2(413, "request_too_large", "scan-budget", msg, null, { shouldRetry: false }));
+    return early({ ...features2 ? { features: features2 } : {}, status: 413, decision: { action: "block", reason: "scan-budget" }, errorClass: "request_too_large" });
+  };
+  if (countEscapesUpTo(body, { start: 0, end: body.length }, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
+    return scanBudgetExit(`the request body holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences, more than tokenyard scans for secrets; send the text unescaped where JSON allows it, or split the request`);
+  }
+  if (countJsonValuesUpTo(body, BODY_VALUE_BUDGET) > BODY_VALUE_BUDGET) {
+    return scanBudgetExit(`the request body holds more than ${BODY_VALUE_BUDGET} JSON values (strings, numbers, objects, arrays), more than tokenyard parses and scans for secrets; send long lists as one string, or split the request`);
+  }
   const features = extractFeatures(surface, body);
   const product = key.kind === "service";
-  if (countEscapesUpTo(body, { start: 0, end: body.length }, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
-    const msg = `the request body holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences, more than tokenyard scans for secrets; send the text unescaped where JSON allows it, or split the request`;
-    sendError(req, res, own2(413, "request_too_large", "scan-budget", msg, null, { shouldRetry: false }));
-    return early({ features, status: 413, decision: { action: "block", reason: "scan-budget" }, errorClass: "request_too_large" });
+  let guard;
+  try {
+    guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? "");
+  } catch (err) {
+    if (!(err instanceof ScanBudgetError)) throw err;
+    const what = err.counter === "runs" ? `${err.limit} decoded string pieces` : `${err.limit} secret or PII rule matches`;
+    return scanBudgetExit(`the request body needs more than ${what} to scan for secrets, more than tokenyard scans; split the request`, features);
   }
-  const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? "");
   const featuresFor = (x) => buildFeatures(x, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
   let f;
   let plan;
@@ -59815,6 +59938,7 @@ var init_handler = __esm({
     init_scan();
     init_decide();
     init_body_shape();
+    init_json_ranges();
     init_match();
     init_admission();
     init_resolve();

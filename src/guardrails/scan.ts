@@ -49,32 +49,134 @@ const MEMBER = ': ';
 const PIECE_KEYS = new Set(['text', 'content', 'thinking']);
 const SIMPLE_ESCAPES: Record<number, string> = { 0x22: '"', 0x5c: '\\', 0x2f: '/', 0x62: '\b', 0x66: '\f', 0x6e: '\n', 0x72: '\r', 0x74: '\t' };
 
+// ---- Scan work budget (S-V3-3) ------------------------------------------------------------------------------------
+// The scan's time and memory grow with the number of decoded runs (each string, token and escape is one or two) and
+// with the number of regex matches (each gets its byte segments, a span and an HMAC), not with bytes alone: 32 MiB of
+// `"a",` held the event loop for 2 to 6 s and 32 MiB of `1,` needed more than 2 GB before V8 gave up. Both are counted
+// as they are made and the scan stops at the first one over its cap, before allocating it.
+
+/**
+ * Most decoded runs one scan call (`scanBody` over all its regions, or `findSpans`) may build, over all its views.
+ * A run costs about 40 ns and 16 bytes plus its text. A body that passes the gateway's earlier budgets (1 Mi JSON
+ * values, 1 Mi escapes) makes at most 2 runs per value and 2 per escape, plus the joined copies of split message text;
+ * the bench's 31 MiB coding-agent body makes 1.8 Mi, a 1 M token context window (about 4 MiB of text) under 0.6 Mi.
+ */
+export const SCAN_RUN_BUDGET = 3 * 1024 * 1024;
+/**
+ * Most regex matches one scan call may try, counted before the entropy and checksum checks. Each costs 1 to 3 us with
+ * its segments, span and HMAC. Ordinary bodies match a handful (the false-positive corpus at most 108 per file); a
+ * product prompt with 60,000 email addresses or long numbers still passes.
+ */
+export const SCAN_MATCH_BUDGET = 64 * 1024;
+
+/** A scan stopped at its work budget (S-V3-3); the gateway answers 413 `scan-budget` and sends nothing. */
+export class ScanBudgetError extends Error {
+  constructor(
+    readonly counter: 'runs' | 'matches',
+    readonly limit: number,
+  ) {
+    super(`the secret scan stopped after ${limit} ${counter === 'runs' ? 'decoded string pieces' : 'rule matches'}`);
+    this.name = 'ScanBudgetError';
+  }
+}
+
+/** The work one scan call may still do: shared by every view and rule of that call. */
+export class ScanBudget {
+  private runsLeft: number;
+  private matchesLeft: number;
+  constructor(
+    readonly runLimit: number = SCAN_RUN_BUDGET,
+    readonly matchLimit: number = SCAN_MATCH_BUDGET,
+  ) {
+    this.runsLeft = runLimit;
+    this.matchesLeft = matchLimit;
+  }
+  run(): void {
+    if (--this.runsLeft < 0) throw new ScanBudgetError('runs', this.runLimit);
+  }
+  match(): void {
+    if (--this.matchesLeft < 0) throw new ScanBudgetError('matches', this.matchLimit);
+  }
+  /** Work done so far (tests and benchmarks show how far ordinary bodies stay below the caps). */
+  used(): { runs: number; matches: number } {
+    return { runs: this.runLimit - this.runsLeft, matches: this.matchLimit - this.matchesLeft };
+  }
+}
+
+/**
+ * One decoded view: its text as latin1 bytes in a growing buffer and, per run, where it sits in the text and the body.
+ * No string per run (S-V3-3: a string and five array slots per run were about 100 bytes; this is 16 per run plus the
+ * text), and runs are counted against the scan budget before they are stored.
+ */
 class View {
-  private readonly parts: string[] = [];
+  private buf: Buffer = Buffer.allocUnsafe(256);
   /** Stride 4: text start, byte start, byte end, kind. */
-  private readonly runs: number[] = [];
+  private runs: Uint32Array = new Uint32Array(64);
+  private count = 0;
   length = 0;
   private textCache: string | null = null;
 
+  constructor(private readonly budget: ScanBudget) {}
+
+  /** Room for one more run of `chars` characters; counts the run against the budget first. */
+  private open(chars: number, bStart: number, bEnd: number, kind: number): number {
+    this.budget.run();
+    if ((this.count + 1) * 4 > this.runs.length) {
+      const next = new Uint32Array(this.runs.length * 2);
+      next.set(this.runs);
+      this.runs = next;
+    }
+    if (this.length + chars > this.buf.length) {
+      const next = Buffer.allocUnsafe(Math.max(this.buf.length * 2, this.length + chars));
+      this.buf.copy(next, 0, 0, this.length);
+      this.buf = next;
+    }
+    const r = this.count * 4;
+    this.runs[r] = this.length;
+    this.runs[r + 1] = bStart;
+    this.runs[r + 2] = bEnd;
+    this.runs[r + 3] = kind;
+    this.count++;
+    this.textCache = null;
+    const at = this.length;
+    this.length += chars;
+    return at;
+  }
+
+  /** A run of decoded text (latin1: one character per byte). */
   push(text: string, bStart: number, bEnd: number, kind: number): void {
     if (text.length === 0) return;
-    this.parts.push(text);
-    this.runs.push(this.length, bStart, bEnd, kind);
-    this.length += text.length;
-    this.textCache = null;
+    const at = this.open(text.length, bStart, bEnd, kind);
+    for (let k = 0; k < text.length; k++) this.buf[at + k] = text.charCodeAt(k);
+  }
+
+  /** A run whose text is the body's own bytes `[bStart, bEnd)`. */
+  pushBytes(body: Buffer, bStart: number, bEnd: number, kind: number): void {
+    if (bEnd <= bStart) return;
+    const at = this.open(bEnd - bStart, bStart, bEnd, kind);
+    body.copy(this.buf, at, bStart, bEnd);
   }
 
   runCount(): number {
-    return this.parts.length;
+    return this.count;
+  }
+
+  private textStart(k: number): number {
+    return k < this.count ? (this.runs[k * 4] as number) : this.length;
   }
 
   /** Decoded text of runs `[from, to)`. */
   textOf(from: number, to: number): string {
-    return this.parts.slice(from, to).join('');
+    return this.buf.toString('latin1', this.textStart(from), this.textStart(to));
   }
 
   copyRuns(from: number, to: number, into: View): void {
-    for (let k = from; k < to; k++) into.push(this.parts[k] as string, this.runs[k * 4 + 1] as number, this.runs[k * 4 + 2] as number, this.runs[k * 4 + 3] as number);
+    for (let k = from; k < to; k++) {
+      const t = this.textStart(k);
+      const tEnd = this.textStart(k + 1);
+      const at = into.open(tEnd - t, this.runs[k * 4 + 1] as number, this.runs[k * 4 + 2] as number, this.runs[k * 4 + 3] as number);
+      this.buf.copy(into.buf, at, t, tEnd);
+    }
   }
 
   separate(at: number, text: string = SEP): void {
@@ -82,7 +184,7 @@ class View {
   }
 
   get text(): string {
-    this.textCache ??= this.parts.join('');
+    this.textCache ??= this.buf.toString('latin1', 0, this.length);
     return this.textCache;
   }
 
@@ -90,20 +192,20 @@ class View {
   segments(s: number, e: number): Segment[] {
     const r = this.runs;
     let lo = 0;
-    let hi = r.length / 4 - 1;
+    let hi = this.count - 1;
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1;
       if ((r[mid * 4] as number) <= s) lo = mid;
       else hi = mid - 1;
     }
     const out: Segment[] = [];
-    for (let k = lo; k * 4 < r.length; k++) {
+    for (let k = lo; k < this.count; k++) {
       const t = r[k * 4] as number;
       if (t >= e) break;
       const b = r[k * 4 + 1] as number;
       const bEnd = r[k * 4 + 2] as number;
       const kind = r[k * 4 + 3] as number;
-      const tl = (this.parts[k] as string).length;
+      const tl = this.textStart(k + 1) - t;
       if (kind === SEPARATOR) continue;
       const linear = kind === PLAIN || kind === BARE;
       const from = linear ? b + Math.max(s, t) - t : b;
@@ -160,15 +262,15 @@ const isStructural = (c: number | undefined): boolean => c === 0x7b || c === 0x7
  * the raw bytes are scanned as they are, and a best-effort decoded copy beside them (escapes undone anywhere, invalid
  * ones kept literal), so an escaped secret is not missed either. Fail toward detection.
  */
-function rawViews(body: Buffer, start: number, end: number): { all: View; joined: View | null; decoded: View } {
-  const all = new View();
-  all.push(body.toString('latin1', start, end), start, end, PLAIN);
-  const decoded = new View();
+function rawViews(body: Buffer, start: number, end: number, budget: ScanBudget): { all: View; joined: View | null; decoded: View } {
+  const all = new View(budget);
+  all.pushBytes(body, start, end, PLAIN);
+  const decoded = new View(budget);
   let p = start;
   while (p < end) {
     const esc = body.indexOf(0x5c, p);
     const stop = esc < 0 || esc >= end ? end : esc;
-    if (stop > p) decoded.push(body.toString('latin1', p, stop), p, stop, PLAIN);
+    if (stop > p) decoded.pushBytes(body, p, stop, PLAIN);
     if (stop >= end) break;
     const d = decodeEscape(body, stop, end);
     decoded.push(d.text, stop, d.next, ESCAPE);
@@ -177,13 +279,10 @@ function rawViews(body: Buffer, start: number, end: number): { all: View; joined
   return { all, joined: null, decoded };
 }
 
-function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined, raw: boolean): { all: View; joined: View | null; decoded?: View } {
-  if (raw) return rawViews(body, start, end);
-  // One latin1 copy of the range; runs are slices of it (V1: a Buffer.toString per run cost more than the walk itself).
-  const src = body.toString('latin1', start, end);
-  const latin1 = (from: number, to: number): string => src.slice(from - start, to - start);
-  const all = new View();
-  const joined = messages && messages.length > 0 ? new View() : null;
+function buildViews(body: Buffer, start: number, end: number, messages: readonly Range[] | undefined, raw: boolean, budget: ScanBudget): { all: View; joined: View | null; decoded?: View } {
+  if (raw) return rawViews(body, start, end, budget);
+  const all = new View(budget);
+  const joined = messages && messages.length > 0 ? new View(budget) : null;
   let lastKey: string | null = null;
   let group = -1;
   let pending: { first: number; last: number; at: number } | null = null;
@@ -221,7 +320,7 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
         let j = i + 1;
         while (j < q && !isWs(body[j]) && !isStructural(body[j])) j++;
         opening(i);
-        all.push(latin1(i, j), i, j, BARE);
+        all.pushBytes(body, i, j, BARE);
         afterColon = false;
         i = j;
       }
@@ -237,13 +336,13 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
       const quote = nextQuote(p);
       const esc = nextBs(p);
       if (esc >= 0 && esc < quote) {
-        if (esc > p) all.push(latin1(p, esc), p, esc, PLAIN);
+        if (esc > p) all.pushBytes(body, p, esc, PLAIN);
         const d = decodeEscape(body, esc, end);
         all.push(d.text, esc, d.next, ESCAPE);
         p = d.next;
         continue;
       }
-      if (quote > p) all.push(latin1(p, quote), p, quote, PLAIN);
+      if (quote > p) all.pushBytes(body, p, quote, PLAIN);
       close = quote;
       break;
     }
@@ -303,11 +402,19 @@ export function keywordsIn(text: string, keywords: readonly string[]): Set<strin
   if (keywords.includes('')) found.add('');
   const list = keywords.filter((k) => k.length > 0);
   if (list.length === 0) return found;
-  const re = keywordAlternation(list);
-  re.lastIndex = 0;
-  for (let m = re.exec(text); m !== null; m = re.exec(text)) {
-    found.add(m[0]);
-    re.lastIndex = m.index + 1;
+  // A found keyword leaves the alternation, so the pass stops at one hit per keyword (S-V3-3: 32 MiB of `@` were 32 Mi
+  // hits of one keyword, 0.85 s); at most one alternation per keyword is compiled.
+  let left = list;
+  let from = 0;
+  while (left.length > 0) {
+    const re = keywordAlternation(left);
+    re.lastIndex = from;
+    const m = re.exec(text);
+    if (m === null) break;
+    const hit = m[0];
+    found.add(hit);
+    from = m.index + 1;
+    left = left.filter((k) => k !== hit);
   }
   for (const k of list) if (!found.has(k) && [...found].some((f) => f.startsWith(k))) found.add(k);
   return found;
@@ -333,12 +440,13 @@ function bareNumberOk(body: Buffer, rule: SecretRule, value: string, segments: S
   return isDelimiter(g.start > 0 ? body[g.start - 1] : undefined) && isDelimiter(body[g.end]) && rule.bareNumber(value);
 }
 
-function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[], body: Buffer, quotedOnly: boolean, present: ReadonlySet<string>): void {
+function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Span[], body: Buffer, quotedOnly: boolean, present: ReadonlySet<string>, budget: ScanBudget): void {
   if (rule.keywords.length > 0 && !rule.keywords.some((k) => present.has(k))) return;
   const text = view.text;
   const re = globalOf(rule);
   re.lastIndex = 0;
   for (let m = re.exec(text); m !== null; m = re.exec(text)) {
+    budget.match();
     if (m[0].length === 0) {
       re.lastIndex++;
       continue;
@@ -359,11 +467,10 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
 
 /**
  * Most JSON escapes a body may hold (S-V3-1; the handler counts the whole body, which the scanner decodes whole
- * whenever a rule blocks, on product routes and for bodies it cannot trust). Each escape is decoded on its own, about 0.1 us on a
- * coding-agent route and 0.2 us on a product route against about 3 ns per plain byte, so 32 MiB of escapes held the
- * event loop for 1.0 to 2.9 s. With 1 Mi escapes a 32 MiB body scans in at most about 0.27 s (coding agent) and 0.75 s
- * (product), measured. JSON-encoded source code holds one escape per 16 to 30 bytes, so a body may hold 16 to 30 MiB
- * of it, far more than any model's context window.
+ * whenever a rule blocks, on product routes and for bodies it cannot trust). Each escape is decoded on its own, so
+ * 32 MiB of escapes held the event loop for 1.0 to 2.9 s. JSON-encoded source code holds one escape per 16 to 30 bytes,
+ * so a body may hold 16 to 30 MiB of it, far more than any model's context window. The scan's other cost drivers
+ * (runs, matches) have their own budgets above (S-V3-3).
  */
 export const SCAN_ESCAPE_BUDGET = 1024 * 1024;
 
@@ -385,12 +492,13 @@ export function countEscapesUpTo(body: Buffer, range: Range, max: number): numbe
  * position. The keyword prefilter runs on the decoded text before any regex; entropy and `validate` run on the value.
  * With `messages`, text values split across blocks of one message are matched whole too.
  */
-export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean } = {}): Span[] {
+export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { range?: Range; messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean; budget?: ScanBudget } = {}): Span[] {
   const q = opts.quotedOnly === true;
   const range = opts.range ?? { start: 0, end: body.length };
   const out: Span[] = [];
   if (rules.length === 0 || range.end <= range.start) return out;
-  const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true);
+  const budget = opts.budget ?? new ScanBudget();
+  const { all, joined, decoded } = buildViews(body, range.start, range.end, opts.messages, opts.raw === true, budget);
   const keywords = [...new Set(rules.flatMap((r) => r.keywords))];
   const lazy = (v: View): (() => ReadonlySet<string>) => {
     let set: Set<string> | null = null;
@@ -401,13 +509,13 @@ export function findSpans(body: Buffer, rules: readonly SecretRule[], opts: { ra
   const inDecoded = decoded ? lazy(decoded) : null;
   for (const rule of rules) {
     const start = out.length;
-    matchView(all, rule, false, out, body, q, inAll());
-    if (joined && inJoined) matchView(joined, rule, true, out, body, q, inJoined());
+    matchView(all, rule, false, out, body, q, inAll(), budget);
+    if (joined && inJoined) matchView(joined, rule, true, out, body, q, inJoined(), budget);
     // The decoded copy of a raw body: a value it shares with the raw view is reported once (same rule and bytes).
     if (decoded && inDecoded) {
       const before = out.length;
       const known = new Set(out.slice(start).map((r) => `${r.start}:${r.end}`));
-      matchView(decoded, rule, false, out, body, q, inDecoded());
+      matchView(decoded, rule, false, out, body, q, inDecoded(), budget);
       const fresh = out.splice(before).filter((d) => !known.has(`${d.start}:${d.end}`));
       out.push(...fresh);
     }
@@ -443,7 +551,7 @@ export function scanBody(
   rules: readonly SecretRule[],
   actionFor: (rule: SecretRule) => GuardrailAction,
   salt: string,
-  opts: { messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean; valueHmac?: boolean } = {},
+  opts: { messages?: readonly Range[]; raw?: boolean; quotedOnly?: boolean; valueHmac?: boolean; budget?: ScanBudget } = {},
 ): GuardrailHit[] {
   const action = (r: SecretRule): GuardrailAction => (r.entropyOnly ? 'warn' : actionFor(r));
   const historyRules = rules.filter((r) => action(r) !== 'warn');
@@ -456,8 +564,10 @@ export function scanBody(
     : [{ where: 'history', range: { start: 0, end: body.length }, rules: historyRules, messages: opts.messages }];
   const hits: GuardrailHit[] = [];
   const seen = new Set<string>();
+  // One budget for every region: together they cover the body once.
+  const budget = opts.budget ?? new ScanBudget();
   for (const region of regions) {
-    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, ...(region.messages ? { messages: region.messages } : {}) })) {
+    for (const s of findSpans(body, region.rules, { range: region.range, raw: opts.raw === true, quotedOnly: opts.quotedOnly === true, budget, ...(region.messages ? { messages: region.messages } : {}) })) {
       const valueHmac = opts.valueHmac === false ? '' : pseudonym(salt, s.value);
       const id = `${s.rule.id}\0${valueHmac}\0${region.where}`;
       if (seen.has(id)) continue;

@@ -6,11 +6,13 @@
 import { expect, test } from 'vitest';
 import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
-import { findSpans, scanBody } from '../../src/guardrails/scan.js';
+import { findSpans, ScanBudget, scanBody } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 
 const MIB = 1024 * 1024;
 const BOUND_MS = 1_000;
+/** No work budget (S-V3-3): a budget stop would hide a slow rule; this test is about the rules, the budget has its own. */
+const unbounded = (): ScanBudget => new ScanBudget(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
 const fill = (unit: string): string => unit.repeat(Math.ceil(MIB / unit.length)).slice(0, MIB);
 
 /** Adversarial texts: each keyword repeated with separators the rules accept or reject, long runs, and the classic cases. */
@@ -58,15 +60,15 @@ test('every rule scans adversarial 1 MiB bodies within the time bound (no super-
     const b = Buffer.from(JSON.stringify({ model: 'm', messages: [{ role: 'user', content: text }] }));
     const f = extractAnthropicFeatures(b);
     const t0 = performance.now();
-    scanBody(b, f.lastTurn, rules, () => 'block', 's', { messages: f.messages });
-    findSpans(b, rules, { messages: f.messages });
+    scanBody(b, f.lastTurn, rules, () => 'block', 's', { messages: f.messages, budget: unbounded() });
+    findSpans(b, rules, { messages: f.messages, budget: unbounded() });
     const ms = performance.now() - t0;
     worst = Math.max(worst, ms);
     if (ms > BOUND_MS) slow.push(`${name}: ${ms.toFixed(0)} ms`);
   }
   for (const [name, b, raw] of adversarialBodies()) {
     const t0 = performance.now();
-    scanBody(b, { start: 0, end: b.length }, rules, () => 'block', 's', { raw });
+    scanBody(b, { start: 0, end: b.length }, rules, () => 'block', 's', { raw, budget: unbounded() });
     const ms = performance.now() - t0;
     worst = Math.max(worst, ms);
     if (ms > BOUND_MS) slow.push(`${name}: ${ms.toFixed(0)} ms`);

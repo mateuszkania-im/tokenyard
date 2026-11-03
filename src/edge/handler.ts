@@ -9,9 +9,10 @@ import { redactCredentialEcho } from '../guardrails/credential-echo.js';
 import { PII_RULES } from '../guardrails/pii.js';
 import { type RedactionHit, redactionHits, redactProductBody } from '../guardrails/redact.js';
 import { DEFAULT_RULES } from '../guardrails/rules.js';
-import { countEscapesUpTo, findSpans, SCAN_ESCAPE_BUDGET, scanBody } from '../guardrails/scan.js';
+import { countEscapesUpTo, findSpans, SCAN_ESCAPE_BUDGET, ScanBudgetError, scanBody } from '../guardrails/scan.js';
 import { buildFeatures, decide, enforcedLevelApplies } from '../policy/decide.js';
 import { bodyShapeRefusal } from '../surfaces/body-shape.js';
+import { BODY_VALUE_BUDGET, countJsonValuesUpTo } from '../surfaces/json-ranges.js';
 import { modelsForKey } from '../policy/match.js';
 import { atEstimateCharge, isAdmitted, planAdmission } from '../policy/admission.js';
 import { resolve } from '../policy/resolve.js';
@@ -729,20 +730,35 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
 
   await readLatch(deps, runtime);
 
+  // Scan budget (S-V3-1, S-V3-3), before the body is parsed: parsing and the secret scan cost per JSON value and per
+  // escape, not per byte, so a body holding more of either than the budget is refused before JSON.parse allocates
+  // them. The whole body counts: the scanner decodes it whole whenever a rule blocks (history rules), on product routes
+  // (redaction), for a body that cannot be trusted and when there is no last turn.
+  const scanBudgetExit = (msg: string, features?: ExtractedFeatures): Promise<void> => {
+    sendError(req, res, own(413, 'request_too_large', 'scan-budget', msg, null, { shouldRetry: false }));
+    return early({ ...(features ? { features } : {}), status: 413, decision: { action: 'block', reason: 'scan-budget' }, errorClass: 'request_too_large' });
+  };
+  if (countEscapesUpTo(body, { start: 0, end: body.length }, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
+    return scanBudgetExit(`the request body holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences, more than tokenyard scans for secrets; send the text unescaped where JSON allows it, or split the request`);
+  }
+  if (countJsonValuesUpTo(body, BODY_VALUE_BUDGET) > BODY_VALUE_BUDGET) {
+    return scanBudgetExit(`the request body holds more than ${BODY_VALUE_BUDGET} JSON values (strings, numbers, objects, arrays), more than tokenyard parses and scans for secrets; send long lists as one string, or split the request`);
+  }
+
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);
 
-  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan. A body holding more escapes
-  // than the scan budget is refused first: decoding them would hold the event loop (S-V3-1). The whole body counts:
-  // the scanner decodes it whole whenever a rule blocks (history rules), on product routes (redaction), for a body that
-  // cannot be trusted and when there is no last turn; counting less would let escapes in earlier turns through.
+  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan. The scan stops at its work
+  // budget (decoded runs, rule matches; S-V3-3) and the body is refused, never sent unscanned.
   const product = key.kind === 'service';
-  if (countEscapesUpTo(body, { start: 0, end: body.length }, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
-    const msg = `the request body holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences, more than tokenyard scans for secrets; send the text unescaped where JSON allows it, or split the request`;
-    sendError(req, res, own(413, 'request_too_large', 'scan-budget', msg, null, { shouldRetry: false }));
-    return early({ features, status: 413, decision: { action: 'block', reason: 'scan-budget' }, errorClass: 'request_too_large' });
+  let guard: ReturnType<typeof scanGuardrails>;
+  try {
+    guard = scanGuardrails(policy, product, body, features, deps.guardrailSalt ?? '');
+  } catch (err) {
+    if (!(err instanceof ScanBudgetError)) throw err;
+    const what = err.counter === 'runs' ? `${err.limit} decoded string pieces` : `${err.limit} secret or PII rule matches`;
+    return scanBudgetExit(`the request body needs more than ${what} to scan for secrets, more than tokenyard scans; split the request`, features);
   }
-  const guard = scanGuardrails(policy, product, body, features, deps.guardrailSalt ?? '');
 
   // 6. Decide. A reservation that cannot be priced (the estimator throws) fails closed: refused before admit, so nothing
   // is reserved.

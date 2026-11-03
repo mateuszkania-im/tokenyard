@@ -1,13 +1,17 @@
 // V4 fuzz: the secret scanner, the body-shape check and the S-V3-1 escape budget. A secret is found, with the HMAC of
 // its decoded value, however another JSON writer escapes it (\uXXXX for any character, \/) and however it is split
 // over the text blocks of one message; a duplicate key is found at any depth whatever its escaping; the escape count
-// matches a reference; a body at the budget scans within its time bound.
+// matches a reference; a body at the budget scans within its time bound. S-V3-3: the JSON value count matches
+// JSON.parse, the scan work budget only ever stops a scan (never changes what it finds), and a body just under every
+// budget scans within its time bound.
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
-import { countEscapesUpTo, SCAN_ESCAPE_BUDGET, scanBody } from '../../src/guardrails/scan.js';
+import { PII_RULES } from '../../src/guardrails/pii.js';
+import { countEscapesUpTo, findSpans, SCAN_ESCAPE_BUDGET, SCAN_RUN_BUDGET, ScanBudget, ScanBudgetError, scanBody } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { bodyShapeRefusal } from '../../src/surfaces/body-shape.js';
+import { BODY_VALUE_BUDGET, countJsonValuesUpTo } from '../../src/surfaces/json-ranges.js';
 import { RULE_FIXTURES } from '../guardrails/fixtures.js';
 import { fuzz, fuzzTimeout } from '../helpers/fuzz.js';
 
@@ -140,5 +144,72 @@ test('S-V3-1 bound: a body holding the budget of mixed escapes in every turn sca
   const started = performance.now();
   scanBody(b, f.lastTurn, DEFAULT_RULES, () => 'redact', 'salt', f.messages ? { messages: f.messages } : {});
   // S-V3-1 measured at most 0.75 s for a 32 MiB product body at the budget; slack for loaded CI machines.
+  expect(performance.now() - started).toBeLessThan(2_500);
+}, 20_000);
+
+/** JSON values of a parsed value as countJsonValuesUpTo counts them: every node, object keys included. */
+function nodes(v: unknown): number {
+  if (Array.isArray(v)) return 1 + v.reduce((n: number, x) => n + nodes(x), 0);
+  if (v !== null && typeof v === 'object') return 1 + Object.entries(v).reduce((n, [, x]) => n + 1 + nodes(x), 0);
+  return 1;
+}
+
+test('fuzz: countJsonValuesUpTo counts the nodes JSON.parse builds, whatever the escaping, and stops one past its limit', () => {
+  fc.assert(
+    fc.property(tree, fc.constantFrom('', ' ', '\n\t'), fc.nat(40), (t, ws, max) => {
+      const text = `{"model":"m",${ws}"x":${ws}${t.json}${ws}}`;
+      const b = Buffer.from(text);
+      // Duplicate keys collapse in JSON.parse; count the source tree instead: the walker sees every key it holds.
+      let k = 0;
+      const parsed = JSON.parse(text.replace(/"([^"\\]|\\.)*"(?=\s*:)/g, () => `"k${k++}"`)) as unknown;
+      const want = nodes(parsed);
+      expect(countJsonValuesUpTo(b, 1e9)).toBe(want);
+      expect(countJsonValuesUpTo(b, max)).toBe(Math.min(want, max + 1));
+    }),
+    fuzz(0x7a1e, 1_500),
+  );
+}, fuzzTimeout(10_000));
+
+test('fuzz: the scan work budget only stops a scan: under any budget it throws ScanBudgetError or finds what it finds without one', () => {
+  fc.assert(
+    fc.property(placed, fc.boolean(), fc.double({ min: 0, max: 1.2, noNaN: true }), fc.double({ min: 0, max: 1.5, noNaN: true }), (p, escaped, fr, fm) => {
+      const b = bodyOf(p, escaped);
+      const f = extractAnthropicFeatures(b);
+      const opts = f.messages ? { messages: f.messages } : {};
+      const free = new ScanBudget(1e9, 1e9);
+      const want = scanBody(b, f.lastTurn, [...DEFAULT_RULES, ...PII_RULES], () => 'block', 'salt', { ...opts, budget: free });
+      const used = free.used();
+      expect(used.runs).toBeGreaterThan(0);
+      const runs = Math.floor(used.runs * fr);
+      const matches = Math.floor(used.matches * fm);
+      let got: ReturnType<typeof scanBody> | ScanBudgetError;
+      try {
+        got = scanBody(b, f.lastTurn, [...DEFAULT_RULES, ...PII_RULES], () => 'block', 'salt', { ...opts, budget: new ScanBudget(runs, matches) });
+      } catch (err) {
+        if (!(err instanceof ScanBudgetError)) throw err;
+        got = err;
+      }
+      if (runs >= used.runs && matches >= used.matches) expect(got).toEqual(want);
+      else expect(got).toBeInstanceOf(ScanBudgetError);
+    }),
+    fuzz(0xb4d6, 600),
+  );
+}, fuzzTimeout(20_000));
+
+test('S-V3-3 bound: a body just under the value, escape and run budgets scans on every product scan within its time bound', () => {
+  // `"\na"` strings: one value and one escape each, three runs (separator, escape, text): the most runs a body can make
+  // while it passes the gateway's value and escape budgets, without the joined copies that would pass the run budget.
+  const n = Math.min(BODY_VALUE_BUDGET, SCAN_ESCAPE_BUDGET, Math.floor(SCAN_RUN_BUDGET / 3)) - 64;
+  const b = Buffer.from(`{"model":"claude-haiku-5-5","max_tokens":8,"messages":[{"role":"user","content":[${'"\\na",'.repeat(n)}"x"]}]}`);
+  expect(countJsonValuesUpTo(b, BODY_VALUE_BUDGET)).toBeLessThanOrEqual(BODY_VALUE_BUDGET);
+  expect(countEscapesUpTo(b, { start: 0, end: b.length }, SCAN_ESCAPE_BUDGET)).toBeLessThanOrEqual(SCAN_ESCAPE_BUDGET);
+  const f = extractAnthropicFeatures(b);
+  const opts = f.messages ? { messages: f.messages } : {};
+  const started = performance.now();
+  // The three scans of a product route: secrets, PII, and the redaction spans over the whole body.
+  scanBody(b, f.lastTurn, DEFAULT_RULES, () => 'redact', 'salt', opts);
+  scanBody(b, f.lastTurn, PII_RULES, () => 'redact', 'salt', { ...opts, valueHmac: false });
+  findSpans(b, [...DEFAULT_RULES.filter((r) => !r.entropyOnly), ...PII_RULES], opts);
+  // Measured about 0.35 s for the three; slack for loaded CI machines.
   expect(performance.now() - started).toBeLessThan(2_500);
 }, 20_000);

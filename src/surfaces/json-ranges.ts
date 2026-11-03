@@ -164,3 +164,48 @@ export function duplicateTopLevelKey(b: Buffer, keys: readonly string[]): boolea
   }
   return dup;
 }
+
+/**
+ * Most JSON values (strings, object keys included, numbers, literals, objects and arrays) a request body may hold
+ * (S-V3-3). Parsing and scanning cost per value, not per byte: 32 MiB of `{},` took 2.5 s and 1.2 GB in JSON.parse
+ * alone, 32 MiB of `1,` as the messages array 1.2 s and 1.2 GB. At the budget the whole request (parse, shape check,
+ * three scans on a product route) takes at most about 0.6 s. A coding-agent body holds a few hundred to a few tens of
+ * thousands of values (a long tool result or an image is one string; the bench's 31 MiB body holds 76,000), so the
+ * budget leaves more than 10 times what a context window can carry.
+ */
+export const BODY_VALUE_BUDGET = 1024 * 1024;
+
+/** Byte classes for countJsonValuesUpTo: 0 a token byte, 1 whitespace or a separator, 2 an opening brace or bracket. */
+const BYTE_CLASS = new Uint8Array(256);
+for (const c of [0x20, 0x09, 0x0a, 0x0d, 0x7d, 0x5d, 0x2c, 0x3a]) BYTE_CLASS[c] = 1;
+BYTE_CLASS[0x7b] = 2;
+BYTE_CLASS[0x5b] = 2;
+BYTE_CLASS[QUOTE] = 3;
+
+/**
+ * JSON values in `b` as a parser would count them (a string, a run of other bytes outside strings, an opening brace or
+ * bracket), counted up to `max + 1` and no further, so a body over the budget is refused before JSON.parse allocates
+ * it. Works on any bytes: a body JSON.parse refuses is counted the same way.
+ */
+export function countJsonValuesUpTo(b: Buffer, max: number): number {
+  let n = 0;
+  let i = 0;
+  const len = b.length;
+  while (i < len && n <= max) {
+    const k = BYTE_CLASS[b[i] as number];
+    if (k === 1) {
+      i++;
+    } else if (k === 3) {
+      n++;
+      i = skipString(b, i);
+    } else if (k === 2) {
+      n++;
+      i++;
+    } else {
+      n++;
+      i++;
+      while (i < len && BYTE_CLASS[b[i] as number] === 0) i++;
+    }
+  }
+  return n;
+}
