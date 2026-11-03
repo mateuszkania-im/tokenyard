@@ -27,6 +27,7 @@ export const ERROR_CODES = [
   'E_STORE_DOWN_UNSTATED',
   'E_CREDENTIAL_ENV',
   'E_REWRITE_NOT_AUTHORIZED',
+  'E_RESERVE_OUTPUT_NO_REWRITE',
 ] as const;
 
 export const WARNING_CODES = ['W_CHILD_BUDGET', 'W_SURFACE_NO_ROUTE', 'W_ROUTE_SHADOWED', 'W_SESSION_AWARE_BLOCK', 'W_SERVER_TOOLS_ASSUME', 'W_SUBSCRIPTION_BLOCK', 'W_HEADER_ROUTE_GRANTS', 'W_UNPRICED_TOOL_ENFORCED'] as const;
@@ -126,6 +127,11 @@ export function validatePolicy(src: PolicySource, o: { experimentalSubscription:
     if (codingAgentSeen) {
       if (r.rewriteModel !== undefined && r.allowBodyRewrite !== true) err('E_BODY_REWRITE', `${at}.rewriteModel`, 'rewriteModel on coding-agent traffic needs allowBodyRewrite: true and a because: reason');
       if (r.allowBodyRewrite === true && (r.because ?? '').trim() === '') err('E_BODY_REWRITE', `${at}.because`, 'allowBodyRewrite: true must name the reason in because:');
+      // reserveOutputTokens lowers the reservation only when max_tokens is capped in the body; on a route a client
+      // header selects, without that rewrite, any client could pick the smaller reservation (A1).
+      if (r.reserveOutputTokens !== undefined && r.allowBodyRewrite !== true && HEADER_FIELDS.some((k) => r.match[k] !== undefined)) {
+        err('E_RESERVE_OUTPUT_NO_REWRITE', `${at}.reserveOutputTokens`, 'reserveOutputTokens on a route chosen by client headers needs allowBodyRewrite: true (and a because: reason), so max_tokens is capped in the body');
+      }
     }
 
     r.allowModels?.forEach((m, j) => {

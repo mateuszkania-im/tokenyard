@@ -212,7 +212,8 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   }
 
   // A rewrite changes body bytes: product traffic, or coding-agent traffic behind allowBodyRewrite (spec 6.4).
-  const mayRewrite = route.rewriteModel !== null && (f.traffic === 'product' || route.allowBodyRewrite);
+  const bodyRewritable = f.traffic === 'product' || route.allowBodyRewrite;
+  const mayRewrite = route.rewriteModel !== null && bodyRewritable;
   const upstreamModel = mayRewrite ? (route.rewriteModel as string) : f.model;
   const rewritesModel = upstreamModel !== f.model;
   // The served model must be one both routes allow, so a header-chosen rewrite cannot reach a model the key may not use.
@@ -246,14 +247,20 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce, resetsAt: w?.end ?? null }];
   });
 
+  // reserveOutputTokens lowers the reservation only when the gateway writes it into the body as max_tokens
+  // (max_output_tokens), under the same rule as a model rewrite; otherwise the client's own limit stands (A1).
+  const reserve = route.reserveOutputTokens !== null && bodyRewritable && (f.surface === 'anthropic-messages' || f.surface === 'openai-responses') ? route.reserveOutputTokens : null;
+  const asked = f.maxOutputTokens;
+  if (reserve !== null && !(asked !== null && Number.isFinite(asked) && asked > 0 && asked <= reserve)) plan.outputCap = reserve;
+
   let est = 0;
   if (hasModels(t)) {
     const price = reservationPrice(t, known).price;
     const uf = upstreamFeatures(f, t, upstreamModel, price);
     const r = policy.reservation;
-    const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route.reserveOutputTokens });
-    est = r.estimator === 'session-aware' ? sessionAwareMicroUsd(uf, price, t, null, route.reserveOutputTokens) : worst.micro;
-    plan.outputTokensBound = reservedOutputTokens(uf, price, t, route.reserveOutputTokens);
+    const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: reserve });
+    est = r.estimator === 'session-aware' ? sessionAwareMicroUsd(uf, price, t, null, reserve) : worst.micro;
+    plan.outputTokensBound = reservedOutputTokens(uf, price, t, reserve);
     const enforced = levels.some((l) => l.enforce);
     // An unpriced server tool has no bound at all (its loop is reserved as one iteration): refused whenever an
     // enforced level applies; failure.unpricedModel: allow-and-flag admits it only when none does.

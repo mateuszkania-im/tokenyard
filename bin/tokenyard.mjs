@@ -30309,7 +30309,8 @@ function decide(policy2, f) {
   if (refused2.length > 0) {
     return { ...plan, preBlock: "server-tool-not-allowed", warnings: [...warnings, ...refused2.map((tool) => ({ kind: "server-tool-not-allowed", type: tool.type }))] };
   }
-  const mayRewrite = route2.rewriteModel !== null && (f.traffic === "product" || route2.allowBodyRewrite);
+  const bodyRewritable = f.traffic === "product" || route2.allowBodyRewrite;
+  const mayRewrite = route2.rewriteModel !== null && bodyRewritable;
   const upstreamModel = mayRewrite ? route2.rewriteModel : f.model;
   const rewritesModel = upstreamModel !== f.model;
   if (rewritesModel && (!allows(route2, upstreamModel) || !allows(authz, upstreamModel))) return { ...plan, preBlock: "model-not-allowed" };
@@ -30334,14 +30335,17 @@ function decide(policy2, f) {
     const w = b.window === null ? null : windowOf(b.window, f.ts);
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce, resetsAt: w?.end ?? null }];
   });
+  const reserve = route2.reserveOutputTokens !== null && bodyRewritable && (f.surface === "anthropic-messages" || f.surface === "openai-responses") ? route2.reserveOutputTokens : null;
+  const asked = f.maxOutputTokens;
+  if (reserve !== null && !(asked !== null && Number.isFinite(asked) && asked > 0 && asked <= reserve)) plan.outputCap = reserve;
   let est = 0;
   if (hasModels(t)) {
     const price2 = reservationPrice(t, known).price;
     const uf = upstreamFeatures(f, t, upstreamModel, price2);
     const r = policy2.reservation;
-    const worst = worstCaseMicroUsd(uf, price2, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route2.reserveOutputTokens });
-    est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price2, t, null, route2.reserveOutputTokens) : worst.micro;
-    plan.outputTokensBound = reservedOutputTokens(uf, price2, t, route2.reserveOutputTokens);
+    const worst = worstCaseMicroUsd(uf, price2, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: reserve });
+    est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price2, t, null, reserve) : worst.micro;
+    plan.outputTokensBound = reservedOutputTokens(uf, price2, t, reserve);
     const enforced = levels.some((l) => l.enforce);
     if (worst.block === "unpriced-server-tool") {
       if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
@@ -31131,6 +31135,36 @@ function rewriteTopLevelModel(b, model) {
   try {
     const back = JSON.parse(out.toString("utf8"));
     return isObj4(back) && back.model === model ? out : null;
+  } catch {
+    return null;
+  }
+}
+function capTopLevelInteger(b, key, value) {
+  if (!Number.isSafeInteger(value) || value <= 0) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(b.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!isObj4(parsed)) return null;
+  const ranges = topLevelValueRanges(b, key);
+  if (ranges.length > 1) return null;
+  const r = ranges[0];
+  let out;
+  if (r !== void 0) {
+    if (typeof parsed[key] !== "number") return null;
+    out = Buffer.concat([b.subarray(0, r.start), Buffer.from(String(value), "utf8"), b.subarray(r.end)]);
+  } else {
+    if (Object.hasOwn(parsed, key)) return null;
+    const open5 = b.indexOf(123);
+    if (open5 < 0) return null;
+    const sep3 = Object.keys(parsed).length > 0 ? "," : "";
+    out = Buffer.concat([b.subarray(0, open5 + 1), Buffer.from(`${JSON.stringify(key)}:${value}${sep3}`, "utf8"), b.subarray(open5 + 1)]);
+  }
+  try {
+    const back = JSON.parse(out.toString("utf8"));
+    return isObj4(back) && back[key] === value && Object.keys(back).length === Object.keys(parsed).length + (r === void 0 ? 1 : 0) ? out : null;
   } catch {
     return null;
   }
@@ -58750,6 +58784,16 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     }
     upstreamBody = rewritten;
   }
+  if (plan.preBlock === null && plan.outputCap !== void 0) {
+    const field = surface === "openai-responses" ? "max_output_tokens" : "max_tokens";
+    const capped = capTopLevelInteger(upstreamBody, field, plan.outputCap);
+    if (!capped) {
+      const msg = `route "${plan.route ?? ""}" caps ${field} at ${plan.outputCap}, but the request's top-level ${field} could not be set exactly (send one JSON object with at most one numeric "${field}")`;
+      sendError(req, res, own2(400, "invalid_request_error", "output-cap-failed", msg));
+      return early({ ...decided, status: 400, decision: { action: "block", reason: "output-cap-failed" }, errorClass: "invalid_request_error" });
+    }
+    upstreamBody = capped;
+  }
   const { pre, callsAdmit } = planAdmission(policy2, plan);
   let admission = null;
   let admitAt;
@@ -59142,6 +59186,9 @@ function validatePolicy(src, o) {
     if (codingAgentSeen) {
       if (r.rewriteModel !== void 0 && r.allowBodyRewrite !== true) err("E_BODY_REWRITE", `${at}.rewriteModel`, "rewriteModel on coding-agent traffic needs allowBodyRewrite: true and a because: reason");
       if (r.allowBodyRewrite === true && (r.because ?? "").trim() === "") err("E_BODY_REWRITE", `${at}.because`, "allowBodyRewrite: true must name the reason in because:");
+      if (r.reserveOutputTokens !== void 0 && r.allowBodyRewrite !== true && HEADER_FIELDS.some((k) => r.match[k] !== void 0)) {
+        err("E_RESERVE_OUTPUT_NO_REWRITE", `${at}.reserveOutputTokens`, "reserveOutputTokens on a route chosen by client headers needs allowBodyRewrite: true (and a because: reason), so max_tokens is capped in the body");
+      }
     }
     r.allowModels?.forEach((m, j) => {
       if (!priced(m)) err("E_UNPRICED_MODEL", `${at}.allowModels[${j}]`, `"${m}" has no entry in the price table`);
@@ -59251,7 +59298,8 @@ var init_validate = __esm({
       "E_BUDGET_USD",
       "E_STORE_DOWN_UNSTATED",
       "E_CREDENTIAL_ENV",
-      "E_REWRITE_NOT_AUTHORIZED"
+      "E_REWRITE_NOT_AUTHORIZED",
+      "E_RESERVE_OUTPUT_NO_REWRITE"
     ];
     WARNING_CODES = ["W_CHILD_BUDGET", "W_SURFACE_NO_ROUTE", "W_ROUTE_SHADOWED", "W_SESSION_AWARE_BLOCK", "W_SERVER_TOOLS_ASSUME", "W_SUBSCRIPTION_BLOCK", "W_HEADER_ROUTE_GRANTS", "W_UNPRICED_TOOL_ENFORCED"];
     LOAD_ERROR_CODES = ["E_FILE_MISSING", "E_YAML_UNSAFE", "E_YAML_SYNTAX", "E_SCHEMA", "E_PRICES_INVALID", "E_MODEL_LIMITS_MISSING"];
@@ -120864,7 +120912,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
       return { ...NOTHING3, kind: "exit", decision: { action: "block", reason: "reservation-error", route: null, chain: [] } };
     }
     const compared = (action, reason) => ({ action, reason, route: plan.route, chain: plan.chain.map((c) => c.provider) });
-    const bodyExit = plan.preBlock === null && r.decision.reason !== null && BODY_EXITS.has(r.decision.reason) && (r.decision.reason !== "model-rewrite-failed" || plan.chain[0]?.rewritesModel === true);
+    const bodyExit = plan.preBlock === null && r.decision.reason !== null && BODY_EXITS.has(r.decision.reason) && (r.decision.reason !== "model-rewrite-failed" || plan.chain[0]?.rewritesModel === true) && (r.decision.reason !== "output-cap-failed" || plan.outputCap !== void 0);
     if (bodyExit) return { ...NOTHING3, kind: "exit", decision: compared("block", r.decision.reason) };
     const { pre, callsAdmit } = planAdmission(policy2, plan);
     let admission = null;
@@ -121068,7 +121116,7 @@ var init_engine = __esm({
     CLASSES2 = new Set(REQUEST_CLASSES2);
     STORE_DOWN = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
     NOTHING3 = { reason: null, name: "", scopeValue: "", provider: null, upstreamModel: null, cost: null };
-    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed"]);
+    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed", "output-cap-failed"]);
     uniqSorted = (xs) => [...new Set(xs)].sort(cmp);
     recordedDecision = (r) => ({ action: r.decision.action, reason: r.decision.reason, route: r.decision.route, chain: [...r.decision.chain] });
   }

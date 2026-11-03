@@ -204,3 +204,40 @@ export function rewriteTopLevelModel(b: Buffer, model: string): Buffer | null {
     return null;
   }
 }
+
+/**
+ * The body with the top-level integer `key` (`max_tokens`, `max_output_tokens`) set to `value`: only the bytes of the
+ * existing value change, or, when the key is absent, `"key":value,` is inserted right after the opening brace; every
+ * other byte is kept. Null when that cannot be done exactly: not a JSON object, more than one such key, or a value that
+ * is not a number. The result is checked by parsing it back.
+ */
+export function capTopLevelInteger(b: Buffer, key: string, value: number): Buffer | null {
+  if (!Number.isSafeInteger(value) || value <= 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(b.toString('utf8'));
+  } catch {
+    return null;
+  }
+  if (!isObj(parsed)) return null;
+  const ranges = topLevelValueRanges(b, key);
+  if (ranges.length > 1) return null;
+  const r = ranges[0];
+  let out: Buffer;
+  if (r !== undefined) {
+    if (typeof parsed[key] !== 'number') return null;
+    out = Buffer.concat([b.subarray(0, r.start), Buffer.from(String(value), 'utf8'), b.subarray(r.end)]);
+  } else {
+    if (Object.hasOwn(parsed, key)) return null;
+    const open = b.indexOf(0x7b);
+    if (open < 0) return null;
+    const sep = Object.keys(parsed).length > 0 ? ',' : '';
+    out = Buffer.concat([b.subarray(0, open + 1), Buffer.from(`${JSON.stringify(key)}:${value}${sep}`, 'utf8'), b.subarray(open + 1)]);
+  }
+  try {
+    const back = JSON.parse(out.toString('utf8')) as unknown;
+    return isObj(back) && back[key] === value && Object.keys(back).length === Object.keys(parsed).length + (r === undefined ? 1 : 0) ? out : null;
+  } catch {
+    return null;
+  }
+}

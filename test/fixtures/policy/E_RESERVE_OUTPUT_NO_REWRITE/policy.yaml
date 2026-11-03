@@ -1,0 +1,19 @@
+apiVersion: tokenyard/v1
+kind: Policy
+metadata: { name: fixture }
+pricing: ./prices.yaml
+keys: ./keys.yaml
+providers:
+  anthropic: { format: anthropic, baseUrl: https://api.anthropic.com, credential: { env: ANTHROPIC_API_KEY } }
+tenants:
+  acme: { teams: [web] }
+routes:
+  # Chosen by a client header on coding-agent traffic without allowBodyRewrite: max_tokens cannot be capped in the
+  # body, so the smaller reservation would be any client's choice.
+  - { name: aux, match: { traffic: coding-agent, requestClass: auxiliary }, chain: [anthropic], reserveOutputTokens: 200 }
+  - { name: all, match: { traffic: coding-agent }, chain: [anthropic] }
+  - { name: product, match: { traffic: product }, chain: [anthropic] }
+budgets:
+  - { name: org-month, scope: tenant, window: month, usd: 100, onExceed: block }
+failure:
+  counterStoreDown: { rateLimits: open, budgets: closed }

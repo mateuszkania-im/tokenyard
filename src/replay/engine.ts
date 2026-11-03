@@ -79,7 +79,7 @@ const CLASSES: ReadonlySet<string> = new Set(REQUEST_CLASSES);
 const STORE_DOWN: Admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
 const NOTHING: Omit<Outcome, 'kind' | 'decision'> = { reason: null, name: '', scopeValue: '', provider: null, upstreamModel: null, cost: null };
 /** Gateway exits after decide that depend on body bytes the trace does not hold: carried over as recorded. */
-const BODY_EXITS: ReadonlySet<string> = new Set(['redaction-failed', 'model-rewrite-failed']);
+const BODY_EXITS: ReadonlySet<string> = new Set(['redaction-failed', 'model-rewrite-failed', 'output-cap-failed']);
 
 /** Request features exactly as the gateway decided on them: the recorded bound and its kind are used, never re-derived (R11). */
 export function featuresOf(r: TraceRecord): RequestFeatures {
@@ -222,7 +222,7 @@ async function simulate(
       return { ...NOTHING, kind: 'exit', decision: { action: 'block', reason: 'reservation-error', route: null, chain: [] } };
     }
     const compared = (action: 'forward' | 'block', reason: string | null): ComparedDecision => ({ action, reason, route: plan.route, chain: plan.chain.map((c) => c.provider) });
-    const bodyExit = plan.preBlock === null && r.decision.reason !== null && BODY_EXITS.has(r.decision.reason) && (r.decision.reason !== 'model-rewrite-failed' || plan.chain[0]?.rewritesModel === true);
+    const bodyExit = plan.preBlock === null && r.decision.reason !== null && BODY_EXITS.has(r.decision.reason) && (r.decision.reason !== 'model-rewrite-failed' || plan.chain[0]?.rewritesModel === true) && (r.decision.reason !== 'output-cap-failed' || plan.outputCap !== undefined);
     if (bodyExit) return { ...NOTHING, kind: 'exit', decision: compared('block', r.decision.reason) };
 
     // Spec 5.3 steps 7 and 8, as src/edge/handler.ts runs them. A store that was down when recorded is down here too.

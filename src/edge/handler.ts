@@ -19,7 +19,7 @@ import { parseResponsesJsonUsage, ResponsesUsageAccumulator } from '../stream/re
 import { SseParser } from '../stream/sse.js';
 import { createTee } from '../stream/tee.js';
 import { extractCountTokensFeatures } from '../surfaces/anthropic-count-tokens.js';
-import { extractAnthropicFeatures, rewriteTopLevelModel } from '../surfaces/anthropic-messages.js';
+import { capTopLevelInteger, extractAnthropicFeatures, rewriteTopLevelModel } from '../surfaces/anthropic-messages.js';
 import { modelsListBody } from '../surfaces/anthropic-models.js';
 import { extractResponsesFeatures } from '../surfaces/openai-responses.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
@@ -616,6 +616,17 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       return early({ ...decided, status: 400, decision: { action: 'block', reason: 'model-rewrite-failed' }, errorClass: 'invalid_request_error' });
     }
     upstreamBody = rewritten;
+  }
+  // reserveOutputTokens: the reservation counts only this many output tokens, so the body must ask for no more (A1).
+  if (plan.preBlock === null && plan.outputCap !== undefined) {
+    const field = surface === 'openai-responses' ? 'max_output_tokens' : 'max_tokens';
+    const capped = capTopLevelInteger(upstreamBody, field, plan.outputCap);
+    if (!capped) {
+      const msg = `route "${plan.route ?? ''}" caps ${field} at ${plan.outputCap}, but the request's top-level ${field} could not be set exactly (send one JSON object with at most one numeric "${field}")`;
+      sendError(req, res, own(400, 'invalid_request_error', 'output-cap-failed', msg));
+      return early({ ...decided, status: 400, decision: { action: 'block', reason: 'output-cap-failed' }, errorClass: 'invalid_request_error' });
+    }
+    upstreamBody = capped;
   }
 
   // 7. Admit: one store call for rate checks, stream slots, taint and every reservation (spec 7). Blocks that need no
