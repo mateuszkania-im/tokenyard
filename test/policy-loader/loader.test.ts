@@ -1,5 +1,5 @@
 import { Agent, createServer } from 'node:http';
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { startAnthropicMock } from '../../src/mock/anthropic.js';
@@ -44,20 +44,45 @@ test('file change swaps the snapshot; in-flight request keeps its revision', asy
   expect(l.loadErrors).toBe(0);
 });
 
+/**
+ * Writes with `write` and waits until `seen()` holds, writing again every `everyMs` until `deadlineMs`. One write proves
+ * little about a watcher: macOS starts the FSEvents stream behind fs.watch asynchronously, so events right after
+ * watch() returns can be dropped, and a loaded machine widens that window (the flake in the final verification).
+ * Writing again still needs a working watcher; the poll is a minute away.
+ */
+async function writeUntil(write: () => void, seen: () => boolean, deadlineMs = 20_000, everyMs = 1_000): Promise<boolean> {
+  const end = Date.now() + deadlineMs;
+  while (Date.now() < end) {
+    write();
+    const next = Math.min(end, Date.now() + everyMs);
+    while (Date.now() < next) {
+      if (seen()) return true;
+      await sleep(20);
+    }
+  }
+  return seen();
+}
+
 test('the watcher alone reloads: with the poll a minute away, a new revision and then a broken file are both noticed', async () => {
   // The other reload tests poll every 100 ms to 1 s as a backup for a watcher event a loaded machine delivers late;
-  // this one leaves only the watcher, so a broken watcher fails here (V5 review). The waits are generous, not tight.
+  // this one leaves only the watcher, so a broken watcher fails here (V5 review). The deadlines are generous, not tight.
   const dir = tempDir();
   writePolicyDir(dir, UP, 'one');
   const l = await started({ dir, pollMs: 60_000 });
   const first = l.active().revision;
-  writePolicyDir(dir, UP, 'two');
-  await expect.poll(() => l.active().revision, { timeout: 12_000 }).not.toBe(first);
+  expect(await writeUntil(() => writePolicyDir(dir, UP, 'two'), () => l.active().revision !== first)).toBe(true);
   const second = l.active().revision;
-  writeFileSync(join(dir, 'policy.yaml'), 'apiVersion: [unclosed');
-  await expect.poll(() => l.loadErrors, { timeout: 12_000 }).toBe(1);
+  const errorsBefore = l.loadErrors;
+  // Atomic like writePolicyDir: a plain write can be read empty in between, a second distinct failure.
+  const writeBroken = (): void => {
+    const tmp = join(dir, '.policy.yaml.tmp');
+    writeFileSync(tmp, 'apiVersion: [unclosed');
+    renameSync(tmp, join(dir, 'policy.yaml'));
+  };
+  expect(await writeUntil(writeBroken, () => l.loadErrors > errorsBefore)).toBe(true);
+  expect(l.loadErrors).toBe(errorsBefore + 1); // the same broken file written again is still one failure
   expect(l.active().revision).toBe(second);
-}, 30_000);
+}, 60_000);
 
 test('swap under load: 200 concurrent requests during 5 swaps, zero failed', async () => {
   process.env[PROVIDER_KEY_ENV] = 'k';
