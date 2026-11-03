@@ -21,6 +21,14 @@ export function globTest(re: RegExp, value: string): boolean {
   return value.length <= MAX_GLOB_INPUT && re.test(value);
 }
 
+/**
+ * Whether model glob `re` holds for `model` (default: the request's own). In replay `f.model` may be a pseudonym (B1);
+ * then the trace's `modelGlobs` say which of the policy's patterns the clear name matched.
+ */
+export function modelMatches(re: RegExp, f: Pick<RequestFeatures, 'model' | 'modelGlobs'>, model: string = f.model): boolean {
+  return globTest(re, model) || (model === f.model && f.modelGlobs?.includes(re.source) === true);
+}
+
 const eq = <T>(want: T | null, have: T | null): boolean => want === null || want === have;
 
 /** Match fields whose request value comes from client headers, not from the key or the request itself. */
@@ -43,7 +51,7 @@ export function routeMatches(r: CompiledRoute, f: RequestFeatures, surface: Surf
     eq(m.agentType, a.agentType) &&
     eq(m.repo, a.repo) &&
     eq(m.feature, a.feature) &&
-    (m.model === null || globTest(m.model, f.model))
+    (m.model === null || modelMatches(m.model, f))
   );
 }
 

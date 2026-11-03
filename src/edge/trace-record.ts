@@ -6,7 +6,7 @@ import { globTest } from '../policy/match.js';
 import type { CompiledPolicy } from '../policy/types.js';
 import type { TraceRecord } from '../ledger/record.js';
 import { sanitizeHeaderValue } from '../report/sanitize.js';
-import { errorCodeLabel, modelShapeLabel, OTHER, rateLimitHeadersLabel, serviceTierLabel } from '../surfaces/labels.js';
+import { errorCodeLabel, rateLimitHeadersLabel, serviceTierLabel } from '../surfaces/labels.js';
 import type { RequestOutcome } from './handler.js';
 
 /** Client agent and version from the User-Agent header, best effort (spec 9.1). */
@@ -24,17 +24,28 @@ export function parseClient(userAgent: string | undefined): RequestOutcome['clie
 /** The policy parts that say which model names a trace may hold. */
 export type ModelNames = Pick<CompiledPolicy, 'prices' | 'routes'>;
 
+/** Every model glob of the policy (route `match.model` and `allowModels`), as compiled. */
+const modelPatterns = (p: ModelNames): RegExp[] => p.routes.flatMap((r) => [...(r.match.model ? [r.match.model] : []), ...(r.allowModels ?? [])]);
+
 /**
- * The model as traced (B1), so a secret or prose pasted into `model` never reaches a trace, span or export: kept when
- * the price table prices it, or when it has the shape of a model id (lowercase, at most 64 characters) and an explicit
- * `allowModels` pattern of a route matches it (an operator-listed name the price table does not know yet, which replay
- * needs to reproduce the route's allowlist); any other name is `other`. No model stays the empty string.
+ * The model as traced (B1), so a secret or prose pasted into `model` never reaches a trace, span or export: in clear
+ * when the price table prices it (a wildcard-free `allowModels` entry is always priced: validation refuses it otherwise,
+ * E_UNPRICED_MODEL); any other name is the pseudonym `model-<16 hex>` of HMAC(salt, name), so equal names stay equal.
+ * No model stays the empty string.
  */
-export function tracedModel(p: ModelNames, model: string | null | undefined): string {
+export function tracedModel(p: ModelNames, model: string | null | undefined, salt = ''): string {
   if (!model) return '';
   if (lookupModel(p.prices, model) !== null) return model;
-  const listed = modelShapeLabel(model) === model && p.routes.some((r) => r.allowModels !== null && r.allowModels.some((re) => globTest(re, model)));
-  return listed ? model : OTHER;
+  return `model-${pseudonym(salt, `model:${model}`).slice(0, 16)}`;
+}
+
+/**
+ * The policy's model patterns (regex sources) a pseudonymised name matched, sorted: what replay needs to apply the
+ * same route conditions and allowlists without the name. Absent when the name is in clear.
+ */
+export function tracedModelGlobs(p: ModelNames, model: string | null | undefined, traced: string): string[] | undefined {
+  if (!model || traced === model) return undefined;
+  return [...new Set(modelPatterns(p).filter((re) => globTest(re, model)).map((re) => re.source))].sort();
 }
 
 
@@ -50,6 +61,9 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
   const u = o.usage;
   const a = o.attribution;
   const rateLimit = rateLimitHeadersLabel(o.rateLimitHeaders ?? {});
+  const clearName = o.features.model ?? u?.responseModel;
+  const tracedName = tracedModel(names, clearName, salt);
+  const tracedGlobs = tracedModelGlobs(names, clearName, tracedName);
   return {
     v: 1,
     kind: 'request',
@@ -76,7 +90,8 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
       ...(a.sanitized ? { sanitized: true as const } : {}),
     },
     features: {
-      model: tracedModel(names, o.features.model ?? u?.responseModel),
+      model: tracedName,
+      ...(tracedGlobs && tracedGlobs.length > 0 ? { modelGlobs: tracedGlobs } : {}),
       stream: o.features.stream,
       // Exits before the decision have no bound: the body size stands in (at most one token per byte, spec 7.3).
       inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
@@ -125,7 +140,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string, names: ModelNa
       : {}),
     outcome: {
       provider: o.provider,
-      upstreamModel: o.provider === null ? null : tracedModel(names, u?.responseModel ?? o.features.model),
+      upstreamModel: o.provider === null ? null : tracedModel(names, u?.responseModel ?? o.features.model, salt),
       attempts: o.attempts ?? 1,
       cacheColdRisk: o.cacheColdRisk ?? false,
       status: o.status,

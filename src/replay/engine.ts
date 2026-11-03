@@ -94,6 +94,7 @@ export function featuresOf(r: TraceRecord): RequestFeatures {
     team: r.team,
     keyId: r.keyId,
     model: r.features.model,
+    ...(r.features.modelGlobs ? { modelGlobs: [...r.features.modelGlobs] } : {}),
     stream: r.features.stream,
     inputTokensBound: r.features.inputTokensBound,
     boundKind: r.features.boundKind,

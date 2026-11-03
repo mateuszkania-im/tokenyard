@@ -400,6 +400,10 @@ var init_labels = __esm({
 });
 
 // src/ledger/anonymize.ts
+function exportedModel(m, p) {
+  if (m === "" || m === "other") return m;
+  return MODEL_PSEUDONYM.test(m) || modelShapeLabel(m) !== m ? p("model", m) : m;
+}
 function anonymizeRecord(r, p) {
   const opt = (kind, v) => v === null ? null : p(kind, v);
   const enumOr = (kind, v, known) => v === null || known.has(v) ? v : p(kind, v);
@@ -438,7 +442,8 @@ function anonymizeRecord(r, p) {
       ...a.sanitized ? { sanitized: true } : {}
     },
     features: {
-      model: modelShapeLabel(f.model),
+      model: exportedModel(f.model, p),
+      ...f.modelGlobs ? { modelGlobs: [...f.modelGlobs] } : {},
       stream: f.stream,
       inputTokensBound: f.inputTokensBound,
       boundKind: f.boundKind,
@@ -463,7 +468,7 @@ function anonymizeRecord(r, p) {
     ...r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision) } : {},
     outcome: {
       provider: o.provider,
-      upstreamModel: o.upstreamModel === null ? null : modelShapeLabel(o.upstreamModel),
+      upstreamModel: o.upstreamModel === null ? null : exportedModel(o.upstreamModel, p),
       attempts: o.attempts,
       cacheColdRisk: o.cacheColdRisk,
       status: o.status,
@@ -516,7 +521,7 @@ function saltedPseudonyms(salt) {
     return `${kind}-${h.slice(0, 8)}`;
   };
 }
-var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES;
+var HEX_KINDS, REQUEST_CLASSES, AGENT_TYPES, MODEL_PSEUDONYM;
 var init_anonymize = __esm({
   "src/ledger/anonymize.ts"() {
     "use strict";
@@ -525,6 +530,7 @@ var init_anonymize = __esm({
     HEX_KINDS = /* @__PURE__ */ new Set(["prefix", "session", "agent", "promptId", "valueHmac"]);
     REQUEST_CLASSES = /* @__PURE__ */ new Set(["main", "subagent", "compaction", "auxiliary"]);
     AGENT_TYPES = /* @__PURE__ */ new Set(["general-purpose", "Explore", "Plan", "statusline-setup", "claude-code-guide"]);
+    MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
   }
 });
 
@@ -30205,10 +30211,13 @@ function globToRegExp(glob) {
 function globTest(re2, value) {
   return value.length <= MAX_GLOB_INPUT && re2.test(value);
 }
+function modelMatches(re2, f, model = f.model) {
+  return globTest(re2, model) || model === f.model && f.modelGlobs?.includes(re2.source) === true;
+}
 function routeMatches(r, f, surface) {
   const m = r.match;
   const a = f.attribution;
-  return eq(m.surface, surface) && eq(m.traffic, f.traffic) && eq(m.billing, f.billing) && eq(m.tenant, f.tenant) && eq(m.team, f.team) && eq(m.requestClass, a.requestClass) && eq(m.agentType, a.agentType) && eq(m.repo, a.repo) && eq(m.feature, a.feature) && (m.model === null || globTest(m.model, f.model));
+  return eq(m.surface, surface) && eq(m.traffic, f.traffic) && eq(m.billing, f.billing) && eq(m.tenant, f.tenant) && eq(m.team, f.team) && eq(m.requestClass, a.requestClass) && eq(m.agentType, a.agentType) && eq(m.repo, a.repo) && eq(m.feature, a.feature) && (m.model === null || modelMatches(m.model, f));
 }
 function findAuthzRoute(policy2, f) {
   const bare2 = { ...f, attribution: { ...f.attribution, requestClass: null, agentType: null, repo: null, feature: null } };
@@ -30518,7 +30527,7 @@ function decide(policy2, f) {
   plan.route = route2.name;
   const authz = route2.match.requestClass === null && route2.match.agentType === null && route2.match.repo === null && route2.match.feature === null ? route2 : findAuthzRoute(policy2, f);
   if (authz === null) return { ...plan, preBlock: "no-route" };
-  const allows = (r, model) => r.allowModels === null || r.allowModels.some((re2) => globTest(re2, model));
+  const allows = (r, model) => r.allowModels === null || r.allowModels.some((re2) => modelMatches(re2, f, model));
   if (!allows(route2, f.model) || !allows(authz, f.model)) return { ...plan, preBlock: "model-not-allowed" };
   const lists = (r, type) => (r.serverTools ?? []).includes(serverToolKey(type));
   const refused2 = f.serverTools.filter((tool) => !lists(route2, tool.type) || !lists(authz, tool.type));
@@ -58670,17 +58679,23 @@ function parseClient(userAgent) {
   if (codex) return { agent: "codex", version: version2(codex[1]) };
   return { agent: "other", version: null };
 }
-function tracedModel(p, model) {
+function tracedModel(p, model, salt = "") {
   if (!model) return "";
   if (lookupModel(p.prices, model) !== null) return model;
-  const listed = modelShapeLabel(model) === model && p.routes.some((r) => r.allowModels !== null && r.allowModels.some((re2) => globTest(re2, model)));
-  return listed ? model : OTHER;
+  return `model-${pseudonym(salt, `model:${model}`).slice(0, 16)}`;
+}
+function tracedModelGlobs(p, model, traced) {
+  if (!model || traced === model) return void 0;
+  return [...new Set(modelPatterns(p).filter((re2) => globTest(re2, model)).map((re2) => re2.source))].sort();
 }
 function buildTraceRecord(o, salt, names) {
   const hmac = (v) => v === null ? null : pseudonym(salt, v);
   const u = o.usage;
   const a = o.attribution;
   const rateLimit2 = rateLimitHeadersLabel(o.rateLimitHeaders ?? {});
+  const clearName = o.features.model ?? u?.responseModel;
+  const tracedName = tracedModel(names, clearName, salt);
+  const tracedGlobs = tracedModelGlobs(names, clearName, tracedName);
   return {
     v: 1,
     kind: "request",
@@ -58707,7 +58722,8 @@ function buildTraceRecord(o, salt, names) {
       ...a.sanitized ? { sanitized: true } : {}
     },
     features: {
-      model: tracedModel(names, o.features.model ?? u?.responseModel),
+      model: tracedName,
+      ...tracedGlobs && tracedGlobs.length > 0 ? { modelGlobs: tracedGlobs } : {},
       stream: o.features.stream,
       // Exits before the decision have no bound: the body size stands in (at most one token per byte, spec 7.3).
       inputTokensBound: o.inputBound?.tokens ?? o.features.bodyBytes,
@@ -58754,7 +58770,7 @@ function buildTraceRecord(o, salt, names) {
     } : {},
     outcome: {
       provider: o.provider,
-      upstreamModel: o.provider === null ? null : tracedModel(names, u?.responseModel ?? o.features.model),
+      upstreamModel: o.provider === null ? null : tracedModel(names, u?.responseModel ?? o.features.model, salt),
       attempts: o.attempts ?? 1,
       cacheColdRisk: o.cacheColdRisk ?? false,
       status: o.status,
@@ -58783,6 +58799,7 @@ function buildTraceRecord(o, salt, names) {
     }
   };
 }
+var modelPatterns;
 var init_trace_record = __esm({
   "src/edge/trace-record.ts"() {
     "use strict";
@@ -58792,6 +58809,7 @@ var init_trace_record = __esm({
     init_match();
     init_sanitize();
     init_labels();
+    modelPatterns = (p) => p.routes.flatMap((r) => [...r.match.model ? [r.match.model] : [], ...r.allowModels ?? []]);
   }
 });
 
@@ -121283,6 +121301,7 @@ function featuresOf(r) {
     team: r.team,
     keyId: r.keyId,
     model: r.features.model,
+    ...r.features.modelGlobs ? { modelGlobs: [...r.features.modelGlobs] } : {},
     stream: r.features.stream,
     inputTokensBound: r.features.inputTokensBound,
     boundKind: r.features.boundKind,

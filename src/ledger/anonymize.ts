@@ -6,7 +6,9 @@ export type PseudonymKind =
   | 'tenant' | 'team' | 'key' | 'repo' | 'branch' | 'ticket' | 'feature' | 'agentType' | 'requestClass'
   // Linkable ids: already hashes or HMACs in the raw traces, but stable across exports and, for prefixHash, an unsalted
   // SHA-256 of the tools and system bytes that anyone holding those bytes can confirm. Re-keyed with the export salt.
-  | 'prefix' | 'session' | 'agent' | 'promptId' | 'valueHmac' | 'instance';
+  | 'prefix' | 'session' | 'agent' | 'promptId' | 'valueHmac' | 'instance'
+  // A model name the gateway pseudonymised (B1), or a name a trace written before that holds in an unexpected shape.
+  | 'model';
 
 /** Kinds whose pseudonym keeps the hex shape of the value it replaces (reports and replay treat them as opaque ids). */
 const HEX_KINDS: ReadonlySet<PseudonymKind> = new Set(['prefix', 'session', 'agent', 'promptId', 'valueHmac']);
@@ -25,6 +27,18 @@ const AGENT_TYPES: ReadonlySet<string> = new Set(['general-purpose', 'Explore', 
  * back to the raw traces or across exports with different salts. Agent and parent agent share one kind, so a
  * subagent still joins its parent. The record id is the caller's (export numbers records in export order).
  */
+const MODEL_PSEUDONYM = /^model-[0-9a-f]{16}$/;
+
+/**
+ * The model as exported: the gateway writes a name in clear only when it is priced or a wildcard-free allowModels
+ * entry, and a trace-salted `model-<hex>` otherwise; that pseudonym is re-keyed with the export salt, and so is any name
+ * not shaped like a model id (traces written before B1). The empty string and `other` stay.
+ */
+function exportedModel(m: string, p: (kind: PseudonymKind, v: string) => string): string {
+  if (m === '' || m === 'other') return m;
+  return MODEL_PSEUDONYM.test(m) || modelShapeLabel(m) !== m ? p('model', m) : m;
+}
+
 export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: string) => string): TraceRecord {
   const opt = (kind: PseudonymKind, v: string | null): string | null => (v === null ? null : p(kind, v));
   const enumOr = (kind: PseudonymKind, v: string | null, known: ReadonlySet<string>): string | null =>
@@ -67,7 +81,8 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
       ...(a.sanitized ? { sanitized: true as const } : {}),
     },
     features: {
-      model: modelShapeLabel(f.model),
+      model: exportedModel(f.model, p),
+      ...(f.modelGlobs ? { modelGlobs: [...f.modelGlobs] } : {}),
       stream: f.stream,
       inputTokensBound: f.inputTokensBound,
       boundKind: f.boundKind,
@@ -92,7 +107,7 @@ export function anonymizeRecord(r: TraceRecord, p: (kind: PseudonymKind, v: stri
     ...(r.candidateDecision ? { candidateDecision: decisionOf(r.candidateDecision) } : {}),
     outcome: {
       provider: o.provider,
-      upstreamModel: o.upstreamModel === null ? null : modelShapeLabel(o.upstreamModel),
+      upstreamModel: o.upstreamModel === null ? null : exportedModel(o.upstreamModel, p),
       attempts: o.attempts,
       cacheColdRisk: o.cacheColdRisk,
       status: o.status,

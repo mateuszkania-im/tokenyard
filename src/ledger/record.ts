@@ -24,7 +24,9 @@ export interface TraceRecord {
               /** Not in spec 9.1: set (true) when the body enabled threshold compaction; the reservation counts its iterations (replay reproduces it). */
               compaction?: true;
               /** Not in spec 9.1: the OpenAI service_tier the request asked for, when not default (replay prices the reservation with it). */
-              serviceTier?: string };
+              serviceTier?: string;
+              /** Not in spec 9.1: when `model` is a pseudonym (B1), the policy's model patterns (regex sources) the clear name matched; replay applies route conditions and allowlists with them. */
+              modelGlobs?: string[] };
   guardrail: { hits: Array<{ rule: string; action: 'block' | 'warn' | 'redact'; valueHmac: string; where: 'last-turn' | 'history' }> };
   policy: { revision: string; candidateRevision?: string; candidateError?: string };
   decision: { route: string | null; action: 'forward' | 'block'; reason: string | null;

@@ -110,7 +110,7 @@ test('a request that never reached a provider gets a SERVER span only', async ()
   expect(spans[0]?.attributes[TOKENYARD.decision]).toBe('block');
 });
 
-test('span names use the priced model or "other"; an unpriced request model is "other" in the attribute too (B1)', async () => {
+test('span names use the priced model or "other"; an unpriced request model is a salted pseudonym in the attribute (B1)', async () => {
   const exporter = new InMemorySpanExporter();
   const sink = await createTracer(null, { exporter });
   const rec = buildTraceRecord(outcome({ features: { ...outcome().features, model: 'evil\nmodel-' + 'x'.repeat(300) } }), 'salt', { prices: PRICES, routes: [] });
@@ -119,6 +119,6 @@ test('span names use the priced model or "other"; an unpriced request model is "
   const clients = exporter.getFinishedSpans().filter((s) => s.kind === 2);
   expect(clients.map((c) => c.name)).toEqual(['chat other', 'chat other']);
   const attr = String(clients[0]?.attributes[GEN_AI.requestModel]);
-  expect(attr).toBe('other');
+  expect(attr).toMatch(/^model-[0-9a-f]{16}$/);
   await sink.shutdown();
 });

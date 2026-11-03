@@ -5,7 +5,7 @@ import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd,
 import { budgetKey, gcraKey, keyTaintKey, streamKey, taintKey } from '../limits/keys.js';
 import { lookupModel, type ModelPrice, type PriceTable, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
-import { findAuthzRoute, findRoute, globTest } from './match.js';
+import { findAuthzRoute, findRoute, modelMatches } from './match.js';
 import { REQUEST_CLASSES } from './schema.js';
 import type { CompiledBudget, CompiledPolicy, CompiledRoute, GuardrailHit, KeyRecord, Plan, RawAttribution, RequestFeatures, Surface, Warning } from './types.js';
 
@@ -221,7 +221,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   // Client headers may pick the route, not widen the models: the header-free route must allow the model too (spec 11).
   const authz = route.match.requestClass === null && route.match.agentType === null && route.match.repo === null && route.match.feature === null ? route : findAuthzRoute(policy, f);
   if (authz === null) return { ...plan, preBlock: 'no-route' };
-  const allows = (r: CompiledRoute, model: string): boolean => r.allowModels === null || r.allowModels.some((re) => globTest(re, model));
+  const allows = (r: CompiledRoute, model: string): boolean => r.allowModels === null || r.allowModels.some((re) => modelMatches(re, f, model));
   if (!allows(route, f.model) || !allows(authz, f.model)) return { ...plan, preBlock: 'model-not-allowed' };
   // Server tools are denied unless both routes list their type (date suffix dropped): a header cannot unlock a tool.
   const lists = (r: CompiledRoute, type: string): boolean => (r.serverTools ?? []).includes(serverToolKey(type));

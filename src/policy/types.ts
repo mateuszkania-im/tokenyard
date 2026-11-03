@@ -143,6 +143,8 @@ export interface RequestFeatures {
   billing: 'api' | 'subscription';     // from the key
   tenant: string; team: string | null; keyId: string;
   model: string; stream: boolean;
+  /** Replay only (B1): `model` is a pseudonym and these are the policy's model patterns (regex sources) the clear name matched. */
+  modelGlobs?: readonly string[];
   inputTokensBound: number;            // provable upper bound on billed input tokens per iteration, see 7.3
   boundKind: 'bytes' | 'context-window';
   maxOutputTokens: number | null;

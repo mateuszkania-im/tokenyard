@@ -1,8 +1,8 @@
 // B1 (security review B): strings from the request body and the User-Agent were copied verbatim into trace records,
 // OTel spans and --anonymize exports: a secret pasted into `model` (forwarded, the provider answers 404), prose or file
 // paths in tools[].type and service_tier, an unbounded client version, a 200 kB model name as a 200 kB trace line.
-// Every such field is bounded now: the model is kept only when the price table prices it (else "other"), a server tool
-// type must match ^[a-z0-9_]{1,64}$ (else "(invalid)"), a service tier must be a known OpenAI tier (else "other"), the
+// Every such field is bounded now: the model is kept only when the price table prices it (else a salted pseudonym),
+// a server tool type must match ^[a-z0-9_]{1,64}$ (else "(invalid)"), a service tier must be a known OpenAI tier (else "other"), the
 // client version goes through the header sanitiser, and anonymizeRecord rebuilds every object field by field.
 import { randomBytes } from 'node:crypto';
 import { afterEach, expect, test } from 'vitest';
@@ -44,11 +44,11 @@ async function setup(models?: string[]) {
 
 const anon = (r: Rec): TraceRecord => anonymizeRecord({ ...r, instance: 'i', seq: 1 } as TraceRecord, saltedPseudonyms('x'));
 
-test('B1a/B1b an unpriced model (a pasted secret) is traced and exported as "other", never in a span', async () => {
+test('B1a/B1b an unpriced model (a pasted secret) is traced and exported as a pseudonym, never in a span', async () => {
   const s = await setup();
   await send(s.url, { path: '/v1/messages', headers: auth, body: Buffer.from(JSON.stringify({ model: AWS_CANARY, max_tokens: 16, messages: [{ role: 'user', content: 'hi' }] })) });
   const rec = await s.last();
-  expect(rec.features.model).toBe('other');
+  expect(rec.features.model).toMatch(/^model-[0-9a-f]{16}$/);
   expect(JSON.stringify(rec)).not.toContain('CANARY');
   expect(JSON.stringify(anon(rec))).not.toContain('CANARY');
   for (let i = 0; i < 50 && s.spans.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
@@ -64,14 +64,7 @@ test('B1a a priced model is traced as sent', async () => {
   expect(rec.outcome.upstreamModel).toBe('claude-haiku-5-5');
 });
 
-test('B1a an unpriced model id an explicit allowModels pattern lists stays (replay needs it); an unlisted one is "other"', async () => {
-  const s = await setup(['claude-haiku-*']);
-  for (const [model, traced] of [['claude-haiku-9-9', 'claude-haiku-9-9'], ['claude-zzz-1', 'other'], [`claude-haiku-${AWS_CANARY}`, 'other']] as const) {
-    s.traces.length = 0;
-    await send(s.url, { path: '/v1/messages', headers: auth, body: Buffer.from(JSON.stringify({ model, max_tokens: 16, messages: [{ role: 'user', content: 'hi' }] })) });
-    expect((await s.last()).features.model, model).toBe(traced);
-  }
-});
+// Unpriced names an allowModels glob accepts: test/security/b1r-model-pseudonym.test.ts (fix round ruling).
 
 test('B1c a server tool type outside ^[a-z0-9_]{1,64}$ is traced as "(invalid)"', async () => {
   const s = await setup();
@@ -122,7 +115,7 @@ test('B1 anonymizeRecord rebuilds features and outcome field by field: unknown k
   } as unknown as TraceRecord;
   const out = anonymizeRecord(r, saltedPseudonyms('x'));
   expect(JSON.stringify(out)).not.toContain('CANARY');
-  expect(out.features.model).toBe('other');
+  expect(out.features.model).toMatch(/^model-[0-9a-f]{8}$/);
   expect(out.features.serverTools).toEqual([{ type: '(invalid)', maxUses: null }]);
   expect(out.features.serviceTier).toBe('other');
   expect(out.outcome.usage).toEqual({ input: 1, output: 1, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 });
