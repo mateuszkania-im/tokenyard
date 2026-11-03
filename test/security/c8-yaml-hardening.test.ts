@@ -96,3 +96,18 @@ test('C8c: loading a policy directory parses each file once', async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Fix round 1: the key checks ran on mapping nodes only, so a !!pairs or !!omap sequence of pairs carried __proto__ or
+// << past them. The checks run on every pair now, and any tag outside the YAML 1.2 core schema is refused.
+test('C8d: __proto__ and << are refused in every pair, also inside !!pairs and !!omap', () => {
+  expect(refused('a: !!pairs [{__proto__: {polluted: 1}}]\n')).toBe('E_YAML_UNSAFE');
+  expect(refused('a: !!pairs [{"<<": {x: 1}}]\n')).toBe('E_YAML_UNSAFE');
+  expect(refused('!!omap [{x: !!pairs [{__proto__: 2}]}]\n')).toBe('E_YAML_UNSAFE');
+});
+
+test('C8d: tags outside the YAML 1.2 core schema are refused; core tags are accepted', () => {
+  for (const t of ['a: !!binary aGk=\n', 'a: !!timestamp 2001-12-14\n', 'a: !!set {x: null}\n', 'a: !!omap [{x: 1}]\n', 'a: !!pairs [{x: 1}]\n', 'a: !foo 1\n', 'a: !<tag:example.com,2000:x> 1\n']) {
+    expect(refused(t), t).toBe('E_YAML_UNSAFE');
+  }
+  expect(parseYamlSafe('a: !!str 1\nb: !!int "2"\nc: !!float 1.5\nd: !!bool true\ne: !!null ""\nf: !!map {x: 1}\ng: !!seq [1]\n')).toEqual({ a: '1', b: 2, c: 1.5, d: true, e: null, f: { x: 1 }, g: [1] });
+});

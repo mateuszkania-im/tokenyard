@@ -33,7 +33,7 @@ test('S25-5 nested mappings count towards the cap', () => {
   const n = Math.ceil(MAX_YAML_NODES / (depth * 3)) + 5;
   const text = `[${Array.from({ length: n }, () => one).join(',')}]`;
   expect(text.length).toBeLessThan(1_000_000);
-  expect(refused(text)).toMatch(/^E_YAML_UNSAFE/);
+  expect(refused(text)).toMatch(/^E_YAML_UNSAFE .*nodes/);
 });
 
 test('S25-5 the example policies still load', async () => {

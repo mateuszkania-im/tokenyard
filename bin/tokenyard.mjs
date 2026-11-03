@@ -2167,7 +2167,7 @@ var require_identity = __commonJS({
     var isAlias2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === ALIAS;
     var isDocument = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === DOC;
     var isMap2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === MAP;
-    var isPair = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === PAIR;
+    var isPair2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === PAIR;
     var isScalar2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SCALAR;
     var isSeq = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SEQ;
     function isCollection2(node2) {
@@ -2204,7 +2204,7 @@ var require_identity = __commonJS({
     exports.isDocument = isDocument;
     exports.isMap = isMap2;
     exports.isNode = isNode;
-    exports.isPair = isPair;
+    exports.isPair = isPair2;
     exports.isScalar = isScalar2;
     exports.isSeq = isSeq;
   }
@@ -9504,14 +9504,20 @@ function parseYamlSafe(text2) {
   (0, import_yaml.visit)(doc, (_k, node2) => {
     if (++nodes > MAX_YAML_NODES) throw new YamlError("E_YAML_UNSAFE", `document has more than ${MAX_YAML_NODES} nodes`);
     if ((0, import_yaml.isAlias)(node2)) throw new YamlError("E_YAML_UNSAFE", "YAML aliases are not allowed in policy files");
+    if (((0, import_yaml.isScalar)(node2) || (0, import_yaml.isCollection)(node2)) && node2.tag !== void 0 && !CORE_TAGS.has(node2.tag)) {
+      throw new YamlError("E_YAML_UNSAFE", `YAML tag ${JSON.stringify(node2.tag.slice(0, 64))} is not allowed in policy files`);
+    }
+    if ((0, import_yaml.isPair)(node2)) {
+      if ((0, import_yaml.isCollection)(node2.key)) throw new YamlError("E_YAML_UNSAFE", "mappings and sequences are not allowed as keys");
+      const value = (0, import_yaml.isScalar)(node2.key) ? node2.key.value : node2.key;
+      if (value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
+      if (value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
+      return;
+    }
     if (!(0, import_yaml.isMap)(node2)) return;
     const seen = /* @__PURE__ */ new Set();
     for (const pair of node2.items) {
-      if ((0, import_yaml.isCollection)(pair.key)) throw new YamlError("E_YAML_UNSAFE", "mappings and sequences are not allowed as keys");
-      const value = (0, import_yaml.isScalar)(pair.key) ? pair.key.value : pair.key;
-      if (value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
-      if (value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
-      const key = jsKey(value);
+      const key = jsKey((0, import_yaml.isScalar)(pair.key) ? pair.key.value : pair.key);
       if (seen.has(key)) throw new YamlError("E_YAML_SYNTAX", `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
       seen.add(key);
     }
@@ -9522,7 +9528,7 @@ function parseYamlSafe(text2) {
     throw new YamlError("E_YAML_SYNTAX", e2 instanceof Error ? e2.message : String(e2));
   }
 }
-var import_yaml, YamlError, MAX_YAML_BYTES, MAX_YAML_NODES, DEFAULT_TAGS, jsKey;
+var import_yaml, YamlError, MAX_YAML_BYTES, MAX_YAML_NODES, DEFAULT_TAGS, CORE_TAGS, jsKey;
 var init_safe_yaml = __esm({
   "src/policy/safe-yaml.ts"() {
     "use strict";
@@ -9538,6 +9544,7 @@ var init_safe_yaml = __esm({
     MAX_YAML_BYTES = 1e6;
     MAX_YAML_NODES = 2e5;
     DEFAULT_TAGS = { "!!": "tag:yaml.org,2002:" };
+    CORE_TAGS = new Set(["str", "int", "float", "bool", "null", "map", "seq"].map((t) => `tag:yaml.org,2002:${t}`));
     jsKey = (value) => value === null || value === void 0 ? "" : String(value);
   }
 });

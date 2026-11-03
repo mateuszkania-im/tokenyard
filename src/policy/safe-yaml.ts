@@ -1,5 +1,5 @@
 // Policy files come from pull requests, so YAML is parsed as plain data and nothing else. Pure: parses text, no I/O.
-import { isAlias, isCollection, isMap, isScalar, parseDocument, visit } from 'yaml';
+import { isAlias, isCollection, isMap, isPair, isScalar, parseDocument, visit } from 'yaml';
 
 export type YamlErrorCode = 'E_YAML_UNSAFE' | 'E_YAML_SYNTAX';
 
@@ -18,6 +18,8 @@ export const MAX_YAML_BYTES = 1_000_000;
 export const MAX_YAML_NODES = 200_000;
 
 const DEFAULT_TAGS = { '!!': 'tag:yaml.org,2002:' } as const;
+/** The tags of the YAML 1.2 core schema, the only explicit tags a policy file may use. */
+const CORE_TAGS = new Set(['str', 'int', 'float', 'bool', 'null', 'map', 'seq'].map((t) => `tag:yaml.org,2002:${t}`));
 
 /** The property name a scalar key becomes in the JS object: null (`~`, `null`, empty) is "", the rest String(value). */
 const jsKey = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
@@ -52,14 +54,22 @@ export function parseYamlSafe(text: string): unknown {
   visit(doc, (_k, node) => {
     if (++nodes > MAX_YAML_NODES) throw new YamlError('E_YAML_UNSAFE', `document has more than ${MAX_YAML_NODES} nodes`);
     if (isAlias(node)) throw new YamlError('E_YAML_UNSAFE', 'YAML aliases are not allowed in policy files');
+    // Only the YAML 1.2 core schema: !!binary, !!timestamp, !!set, !!omap, !!pairs and custom tags are refused.
+    if ((isScalar(node) || isCollection(node)) && node.tag !== undefined && !CORE_TAGS.has(node.tag)) {
+      throw new YamlError('E_YAML_UNSAFE', `YAML tag ${JSON.stringify(node.tag.slice(0, 64))} is not allowed in policy files`);
+    }
+    // Key checks on every pair, wherever it sits (a !!pairs or !!omap sequence holds pairs outside any mapping).
+    if (isPair(node)) {
+      if (isCollection(node.key)) throw new YamlError('E_YAML_UNSAFE', 'mappings and sequences are not allowed as keys');
+      const value = isScalar(node.key) ? node.key.value : node.key;
+      if (value === '<<') throw new YamlError('E_YAML_UNSAFE', 'YAML merge keys (<<) are not allowed in policy files');
+      if (value === '__proto__') throw new YamlError('E_YAML_UNSAFE', 'key __proto__ is not allowed');
+      return;
+    }
     if (!isMap(node)) return;
     const seen = new Set<string>();
     for (const pair of node.items) {
-      if (isCollection(pair.key)) throw new YamlError('E_YAML_UNSAFE', 'mappings and sequences are not allowed as keys');
-      const value = isScalar(pair.key) ? pair.key.value : pair.key;
-      if (value === '<<') throw new YamlError('E_YAML_UNSAFE', 'YAML merge keys (<<) are not allowed in policy files');
-      if (value === '__proto__') throw new YamlError('E_YAML_UNSAFE', 'key __proto__ is not allowed');
-      const key = jsKey(value);
+      const key = jsKey(isScalar(pair.key) ? pair.key.value : pair.key);
       if (seen.has(key)) throw new YamlError('E_YAML_SYNTAX', `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
       seen.add(key);
     }
