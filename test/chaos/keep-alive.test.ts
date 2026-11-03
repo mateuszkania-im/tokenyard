@@ -6,7 +6,7 @@
 // client). Clients run in worker threads with their own event loops, as separate client processes would. The fix:
 // closeIdleWhenQuiet in src/edge/server.ts.
 import { Worker } from 'node:worker_threads';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { Socket } from 'node:net';
 import { closeIdleWhenQuiet } from '../../src/edge/server.js';
 import { authHeaders, msgBody, startStack } from '../helpers/conformance.js';
@@ -119,6 +119,22 @@ test('idle close on a loop that stays busy is retried, and forced after 2 s of l
   expect(s.destroyed).toBe(false);
   await expect.poll(() => s.destroyed, { timeout: 3_000 }).toBe(true);
   expect(t).toBeGreaterThanOrEqual(2_000);
+});
+
+test('M5 the idle close reads a monotonic clock: a wall clock stepped back after the timer fired does not hold the socket open', async () => {
+  const s = fakeSocket();
+  const base = Date.now();
+  let n = 0;
+  // The first reading is an hour ahead (the wall clock is then stepped back); every later one is 60 ms on, so with the
+  // wall clock every turn looks busy and the 2 s force bound is an hour away.
+  const spy = vi.spyOn(Date, 'now').mockImplementation(() => (n++ === 0 ? base + 3_600_000 : base + 60 * n));
+  try {
+    closeIdleWhenQuiet(s);
+    for (let i = 0; i < 100 && !s.destroyed; i++) await new Promise((r) => setTimeout(r, 20));
+  } finally {
+    spy.mockRestore();
+  }
+  expect(s.destroyed).toBe(true);
 });
 
 test('bytes read after the idle timer fired cancel the close', async () => {

@@ -24,8 +24,9 @@ const MAX_IDLE_CLOSE_DELAY_MS = 2_000;
  * the poll phase) that comes back within QUIET_TURN_MS; while the loop is busier than that it is tried again every
  * BUSY_RETRY_MS, for at most MAX_IDLE_CLOSE_DELAY_MS. Any byte read since the timer fired cancels it: Node's request
  * handling owns the socket again, and its headers and request timeouts bound it. A socket that stays idle is closed.
+ * Loop time is read from the monotonic clock, so a wall clock stepped back cannot stretch the 2 s bound (M5).
  */
-export function closeIdleWhenQuiet(socket: Socket, now: () => number = Date.now): void {
+export function closeIdleWhenQuiet(socket: Socket, now: () => number = () => performance.now()): void {
   const read = socket.bytesRead;
   const since = now();
   const attempt = (): void => {

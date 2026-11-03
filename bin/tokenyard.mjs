@@ -60016,7 +60016,7 @@ __export(server_exports, {
   createGateway: () => createGateway
 });
 import { createServer as createServer3 } from "node:http";
-function closeIdleWhenQuiet(socket, now = Date.now) {
+function closeIdleWhenQuiet(socket, now = () => performance.now()) {
   const read = socket.bytesRead;
   const since = now();
   const attempt = () => {
