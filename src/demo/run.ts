@@ -128,7 +128,7 @@ export async function runDemo(o: { out: NodeJS.WritableStream; seed: number; wri
     o.out.write(`${rec.requests} requests in ${rec.sessions} sessions recorded. Replaying them against examples/policy-head (the demo PR: compaction and auxiliary on a cheaper model, a tighter team budget).\n`);
     const result = await replay({ base: rec.base, head: rec.head, traces: readLedger([file]), sinceMs: null, tenant: null });
     if (o.writeTraces) {
-      await writeFileUnder(cliRoot(o.writeTraces), o.writeTraces, await readFile(file));
+      await writeFileUnder(cliRoot(o.writeTraces), o.writeTraces, await readFile(file), { private: true });
       o.out.write(`Traces written to ${o.writeTraces}.\n`);
     }
     o.out.write(renderTerminal(result));

@@ -233,10 +233,10 @@ export function readFileUnderSync(root: string, target: string, capBytes: number
  * Creates `dir` below `root` one component at a time: an existing component must be a real directory (a link is
  * refused before anything is created through it), a missing one is created. Returns the absolute path.
  */
-export async function ensureDirUnder(root: string, dir: string): Promise<string> {
+export async function ensureDirUnder(root: string, dir: string, dirMode?: number): Promise<string> {
   const absRoot = resolve(root);
   const abs = resolve(dir);
-  await mkdir(absRoot, { recursive: true });
+  await mkdir(absRoot, { recursive: true, ...(dirMode !== undefined ? { mode: dirMode } : {}) });
   for (const c of components(absRoot, abs, dir)) {
     let st;
     try {
@@ -244,7 +244,7 @@ export async function ensureDirUnder(root: string, dir: string): Promise<string>
     } catch (e) {
       if (!missing(e)) throw e;
       try {
-        await mkdir(c);
+        await mkdir(c, dirMode);
       } catch (e2) {
         if ((e2 as NodeJS.ErrnoException).code !== 'EEXIST') throw e2;
       }
@@ -260,22 +260,28 @@ export async function ensureDirUnder(root: string, dir: string): Promise<string>
   return abs;
 }
 
+/** File and directory modes of `private` writes (B6): traces, exports, reports and policy state name tenants and costs. */
+export const PRIVATE_FILE_MODE = 0o600;
+export const PRIVATE_DIR_MODE = 0o700;
+
 /**
  * Writes (or with `append`, appends) `data` to `target` below `root`: its directory is created with `ensureDirUnder`,
  * the file is opened with O_NOFOLLOW (a link at the file itself is refused), and with `exclusive` it must not exist.
+ * With `private`, directories this call creates are 0700 and the file is 0600, an existing file narrowed to it.
  */
-export async function writeFileUnder(root: string, target: string, data: string | Uint8Array, o: { append?: boolean; exclusive?: boolean; mode?: number } = {}): Promise<void> {
-  await ensureDirUnder(root, dirname(resolve(target)));
+export async function writeFileUnder(root: string, target: string, data: string | Uint8Array, o: { append?: boolean; exclusive?: boolean; mode?: number; private?: boolean } = {}): Promise<void> {
+  await ensureDirUnder(root, dirname(resolve(target)), o.private ? PRIVATE_DIR_MODE : undefined);
   const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | NONBLOCK | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
   let fh;
   try {
-    fh = await open(resolve(target), flags, o.mode ?? 0o666);
+    fh = await open(resolve(target), flags, o.mode ?? (o.private ? PRIVATE_FILE_MODE : 0o666));
   } catch (e) {
     openFailed(e, target);
   }
   try {
     const st = await fh.stat();
     if (!st.isFile()) throw new UnsafePathError(`${target} is not a regular file`);
+    if (o.private && process.platform !== 'win32' && (st.mode & 0o077) !== 0) await fh.chmod(PRIVATE_FILE_MODE);
     await fh.writeFile(data);
   } finally {
     await fh.close();

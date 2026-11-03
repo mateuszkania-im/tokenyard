@@ -392,7 +392,7 @@ policy
       const base = await loadReplayPolicy({ source: o.base, headDir: o.head, experimentalSubscription, ...(o.baseRevision ? { revision: o.baseRevision } : {}) });
       const head = await loadReplayPolicy({ source: o.head, headDir: o.head, experimentalSubscription, ...(o.headRevision ? { revision: o.headRevision } : {}) });
       const result = await replay({ base, head, traces: await openReplayTraces(o.traces), sinceMs, tenant: o.tenant ?? null });
-      if (o.json) await writeFileUnder(cliRoot(o.json), o.json, renderJson(result));
+      if (o.json) await writeFileUnder(cliRoot(o.json), o.json, renderJson(result), { private: true });
       process.stdout.write(renderTerminal(result));
       if (result.gates.failed.length > 0) process.exitCode = 1;
     } catch (e) {
@@ -451,7 +451,7 @@ program
       const { cliRoot, UnsafePathError, writeFileUnder } = await import('./fsutil/safe-path.js');
       const { renderReportHtml } = await import('./report/render-html.js');
       try {
-        await writeFileUnder(cliRoot(o.html), o.html, renderReportHtml(report));
+        await writeFileUnder(cliRoot(o.html), o.html, renderReportHtml(report), { private: true });
       } catch (e) {
         if (e instanceof UnsafePathError) return void (console.error(`tokenyard report: ${e.message}`), process.exit(1));
         throw e;

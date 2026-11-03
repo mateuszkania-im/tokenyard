@@ -127,7 +127,7 @@ export class TraceWriter {
       text += items.map((i) => `${JSON.stringify(i.line)}\n`).join('');
       try {
         // Directories are created below the root one by one and the file is opened without following links (S-FS-1).
-        await writeFileUnder(this.root, path, text, { append: true });
+        await writeFileUnder(this.root, path, text, { append: true, private: true });
       } catch {
         this.opened.delete(path);
         this.dropped += items.filter((i) => i.request).length;

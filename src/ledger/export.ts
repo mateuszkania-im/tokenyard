@@ -161,7 +161,7 @@ export async function exportTraces(o: { dir: string; sinceMs: number; untilMs: n
       ]
     : [manifest, ...records.map(({ r }) => r)];
   const text = lines.map((l) => `${JSON.stringify(l)}\n`).join('');
-  await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith('.gz') ? gzipSync(text) : text);
+  await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith('.gz') ? gzipSync(text) : text, { private: true });
   return manifest;
 }
 

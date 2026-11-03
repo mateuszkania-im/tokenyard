@@ -53,6 +53,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/fsutil/safe-path.ts
 var safe_path_exports = {};
 __export(safe_path_exports, {
+  PRIVATE_DIR_MODE: () => PRIVATE_DIR_MODE,
+  PRIVATE_FILE_MODE: () => PRIVATE_FILE_MODE,
   UnsafePathError: () => UnsafePathError,
   checkPath: () => checkPath,
   checkPathSync: () => checkPathSync,
@@ -218,10 +220,10 @@ function readFileUnderSync(root, target, capBytes) {
     closeSync(fd);
   }
 }
-async function ensureDirUnder(root, dir) {
+async function ensureDirUnder(root, dir, dirMode) {
   const absRoot = resolve(root);
   const abs = resolve(dir);
-  await mkdir(absRoot, { recursive: true });
+  await mkdir(absRoot, { recursive: true, ...dirMode !== void 0 ? { mode: dirMode } : {} });
   for (const c of components(absRoot, abs, dir)) {
     let st;
     try {
@@ -229,7 +231,7 @@ async function ensureDirUnder(root, dir) {
     } catch (e2) {
       if (!missing(e2)) throw e2;
       try {
-        await mkdir(c);
+        await mkdir(c, dirMode);
       } catch (e22) {
         if (e22.code !== "EEXIST") throw e22;
       }
@@ -245,17 +247,18 @@ async function ensureDirUnder(root, dir) {
   return abs;
 }
 async function writeFileUnder(root, target, data, o = {}) {
-  await ensureDirUnder(root, dirname(resolve(target)));
+  await ensureDirUnder(root, dirname(resolve(target)), o.private ? PRIVATE_DIR_MODE : void 0);
   const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | NONBLOCK | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
   let fh;
   try {
-    fh = await open(resolve(target), flags, o.mode ?? 438);
+    fh = await open(resolve(target), flags, o.mode ?? (o.private ? PRIVATE_FILE_MODE : 438));
   } catch (e2) {
     openFailed(e2, target);
   }
   try {
     const st = await fh.stat();
     if (!st.isFile()) throw new UnsafePathError(`${target} is not a regular file`);
+    if (o.private && process.platform !== "win32" && (st.mode & 63) !== 0) await fh.chmod(PRIVATE_FILE_MODE);
     await fh.writeFile(data);
   } finally {
     await fh.close();
@@ -279,7 +282,7 @@ async function listDirUnder(root, dir) {
   await checkPath(root, dir);
   return (await readdir(resolve(dir), { withFileTypes: true })).filter((e2) => e2.isFile() || e2.isDirectory());
 }
-var UnsafePathError, NOFOLLOW, NONBLOCK, realProbe, GROUP_OR_WORLD_WRITABLE, STICKY, systemLinksAllowed, allowedLink, missing, tooLarge;
+var UnsafePathError, NOFOLLOW, NONBLOCK, realProbe, GROUP_OR_WORLD_WRITABLE, STICKY, systemLinksAllowed, allowedLink, missing, tooLarge, PRIVATE_FILE_MODE, PRIVATE_DIR_MODE;
 var init_safe_path = __esm({
   "src/fsutil/safe-path.ts"() {
     "use strict";
@@ -295,6 +298,8 @@ var init_safe_path = __esm({
     allowedLink = (absRoot, path3, st) => st.isSymbolicLink() && systemLinksAllowed(absRoot) && trustedSystemLink(path3);
     missing = (e2) => e2.code === "ENOENT" || e2.code === "ENOTDIR";
     tooLarge = (target, cap2) => new UnsafePathError(`${target} is larger than ${cap2} bytes`);
+    PRIVATE_FILE_MODE = 384;
+    PRIVATE_DIR_MODE = 448;
   }
 });
 
@@ -659,7 +664,7 @@ async function exportTraces(o) {
   ] : [manifest, ...records.map(({ r }) => r)];
   const text2 = lines.map((l) => `${JSON.stringify(l)}
 `).join("");
-  await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith(".gz") ? gzipSync(text2) : text2);
+  await writeFileUnder(cliRoot(o.out), o.out, o.out.endsWith(".gz") ? gzipSync(text2) : text2, { private: true });
   return manifest;
 }
 async function pruneTraces(o) {
@@ -1489,7 +1494,7 @@ var init_writer = __esm({
           text2 += items.map((i) => `${JSON.stringify(i.line)}
 `).join("");
           try {
-            await writeFileUnder(this.root, path3, text2, { append: true });
+            await writeFileUnder(this.root, path3, text2, { append: true, private: true });
           } catch {
             this.opened.delete(path3);
             this.dropped += items.filter((i) => i.request).length;
@@ -60201,10 +60206,10 @@ import { rename, unlink as unlink2 } from "node:fs/promises";
 import { join as join5 } from "node:path";
 async function writeLkg(stateDir, bundleText) {
   const root = cliRoot(stateDir);
-  await ensureDirUnder(root, stateDir);
+  await ensureDirUnder(root, stateDir, PRIVATE_DIR_MODE);
   const tmp = join5(stateDir, `${LKG_FILE}.${process.pid}.${Date.now()}.tmp`);
   try {
-    await writeFileUnder(root, tmp, JSON.stringify({ sha256: sha(bundleText), bundle: bundleText }), { exclusive: true, mode: 384 });
+    await writeFileUnder(root, tmp, JSON.stringify({ sha256: sha(bundleText), bundle: bundleText }), { exclusive: true, private: true });
     await rename(tmp, join5(stateDir, LKG_FILE));
   } catch (e2) {
     await unlink2(tmp).catch(() => void 0);
@@ -121771,7 +121776,7 @@ async function runDemo(o) {
 `);
     const result = await replay({ base: rec.base, head: rec.head, traces: readLedger([file2]), sinceMs: null, tenant: null });
     if (o.writeTraces) {
-      await writeFileUnder(cliRoot(o.writeTraces), o.writeTraces, await readFile(file2));
+      await writeFileUnder(cliRoot(o.writeTraces), o.writeTraces, await readFile(file2), { private: true });
       o.out.write(`Traces written to ${o.writeTraces}.
 `);
     }
@@ -126460,7 +126465,7 @@ policy.command("replay").description("replay a merged trace export against a bas
     const base = await loadReplayPolicy2({ source: o.base, headDir: o.head, experimentalSubscription, ...o.baseRevision ? { revision: o.baseRevision } : {} });
     const head = await loadReplayPolicy2({ source: o.head, headDir: o.head, experimentalSubscription, ...o.headRevision ? { revision: o.headRevision } : {} });
     const result = await replay2({ base, head, traces: await openReplayTraces2(o.traces), sinceMs, tenant: o.tenant ?? null });
-    if (o.json) await writeFileUnder2(cliRoot2(o.json), o.json, renderJson2(result));
+    if (o.json) await writeFileUnder2(cliRoot2(o.json), o.json, renderJson2(result), { private: true });
     process.stdout.write(renderTerminal2(result));
     if (result.gates.failed.length > 0) process.exitCode = 1;
   } catch (e2) {
@@ -126496,7 +126501,7 @@ program2.command("report").description("cost report from a trace dir or an expor
     const { cliRoot: cliRoot2, UnsafePathError: UnsafePathError2, writeFileUnder: writeFileUnder2 } = await Promise.resolve().then(() => (init_safe_path(), safe_path_exports));
     const { renderReportHtml: renderReportHtml2 } = await Promise.resolve().then(() => (init_render_html(), render_html_exports));
     try {
-      await writeFileUnder2(cliRoot2(o.html), o.html, renderReportHtml2(report));
+      await writeFileUnder2(cliRoot2(o.html), o.html, renderReportHtml2(report), { private: true });
     } catch (e2) {
       if (e2 instanceof UnsafePathError2) return void (console.error(`tokenyard report: ${e2.message}`), process.exit(1));
       throw e2;

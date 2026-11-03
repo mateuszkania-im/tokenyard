@@ -1,7 +1,7 @@
 // Last-known-good bundle in --state-dir (spec 6.7). One file, replaced atomically, with its own sha256.
 import { createHash } from 'node:crypto';
 import { rename, unlink } from 'node:fs/promises';
-import { cliRoot, ensureDirUnder, readFileUnder, writeFileUnder } from '../fsutil/safe-path.js';
+import { cliRoot, ensureDirUnder, PRIVATE_DIR_MODE, readFileUnder, writeFileUnder } from '../fsutil/safe-path.js';
 import { join } from 'node:path';
 import { MAX_BUNDLE_BYTES, parseBundle, type Bundle } from '../policy/bundle.js';
 
@@ -13,10 +13,10 @@ const sha = (text: string): string => createHash('sha256').update(text).digest('
 export async function writeLkg(stateDir: string, bundleText: string): Promise<void> {
   // No symbolic link from the state dir's root down (S-FS-1); the temp file is created exclusively, never through a link.
   const root = cliRoot(stateDir);
-  await ensureDirUnder(root, stateDir);
+  await ensureDirUnder(root, stateDir, PRIVATE_DIR_MODE);
   const tmp = join(stateDir, `${LKG_FILE}.${process.pid}.${Date.now()}.tmp`);
   try {
-    await writeFileUnder(root, tmp, JSON.stringify({ sha256: sha(bundleText), bundle: bundleText }), { exclusive: true, mode: 0o600 });
+    await writeFileUnder(root, tmp, JSON.stringify({ sha256: sha(bundleText), bundle: bundleText }), { exclusive: true, private: true });
     await rename(tmp, join(stateDir, LKG_FILE));
   } catch (e) {
     await unlink(tmp).catch(() => undefined);
