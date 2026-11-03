@@ -25,3 +25,7 @@ jobs:
       - run: npm test
       - run: npm run check:bundle
       - run: npm run check:secrets
+      # The published tarball, scanned entry by entry (the files list decides what ships, not git).
+      - name: pack and scan the npm tarball
+        shell: bash
+        run: npm run check:secrets -- "$(npm pack --silent)"
