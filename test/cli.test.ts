@@ -42,7 +42,7 @@ test('tokenyard serve --dev-upstream forwards to the upstream', async () => {
     const res = await fetch(`${url}/v1/messages?beta=true`, {
       method: 'POST',
       headers: { authorization: 'Bearer ty_live_dev', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-test', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
     });
     expect(res.status).toBe(200);
     expect(mock.received[0]?.pathAndQuery).toBe('/v1/messages?beta=true');

@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { authHeaders, loadFixtures, send, startStack } from '../../helpers/conformance.js';
 import { startNaiveProxy } from '../../helpers/naive-proxy.js';
+import { auditBudgets } from '../../helpers/policy.js';
 
 let stack: Awaited<ReturnType<typeof startStack>>;
 beforeEach(async () => {
-  stack = await startStack();
+  // Some fixtures name models the example table does not price (claude-sonnet-5): no enforced budget level here, so
+  // the bytes check covers them (an unpriced model is refused under an enforced level, docs/conformance.md).
+  stack = await startStack({ policy: { edit: auditBudgets } });
 });
 afterEach(async () => {
   await stack.close();

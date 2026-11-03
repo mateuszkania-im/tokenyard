@@ -88,7 +88,9 @@ afterEach(async () => {
 const AWS = 'AKIAIOSFODNN7EXAMPLE';
 
 test('guardrails on Responses: escaped secrets in a tool output, duplicate keys and unparseable bodies are all blocked', async () => {
-  stack = await startOpenAIStack();
+  // Without allowModels on the codex route, so a body with no readable model reaches the secret check (an allowModels
+  // route answers it 403 model-not-allowed before that; either way nothing is sent).
+  stack = await startOpenAIStack({ policy: { editRoutes: (routes) => void delete routes.find((r) => r.name === 'codex')?.allowModels } });
   const escaped = AWS.replace('A', '\\u0041');
   const call = '{"type":"function_call","name":"shell","arguments":"{}","call_id":"c1"}';
   const bodies = [

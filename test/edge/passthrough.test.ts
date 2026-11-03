@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { startAnthropicMock, type MockServer } from '../../src/mock/anthropic.js';
 import type { CounterStore } from '../../src/limits/store.js';
 import { startGateway, type TestGateway } from '../helpers/gateway.js';
-import { PROVIDER_KEY_ENV, TEST_KEY, testPolicy } from '../helpers/policy.js';
+import { auditBudgets, PROVIDER_KEY_ENV, TEST_KEY, testPolicy } from '../helpers/policy.js';
 
 const PROVIDER_KEY = 'sk-provider-test-value';
 
@@ -58,12 +58,12 @@ function send(
 const auth = { 'x-api-key': TEST_KEY, 'content-type': 'application/json', 'anthropic-version': '2023-06-01' };
 const msgBody = (extra: Record<string, unknown> = {}): Buffer =>
   Buffer.from(
-    JSON.stringify({ model: 'claude-test', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }], ...extra }),
+    JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }], ...extra }),
   );
 
-async function withMock(): Promise<{ mock: MockServer; gw: TestGateway }> {
+async function withMock(o: Partial<Parameters<typeof testPolicy>[0]> = {}): Promise<{ mock: MockServer; gw: TestGateway }> {
   mock = await startAnthropicMock();
-  gw = await startGateway({ policy: testPolicy({ upstream: mock.url }) });
+  gw = await startGateway({ policy: testPolicy({ upstream: mock.url, ...o }) });
   return { mock, gw };
 }
 
@@ -80,7 +80,7 @@ test('upstream receives the exact body bytes and the query string', async () => 
   const { mock, gw } = await withMock();
   // Odd spacing, key order, unicode and an escaped \p{...} pattern: any re-serialisation would change these bytes.
   const body = Buffer.from(
-    '{ "model":"claude-test","max_tokens":64,  "system":[{"type":"text","text":"zażółć \\u0041","cache_control":{"type":"ephemeral"}}],' +
+    '{ "model":"claude-haiku-5-5","max_tokens":64,  "system":[{"type":"text","text":"zażółć \\u0041","cache_control":{"type":"ephemeral"}}],' +
       '"tools":[{"name":"t","input_schema":{"type":"object","properties":{"p":{"type":"string","pattern":"^\\\\p{L}+$"}}}}],' +
       '"messages":[{"role":"user","content":"hi"}],"unknown_field":{"z":1,"a":2}}',
   );
@@ -352,7 +352,7 @@ test('HEAD /api/hello returns empty 200; count_tokens is forwarded without reser
   const hello = await send(gw.url, { method: 'HEAD', path: '/api/hello' });
   expect(hello.status).toBe(200);
   expect(hello.body.length).toBe(0);
-  const body = Buffer.from('{"model":"claude-test","messages":[{"role":"user","content":"hello world"}]}');
+  const body = Buffer.from('{"model":"claude-haiku-5-5","messages":[{"role":"user","content":"hello world"}]}');
   const res = await send(gw.url, { path: '/v1/messages/count_tokens?beta=true', headers: auth, body });
   expect(res.status).toBe(200);
   expect(JSON.parse(res.body.toString()).input_tokens).toBeGreaterThan(0);
@@ -365,11 +365,11 @@ test('HEAD /api/hello returns empty 200; count_tokens is forwarded without reser
   expect(calls).toEqual(['admit']);
 });
 
-test('invalid JSON body is forwarded unchanged and the provider 400 reaches the client', async () => {
-  const { mock, gw } = await withMock();
+test('invalid JSON body is forwarded unchanged and the provider 400 reaches the client when no enforced budget applies', async () => {
+  const { mock, gw } = await withMock({ edit: auditBudgets });
   const errBody = '{"type":"error","error":{"type":"invalid_request_error","message":"messages: invalid JSON"}}';
   mock.setScenario(() => ({ kind: 'status', status: 400, headers: {}, body: errBody }));
-  const body = Buffer.from('{"model":"claude-test", "messages": [ {"role":"user",');
+  const body = Buffer.from('{"model":"claude-haiku-5-5", "messages": [ {"role":"user",');
   const res = await send(gw.url, { path: '/v1/messages', headers: auth, body });
   expect(mock.received[0]?.body.equals(body)).toBe(true);
   expect(res.status).toBe(400);

@@ -72,3 +72,11 @@ export function testPolicy(o: {
   const providers = new Map([...compiled.providers].map(([n, p]) => [n, n.startsWith('anthropic') ? { ...p, baseUrl: o.upstream } : n === 'openai' ? { ...p, baseUrl: o.openaiUpstream ?? o.upstream } : p]));
   return { ...compiled, providers };
 }
+
+/**
+ * `edit` for testPolicy: every budget in audit mode, so no enforced level applies. Unpriced models and bodies the
+ * gateway cannot parse are refused under an enforced level (A2, A5); protocol-fidelity tests that send them use this.
+ */
+export const auditBudgets = (p: PolicyDoc): void => {
+  p.budgets = p.budgets.map((b) => ({ ...b, mode: 'audit' as const }));
+};

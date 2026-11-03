@@ -33,7 +33,7 @@ test('serve writes traces with a ULID request id, then export and report read th
     const res = await fetch(`${url}/v1/messages`, {
       method: 'POST',
       headers: { 'x-api-key': 'ty_live_dev', 'content-type': 'application/json', 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-test', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
+      body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 8, messages: [{ role: 'user', content: 'hi' }] }),
     });
     expect(res.headers.get('x-tokenyard-request-id')).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
     await res.arrayBuffer();

@@ -61,7 +61,7 @@ export const authHeaders = {
 };
 
 export const msgBody = (extra: Record<string, unknown> = {}): Buffer =>
-  Buffer.from(JSON.stringify({ model: 'claude-test', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }], ...extra }));
+  Buffer.from(JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 64, messages: [{ role: 'user', content: 'hi' }], ...extra }));
 
 /** Every body in test/conformance/fixtures, byte for byte as stored. */
 export function loadFixtures(): Array<{ name: string; bytes: Buffer }> {

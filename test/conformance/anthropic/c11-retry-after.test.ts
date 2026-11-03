@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'vitest';
 import { anthropicError } from '../../../src/edge/errors.js';
 import { authHeaders, send, startStack } from '../../helpers/conformance.js';
+import { auditBudgets } from '../../helpers/policy.js';
 
 let stack: Awaited<ReturnType<typeof startStack>> | undefined;
 afterEach(async () => {
@@ -18,7 +19,8 @@ test('C11 tokenyard own retry-after is an integer number of seconds [https://cod
   expect(anthropicError(500, 'api_error', 'x', null, 'req_1').headers['retry-after']).toBeUndefined();
   // On the wire: a 429 carrying retry-after reaches the client as the same plain integer. The gateway's own 429s
   // (Task 14) are built by the same anthropicError, covered by the unit check above until then.
-  stack = await startStack();
+  // The body '{}' names no model: forwarded only when no enforced budget level applies (docs/conformance.md).
+  stack = await startStack({ policy: { edit: auditBudgets } });
   stack.mock.setScenario({ kind: 'status', status: 429, headers: { 'retry-after': '3' }, body: '{"type":"error","error":{"type":"rate_limit_error","message":"x"}}' });
   const res = await send(stack.gw.url, { path: '/v1/messages', headers: authHeaders, body: '{}' });
   expect(res.status).toBe(429);

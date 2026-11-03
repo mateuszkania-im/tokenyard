@@ -232,11 +232,6 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     const m = known === null ? null : lookupModel(t, known)?.price;
     if (!m || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: 'unpriced' };
   }
-  if (known === null) {
-    if (policy.failure.unpricedModel !== 'allow-and-flag') return { ...plan, preBlock: 'unpriced' };
-    warnings.push({ kind: 'unpriced', model: upstreamModel });
-  }
-
   const levels = policy.budgets.flatMap((b) => {
     // A key without a team skips team levels; a missing session or repo header is charged to UNATTRIBUTED on enforced
     // levels, so leaving a header out cannot dodge a budget.
@@ -246,6 +241,14 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
     const w = b.window === null ? null : windowOf(b.window, f.ts);
     return [{ budget: b.name, key: budgetKey(f.tenant, b.name, value, w?.start ?? null), limitMicroUsd: b.limitMicroUsd, enforce, resetsAt: w?.end ?? null }];
   });
+
+  // An unpriced model is reserved at the envelope of the priced ones, which is no bound for a model dearer than all of
+  // them: refused whenever an enforced level applies, as an unpriced server tool is (A2); allow-and-flag admits it only
+  // when none does.
+  if (known === null) {
+    if (policy.failure.unpricedModel !== 'allow-and-flag' || (hasModels(t) && levels.some((l) => l.enforce))) return { ...plan, preBlock: 'unpriced' };
+    warnings.push({ kind: 'unpriced', model: upstreamModel });
+  }
 
   // reserveOutputTokens lowers the reservation only when the gateway writes it into the body as max_tokens
   // (max_output_tokens), under the same rule as a model rewrite; otherwise the client's own limit stands (A1).

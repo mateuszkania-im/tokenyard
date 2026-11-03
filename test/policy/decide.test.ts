@@ -320,6 +320,8 @@ test('unknown, missing or unparseable model: features and reservation priced wit
   const key: KeyRecord = { hash: 'h', keyId: 'k1', tenant: 'acme', team: 'web', name: 'alice', kind: 'developer', billing: 'api' };
   const raw = { session: null, agent: null, parentAgent: null, requestClass: 'subagent', agentType: null, promptId: null, repo: null, branch: null, ticket: null, feature: null };
   const envelope = reservationPrice(p.prices, null).price;
+  const auditOnly = compile(BUDGETS.replace(/usd: (\d+) \}/g, 'usd: $1, mode: audit }'));
+  expect(auditOnly.budgets.some((b) => b.enforce)).toBe(false);
   for (const body of [
     { model: 'claude-mystery-9', max_tokens: 100, messages: [{ role: 'user', content: 'hi' }] },
     { max_tokens: 100, messages: [{ role: 'user', content: 'hi' }] },
@@ -329,8 +331,12 @@ test('unknown, missing or unparseable model: features and reservation priced wit
     const bound = inputTokenBound(x, envelope);
     expect(f).toMatchObject({ inputTokensBound: bound.tokens, boundKind: bound.kind, tenant: 'acme', team: 'web', keyId: 'k1', traffic: 'coding-agent', ts: TS, id: 'req_9' });
     expect(f.attribution.requestClass).toBe('subagent');
-    const plan = decide(p, f);
+    // Enforced levels apply: the envelope is no bound for a model dearer than every priced one, so it is refused (A2).
+    expect(decide(p, f).preBlock).toBe('unpriced');
+    // Without an enforced level, allow-and-flag reserves the envelope and flags it.
+    const plan = decide(auditOnly, f);
     const est = worstCaseMicroUsd(f, envelope, p.prices, { serverToolsWithoutMaxUses: 'block', assumedMaxUses: 25, reserveOutputTokens: null }).micro;
+    expect(plan.preBlock).toBeNull();
     expect(plan.reservations[0]?.estMicroUsd).toBe(est);
     expect(plan.warnings).toContainEqual({ kind: 'unpriced', model: f.model });
   }

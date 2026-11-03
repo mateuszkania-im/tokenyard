@@ -52,6 +52,7 @@ routes:                               # first match wins
   - name: codex
     match: { surface: openai-responses, traffic: coding-agent }
     chain: [openai]
+    allowModels: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.3-codex"]   # unpriced models are refused
   - name: support-summaries
     match: { traffic: product, feature: support-summary }
     chain: [anthropic]
