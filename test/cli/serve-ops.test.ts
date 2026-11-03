@@ -45,7 +45,8 @@ test('serve: /metrics is 404 on the API port and served on the loopback ops port
 
 test('serve with a non-loopback ops host and a token: 401 without it, 200 with it', async () => {
   const port = await freePort();
-  await serve(['--metrics-host', '0.0.0.0', '--metrics-port', String(port)], { TOKENYARD_METRICS_TOKEN: 'tok' });
+  // Not loopback by name (so a token is required) yet reachable only through loopback: tests never bind every interface.
+  await serve(['--metrics-host', '::ffff:127.0.0.1', '--metrics-port', String(port)], { TOKENYARD_METRICS_TOKEN: 'tok' });
   expect((await fetch(`http://127.0.0.1:${port}/metrics`)).status).toBe(401);
   expect((await fetch(`http://127.0.0.1:${port}/metrics`, { headers: { authorization: 'Bearer tok' } })).status).toBe(200);
 });
