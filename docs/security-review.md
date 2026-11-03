@@ -1,7 +1,7 @@
 # Security review (Task 25)
 
 Record of the adversarial review of tokenyard at the end of the build, the findings it produced, the tests that pin
-each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branch `mvp` at 9752407; second pass against 90d7337 (last section).
+each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branch `mvp` at 9752407; second pass against 90d7337; V7 retest against 266d686 (last section).
 
 ## Method
 
@@ -134,6 +134,11 @@ in the main tree) and the test run; every one failed on the reverted code and th
 | S21-1 | `/metrics` served on the API port | 1 failed |
 | S7a | request class passed through | 2 failed |
 | S-FS-1 | link check removed from the path walk | 2 failed |
+| T25 gitattributes (V7) | `--textconv` added to the base-side `git show` | 1 of 2 failed |
+| S6-2 service tier (V7) | tier label passes any value and `serviceTierPrice` drops `Object.hasOwn` | 1 failed |
+| T9-e (V7) | fast mode on a model without fast prices priced at its standard rates | 1 failed |
+| T10 (V7) | rate limit scope enum widened to `session`, `repo`, `feature`, `agentType` | 4 failed |
+| S-V7-1 (V7) | raw id list without the epoch and placeholders (the generator before the fix) | 1 failed |
 
 ## Accepted residual risks and known limitations
 
@@ -145,10 +150,15 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   such a prefix would be treated as a client tool (no provider tool using them was found).
 - **Fast mode price sets (task 9).** Under fast mode only the fast rate set counts for the reservation. If a provider
   ever lists fast prices below standard, the reservation is lower than the standard bound; policy validation does not
-  yet require `fast >= standard`.
-- **Truncated policy files (task 11).** A policy file cut at a line boundary that still validates (for example trailing
-  budgets dropped) can activate and become the last-known-good. The three files are read non-atomically and there is
-  no stability re-read. Operators should replace policy files atomically (write to a temporary name, then rename).
+  yet require `fast >= standard`. Policy validation also does not reject a model without a `fast` block (the price
+  table cannot say which models a provider serves fast); a response that reports fast mode for such a model settles at
+  the reservation, which is priced at the standard rates, so a provider that bills fast mode for a model the table
+  lists without fast prices is under-charged whenever that bill is above the reservation
+  (`test/security/t9-fast-mode-unpriced.test.ts`, T9-e).
+- **Policy files caught mid-write (task 11, S-V3-2).** A changed policy directory activates only when two reads one
+  settle interval (250 ms by default) apart agree (`test/policy-loader/loader-settle.test.ts`). A writer slower than
+  that interval can still be caught with a prefix that validates, and a `--policy-url` source is not re-read. Operators
+  should replace policy files atomically (write to a temporary name, then rename).
 - **Last-known-good is not authenticated (C10).** Its sha256 detects corruption; anyone who can write the state
   directory can plant a policy. The loader requires gateway-user ownership and mode 0600, nothing more.
 - **Error text from the upstream (B2 caveats).** A provider key echoed inside a 2xx SSE `error` event is not redacted
@@ -187,7 +197,8 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
 - **Surface and provider format (task 20).** A route without a `match.surface` can send Responses bodies to an
   Anthropic provider; there is no compile-time check. `max_tool_calls` is applied to every server tool, which
   over-counts (safe).
-- **Rate and stream limits scoped to session or repo.** The schema scopes them to tenant, team or key today; if repo or
+- **Rate and stream limits scoped to session or repo.** The schema scopes them to tenant, team or key today, and a
+  policy with a header-derived scope does not load (`test/security/t10-rate-scope-headers.test.ts`); if repo or
   session scopes are added, a missing header is charged to `(unattributed)` as budgets are (guarded in `decide`).
 - **Header-selected chains.** A header may choose a different provider chain among the models the key may use; this is
   by design (S10-2).
@@ -240,3 +251,90 @@ Observations (no probe):
   replay engine's `BODY_EXITS`. Such records normally carry `preDecision`; a record without it was decided again and
   replayed as forwarded. Fixed: they are carried over as recorded, before decide
   (`test/security/a2-obs-body-shape-replay.test.ts`, 90168ad).
+
+## V7 retest
+
+Date: 2026-11-03, against 266d686. Three parts: every item of the Task 25 checklist traced to the test that pins it
+(or to the ruling that left it open), a quick adversarial sweep over what changed during V1 to V6 (`5ad6f31..266d686`
+in `src/`, `bin/`, `scripts/`, `action.yml`, the workflows, `bench/` and `examples/`), and a secrets pass. No live
+provider was called (spend 0 USD).
+
+`npx vitest run test/security`: every file green; the three Redis variants (A9, A10, S-V2-1) skip without `REDIS_URL`
+and run in `npm run test:redis`. Tests added in V7 were checked against reverted guards (see "Revert checks").
+
+### Checklist items
+
+The findings and rulings forwarded by the coordinator (S6 to S23-1, S-FS-1 and S-FS-2, S-V2-1 to S-V4-4) are the rows
+of the tables above. The checklist items and the minors marked for Task 25:
+
+| Id | Threat | Fix commit | Regression test | Status |
+|---|---|---|---|---|
+| CL-prototype | Prototype keys on any user-keyed table (prices, keys, server tools, service tiers, geo, attribution) and non-finite costs failing open | see S6 | `test/security/s6-prototype-key-lookup.test.ts`, `s6-2-prototype-keys-other-tables.test.ts` | fixed (S6); other tables held: keys are looked up by hash, `Object.hasOwn` on tiers, tools, modifiers |
+| CL-anonymize | Anonymize deny by default; attribution bounded at ingest and escaped in every renderer | see S7a, S7b, B1, S-V4-2 to S-V4-4 | `s7a-anonymize-attribution.test.ts`, `s7b-renderer-injection.test.ts`, `b1-client-text-in-traces.test.ts`, `b1r-model-pseudonym.test.ts`, `s-v4-*.test.ts` | fixed |
+| CL-trace-names | `safeTenantDir` not injective, `--instance-id` unsanitised in a file name | none | none | accepted: operator-set values (residual risks, "Trace layout names") |
+| CL-t9a | Parse error, missing or unpriced model priced with `reservationPrice(t, null)` | see A2 | `a2-unpriced-model.test.ts`, `s6-prototype-key-lookup.test.ts` | fixed |
+| CL-t9b | R11 bytes-bound switch after a violation | see A9 | `a9-r11-latch-scope.test.ts` | fixed |
+| CL-t9c | Estimator throw must fail closed | Task 14 | `test/edge/admission.test.ts` ("a reservation that cannot be priced fails closed") | fixed |
+| CL-t9d | Settlement prices `usage.speed` fast | Task 14 | `t9-fast-mode-unpriced.test.ts` (T9-d), `test/edge/admission.test.ts` | fixed |
+| CL-t9e | Fast-capable model without a `fast` block | none | `t9-fast-mode-unpriced.test.ts` (T9-e: settles at the reservation) | known limit (residual risks, "Fast mode price sets") |
+| CL-fast-max | Under fast mode only the fast rate set counts | none | none | known limit (residual risks, "Fast mode price sets") |
+| CL-client-tool | Client-tool classification by bare prefix | none | none | known limit (residual risks, "Provider billing assumptions") |
+| CL-route | Rewrite priced at the served model, header predicates granting access, server tools not allowed, scope dodge by omitted headers | see S10-1 to S10-4 | `s10-1-*`, `s10-2-*`, `s10-3-*`, `s10-4-*.test.ts` | fixed |
+| CL-taint-ns | Session and key taint sets in one namespace | see S10-taint | `s10-taint-namespace.test.ts` | held by construction |
+| CL-rewrite-authz | Rewritten model checked against the authorising route | see S10-5 | `s10-5-rewrite-authz.test.ts` | fixed |
+| CL-rate-scope | Rate and stream limits scoped to a header skip when it is missing | none needed | `t10-rate-scope-headers.test.ts` | held: the schema allows tenant, team and key only; header-selected chains by design (S10-2) |
+| CL-partial-write | Policy file caught mid-write activates a weakened policy | see S-V3-2 | `test/policy-loader/loader-settle.test.ts`, `test/chaos/reload.test.ts` | fixed; slow writers residual |
+| CL-cross-tenant | Breaker and retry budget interference across tenants | see S12-1 | `s12-1-per-credential-breaker.test.ts`, `t25-retry-budget-tenant.test.ts` | fixed (breaker), held (retry budget per key-record tenant) |
+| CL-redis-restart | Settle after a restart returns unknown, sweeper settles at the estimate | none | none | accepted: fails safe (residual risks, "Counter store restart") |
+| CL-live-crash | Live cap under-count on a crash; stale-lock takeover race | see A11 | `a11-live-cap.test.ts` | fixed; date guard and salt residual |
+| CL-parser | Scanner and upstream parser differential (malformed JSON, duplicate keys, non-string tokens, encodings) | see A5, S25-2, S16-1 | `a5-parser-differential.test.ts`, `s25-2-nested-duplicate-keys.test.ts`, `s16-1-scanner-differential.test.ts` | fixed |
+| CL-raw-fallback | Malformed body raw fallback and encoded secrets | see S16-2 | `s16-2-malformed-body-escapes.test.ts` | fixed |
+| CL-bare-number | PII and secrets in unquoted JSON numbers | see S16-3 | `s16-3-bare-numeric-pii.test.ts` | fixed |
+| CL-action | Base policy spoofing via working-tree paths, sticky comment hijack, PR code in the policy-replay workflow | see S19-1, S19-2, C12 | `s19-action-base-policy.test.ts`, `c12-workflow-trusted-checkout.test.ts` | fixed |
+| CL-base-side | PR input influencing the base side: paths, git discovery, environment, head-tree config files, policy includes | see S19-3, S19-4, C2, C9, C11 | `s19-action-base-policy.test.ts`, `c9-base-git-env.test.ts`, `c2-action-traces-at-base.test.ts`, `c11-cli-base-ref.test.ts`, `t25-head-tree-gitattributes.test.ts`, `test/policy/schema.test.ts` ("pricing and keys must name a file in the policy directory") | fixed; head-tree `.gitattributes` held (blobs read without textconv or filters) |
+| CL-safe-path | Any direct read or write of a user-controlled path | see S-FS-1, S-FS-2 | `s-fs-1-safe-path.test.ts`, `s-fs-2-system-links.test.ts` | fixed |
+| CL-settle-tier | Settlement without terminal usage; price tier picked by the client | see S20-1, S20-2, A2-3 | `s20-1-service-tier.test.ts`, `s20-2-responses-settle-without-usage.test.ts`, `a2-3-responses-tool-fee.test.ts` | fixed |
+| CL-t20 | Duplicate keys inside `tools[]`; route without a surface; codex route without `allowModels`; `max_tool_calls` on every tool | see S25-2, A2 | `s25-2-nested-duplicate-keys.test.ts`, `a2-unpriced-model.test.ts` | fixed; surface check and over-count residual |
+| CL-ops | Ops endpoint exposure; metric cardinality from client input | see S21-1, S21-2, B3 | `s21-1-metrics-exposure.test.ts`, `s21-2-metric-label-cardinality.test.ts`, `b3-ops-host.test.ts` | fixed; series count bounded in the V2 soak |
+| CL-reserve-output | `reserveOutputTokens` below a request's max output | see A1, S25-1 | `a1-reserve-output-tokens.test.ts` | fixed |
+
+### New findings
+
+| Id | Area | Severity | Description | Regression test | Status | Commit |
+|---|---|---|---|---|---|---|
+| S-V7-1 | privacy (tooling) | Low | The local leak guard for `examples/live` (`test/docs/readme.test.ts`) checks the raw linkable ids that `bench/live-summary.ts` writes to `.live/raw-names.json`; the list left out the process epoch (`decision.seqEpoch`, S-V4-4) and the raw traces' server tool placeholders (`tool_<16 hex>`, S-V4-3), so a regression of either in the anonymizer would not have been caught. The committed export held none of them | `test/security/s-v7-1-live-guard-ids.test.ts` (local only: needs the gitignored raw traces) | fixed: both are collected; the list now holds every epoch of the raw traces | `git log --grep S-V7-1` |
+
+No High or Critical finding.
+
+### Sweep of V1 to V6 (held, no finding)
+
+- **Idle keep-alive close** (`closeIdleWhenQuiet`): a byte read after the idle timer cancels the close and hands the
+  socket back to Node; a probe that sent one byte at that moment and nothing more saw the socket closed at the
+  headers timeout, so the deferral is bounded (2 s while the loop is busy, then Node's headers and request timeouts).
+- **Scan budgets** run after authentication and before `JSON.parse`; the refusals are fixed-text 413s with
+  `x-should-retry: false` and a fixed reason label.
+- **Session churn (S-V2-1)**: the new-session allowance and the marker are written only on admit or on a last-turn taint
+  write; key names are percent-encoded; the memory store's markers expire with the idle TTL.
+- **SSE parser (S-V4-1)**: a dropped event cannot lower a charge: a Messages stream without final usage or with an
+  estimated output settles at the reservation, as does a Responses stream without terminal usage.
+- **Body walk** (`skipString`, `duplicateTopLevelKey`, `countJsonValuesUpTo`): quote parity over the preceding backslash
+  run matches the sequential parse; the any-depth duplicate key check (S25-2) stays as the second layer.
+- **Keyword prefilter** (`keywordsIn`): every start position is searched, prefixes of a longer hit are added, so the
+  prefilter finds every keyword `includes` finds.
+- **Loader settle re-read, writer forgetting past hours, breaker window**: no new input reaches them beyond the policy
+  author and the clock.
+- **Ops listener**: only a comment changed; an IPv4-mapped loopback host still needs a token.
+- **Bench and soak harness**: every listener binds 127.0.0.1 (the soak probe preloaded into the gateway answers
+  memory samples only and is not in the npm package); the Redis URL with its password goes through the environment;
+  `bench/soak.ts` refuses a non-loopback `REDIS_URL` and `bench/run.ts` skips one unless `BENCH_ALLOW_FLUSH=1`; `scripts/local-redis.mjs` keeps the
+  loopback, random-port, random-password container (S23-1) and now forwards signals to its command.
+- **CI**: `permissions: contents: read`, actions pinned to commit SHAs, `persist-credentials: false`; the mutation job
+  runs only on `workflow_dispatch`.
+- **examples/live**: no prompt text, home paths, host names, email addresses or key-shaped strings in the summary, the
+  HTML report, the screenshots or the anonymized traces; the raw epochs are absent from the export.
+
+### Secrets
+
+`npm run check:secrets` is clean (529 files at the last V7 commit). In `git grep HEAD`, 48 tokens start with `sk-ant-`, `sk-` or `ty_live_`
+followed by 8 or more key characters, all test canaries, plan examples or fixtures; none equals a key in `.env`
+(compared by SHA-256, values never printed).
