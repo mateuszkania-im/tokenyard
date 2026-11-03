@@ -62,13 +62,14 @@ test('swap under load: 200 concurrent requests during 5 swaps, zero failed', asy
   const agent = new Agent({ keepAlive: true, maxSockets: 64 });
   cleanups.push(async () => agent.destroy());
   const swapper = (async () => {
+    // 80 ms apart: a revision activates once two reads a settle interval (20 ms) apart agree (V3).
     for (let i = 1; i <= 5; i++) {
-      await sleep(30);
+      await sleep(80);
       writePolicyDir(dir, mock.url, `v${i}`);
     }
   })();
   const requests = Array.from({ length: 200 }, async (_, i) => {
-    await sleep((i % 40) * 4);
+    await sleep((i % 40) * 12);
     const r = await send(url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-sonnet-5-5' }), agent });
     results.push({ status: r.status, rev: String(r.headers['x-tokenyard-policy-revision']) });
   });

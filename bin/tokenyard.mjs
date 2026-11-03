@@ -60681,7 +60681,7 @@ __export(loader_exports, {
 import { EventEmitter as EventEmitter2 } from "node:events";
 import { watch } from "node:fs";
 import { join as join6 } from "node:path";
-var DEFAULT_POLL_MS, DEFAULT_DEBOUNCE_MS, PolicyLoader, msgOf;
+var DEFAULT_POLL_MS, DEFAULT_DEBOUNCE_MS, MAX_START_READS, sleep3, PolicyLoader, msgOf;
 var init_loader = __esm({
   "src/policy-loader/loader.ts"() {
     "use strict";
@@ -60692,6 +60692,8 @@ var init_loader = __esm({
     init_lkg();
     DEFAULT_POLL_MS = 15e3;
     DEFAULT_DEBOUNCE_MS = 250;
+    MAX_START_READS = 20;
+    sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
     PolicyLoader = class _PolicyLoader extends EventEmitter2 {
       constructor(o) {
         super();
@@ -60792,35 +60794,68 @@ var init_loader = __esm({
           this.pollTimer.unref();
         }
       }
-      /** Serialised: loads never overlap. With `throwOnError` the failure is also thrown (start); it is always counted. */
+      /**
+       * Serialised: loads never overlap. With `throwOnError` the failure is also thrown (start); it is always counted.
+       * A directory is read file by file and may be caught mid-write: a prefix of policy.yaml can still validate (budgets
+       * not written yet), or keys.yaml can be newer than policy.yaml. A changed directory therefore activates only when a
+       * second read one settle interval (`debounceMs`) later finds the same bundle; otherwise another read follows (V3,
+       * Task 11). At start that repeats up to MAX_START_READS times.
+       */
       reload(trigger, throwOnError) {
         const run2 = this.queue.then(async () => {
-          if (this.stopped) return;
-          try {
-            const got = await this.fetch();
-            if (got === null || got.bundle.manifest.sha256 === this.activeSha) {
-              if (got) this.etag = got.etag;
-              this.lastError = null;
-              return;
-            }
-            const bundle = got.bundle;
-            this.swap(bundle);
-            this.etag = got.etag;
-            this.lastError = null;
-            this.emit("loaded", this.base);
-            await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e2) => this.report(new Error(`could not write last-known-good: ${msgOf(e2)}`)));
-          } catch (e2) {
-            const message = msgOf(e2);
-            if (!(trigger === "poll" && message === this.lastError)) {
+          for (let n2 = 1; ; n2++) {
+            if (this.stopped) return;
+            if (await this.loadOnce(trigger, throwOnError) === "done") return;
+            if (trigger !== "start") return this.scheduleReload();
+            if (n2 >= MAX_START_READS) {
+              const e2 = new Error(`the policy directory kept changing over ${MAX_START_READS} reads`);
               this.errors++;
-              this.lastError = message;
               this.report(e2);
+              throw e2;
             }
-            if (throwOnError) throw e2;
           }
         });
         this.queue = run2.catch(() => void 0);
         return run2;
+      }
+      /** One load: 'unstable' when two reads of a changed directory differed (nothing activated, nothing counted). */
+      async loadOnce(trigger, throwOnError) {
+        try {
+          const got = await this.fetch();
+          if (got === null || got.bundle.manifest.sha256 === this.activeSha) {
+            if (got) this.etag = got.etag;
+            this.lastError = null;
+            return "done";
+          }
+          if (this.o.dir) {
+            await sleep3(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+            if (this.stopped) return "done";
+            const again = await this.fetch();
+            if (again?.bundle.manifest.sha256 !== got.bundle.manifest.sha256) return "unstable";
+          }
+          const bundle = got.bundle;
+          this.swap(bundle);
+          this.etag = got.etag;
+          this.lastError = null;
+          this.emit("loaded", this.base);
+          await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e2) => this.report(new Error(`could not write last-known-good: ${msgOf(e2)}`)));
+        } catch (e2) {
+          const message = msgOf(e2);
+          if (!(trigger === "poll" && message === this.lastError)) {
+            this.errors++;
+            this.lastError = message;
+            this.report(e2);
+          }
+          if (throwOnError) throw e2;
+        }
+        return "done";
+      }
+      /** Another read once the directory had time to settle (the watcher and the poll also trigger one). */
+      scheduleReload() {
+        if (this.stopped) return;
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => void this.reload("watch", false), this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+        this.debounceTimer.unref();
       }
       async fetch() {
         if (this.o.dir) return { bundle: buildBundle(await loadPolicyDir(this.o.dir), { createdAt: (/* @__PURE__ */ new Date()).toISOString() }), etag: null };

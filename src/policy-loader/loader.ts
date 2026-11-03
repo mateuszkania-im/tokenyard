@@ -23,6 +23,10 @@ export interface PolicyLoaderOptions {
 
 export const DEFAULT_POLL_MS = 15_000;
 export const DEFAULT_DEBOUNCE_MS = 250;
+/** Reads of a changing policy directory at start before `start` gives up. */
+const MAX_START_READS = 20;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 type Trigger = 'start' | 'watch' | 'poll';
 
@@ -132,36 +136,71 @@ export class PolicyLoader extends EventEmitter {
     }
   }
 
-  /** Serialised: loads never overlap. With `throwOnError` the failure is also thrown (start); it is always counted. */
+  /**
+   * Serialised: loads never overlap. With `throwOnError` the failure is also thrown (start); it is always counted.
+   * A directory is read file by file and may be caught mid-write: a prefix of policy.yaml can still validate (budgets
+   * not written yet), or keys.yaml can be newer than policy.yaml. A changed directory therefore activates only when a
+   * second read one settle interval (`debounceMs`) later finds the same bundle; otherwise another read follows (V3,
+   * Task 11). At start that repeats up to MAX_START_READS times.
+   */
   private reload(trigger: Trigger, throwOnError: boolean): Promise<void> {
     const run = this.queue.then(async () => {
-      if (this.stopped) return;
-      try {
-        const got = await this.fetch();
-        if (got === null || got.bundle.manifest.sha256 === this.activeSha) {
-          if (got) this.etag = got.etag;
-          this.lastError = null;
-          return;
-        }
-        const bundle = got.bundle;
-        this.swap(bundle);
-        this.etag = got.etag;
-        this.lastError = null;
-        this.emit('loaded', this.base);
-        await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e: unknown) => this.report(new Error(`could not write last-known-good: ${msgOf(e)}`)));
-      } catch (e) {
-        const message = msgOf(e);
-        // A broken file that the poll finds again is one failure, not one per tick.
-        if (!(trigger === 'poll' && message === this.lastError)) {
+      for (let n = 1; ; n++) {
+        if (this.stopped) return;
+        if ((await this.loadOnce(trigger, throwOnError)) === 'done') return;
+        if (trigger !== 'start') return this.scheduleReload();
+        if (n >= MAX_START_READS) {
+          const e = new Error(`the policy directory kept changing over ${MAX_START_READS} reads`);
           this.errors++;
-          this.lastError = message;
           this.report(e);
+          throw e;
         }
-        if (throwOnError) throw e;
       }
     });
     this.queue = run.catch(() => undefined);
     return run;
+  }
+
+  /** One load: 'unstable' when two reads of a changed directory differed (nothing activated, nothing counted). */
+  private async loadOnce(trigger: Trigger, throwOnError: boolean): Promise<'done' | 'unstable'> {
+    try {
+      const got = await this.fetch();
+      if (got === null || got.bundle.manifest.sha256 === this.activeSha) {
+        if (got) this.etag = got.etag;
+        this.lastError = null;
+        return 'done';
+      }
+      if (this.o.dir) {
+        await sleep(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+        if (this.stopped) return 'done';
+        const again = await this.fetch();
+        if (again?.bundle.manifest.sha256 !== got.bundle.manifest.sha256) return 'unstable';
+      }
+      const bundle = got.bundle;
+      this.swap(bundle);
+      this.etag = got.etag;
+      this.lastError = null;
+      this.emit('loaded', this.base);
+      await writeLkg(this.o.stateDir, serializeBundle(bundle)).catch((e: unknown) => this.report(new Error(`could not write last-known-good: ${msgOf(e)}`)));
+    } catch (e) {
+      const message = msgOf(e);
+      // A broken file that the poll finds again is one failure, not one per tick.
+      if (!(trigger === 'poll' && message === this.lastError)) {
+        this.errors++;
+        this.lastError = message;
+        this.report(e);
+      }
+      if (throwOnError) throw e;
+    }
+    return 'done';
+  }
+
+  /** Another read once the directory had time to settle (the watcher and the poll also trigger one). */
+  private scheduleReload(): void {
+    if (this.stopped) return;
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => void this.reload('watch', false), this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+    this.debounceTimer.unref();
   }
 
   private async fetch(): Promise<{ bundle: Bundle; etag: string | null } | null> {
