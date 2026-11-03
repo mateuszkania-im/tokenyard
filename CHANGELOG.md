@@ -31,7 +31,7 @@ First release.
 
 - Security review of the gateway (spec section 15): regression suite in `test/security/` (duplicate admit, latch scope, header trust, key handling, trace redaction), all findings fixed before release.
 - npm package `@mateuszkania-im/tokenyard`: one bundled file, no runtime dependencies, tarball limited to `bin/`, `action.yml`, `LICENSE`, `README.md` and `package.json`, scanned for secrets; `publishConfig` with public access and provenance.
-- CI: Node 20.19, 22 and 24 on Linux and Node 22 on Windows, Redis job (store contract and budget proof), pack smoke test on Linux and Windows (install the tarball, run `--version`, `policy check`, `demo`), README benchmark check, `npm audit signatures`, compose smoke test. Actions pinned to commit SHAs, read-only token, no publish job.
+- CI: Node 20.19, 22 and 24 on Linux and Node 22 on Windows, Redis job (store contract and budget proof), pack smoke test on Linux and Windows (install the tarball, run `--version`, `policy check`, `demo`), README benchmark check, `npm audit signatures`, compose smoke test. Actions in every workflow pinned to commit SHAs (checked by a test), read-only token, no publish job. `publishConfig.provenance` makes a local `npm publish` fail; a hand publish needs `--provenance=false` (see the README, Publishing).
 
 ### Not in this release
 

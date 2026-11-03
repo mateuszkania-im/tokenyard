@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # The pull request head: policy files, read as data.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -28,7 +28,7 @@ jobs:
           fi
       # The code that judges the PR comes from the base commit, so a PR cannot change the bundle that replays it.
       # Other repositories pin a released tag instead (uses: mateuszkania-im/tokenyard@v0.1.0).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .tokenyard-trusted
@@ -61,7 +61,7 @@ jobs:
         with:
           policy-dir: examples/policy
           traces: examples/traces/demo.ndjson.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.replay.outputs.replay-json != ''
         with:
           name: replay-json

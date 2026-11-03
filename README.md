@@ -509,4 +509,8 @@ npm run bench:check      # fails when the README block differs from bench/result
 
 TypeScript strict, ESM, Vitest, raw `node:http`, `undici` upstream, Node 20.19 or later (CI: Node 20.19, 22 and 24 on Linux, Node 22 on Windows). The design is in [docs/superpowers/specs/2026-11-02-gateway-design.md](docs/superpowers/specs/2026-11-02-gateway-design.md); designed but not built: [quality evaluation](docs/future-quality.md). Changes: [CHANGELOG.md](CHANGELOG.md).
 
+## Publishing
+
+The package sets `publishConfig.provenance: true`, so a local `npm publish` fails outside a supported CI provider (npm cannot sign provenance from a laptop). A hand publish needs `npm publish --provenance=false`; a provenance-signed release needs a later trusted publish job with `id-token: write`, which CI does not have yet.
+
 Licence: MIT.
