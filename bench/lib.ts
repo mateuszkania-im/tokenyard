@@ -137,6 +137,9 @@ function tryRun(cmd: string, args: string[]): string | null {
 
 const pkgVersion = (name: string): string => (JSON.parse(readFileSync(join(ROOT, 'node_modules', name, 'package.json'), 'utf8')) as { version: string }).version;
 
+/** The paths whose uncommitted changes make a benchmark run dirty: the code it runs, the bundle and the scripts. */
+export const BENCH_INPUTS = ['src', 'bin', 'bench', 'scripts', 'test/helpers', 'examples', 'package.json', 'package-lock.json'] as const;
+
 export function environment(redisVersion: string | null): {
   runAt: string;
   git: { commit: string; dirty: boolean };
@@ -147,7 +150,7 @@ export function environment(redisVersion: string | null): {
 } {
   const commit = tryRun('git', ['-C', ROOT, 'rev-parse', '--short', 'HEAD']) ?? 'unknown';
   // Only the files the benchmark runs count: the results file and README written by this run do not make it dirty.
-  const dirty = (tryRun('git', ['-C', ROOT, 'status', '--porcelain', '--', 'src', 'bench', 'test/helpers', 'examples', 'package.json', 'package-lock.json']) ?? '')
+  const dirty = (tryRun('git', ['-C', ROOT, 'status', '--porcelain', '--', ...BENCH_INPUTS]) ?? '')
     .split('\n')
     .filter((l) => l.trim() !== '' && !l.endsWith('bench/results.json')).length > 0;
   return {

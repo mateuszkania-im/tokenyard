@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { cpuRssSlopes, intendedStarts, percentiles, rowSaturated, throughput, ttfbVerdict } from '../../bench/lib.js';
+import { BENCH_INPUTS, cpuRssSlopes, intendedStarts, percentiles, rowSaturated, throughput, ttfbVerdict } from '../../bench/lib.js';
 import { profileArgs } from '../../bench/overhead.js';
 
 test('intended send times are evenly spaced per connection from a phase inside the first interval, within the run', () => {
@@ -78,4 +78,8 @@ test('a row is saturated at a full core, or when the gateway answered clearly le
   const lo = { store: 'redis', scenario: 'body-150kb', concurrency: 100, ratePerConnection: 1.25, durationS: 18, gatewayCpuPct: 60, rssGrowthMb: 10 };
   const hi = { ...row, store: 'redis', scenario: 'body-150kb', gatewayCpuPct: 94.1, rssGrowthMb: 30, throughput: { gateway: { requestsPerS: 322.9, outputTokensPerS: 0, elapsedS: 19.36 } } };
   expect(cpuRssSlopes([lo, hi], 100, 500)[0]?.saturated).toBe(true);
+});
+
+test('a run is dirty when the bundle or the scripts it runs have uncommitted changes, not only src and bench (Task 23 minor)', () => {
+  expect(BENCH_INPUTS).toEqual(expect.arrayContaining(['src', 'bin', 'bench', 'scripts', 'package.json', 'package-lock.json']));
 });
