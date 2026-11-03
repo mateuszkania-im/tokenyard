@@ -14,6 +14,7 @@ First release.
 - Price table with source and date per entry, cost in integer micro-USD.
 - NDJSON decision traces per instance with HMAC-pseudonymised ids, `traces export` (merged, with a manifest; `--anonymize`), `traces prune`.
 - OTel GenAI spans (opt-in OTLP), Prometheus `/metrics` on a separate ops listener, `/healthz` and `/readyz`.
+- Graceful shutdown on SIGTERM and SIGINT: `/readyz` answers 503 while requests and streams in flight finish within `--shutdown-grace-ms` (default 30 s); a second signal stops at once. Startup warnings for enforced budgets on the memory store without `--trace-dir` and for unset provider credential variables.
 
 ### Policy as code
 
