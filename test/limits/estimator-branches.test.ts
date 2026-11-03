@@ -56,6 +56,9 @@ test('the unpriced envelope covers the most expensive fast and service tier pric
   // without fast prices the auto service tiers set the envelope
   const noFast = table({ m: { ...M, fast: undefined } as ModelPrice });
   expect(reservationPrice(noFast, null).price).toMatchObject({ input: 4, output: 40, maxOutputTokens: 100 });
+  // fast cheaper than the dearest service tier: the auto tiers still count
+  const cheapFast = table({ m: { ...M, fast: { ...rates(1.5, 15), ...P } } });
+  expect(reservationPrice(cheapFast, null).price).toMatchObject({ input: 4, output: 40 });
   expect(() => reservationPrice(table({}), null)).toThrow('price table has no models');
   expect(reservationPrice(T, 'plain')).toEqual({ price: PLAIN, unpriced: false });
 });
