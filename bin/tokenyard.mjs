@@ -59223,10 +59223,11 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   const features = extractFeatures(surface, body);
   const product = key.kind === "service";
   const guard = scanGuardrails(policy2, product, body, features, deps.guardrailSalt ?? "");
+  const featuresFor = (x) => buildFeatures(x, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
   let f;
   let plan;
   try {
-    f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy2.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
+    f = featuresFor(features);
     const shape = bodyShapeRefusal(body, !features.parseError);
     const unreadable = features.parseError && surface !== "anthropic-count-tokens" && enforcedLevelApplies(policy2, f);
     const secret = guard.hits.some((h) => h.action === "block" && h.where === "last-turn");
@@ -59282,6 +59283,19 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
       return early({ ...decided, status: 400, decision: { action: "block", reason: "output-cap-failed" }, errorClass: "invalid_request_error" });
     }
     upstreamBody = capped2;
+  }
+  if (plan.preBlock === null && upstreamBody.length !== body.length) {
+    try {
+      f = featuresFor({ ...features, bodyBytes: upstreamBody.length });
+      plan = decide(policy2, f);
+    } catch {
+      sendError(req, res, own2(500, "api_error", "reservation-error", "the reservation for this request could not be computed; it was not sent"));
+      return early({ ...decided, status: 500, decision: { action: "block", reason: "reservation-error" }, errorClass: "reservation_error" });
+    }
+    held.plan = plan;
+    held.features = f;
+    decided.inputBound = { tokens: f.inputTokensBound, kind: f.boundKind };
+    if (cp) decided.candidate = auditCandidate(cp, f);
   }
   const { pre, callsAdmit } = planAdmission(policy2, plan);
   let admission = null;

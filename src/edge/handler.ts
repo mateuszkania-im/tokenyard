@@ -716,10 +716,12 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
 
   // 6. Decide. A reservation that cannot be priced (the estimator throws) fails closed: refused before admit, so nothing
   // is reserved.
+  const featuresFor = (x: ExtractedFeatures): RequestFeatures =>
+    buildFeatures(x, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
   let f: RequestFeatures;
   let plan: Plan;
   try {
-    f = buildFeatures(features, key, pseudonymised(readAttribution(req.headers, surface), deps.traceSalt), guard.hits, policy.prices, id, startedAt, surface, { bytesBoundOff: runtime.bytesBoundOff });
+    f = featuresFor(features);
     // Bodies another parser may read differently than JSON.parse did (A5, C7): a BOM, duplicate keys, and, when an
     // enforced budget applies to a billed surface, JSON that does not parse. A last-turn secret is still answered as one.
     const shape = bodyShapeRefusal(body, !features.parseError);
@@ -745,7 +747,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const cp = policy.candidate;
   const candidate = cp ? auditCandidate(cp, f) : undefined;
   const chainNames = plan.chain.map((c) => c.provider);
-  const decided = {
+  const decided: Pick<RequestOutcome, 'features' | 'inputBound' | 'boundAssumed' | 'route' | 'guardrailHits' | 'candidate'> = {
     features,
     inputBound: { tokens: f.inputTokensBound, kind: f.boundKind },
     boundAssumed: plan.warnings.some((w) => w.kind === 'bound-assumed'),
@@ -788,6 +790,24 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       return early({ ...decided, status: 400, decision: { action: 'block', reason: 'output-cap-failed' }, errorClass: 'invalid_request_error' });
     }
     upstreamBody = capped;
+  }
+  // A2-1: the bytes bound counts the bytes sent upstream, not the client's: a redaction placeholder can be longer than
+  // the value it replaces (an email becomes a placeholder about three times its length), and a model rewrite or the
+  // output cap change the length too. decide runs again on the final length (pure, so the route, chain and cap are the
+  // same; only the bound and the reservation follow the bytes), before admit. The trace records this bound, so replay
+  // reproduces the reservation, and R11 only ever compares billed input with the bytes actually sent.
+  if (plan.preBlock === null && upstreamBody.length !== body.length) {
+    try {
+      f = featuresFor({ ...features, bodyBytes: upstreamBody.length });
+      plan = decide(policy, f);
+    } catch {
+      sendError(req, res, own(500, 'api_error', 'reservation-error', 'the reservation for this request could not be computed; it was not sent'));
+      return early({ ...decided, status: 500, decision: { action: 'block', reason: 'reservation-error' }, errorClass: 'reservation_error' });
+    }
+    held.plan = plan;
+    held.features = f;
+    decided.inputBound = { tokens: f.inputTokensBound, kind: f.boundKind };
+    if (cp) decided.candidate = auditCandidate(cp, f);
   }
 
   // 7. Admit: one store call for rate checks, stream slots, taint and every reservation (spec 7). Blocks that need no
