@@ -3,6 +3,7 @@
 // 127.0.0.1 port and requires a random password (carried in the URL), removed when the caller is done, on exit and on
 // SIGINT or SIGTERM. REDIS_URL, when set, is used instead and nothing is started.
 //   node scripts/local-redis.mjs <command> [args...]   runs the command with REDIS_URL set, then removes the container
+// The command also gets REDIS_CONTAINER, the container's name, when one was started (chaos tests pause and unpause it).
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -38,7 +39,7 @@ export const localRedisUrl = (port, password) => `redis://:${encodeURIComponent(
  * process exit, SIGINT and SIGTERM, so an interrupted run does not leave the container behind.
  */
 export function startLocalRedis() {
-  if (process.env.REDIS_URL) return { url: process.env.REDIS_URL, started: false, stop() {} };
+  if (process.env.REDIS_URL) return { url: process.env.REDIS_URL, started: false, name: process.env.REDIS_CONTAINER ?? null, stop() {} };
   const name = `ty-redis-${randomBytes(4).toString('hex')}`;
   const password = randomBytes(24).toString('hex');
   execFileSync('docker', redisRunArgs(name, password), { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -72,7 +73,7 @@ export function startLocalRedis() {
       if (i >= 50) throw new Error('the Redis container did not answer PING');
       execFileSync('sleep', ['0.2']);
     }
-    return { url: localRedisUrl(port, password), started: true, stop };
+    return { url: localRedisUrl(port, password), started: true, name, stop };
   } catch (e) {
     stop();
     throw e;
@@ -92,7 +93,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.error(`local-redis: no REDIS_URL and the Redis container did not start: ${e instanceof Error ? e.message.split('\n')[0] : String(e)}`);
     process.exit(1);
   }
-  const child = spawn(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, REDIS_URL: redis.url } });
+  const child = spawn(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32', env: { ...process.env, REDIS_URL: redis.url, ...(redis.name ? { REDIS_CONTAINER: redis.name } : {}) } });
   child.on('exit', (code, signal) => {
     redis.stop();
     process.exit(code ?? (signal ? 1 : 0));
