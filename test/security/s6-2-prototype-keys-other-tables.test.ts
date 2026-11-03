@@ -5,10 +5,11 @@
 // price at NaN or undefined, nor dodge a budget. Mock upstreams only.
 import { afterEach, expect, test } from 'vitest';
 import { startAnthropicMock } from '../../src/mock/anthropic.js';
+import type { PolicyDoc } from '../../src/policy/schema.js';
 import type { PriceTable } from '../../src/pricing/prices.js';
 import { authHeaders, codexHeaders, msgBody, respBody, send, startOpenAIStack } from '../helpers/conformance.js';
 import { testPolicy } from '../helpers/policy.js';
-import { closeAll, closers, gw } from './common.js';
+import { closeAll, closers, gw, raw, readJson } from './common.js';
 
 afterEach(closeAll);
 const NAMES = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
@@ -72,6 +73,67 @@ test('S6-2 prototype member names as inference_geo and attribution headers keep 
     // Forwarded requests carry a reservation: a prototype name never turns the budget levels off.
     if (o.status === 200) expect(o.reservedMicroUsd ?? 0).toBeGreaterThan(0);
   }
-  // At least one request with prototype-named attribution reached the upstream (the geo is not a block by itself).
-  expect(mock.received.length + g.outcomes.filter((o) => o.status !== 200).length).toBe(NAMES.length);
+  // Prototype-named attribution and geo are no block by themselves: every request reached the upstream.
+  expect(mock.received.length).toBe(NAMES.length);
+  expect(g.outcomes.every((o) => o.status === 200)).toBe(true);
 });
+
+/**
+ * Enforced session and repo budgets whose scope value is a prototype member name. The upstream holds every request
+ * open, so the first request's reservation stays on the level; the limit is 1.5 reservations, so a second request with
+ * the same value must be refused by that budget, while a request with an ordinary value is still admitted.
+ */
+for (const scope of ['session', 'repo'] as const) {
+  test(`S6-2 an enforced ${scope} budget keyed by a prototype member name still blocks past its limit`, async () => {
+    const header = scope === 'session' ? 'x-claude-code-session-id' : 'x-tokenyard-repo';
+    const held: Array<() => void> = [];
+    let onHeld: () => void = () => undefined;
+    const up = await raw(async (req, res) => {
+      await readJson(req);
+      queueMicrotask(() => onHeld());
+      held.push(() => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'm', type: 'message', model: 'claude-haiku-5-5', content: [], usage: { input_tokens: 1, output_tokens: 1 } })));
+    });
+    closers.push(async () => {
+      for (const h of held.splice(0)) h();
+    });
+    const withBudget = (usd: number) =>
+      testPolicy({
+        upstream: up.url,
+        models: ['claude-haiku-5-5'],
+        edit: (p: PolicyDoc) => {
+          p.budgets = [{ name: `per-${scope}`, scope, usd, onExceed: 'block', mode: 'enforce', ...(scope === 'repo' ? { window: 'day' } : {}) }];
+        },
+      });
+    // The reservation of one request, measured on a gateway with a large limit.
+    const probe = await gw(withBudget(1000));
+    const first = send(probe.url, { path: '/v1/messages', headers: { ...authHeaders, [header]: 'probe' }, body: msgBody() });
+    await expect.poll(() => held.length).toBe(1);
+    held.splice(0).forEach((h) => h());
+    await first;
+    await expect.poll(() => probe.outcomes.length).toBe(1);
+    const reserved = probe.outcomes[0]?.reservedMicroUsd ?? 0;
+    expect(reserved).toBeGreaterThan(0);
+
+    const g = await gw(withBudget((reserved * 1.5) / 1_000_000));
+    for (const n of ['__proto__', 'constructor', 'toString']) {
+      const headers = { ...authHeaders, [header]: n };
+      const pending = send(g.url, { path: '/v1/messages', headers, body: msgBody() });
+      await expect.poll(() => held.length).toBe(1);
+      // Either the gateway answers (refused) or the request reaches the held upstream (the budget did not apply).
+      const reply = send(g.url, { path: '/v1/messages', headers, body: msgBody() });
+      const forwarded = new Promise<null>((r) => {
+        onHeld = () => r(null);
+      });
+      const second = await Promise.race([reply, forwarded]);
+      onHeld = () => undefined;
+      expect(second === null ? 'forwarded past the budget' : second.status, n).toBe(429);
+      expect(JSON.parse((second as Awaited<typeof reply>).body.toString()).error.message, n).toContain(`per-${scope}`);
+      // An ordinary value has its own level and is admitted beside the held request.
+      const other = send(g.url, { path: '/v1/messages', headers: { ...authHeaders, [header]: `ordinary-${n}` }, body: msgBody() });
+      await expect.poll(() => held.length).toBe(2);
+      held.splice(0).forEach((h) => h());
+      expect((await pending).status, n).toBe(200);
+      expect((await other).status, n).toBe(200);
+    }
+  });
+}
