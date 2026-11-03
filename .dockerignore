@@ -3,10 +3,10 @@
 !bin/tokenyard.mjs
 !deploy/
 # Never in the context even if the allow-list above changes:
-.env
-.env.*
-.live
-node_modules
-.superpowers
-traces
-.git
+**/.env
+**/.env.*
+**/.live
+**/node_modules
+**/.superpowers
+**/traces
+**/.git
