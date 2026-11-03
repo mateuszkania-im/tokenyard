@@ -1995,11 +1995,11 @@ function buildViews(body, start, end, messages, raw) {
   return { all, joined: joined && joined.length > 0 ? joined : null };
 }
 function keywordAlternation(keywords) {
-  const sorted = [...keywords].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
-  const id = sorted.join("\0");
+  const id = keywords.join("\0");
   let re2 = keywordRegex.get(id);
   if (re2 === void 0) {
     if (keywordRegex.size >= 64) keywordRegex.clear();
+    const sorted = [...keywords].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
     re2 = new RegExp(sorted.map((k) => k.replace(/[.*+?^${}()|[\]\\/-]/g, "\\$&")).join("|"), "g");
     keywordRegex.set(id, re2);
   }

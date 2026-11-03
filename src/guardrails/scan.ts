@@ -277,11 +277,11 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
 const keywordRegex = new Map<string, RegExp>();
 /** One alternation of the literal keywords, longest first, compiled once per keyword list. */
 function keywordAlternation(keywords: readonly string[]): RegExp {
-  const sorted = [...keywords].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
-  const id = sorted.join('\0');
+  const id = keywords.join('\0');
   let re = keywordRegex.get(id);
   if (re === undefined) {
     if (keywordRegex.size >= 64) keywordRegex.clear(); // a handful of rule lists exist; never grows without bound
+    const sorted = [...keywords].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
     re = new RegExp(sorted.map((k) => k.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&')).join('|'), 'g');
     keywordRegex.set(id, re);
   }
