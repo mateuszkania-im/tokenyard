@@ -1427,11 +1427,13 @@ function safeTenantDir(tenant) {
   const s2 = tenant.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, (dots) => "_".repeat(dots.length));
   return s2 === "" ? "_" : s2;
 }
-var TraceWriter;
+var HOUR_MS2, hourStart, TraceWriter;
 var init_writer = __esm({
   "src/ledger/writer.ts"() {
     "use strict";
     init_safe_path();
+    HOUR_MS2 = 36e5;
+    hourStart = (ms) => Math.floor(ms / HOUR_MS2) * HOUR_MS2;
     TraceWriter = class {
       /** `writeAhead`: also write a `reserved` line when a request is admitted (live harness, A11). */
       constructor(o) {
@@ -1443,7 +1445,8 @@ var init_writer = __esm({
       seq = 0;
       queue = [];
       queuedRequests = 0;
-      opened = /* @__PURE__ */ new Set();
+      /** Files that already have their segment record, by path, with the start of their hour (ms). */
+      opened = /* @__PURE__ */ new Map();
       tenants = /* @__PURE__ */ new Set();
       draining = null;
       closed = false;
@@ -1520,6 +1523,7 @@ var init_writer = __esm({
           if (!first2) continue;
           let text2 = "";
           if (!this.opened.has(path3)) {
+            this.forgetPastHours(first2.at);
             const firstSeq = items.find((i) => i.request)?.line.seq;
             const seg = {
               v: 1,
@@ -1530,7 +1534,7 @@ var init_writer = __esm({
             };
             text2 += `${JSON.stringify(seg)}
 `;
-            this.opened.add(path3);
+            this.opened.set(path3, hourStart(first2.at));
           }
           text2 += items.map((i) => `${JSON.stringify(i.line)}
 `).join("");
@@ -1543,6 +1547,15 @@ var init_writer = __esm({
             for (const i of items) i.done?.(false);
           }
         }
+      }
+      /**
+       * Forgets the files of hours before the previous one (V2: one entry per tenant and hour otherwise stays for the life
+       * of the process). A path is chosen when a record is queued and written within the same drain, so no later write
+       * goes to a file this old; one that did (the clock stepped back) would only start it with another segment record.
+       */
+      forgetPastHours(nowMs) {
+        const keepFrom = hourStart(nowMs) - HOUR_MS2;
+        for (const [path3, start] of this.opened) if (start < keepFrom) this.opened.delete(path3);
       }
       /** Resolves when everything queued so far has been written. */
       async flushed() {
@@ -121468,7 +121481,7 @@ var init_diff = __esm({
 // src/replay/fidelity.ts
 function hoursBetween(fromMs, toMs) {
   const out = [];
-  for (let h = Math.floor(fromMs / HOUR_MS2) * HOUR_MS2; h <= toMs; h += HOUR_MS2) out.push(hourLabel2(h));
+  for (let h = Math.floor(fromMs / HOUR_MS3) * HOUR_MS3; h <= toMs; h += HOUR_MS3) out.push(hourLabel2(h));
   return out;
 }
 function disagreement(recorded, replayed) {
@@ -121513,11 +121526,11 @@ function missingInstances(manifests, records) {
   }
   return [...out.values()].sort((a, b) => a.instance < b.instance ? -1 : a.instance > b.instance ? 1 : KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
 }
-var HOUR_MS2, HEARTBEAT_GRACE_MS, KIND_ORDER, hourLabel2, describe3;
+var HOUR_MS3, HEARTBEAT_GRACE_MS, KIND_ORDER, hourLabel2, describe3;
 var init_fidelity = __esm({
   "src/replay/fidelity.ts"() {
     "use strict";
-    HOUR_MS2 = 36e5;
+    HOUR_MS3 = 36e5;
     HEARTBEAT_GRACE_MS = 12e4;
     KIND_ORDER = ["no-file", "seq-gap", "heartbeats-stop"];
     hourLabel2 = (ms) => new Date(ms).toISOString().slice(0, 13);
@@ -122066,7 +122079,7 @@ async function recordDemo(o) {
       seed: o.seed,
       days: days2,
       setTime: (ms) => {
-        for (let h = Math.max(heartbeatHour + HOUR_MS3, Math.ceil(DEMO_START_MS / HOUR_MS3) * HOUR_MS3); h <= ms; h += HOUR_MS3) {
+        for (let h = Math.max(heartbeatHour + HOUR_MS4, Math.ceil(DEMO_START_MS / HOUR_MS4) * HOUR_MS4); h <= ms; h += HOUR_MS4) {
           now = h;
           writer.heartbeat();
           heartbeatHour = h;
@@ -122112,7 +122125,7 @@ async function runDemo(o) {
     await rm(dir, { recursive: true, force: true });
   }
 }
-var HOUR_MS3, DAY_MS5, TRACE_SALT, INSTANCE_ID, DEMO_DAYS;
+var HOUR_MS4, DAY_MS5, TRACE_SALT, INSTANCE_ID, DEMO_DAYS;
 var init_run = __esm({
   "src/demo/run.ts"() {
     "use strict";
@@ -122129,8 +122142,8 @@ var init_run = __esm({
     init_engine();
     init_render_terminal2();
     init_policy();
-    HOUR_MS3 = 36e5;
-    DAY_MS5 = 24 * HOUR_MS3;
+    HOUR_MS4 = 36e5;
+    DAY_MS5 = 24 * HOUR_MS4;
     TRACE_SALT = "tokenyard-demo-salt";
     INSTANCE_ID = "demo0001";
     DEMO_DAYS = 7;

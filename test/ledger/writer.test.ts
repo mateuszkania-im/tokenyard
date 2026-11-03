@@ -100,3 +100,23 @@ test('records contain no prompt text: a body with a canary string never appears 
   const all = await readFile(join(dir, 'acme', '2026-11-02', '10.i1.ndjson'), 'utf8');
   expect(all).not.toContain('CANARY');
 });
+
+test('V2 leak: the writer forgets the files of past hours, so its state stays bounded over days of rotation', async () => {
+  let now = Date.UTC(2026, 10, 2, 0, 30);
+  const w = new TraceWriter({ dir, instanceId: 'i1', queueMax: 100, clock: () => now });
+  const opened = (): number => (w as unknown as { opened: { size: number } }).opened.size;
+  for (let h = 0; h < 72; h++) {
+    for (const tenant of ['a', 'b']) w.write(baseRecord({ tenant, id: `r${h}${tenant}` }));
+    await w.flushed();
+    now += 3_600_000;
+  }
+  // The current hour and the one before it, per tenant: not one entry per hour since start.
+  expect(opened()).toBeLessThanOrEqual(4);
+  // A second write in the same hour still appends without a second segment record.
+  now -= 3_600_000;
+  w.write(baseRecord({ tenant: 'a', id: 'again' }));
+  await w.close();
+  const last = new Date(now).toISOString();
+  const ls = await lines(join(dir, 'a', last.slice(0, 10), `${last.slice(11, 13)}.i1.ndjson`));
+  expect(ls.filter((l) => l.kind === 'segment')).toHaveLength(1);
+});

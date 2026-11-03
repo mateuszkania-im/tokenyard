@@ -15,6 +15,9 @@ export function safeTenantDir(tenant: string): string {
   return s === '' ? '_' : s;
 }
 
+const HOUR_MS = 3_600_000;
+const hourStart = (ms: number): number => Math.floor(ms / HOUR_MS) * HOUR_MS;
+
 interface Pending {
   path: string;
   tenant: string;
@@ -32,7 +35,8 @@ export class TraceWriter {
   private seq = 0;
   private queue: Pending[] = [];
   private queuedRequests = 0;
-  private opened = new Set<string>();
+  /** Files that already have their segment record, by path, with the start of their hour (ms). */
+  private opened = new Map<string, number>();
   private tenants = new Set<string>();
   private draining: Promise<void> | null = null;
   private closed = false;
@@ -122,6 +126,7 @@ export class TraceWriter {
       if (!first) continue;
       let text = '';
       if (!this.opened.has(path)) {
+        this.forgetPastHours(first.at);
         const firstSeq = items.find((i) => i.request)?.line.seq;
         const seg: SegmentRecord = {
           v: 1,
@@ -131,7 +136,7 @@ export class TraceWriter {
           firstSeq: typeof firstSeq === 'number' ? firstSeq : this.seq + 1,
         };
         text += `${JSON.stringify(seg)}\n`;
-        this.opened.add(path);
+        this.opened.set(path, hourStart(first.at));
       }
       text += items.map((i) => `${JSON.stringify(i.line)}\n`).join('');
       try {
@@ -144,6 +149,16 @@ export class TraceWriter {
         for (const i of items) i.done?.(false);
       }
     }
+  }
+
+  /**
+   * Forgets the files of hours before the previous one (V2: one entry per tenant and hour otherwise stays for the life
+   * of the process). A path is chosen when a record is queued and written within the same drain, so no later write
+   * goes to a file this old; one that did (the clock stepped back) would only start it with another segment record.
+   */
+  private forgetPastHours(nowMs: number): void {
+    const keepFrom = hourStart(nowMs) - HOUR_MS;
+    for (const [path, start] of this.opened) if (start < keepFrom) this.opened.delete(path);
   }
 
   /** Resolves when everything queued so far has been written. */
