@@ -207,7 +207,8 @@ interface Session {
 }
 
 export interface TrafficOptions {
-  gatewayUrl: string;
+  /** One gateway, or several replicas: requests go to them in turn. */
+  gatewayUrl: string | readonly string[];
   /** Plaintext tokenyard key per developer name (DEMO_DEVELOPERS). */
   keys: Record<string, string>;
   seed: number;
@@ -335,6 +336,8 @@ export async function generateTraffic(o: TrafficOptions): Promise<{ requests: nu
   planned.sort((a, b) => a.at - b.at || a.order - b.order);
 
   let requests = 0;
+  const urls = typeof o.gatewayUrl === 'string' ? [o.gatewayUrl] : o.gatewayUrl;
+  if (urls.length === 0) throw new Error('generateTraffic: no gateway URL');
   const stopped = new Set<Session>();
   for (const p of planned) {
     const s = p.session;
@@ -370,7 +373,7 @@ export async function generateTraffic(o: TrafficOptions): Promise<{ requests: nu
           ...(p.parent ? { 'x-claude-code-parent-agent-id': p.parent } : {}),
           ...(p.agentType ? { 'x-claude-code-agent-type': p.agentType } : {}),
         };
-    const res = await fetch(`${o.gatewayUrl}${codex ? '/v1/responses' : '/v1/messages'}`, { method: 'POST', headers, body: new Uint8Array(body) });
+    const res = await fetch(`${urls[requests % urls.length]}${codex ? '/v1/responses' : '/v1/messages'}`, { method: 'POST', headers, body: new Uint8Array(body) });
     await res.arrayBuffer();
     requests++;
     await o.afterRequest?.();

@@ -1,0 +1,9 @@
+# Public demo keys (ty_live_demo_<name>); they open only this compose stack, which talks to the mock provider.
+- {"hash":"a5d6bbf3dce1b8cab7e80b285900e05cdb2bc70c7abbb512fa245d004f7d06eb","keyId":"key_a5d6bbf3","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}
+- {"hash":"290ad414251a6b371f136b91f59ffc763d2f60c51e8482c6c602985714a6e60c","keyId":"key_290ad414","tenant":"acme","team":"platform","name":"bruno","kind":"developer","billing":"api"}
+- {"hash":"a5dd9ca394fd370b9ec89f7b6f1a4467b2ce8d7cbcbcd1d038475f50a77c9c9d","keyId":"key_a5dd9ca3","tenant":"acme","team":"platform","name":"chen","kind":"developer","billing":"api"}
+- {"hash":"6d28e43fb22328218fd315b7af1ae9f9aefcd6a032dc9cc315d47ace375624c8","keyId":"key_6d28e43f","tenant":"acme","team":"web","name":"dana","kind":"developer","billing":"api"}
+- {"hash":"cc4eeca5d091a8fceb8fbf2651bd8ae96a34a1838d6595b4b0a71b76679f942a","keyId":"key_cc4eeca5","tenant":"acme","team":"web","name":"elif","kind":"developer","billing":"api"}
+- {"hash":"11f3fb259380e43085a061c38883e2e10a8e6159813e9b32d07ca16e94d1153d","keyId":"key_11f3fb25","tenant":"acme","team":"web","name":"farid","kind":"developer","billing":"api"}
+- {"hash":"adafad0025dfaf3765a7b22a5e7914a5ee9ec5fb0cbc4777f0c50630a5329131","keyId":"key_adafad00","tenant":"acme","team":"data","name":"gosia","kind":"developer","billing":"api"}
+- {"hash":"923e1cacec52c369b9681fde4188f44d89050f0afde217552189d9b7ddc95d6b","keyId":"key_923e1cac","tenant":"acme","team":"data","name":"hiro","kind":"developer","billing":"api"}

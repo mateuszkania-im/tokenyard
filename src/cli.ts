@@ -8,13 +8,17 @@ const program = new Command();
 program.name('tokenyard').description(pkg.description).version(pkg.version);
 program
   .command('mock')
-  .description('run the deterministic mock Anthropic provider')
+  .description('run the deterministic mock Anthropic provider (and with --openai-port the OpenAI one)')
   .option('--port <n>', 'port to listen on (0 picks a free one)', '0')
-  .action(async (o: { port: string }) => {
+  .option('--host <host>', 'address to bind (the compose demo uses 0.0.0.0 inside its container)', '127.0.0.1')
+  .option('--openai-port <n>', 'also run the mock OpenAI provider on this port')
+  .action(async (o: { port: string; host: string; openaiPort?: string }) => {
     const { startAnthropicMock } = await import('./mock/anthropic.js');
-    const mock = await startAnthropicMock({ port: Number(o.port) });
+    const mock = await startAnthropicMock({ port: Number(o.port), host: o.host });
+    const openai = o.openaiPort === undefined ? null : await (await import('./mock/openai.js')).startOpenAIMock({ port: Number(o.openaiPort), host: o.host });
     console.log(mock.url);
-    const stop = (): void => void mock.close().then(() => process.exit(0));
+    if (openai) console.log(openai.url);
+    const stop = (): void => void Promise.all([mock.close(), openai?.close()]).then(() => process.exit(0));
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
@@ -215,6 +219,21 @@ program
     if (!Number.isInteger(seed)) return void (console.error('tokenyard demo: --seed must be an integer'), process.exit(1));
     const { runDemo } = await import('./demo/run.js');
     await runDemo({ out: process.stdout, seed, ...(o.writeTraces ? { writeTraces: o.writeTraces } : {}) });
+  });
+program
+  .command('traffic')
+  .description('send the synthetic demo traffic (the 8 demo developers, public demo keys) to running gateways, in turn; for the compose demo')
+  .requiredOption('--gateway-url <url...>', 'gateway base URL(s); with several, requests alternate between them')
+  .option('--seed <n>', 'seed of the traffic generator', '1')
+  .option('--days <n>', 'days of traffic to send (sent back to back, not in real time)', '1')
+  .action(async (o: { gatewayUrl: string[]; seed: string; days: string }) => {
+    const seed = Number(o.seed);
+    const days = Number(o.days);
+    if (!Number.isInteger(seed) || !Number.isInteger(days) || days < 1) return void (console.error('tokenyard traffic: --seed and --days must be integers, --days at least 1'), process.exit(1));
+    const { generateTraffic, DEMO_DEVELOPERS } = await import('./mock/traffic.js');
+    const { demoKey } = await import('./demo/policy.js');
+    const r = await generateTraffic({ gatewayUrl: o.gatewayUrl, keys: Object.fromEntries(DEMO_DEVELOPERS.map((d) => [d.name, demoKey(d.name)])), seed, days });
+    console.log(`tokenyard traffic: ${r.requests} requests in ${r.sessions} sessions sent to ${o.gatewayUrl.length} gateway(s)`);
   });
 // Live tests (spec 14.1): `npm run live` reads .env with node --env-file; hidden from --help.
 program
@@ -420,13 +439,27 @@ program
   .option('--since <when>', 'duration such as 7d, or an ISO time', '7d')
   .option('--until <when>', 'ISO time (default now)')
   .option('--tenant <tenant>', 'only this tenant')
-  .action(async (o: { traces: string; by: string; since: string; until?: string; tenant?: string }) => {
+  .option('--html <file>', 'write a self-contained HTML report (no script, no external requests) instead of the terminal table')
+  .action(async (o: { traces: string; by: string; since: string; until?: string; tenant?: string; html?: string }) => {
     const dims = o.by.split(',').map((d) => d.trim()).filter(Boolean);
     const bad = dims.filter((d) => !REPORT_DIMENSIONS.includes(d as ReportDimension));
     if (bad.length > 0) return void (console.error(`tokenyard report: unknown dimension ${bad.join(', ')}`), process.exit(1));
     const now = Date.now();
     const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...(o.tenant ? { tenant: o.tenant } : {}) });
-    process.stdout.write(renderReportTerminal(buildReport(records, dims as ReportDimension[])));
+    const report = buildReport(records, dims as ReportDimension[]);
+    if (o.html) {
+      const { cliRoot, UnsafePathError, writeFileUnder } = await import('./fsutil/safe-path.js');
+      const { renderReportHtml } = await import('./report/render-html.js');
+      try {
+        await writeFileUnder(cliRoot(o.html), o.html, renderReportHtml(report));
+      } catch (e) {
+        if (e instanceof UnsafePathError) return void (console.error(`tokenyard report: ${e.message}`), process.exit(1));
+        throw e;
+      }
+      console.error(`wrote ${o.html}: ${report.totals.requests} requests`);
+      return;
+    }
+    process.stdout.write(renderReportTerminal(report));
   });
 program
   .command('action')

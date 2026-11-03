@@ -1,0 +1,12 @@
+# Allow-list: the image needs only the bundle and deploy/. Everything else, secrets included, stays out of the build context.
+*
+!bin/tokenyard.mjs
+!deploy/
+# Never in the context even if the allow-list above changes:
+.env
+.env.*
+.live
+node_modules
+.superpowers
+traces
+.git

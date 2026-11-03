@@ -14,6 +14,8 @@ export interface OpenAIMockServer extends Omit<MockServer, 'setScenario'> {
 
 export interface OpenAIMockOptions {
   port?: number;
+  /** Address to bind (default 127.0.0.1; the compose demo binds 0.0.0.0 inside its container). */
+  host?: string;
   scenario?: OpenAIScenario;
 }
 
@@ -157,7 +159,7 @@ export async function startOpenAIMock(opts: OpenAIMockOptions = {}): Promise<Ope
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, opts.host ?? '127.0.0.1', resolve));
   const port = (server.address() as AddressInfo).port;
   return {
     url: `http://127.0.0.1:${port}`,

@@ -16,6 +16,8 @@ export interface MockServer {
 export interface MockOptions {
   /** Listen port; 0 (default) picks an ephemeral one. */
   port?: number;
+  /** Address to bind (default 127.0.0.1; the compose demo binds 0.0.0.0 inside its container). */
+  host?: string;
   workspace?: string;
   scenario?: Scenario;
   /** Clock for the cache simulator; defaults to Date.now. */
@@ -221,7 +223,7 @@ export async function startAnthropicMock(opts: MockOptions = {}): Promise<MockSe
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(opts.port ?? 0, opts.host ?? '127.0.0.1', resolve));
   const port = (server.address() as AddressInfo).port;
   return {
     url: `http://127.0.0.1:${port}`,

@@ -939,7 +939,7 @@ async function startAnthropicMock(opts = {}) {
       respond(rec, res).catch(() => res.destroy());
     });
   });
-  await new Promise((resolve5) => server.listen(opts.port ?? 0, "127.0.0.1", resolve5));
+  await new Promise((resolve5) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve5));
   const port = server.address().port;
   return {
     url: `http://127.0.0.1:${port}`,
@@ -965,6 +965,160 @@ var init_anthropic = __esm({
     sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     frame = (e2) => `event: ${e2.event}
 data: ${JSON.stringify(e2.data)}
+
+`;
+  }
+});
+
+// src/mock/openai.ts
+var openai_exports = {};
+__export(openai_exports, {
+  startOpenAIMock: () => startOpenAIMock
+});
+import { createServer as createServer2 } from "node:http";
+function parseBody2(body) {
+  try {
+    const v = JSON.parse(body.toString("utf8"));
+    return typeof v === "object" && v !== null && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+function splitTokens2(output2) {
+  const n2 = Math.min(output2, MAX_DELTAS2);
+  if (n2 === 0) return [];
+  const base = Math.floor(output2 / n2);
+  const extra = output2 % n2;
+  return Array.from({ length: n2 }, (_, i) => base + (i < extra ? 1 : 0));
+}
+async function startOpenAIMock(opts = {}) {
+  const received = [];
+  let scenario = opts.scenario ?? DEFAULT_SCENARIO;
+  let respCount = 0;
+  const cache = /* @__PURE__ */ new Map();
+  async function respond(rec, res) {
+    const path3 = rec.pathAndQuery.split("?")[0];
+    if (rec.method !== "POST" || path3 !== "/responses" && path3 !== "/v1/responses") {
+      res.writeHead(404, { "content-type": "application/json" }).end('{"error":{"message":"not found","type":"invalid_request_error","param":null,"code":"unknown_url"}}');
+      return;
+    }
+    const sc = typeof scenario === "function" ? scenario(rec) : scenario;
+    if (sc.kind === "hangBeforeHeaders") return;
+    if (sc.kind === "status") {
+      res.writeHead(sc.status, { "content-type": "application/json", ...sc.headers }).end(sc.body);
+      return;
+    }
+    const body = parseBody2(rec.body);
+    const model = typeof body.model === "string" ? body.model : "gpt-mock";
+    const outputTokens2 = sc.kind === "ok" ? sc.outputTokens : DEFAULT_SCENARIO.kind === "ok" ? DEFAULT_SCENARIO.outputTokens : 16;
+    const input3 = Math.ceil(rec.body.length / 4);
+    const key = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : null;
+    const prev = key === null ? 0 : cache.get(key) ?? 0;
+    if (key !== null) cache.set(key, rec.body.length);
+    const usage = { input: input3, cached: Math.min(input3, Math.floor(Math.min(prev, rec.body.length) / 4 / 128) * 128), output: outputTokens2 };
+    const id = `resp_mock_${String(++respCount).padStart(6, "0")}`;
+    const text2 = splitTokens2(outputTokens2).map((t) => "x".repeat(t * 4));
+    const status = sc.kind === "incomplete" ? "incomplete" : "completed";
+    const response = (st, withUsage) => ({
+      id,
+      object: "response",
+      created_at: 17e8,
+      status: st,
+      model,
+      // The tier that served the request: the one asked for, `default` for `auto` or none.
+      service_tier: typeof body.service_tier === "string" && body.service_tier !== "auto" ? body.service_tier : "default",
+      output: st === "in_progress" ? [] : [{ type: "message", id: `msg_${id}`, status: "completed", role: "assistant", content: [{ type: "output_text", text: text2.join(""), annotations: [] }] }],
+      ...sc.kind === "incomplete" && st === "incomplete" ? { incomplete_details: { reason: sc.reason } } : {},
+      usage: withUsage ? usageJson2(usage) : null
+    });
+    if (body.stream !== true) {
+      if (sc.kind === "drop") {
+        res.socket?.destroy();
+        return;
+      }
+      if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
+      res.writeHead(200, { "content-type": "application/json", "x-request-id": id }).end(JSON.stringify(response(status, true)));
+      return;
+    }
+    let seq = 0;
+    const ev = (type, rest) => ({ type, sequence_number: seq++, ...rest });
+    const events = [
+      ev("response.created", { response: response("in_progress", false) }),
+      ev("response.in_progress", { response: response("in_progress", false) }),
+      ev("response.output_item.added", { output_index: 0, item: { type: "message", id: `msg_${id}`, status: "in_progress", role: "assistant", content: [] } }),
+      ...text2.map((delta) => ev("response.output_text.delta", { item_id: `msg_${id}`, output_index: 0, content_index: 0, delta })),
+      ev("response.output_text.done", { item_id: `msg_${id}`, output_index: 0, content_index: 0, text: text2.join("") })
+    ];
+    if (sc.kind === "incomplete") events.push(ev("response.incomplete", { response: response("incomplete", true) }));
+    else events.push(ev("response.completed", { response: response("completed", true) }));
+    let closed = false;
+    res.on("close", () => closed = true);
+    const write = (chunk) => new Promise((resolve5) => {
+      if (closed || res.destroyed) return resolve5();
+      res.write(chunk, () => resolve5());
+    });
+    if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
+    if (closed) return;
+    res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", "x-request-id": id });
+    for (let i = 0; i < events.length; i++) {
+      if (sc.kind === "drop" && i === sc.afterEvents) {
+        res.socket?.destroy();
+        return;
+      }
+      if ((sc.kind === "failed" || sc.kind === "midStreamError") && i === sc.afterEvents) {
+        const code2 = sc.kind === "failed" ? sc.code : sc.errorType;
+        await write(frame2(ev("response.failed", { response: { ...response("failed", false), error: { code: code2, message: "mock failure" } } })));
+        break;
+      }
+      if (closed) return;
+      await write(frame2(events[i]));
+      if (sc.kind === "pauseAfterStart" && i === 0) await sleep2(sc.pauseMs);
+    }
+    if (!closed) res.end();
+  }
+  const server = createServer2((req, res) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const headers = {};
+      for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
+      const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
+      received.push(rec);
+      respond(rec, res).catch(() => res.destroy());
+    });
+  });
+  await new Promise((resolve5) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve5));
+  const port = server.address().port;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    received,
+    setScenario(s2) {
+      scenario = s2;
+    },
+    close() {
+      return new Promise((resolve5) => {
+        server.close(() => resolve5());
+        server.closeAllConnections();
+      });
+    }
+  };
+}
+var MAX_DELTAS2, sleep2, usageJson2, frame2;
+var init_openai = __esm({
+  "src/mock/openai.ts"() {
+    "use strict";
+    init_scenarios();
+    MAX_DELTAS2 = 100;
+    sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+    usageJson2 = (u) => ({
+      input_tokens: u.input,
+      input_tokens_details: { cached_tokens: u.cached },
+      output_tokens: u.output,
+      output_tokens_details: { reasoning_tokens: 0 },
+      total_tokens: u.input + u.output
+    });
+    frame2 = (data) => `event: ${String(data.type)}
+data: ${JSON.stringify(data)}
 
 `;
   }
@@ -4097,9 +4251,9 @@ var require_stringifyNumber = __commonJS({
     function stringifyNumber({ format, minFractionDigits, tag, value }) {
       if (typeof value === "bigint")
         return String(value);
-      const num4 = typeof value === "number" ? value : Number(value);
-      if (!isFinite(num4))
-        return isNaN(num4) ? ".nan" : num4 < 0 ? "-.inf" : ".inf";
+      const num5 = typeof value === "number" ? value : Number(value);
+      if (!isFinite(num5))
+        return isNaN(num5) ? ".nan" : num5 < 0 ? "-.inf" : ".inf";
       let n2 = Object.is(value, -0) ? "-0" : JSON.stringify(value);
       if (!format && minFractionDigits && (!tag || tag === "tag:yaml.org,2002:float") && /^-?\d/.test(n2) && !n2.includes("e")) {
         let i = n2.indexOf(".");
@@ -4139,8 +4293,8 @@ var require_float = __commonJS({
       test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str),
       stringify(node2) {
-        const num4 = Number(node2.value);
-        return isFinite(num4) ? num4.toExponential() : stringifyNumber.stringifyNumber(node2);
+        const num5 = Number(node2.value);
+        return isFinite(num5) ? num5.toExponential() : stringifyNumber.stringifyNumber(node2);
       }
     };
     var float = {
@@ -4579,8 +4733,8 @@ var require_float2 = __commonJS({
       test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
       resolve: (str) => parseFloat(str.replace(/_/g, "")),
       stringify(node2) {
-        const num4 = Number(node2.value);
-        return isFinite(num4) ? num4.toExponential() : stringifyNumber.stringifyNumber(node2);
+        const num5 = Number(node2.value);
+        return isFinite(num5) ? num5.toExponential() : stringifyNumber.stringifyNumber(node2);
       }
     };
     var float = {
@@ -4782,23 +4936,23 @@ var require_timestamp = __commonJS({
     function parseSexagesimal(str, asBigInt) {
       const sign = str[0];
       const parts = sign === "-" || sign === "+" ? str.substring(1) : str;
-      const num4 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
-      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num4(60) + num4(p), num4(0));
-      return sign === "-" ? num4(-1) * res : res;
+      const num5 = (n2) => asBigInt ? BigInt(n2) : Number(n2);
+      const res = parts.replace(/_/g, "").split(":").reduce((res2, p) => res2 * num5(60) + num5(p), num5(0));
+      return sign === "-" ? num5(-1) * res : res;
     }
     function stringifySexagesimal(node2) {
       let { value } = node2;
-      let num4 = (n2) => n2;
+      let num5 = (n2) => n2;
       if (typeof value === "bigint")
-        num4 = (n2) => BigInt(n2);
+        num5 = (n2) => BigInt(n2);
       else if (isNaN(value) || !isFinite(value))
         return stringifyNumber.stringifyNumber(node2);
       let sign = "";
       if (value < 0) {
         sign = "-";
-        value *= num4(-1);
+        value *= num5(-1);
       }
-      const _60 = num4(60);
+      const _60 = num5(60);
       const parts = [value % _60];
       if (value < 60) {
         parts.unshift(0);
@@ -54791,8 +54945,8 @@ var require_util5 = __commonJS({
           return false;
         }
       }
-      const num4 = Number.parseInt(value, 10);
-      return num4 >= 8 && num4 <= 15;
+      const num5 = Number.parseInt(value, 10);
+      return num5 >= 8 && num5 <= 15;
     }
     function getURLRecord(url2, baseURL) {
       let urlRecord;
@@ -58796,7 +58950,7 @@ __export(server_exports, {
   DEFAULT_BODY_CAP_BYTES: () => DEFAULT_BODY_CAP_BYTES,
   createGateway: () => createGateway
 });
-import { createServer as createServer2 } from "node:http";
+import { createServer as createServer3 } from "node:http";
 function listenOn(server, port, host) {
   return new Promise((resolve5, reject) => {
     server.once("error", reject);
@@ -58809,12 +58963,12 @@ function listenOn(server, port, host) {
   });
 }
 function createGateway(deps) {
-  const server = createServer2(createHandler(deps));
+  const server = createServer3(createHandler(deps));
   let ops = null;
   return {
     listen: (port, host = "127.0.0.1") => listenOn(server, port, host),
     listenOps(port, host = "127.0.0.1") {
-      ops = createServer2((req, res) => {
+      ops = createServer3((req, res) => {
         const kind = matchOps(req.method ?? "GET", req.url ?? "/", deps.basePath);
         if (kind === null) {
           req.resume();
@@ -61247,21 +61401,21 @@ var require_generic_transformers = __commonJS({
       },
       3: void 0
     };
-    function transformDoubleArgument(num4) {
-      switch (num4) {
+    function transformDoubleArgument(num5) {
+      switch (num5) {
         case Infinity:
           return "+inf";
         case -Infinity:
           return "-inf";
         default:
-          return num4.toString();
+          return num5.toString();
       }
     }
     exports.transformDoubleArgument = transformDoubleArgument;
-    function transformStringDoubleArgument(num4) {
-      if (typeof num4 !== "number")
-        return num4;
-      return transformDoubleArgument(num4);
+    function transformStringDoubleArgument(num5) {
+      if (typeof num5 !== "number")
+        return num5;
+      return transformDoubleArgument(num5);
     }
     exports.transformStringDoubleArgument = transformStringDoubleArgument;
     exports.transformDoubleReply = {
@@ -114586,8 +114740,8 @@ var require_Buckets = __commonJS({
        * reverse the items in the backing array in the range [from, limit).
        */
       reverse(from, limit) {
-        const num4 = Math.floor((from + limit) / 2) - from;
-        for (let i = 0; i < num4; i++) {
+        const num5 = Math.floor((from + limit) / 2) - from;
+        for (let i = 0; i < num5; i++) {
           const tmp = this._counts[from + i];
           this._counts[from + i] = this._counts[limit - i - 1];
           this._counts[limit - i - 1] = tmp;
@@ -120035,157 +120189,14 @@ var init_otel = __esm({
   }
 });
 
-// src/mock/openai.ts
-import { createServer as createServer3 } from "node:http";
-function parseBody2(body) {
-  try {
-    const v = JSON.parse(body.toString("utf8"));
-    return typeof v === "object" && v !== null && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-}
-function splitTokens2(output2) {
-  const n2 = Math.min(output2, MAX_DELTAS2);
-  if (n2 === 0) return [];
-  const base = Math.floor(output2 / n2);
-  const extra = output2 % n2;
-  return Array.from({ length: n2 }, (_, i) => base + (i < extra ? 1 : 0));
-}
-async function startOpenAIMock(opts = {}) {
-  const received = [];
-  let scenario = opts.scenario ?? DEFAULT_SCENARIO;
-  let respCount = 0;
-  const cache = /* @__PURE__ */ new Map();
-  async function respond(rec, res) {
-    const path3 = rec.pathAndQuery.split("?")[0];
-    if (rec.method !== "POST" || path3 !== "/responses" && path3 !== "/v1/responses") {
-      res.writeHead(404, { "content-type": "application/json" }).end('{"error":{"message":"not found","type":"invalid_request_error","param":null,"code":"unknown_url"}}');
-      return;
-    }
-    const sc = typeof scenario === "function" ? scenario(rec) : scenario;
-    if (sc.kind === "hangBeforeHeaders") return;
-    if (sc.kind === "status") {
-      res.writeHead(sc.status, { "content-type": "application/json", ...sc.headers }).end(sc.body);
-      return;
-    }
-    const body = parseBody2(rec.body);
-    const model = typeof body.model === "string" ? body.model : "gpt-mock";
-    const outputTokens2 = sc.kind === "ok" ? sc.outputTokens : DEFAULT_SCENARIO.kind === "ok" ? DEFAULT_SCENARIO.outputTokens : 16;
-    const input3 = Math.ceil(rec.body.length / 4);
-    const key = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : null;
-    const prev = key === null ? 0 : cache.get(key) ?? 0;
-    if (key !== null) cache.set(key, rec.body.length);
-    const usage = { input: input3, cached: Math.min(input3, Math.floor(Math.min(prev, rec.body.length) / 4 / 128) * 128), output: outputTokens2 };
-    const id = `resp_mock_${String(++respCount).padStart(6, "0")}`;
-    const text2 = splitTokens2(outputTokens2).map((t) => "x".repeat(t * 4));
-    const status = sc.kind === "incomplete" ? "incomplete" : "completed";
-    const response = (st, withUsage) => ({
-      id,
-      object: "response",
-      created_at: 17e8,
-      status: st,
-      model,
-      // The tier that served the request: the one asked for, `default` for `auto` or none.
-      service_tier: typeof body.service_tier === "string" && body.service_tier !== "auto" ? body.service_tier : "default",
-      output: st === "in_progress" ? [] : [{ type: "message", id: `msg_${id}`, status: "completed", role: "assistant", content: [{ type: "output_text", text: text2.join(""), annotations: [] }] }],
-      ...sc.kind === "incomplete" && st === "incomplete" ? { incomplete_details: { reason: sc.reason } } : {},
-      usage: withUsage ? usageJson2(usage) : null
-    });
-    if (body.stream !== true) {
-      if (sc.kind === "drop") {
-        res.socket?.destroy();
-        return;
-      }
-      if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
-      res.writeHead(200, { "content-type": "application/json", "x-request-id": id }).end(JSON.stringify(response(status, true)));
-      return;
-    }
-    let seq = 0;
-    const ev = (type, rest) => ({ type, sequence_number: seq++, ...rest });
-    const events = [
-      ev("response.created", { response: response("in_progress", false) }),
-      ev("response.in_progress", { response: response("in_progress", false) }),
-      ev("response.output_item.added", { output_index: 0, item: { type: "message", id: `msg_${id}`, status: "in_progress", role: "assistant", content: [] } }),
-      ...text2.map((delta) => ev("response.output_text.delta", { item_id: `msg_${id}`, output_index: 0, content_index: 0, delta })),
-      ev("response.output_text.done", { item_id: `msg_${id}`, output_index: 0, content_index: 0, text: text2.join("") })
-    ];
-    if (sc.kind === "incomplete") events.push(ev("response.incomplete", { response: response("incomplete", true) }));
-    else events.push(ev("response.completed", { response: response("completed", true) }));
-    let closed = false;
-    res.on("close", () => closed = true);
-    const write = (chunk) => new Promise((resolve5) => {
-      if (closed || res.destroyed) return resolve5();
-      res.write(chunk, () => resolve5());
-    });
-    if (sc.kind === "ok" && sc.ttftMs > 0) await sleep2(sc.ttftMs);
-    if (closed) return;
-    res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache", "x-request-id": id });
-    for (let i = 0; i < events.length; i++) {
-      if (sc.kind === "drop" && i === sc.afterEvents) {
-        res.socket?.destroy();
-        return;
-      }
-      if ((sc.kind === "failed" || sc.kind === "midStreamError") && i === sc.afterEvents) {
-        const code2 = sc.kind === "failed" ? sc.code : sc.errorType;
-        await write(frame2(ev("response.failed", { response: { ...response("failed", false), error: { code: code2, message: "mock failure" } } })));
-        break;
-      }
-      if (closed) return;
-      await write(frame2(events[i]));
-      if (sc.kind === "pauseAfterStart" && i === 0) await sleep2(sc.pauseMs);
-    }
-    if (!closed) res.end();
-  }
-  const server = createServer3((req, res) => {
-    const chunks = [];
-    req.on("data", (c) => chunks.push(c));
-    req.on("end", () => {
-      const headers = {};
-      for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
-      const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
-      received.push(rec);
-      respond(rec, res).catch(() => res.destroy());
-    });
-  });
-  await new Promise((resolve5) => server.listen(opts.port ?? 0, "127.0.0.1", resolve5));
-  const port = server.address().port;
-  return {
-    url: `http://127.0.0.1:${port}`,
-    received,
-    setScenario(s2) {
-      scenario = s2;
-    },
-    close() {
-      return new Promise((resolve5) => {
-        server.close(() => resolve5());
-        server.closeAllConnections();
-      });
-    }
-  };
-}
-var MAX_DELTAS2, sleep2, usageJson2, frame2;
-var init_openai = __esm({
-  "src/mock/openai.ts"() {
-    "use strict";
-    init_scenarios();
-    MAX_DELTAS2 = 100;
-    sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
-    usageJson2 = (u) => ({
-      input_tokens: u.input,
-      input_tokens_details: { cached_tokens: u.cached },
-      output_tokens: u.output,
-      output_tokens_details: { reasoning_tokens: 0 },
-      total_tokens: u.input + u.output
-    });
-    frame2 = (data) => `event: ${String(data.type)}
-data: ${JSON.stringify(data)}
-
-`;
-  }
-});
-
 // src/mock/traffic.ts
+var traffic_exports = {};
+__export(traffic_exports, {
+  DEMO_DEVELOPERS: () => DEMO_DEVELOPERS,
+  DEMO_START_MS: () => DEMO_START_MS,
+  FAKE_AWS_KEY: () => FAKE_AWS_KEY,
+  generateTraffic: () => generateTraffic
+});
 function auxiliaryBody(rng, model) {
   return Buffer.from(
     JSON.stringify({
@@ -120300,6 +120311,8 @@ async function generateTraffic(o) {
   }
   planned.sort((a, b) => a.at - b.at || a.order - b.order);
   let requests = 0;
+  const urls = typeof o.gatewayUrl === "string" ? [o.gatewayUrl] : o.gatewayUrl;
+  if (urls.length === 0) throw new Error("generateTraffic: no gateway URL");
   const stopped = /* @__PURE__ */ new Set();
   for (const p of planned) {
     const s2 = p.session;
@@ -120333,7 +120346,7 @@ async function generateTraffic(o) {
       ...p.parent ? { "x-claude-code-parent-agent-id": p.parent } : {},
       ...p.agentType ? { "x-claude-code-agent-type": p.agentType } : {}
     };
-    const res = await fetch(`${o.gatewayUrl}${codex ? "/v1/responses" : "/v1/messages"}`, { method: "POST", headers, body: new Uint8Array(body) });
+    const res = await fetch(`${urls[requests % urls.length]}${codex ? "/v1/responses" : "/v1/messages"}`, { method: "POST", headers, body: new Uint8Array(body) });
     await res.arrayBuffer();
     requests++;
     await o.afterRequest?.();
@@ -121100,6 +121113,13 @@ var init_example_files = __esm({
 });
 
 // src/demo/policy.ts
+var policy_exports = {};
+__export(policy_exports, {
+  DEMO_CREDENTIAL_ENV: () => DEMO_CREDENTIAL_ENV,
+  DEMO_TENANT: () => DEMO_TENANT,
+  demoKey: () => demoKey,
+  demoPolicies: () => demoPolicies
+});
 function compileDemo(dir, files, upstream, openaiUpstream) {
   const src = parsePolicyFiles(dir, files);
   const revision = buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
@@ -121736,6 +121756,78 @@ var init_render_json = __esm({
   "src/replay/render-json.ts"() {
     "use strict";
     totals2 = (t) => ({ costMicroUsd: t.costMicroUsd, costBasis: t.costBasis, estimated: t.estimated, forwarded: t.forwarded, blocked: t.blocked });
+  }
+});
+
+// src/report/render-html.ts
+var render_html_exports = {};
+__export(render_html_exports, {
+  escapeHtml: () => escapeHtml,
+  renderReportHtml: () => renderReportHtml
+});
+function escapeHtml(s2) {
+  return stripControls(s2).replace(/[&<>"']/g, (c) => ENTITY[c] ?? c);
+}
+function renderReportHtml(r) {
+  const cols = r.by.length > 0 ? r.by.map(String) : ["all"];
+  const cost = (x) => formatUsd(x.costMicroUsd) + (x.unpriced > 0 ? `+${x.unpriced} unpriced` : "");
+  const share = (x) => {
+    const p = pct2(x.costMicroUsd, r.totals.costMicroUsd);
+    return `${r.totals.costMicroUsd === 0 ? "-" : `${p.toFixed(1)}%`}<span class="bar" style="width:${Math.round(p)}px"></span>`;
+  };
+  const numeric = (x, bar) => [num4(x.requests), cost(x), bar ? share(x) : "", num4(x.input), num4(x.output), num4(x.cacheRead), num4(x.cacheWrite)].map((c) => `<td class="n">${c}</td>`).join("");
+  const head = [...cols.map((c) => `<th>${escapeHtml(c)}</th>`), ...["requests", "cost", "share", "input", "output", "cache read", "cache write"].map((c) => `<th class="n">${c}</th>`)].join("");
+  const rows = r.groups.map((g) => `<tr>${(r.by.length > 0 ? r.by.map((d) => g.key[d] ?? "") : ["all"]).map((l) => `<td>${escapeHtml(l)}</td>`).join("")}${numeric(g, true)}</tr>`).join("\n");
+  const total = `<tr><td>total</td>${cols.slice(1).map(() => "<td></td>").join("")}${numeric(r.totals, false)}</tr>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tokenyard cost report</title>
+<style>${CSS}</style>
+</head>
+<body>
+<main>
+<h1>tokenyard cost report</h1>
+<p>${r.totals.requests} requests grouped by ${escapeHtml(cols.join(", "))}. Costs are priced at the recorded prices; unpriced requests count as zero.</p>
+<div class="wrap">
+<table>
+<thead><tr>${head}</tr></thead>
+<tbody>
+${rows}
+</tbody>
+<tfoot>${total}</tfoot>
+</table>
+</div>
+</main>
+</body>
+</html>
+`;
+}
+var ENTITY, CSS, pct2, num4;
+var init_render_html = __esm({
+  "src/report/render-html.ts"() {
+    "use strict";
+    init_render_terminal();
+    init_sanitize();
+    ENTITY = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    CSS = `:root{color-scheme:light dark;--bg:#fff;--fg:#1b1f24;--muted:#5b6570;--line:#d8dde3;--bar:#2f6fed;--head:#f3f5f8}
+@media (prefers-color-scheme: dark){:root{--bg:#14171b;--fg:#e6e9ed;--muted:#97a1ad;--line:#2d333b;--bar:#6c9bff;--head:#1c2026}}
+body{margin:0;padding:24px 16px;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+p{margin:0 0 16px;color:var(--muted)}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:var(--head);font-weight:600}
+td.n,th.n{text-align:right}
+tfoot td{font-weight:600;border-top:2px solid var(--line)}
+.bar{display:inline-block;height:8px;border-radius:4px;background:var(--bar);vertical-align:middle;margin-left:8px}`;
+    pct2 = (part2, whole) => whole === 0 ? 0 : part2 / whole * 100;
+    num4 = (n2) => String(n2);
   }
 });
 
@@ -125524,11 +125616,13 @@ var idOf = (g, by) => by.map((d) => g.key[d]).join("\0");
 // src/cli.ts
 var program2 = new Command();
 program2.name("tokenyard").description(package_default.description).version(package_default.version);
-program2.command("mock").description("run the deterministic mock Anthropic provider").option("--port <n>", "port to listen on (0 picks a free one)", "0").action(async (o) => {
+program2.command("mock").description("run the deterministic mock Anthropic provider (and with --openai-port the OpenAI one)").option("--port <n>", "port to listen on (0 picks a free one)", "0").option("--host <host>", "address to bind (the compose demo uses 0.0.0.0 inside its container)", "127.0.0.1").option("--openai-port <n>", "also run the mock OpenAI provider on this port").action(async (o) => {
   const { startAnthropicMock: startAnthropicMock2 } = await Promise.resolve().then(() => (init_anthropic(), anthropic_exports));
-  const mock = await startAnthropicMock2({ port: Number(o.port) });
+  const mock = await startAnthropicMock2({ port: Number(o.port), host: o.host });
+  const openai = o.openaiPort === void 0 ? null : await (await Promise.resolve().then(() => (init_openai(), openai_exports))).startOpenAIMock({ port: Number(o.openaiPort), host: o.host });
   console.log(mock.url);
-  const stop = () => void mock.close().then(() => process.exit(0));
+  if (openai) console.log(openai.url);
+  const stop = () => void Promise.all([mock.close(), openai?.close()]).then(() => process.exit(0));
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
 });
@@ -125700,6 +125794,15 @@ program2.command("demo").description("one-process demo: synthetic coding-agent t
   const { runDemo: runDemo2 } = await Promise.resolve().then(() => (init_run(), run_exports));
   await runDemo2({ out: process.stdout, seed, ...o.writeTraces ? { writeTraces: o.writeTraces } : {} });
 });
+program2.command("traffic").description("send the synthetic demo traffic (the 8 demo developers, public demo keys) to running gateways, in turn; for the compose demo").requiredOption("--gateway-url <url...>", "gateway base URL(s); with several, requests alternate between them").option("--seed <n>", "seed of the traffic generator", "1").option("--days <n>", "days of traffic to send (sent back to back, not in real time)", "1").action(async (o) => {
+  const seed = Number(o.seed);
+  const days2 = Number(o.days);
+  if (!Number.isInteger(seed) || !Number.isInteger(days2) || days2 < 1) return void (console.error("tokenyard traffic: --seed and --days must be integers, --days at least 1"), process.exit(1));
+  const { generateTraffic: generateTraffic2, DEMO_DEVELOPERS: DEMO_DEVELOPERS2 } = await Promise.resolve().then(() => (init_traffic(), traffic_exports));
+  const { demoKey: demoKey2 } = await Promise.resolve().then(() => (init_policy(), policy_exports));
+  const r = await generateTraffic2({ gatewayUrl: o.gatewayUrl, keys: Object.fromEntries(DEMO_DEVELOPERS2.map((d) => [d.name, demoKey2(d.name)])), seed, days: days2 });
+  console.log(`tokenyard traffic: ${r.requests} requests in ${r.sessions} sessions sent to ${o.gatewayUrl.length} gateway(s)`);
+});
 program2.command("live", { hidden: true }).description("live-test harness: the gateway with the live policy and the tokenyard-enforced cap (npm run live)").option("--port <n>", "port to listen on (0 picks a free one)", "4000").action(async (o) => {
   const { startLiveHarness: startLiveHarness2 } = await Promise.resolve().then(() => (init_harness(), harness_exports));
   let h;
@@ -125836,13 +125939,26 @@ traces.command("prune").description("delete trace files older than a duration").
   const removed = await pruneTraces({ dir: o.traceDir, olderThanMs: parseDuration(o.olderThan), nowMs: Date.now() });
   console.error(`removed ${removed} file(s)`);
 });
-program2.command("report").description("cost report from a trace dir or an export file").requiredOption("--traces <path>", "trace directory or an export file (.ndjson or .ndjson.gz)").option("--by <dims>", "comma list of tenant, team, key, repo, branch, ticket, session, requestClass, agent, promptId", "team").option("--since <when>", "duration such as 7d, or an ISO time", "7d").option("--until <when>", "ISO time (default now)").option("--tenant <tenant>", "only this tenant").action(async (o) => {
+program2.command("report").description("cost report from a trace dir or an export file").requiredOption("--traces <path>", "trace directory or an export file (.ndjson or .ndjson.gz)").option("--by <dims>", "comma list of tenant, team, key, repo, branch, ticket, session, requestClass, agent, promptId", "team").option("--since <when>", "duration such as 7d, or an ISO time", "7d").option("--until <when>", "ISO time (default now)").option("--tenant <tenant>", "only this tenant").option("--html <file>", "write a self-contained HTML report (no script, no external requests) instead of the terminal table").action(async (o) => {
   const dims = o.by.split(",").map((d) => d.trim()).filter(Boolean);
   const bad2 = dims.filter((d) => !REPORT_DIMENSIONS.includes(d));
   if (bad2.length > 0) return void (console.error(`tokenyard report: unknown dimension ${bad2.join(", ")}`), process.exit(1));
   const now = Date.now();
   const records = await loadTraceRecords({ path: o.traces, sinceMs: sinceOf(o.since, now), untilMs: o.until ? Date.parse(o.until) : now, ...o.tenant ? { tenant: o.tenant } : {} });
-  process.stdout.write(renderReportTerminal(buildReport(records, dims)));
+  const report = buildReport(records, dims);
+  if (o.html) {
+    const { cliRoot: cliRoot2, UnsafePathError: UnsafePathError2, writeFileUnder: writeFileUnder2 } = await Promise.resolve().then(() => (init_safe_path(), safe_path_exports));
+    const { renderReportHtml: renderReportHtml2 } = await Promise.resolve().then(() => (init_render_html(), render_html_exports));
+    try {
+      await writeFileUnder2(cliRoot2(o.html), o.html, renderReportHtml2(report));
+    } catch (e2) {
+      if (e2 instanceof UnsafePathError2) return void (console.error(`tokenyard report: ${e2.message}`), process.exit(1));
+      throw e2;
+    }
+    console.error(`wrote ${o.html}: ${report.totals.requests} requests`);
+    return;
+  }
+  process.stdout.write(renderReportTerminal(report));
 });
 program2.command("action").description("GitHub Action entry point: policy check, replay against the base ref, sticky PR comment, job summary (inputs come from INPUT_* variables, action.yml)").action(async () => {
   const { githubClient: githubClient2, runAction: runAction2 } = await Promise.resolve().then(() => (init_main(), main_exports));
