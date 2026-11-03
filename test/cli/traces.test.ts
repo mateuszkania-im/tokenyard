@@ -17,14 +17,14 @@ test('serve --trace-dir without a salt refuses to start', async () => {
   const env = { ...process.env, TOKENYARD_TRACE_SALT: '' };
   await expect(run('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', 'http://127.0.0.1:1', '--trace-dir', '/tmp/never'], { env })).rejects.toMatchObject({
     code: 1,
-    stderr: expect.stringContaining('--trace-salt'),
+    stderr: expect.stringContaining('TOKENYARD_TRACE_SALT or --trace-salt-file'),
   });
 });
 
 test('serve writes traces with a ULID request id, then export and report read them', async () => {
   dir = await mkdtemp(join(tmpdir(), 'ty-cli-trace-'));
   const mock = await startAnthropicMock();
-  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url, '--trace-dir', dir, '--instance-id', 'cli1', '--trace-salt', 's', '--no-metrics'], { env: { ...process.env, TOKENYARD_DEV_UPSTREAM_KEY: 'x' } });
+  const child = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', mock.url, '--trace-dir', dir, '--instance-id', 'cli1', '--no-metrics'], { env: { ...process.env, TOKENYARD_DEV_UPSTREAM_KEY: 'x', TOKENYARD_TRACE_SALT: 's' } });
   try {
     const url = await new Promise<string>((resolve, reject) => {
       child.stdout.once('data', (d: Buffer) => resolve(d.toString().trim()));

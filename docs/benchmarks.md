@@ -60,8 +60,8 @@ For every request with usage, the input token bound it was admitted with against
 The live sessions run only through `npm run live` (design spec, section 14.1), on the maintainer's machine, against the real APIs under a hard cap enforced by tokenyard's own budget. Their raw traces stay in `.live/traces/` (gitignored). What is committed is derived from an anonymized export only:
 
 ```sh
-# a fresh random salt each time, never stored
-node bin/tokenyard.mjs traces export --since 30d --trace-dir .live/traces --anonymize --salt "$(node -e 'console.log(require("crypto").randomBytes(24).toString("base64url"))')" --out examples/live/live.ndjson.gz
+# without TOKENYARD_EXPORT_SALT or --salt-file, --anonymize uses a fresh random salt, never stored
+node bin/tokenyard.mjs traces export --since 30d --trace-dir .live/traces --anonymize --out examples/live/live.ndjson.gz
 node bin/tokenyard.mjs report --traces examples/live/live.ndjson.gz --since 2026-11-01T00:00:00Z --until 2026-11-04T00:00:00Z --by session --html examples/live/report.html
 npx tsx bench/live-summary.ts                   # examples/live/summary.json (and .live/raw-names.json, local only)
 ```

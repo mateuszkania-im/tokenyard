@@ -4,6 +4,45 @@ import { exportTraces, loadTraceRecords, parseDuration, pruneTraces } from './le
 import { renderReportTerminal } from './report/render-terminal.js';
 import { buildReport, REPORT_DIMENSIONS, type ReportDimension } from './report/report.js';
 
+/**
+ * A secret from `--<flag>-file <path>` or the environment variable `env` (B5): the value given as `--<flag>` itself is
+ * refused, because every local user reads command lines with `ps` and shells keep them in history. `allowFlag` keeps
+ * a flag value that holds no secret (a Redis URL without a password).
+ */
+async function secretInput(cmd: string, o: { flag: string; value?: string; file?: string; env: string; allowFlag?: (v: string) => boolean }): Promise<string | undefined> {
+  if (o.value !== undefined && o.allowFlag?.(o.value) !== true) {
+    console.error(`${cmd}: --${o.flag} puts a secret on the command line, where every local user can read it (ps); set ${o.env} or use --${o.flag}-file <path>`);
+    process.exit(1);
+  }
+  if (o.value !== undefined && o.file !== undefined) {
+    console.error(`${cmd}: give --${o.flag} or --${o.flag}-file, not both`);
+    process.exit(1);
+  }
+  if (o.file !== undefined) {
+    const { cliRoot, readFileUnder } = await import('./fsutil/safe-path.js');
+    const raw = await readFileUnder(cliRoot(o.file), o.file, 4096).catch((e: unknown) => {
+      console.error(`${cmd}: --${o.flag}-file: ${e instanceof Error ? e.message : String(e)}`);
+      return process.exit(1);
+    });
+    const v = raw?.toString('utf8').replace(/\r?\n$/, '');
+    if (!v) {
+      console.error(`${cmd}: --${o.flag}-file ${o.file} is empty or missing`);
+      process.exit(1);
+    }
+    return v;
+  }
+  return o.value ?? (process.env[o.env] || undefined);
+}
+
+const hasPassword = (url: string): boolean => {
+  try {
+    const u = new URL(url);
+    return u.password !== '' || u.username !== '';
+  } catch {
+    return true; // unparsable: treat as secret rather than echo it back
+  }
+};
+
 const program = new Command();
 program.name('tokenyard').description(pkg.description).version(pkg.version);
 program
@@ -39,15 +78,18 @@ program
   .option('--experimental-subscription', 'experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)')
   .option('--trace-dir <dir>', 'write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson')
   .option('--instance-id <id>', 'instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)')
-  .option('--trace-salt <salt>', 'HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
-  .option('--otlp-endpoint <url>', 'export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs --trace-salt')
+  .option('--trace-salt-file <path>', 'file holding the HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir')
+  .option('--trace-salt <salt>', 'refused: a salt on the command line is visible to every local user; use TOKENYARD_TRACE_SALT or --trace-salt-file')
+  .option('--otlp-endpoint <url>', 'export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs a trace salt')
   .option('--metrics-port <n>', 'ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it', '9464')
-  .option('--metrics-host <host>', 'address the ops listener binds; a non-loopback address needs --metrics-token', '127.0.0.1')
-  .option('--metrics-token <token>', 'bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback')
+  .option('--metrics-host <host>', 'address the ops listener binds; a non-loopback address needs a metrics token', '127.0.0.1')
+  .option('--metrics-token-file <path>', 'file holding the bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback')
+  .option('--metrics-token <token>', 'refused: a token on the command line is visible to every local user; use TOKENYARD_METRICS_TOKEN or --metrics-token-file')
   .option('--no-metrics', 'do not start the ops listener')
   .option('--store <kind>', 'counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis', 'memory')
-  .option('--redis-url <url>', 'Redis URL for --store redis, for example redis://127.0.0.1:6379 (or TOKENYARD_REDIS_URL)')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; store: string; redisUrl?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metrics: boolean }) => {
+  .option('--redis-url <url>', 'Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file')
+  .option('--redis-url-file <path>', 'file holding the Redis URL (with its password)')
+  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; traceSaltFile?: string; store: string; redisUrl?: string; redisUrlFile?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metricsTokenFile?: string; metrics: boolean }) => {
     if (!o.devUpstream && !o.policy && !o.policyUrl) {
       console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
       process.exit(1);
@@ -68,19 +110,20 @@ program
       console.error('tokenyard serve: --store must be memory or redis');
       process.exit(1);
     }
-    const redisUrl = o.redisUrl ?? process.env.TOKENYARD_REDIS_URL;
+    const cmd = 'tokenyard serve';
+    const redisUrl = await secretInput(cmd, { flag: 'redis-url', value: o.redisUrl, file: o.redisUrlFile, env: 'TOKENYARD_REDIS_URL', allowFlag: (v) => !hasPassword(v) });
     if (o.store === 'redis' && !redisUrl) {
-      console.error('tokenyard serve: --store redis needs --redis-url or TOKENYARD_REDIS_URL');
+      console.error('tokenyard serve: --store redis needs --redis-url, --redis-url-file or TOKENYARD_REDIS_URL');
       process.exit(1);
     }
-    const traceSalt = o.traceSalt ?? process.env.TOKENYARD_TRACE_SALT;
+    const traceSalt = await secretInput(cmd, { flag: 'trace-salt', value: o.traceSalt, file: o.traceSaltFile, env: 'TOKENYARD_TRACE_SALT' });
     // The guardrail HMAC salt is the trace salt whenever one is set: taint written by one instance must match on another.
     if (o.store === 'redis' && !traceSalt) {
-      console.error('tokenyard serve: --store redis needs --trace-salt or TOKENYARD_TRACE_SALT (a stable salt, so session taint HMACs match across instances and restarts)');
+      console.error('tokenyard serve: --store redis needs TOKENYARD_TRACE_SALT or --trace-salt-file (a stable salt, so session taint HMACs match across instances and restarts)');
       process.exit(1);
     }
     if (o.traceDir && !traceSalt) {
-      console.error('tokenyard serve: --trace-dir needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids are HMAC pseudonyms)');
+      console.error('tokenyard serve: --trace-dir needs TOKENYARD_TRACE_SALT or --trace-salt-file (session and agent ids are HMAC pseudonyms)');
       process.exit(1);
     }
     const otlpEndpoint = o.otlpEndpoint ?? process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? null;
@@ -89,7 +132,7 @@ program
       process.exit(1);
     }
     if (otlpEndpoint !== null && !traceSalt) {
-      console.error('tokenyard serve: --otlp-endpoint needs --trace-salt or TOKENYARD_TRACE_SALT (session and agent ids on spans are HMAC pseudonyms)');
+      console.error('tokenyard serve: --otlp-endpoint needs TOKENYARD_TRACE_SALT or --trace-salt-file (session and agent ids on spans are HMAC pseudonyms)');
       process.exit(1);
     }
     if (!/^\d+$/.test(o.metricsPort)) {
@@ -97,10 +140,10 @@ program
       process.exit(1);
     }
     const opsOn = o.metrics && Number(o.metricsPort) !== 0;
-    const metricsToken = o.metricsToken ?? process.env.TOKENYARD_METRICS_TOKEN;
+    const metricsToken = await secretInput(cmd, { flag: 'metrics-token', value: o.metricsToken, file: o.metricsTokenFile, env: 'TOKENYARD_METRICS_TOKEN' });
     const { isLoopbackHost } = await import('./edge/ops.js');
     if (opsOn && !isLoopbackHost(o.metricsHost) && !metricsToken) {
-      console.error('tokenyard serve: --metrics-host is not a loopback address, so --metrics-token or TOKENYARD_METRICS_TOKEN is required (or use --no-metrics)');
+      console.error('tokenyard serve: --metrics-host is not a loopback address, so TOKENYARD_METRICS_TOKEN or --metrics-token-file is required (or use --no-metrics)');
       process.exit(1);
     }
     const { hostname } = await import('node:os');
@@ -408,11 +451,20 @@ traces
   .requiredOption('--out <file>', 'output file; a name ending in .gz is gzipped')
   .option('--since <when>', 'duration such as 7d or 12h, or an ISO time', '7d')
   .option('--until <when>', 'ISO time (default now)')
-  .option('--anonymize', 'replace tenant, team, key id, repo, branch and ticket with stable pseudonyms and drop client.version')
-  .option('--salt <salt>', 'salt for --anonymize (or TOKENYARD_TRACE_SALT)')
-  .action(async (o: { traceDir: string; out: string; since: string; until?: string; anonymize?: boolean; salt?: string }) => {
-    const salt = o.salt ?? process.env.TOKENYARD_TRACE_SALT;
-    if (o.anonymize && !salt) return void (console.error('tokenyard traces export: --anonymize needs --salt or TOKENYARD_TRACE_SALT'), process.exit(1));
+  .option('--anonymize', 'replace tenant, team, key id, repo, branch and ticket with salted pseudonyms and drop client.version')
+  .option('--salt-file <path>', 'file holding a one-off salt for --anonymize (or TOKENYARD_EXPORT_SALT); default: a random salt, never stored; never the trace salt')
+  .option('--salt <salt>', 'refused: a salt on the command line is visible to every local user; use TOKENYARD_EXPORT_SALT or --salt-file')
+  .action(async (o: { traceDir: string; out: string; since: string; until?: string; anonymize?: boolean; salt?: string; saltFile?: string }) => {
+    // A one-off salt (B7): never the gateway's trace salt, whose holder would reverse the pseudonyms by dictionary and
+    // link every export made with it. Without one, a random salt is used and forgotten.
+    let salt = await secretInput('tokenyard traces export', { flag: 'salt', value: o.salt, file: o.saltFile, env: 'TOKENYARD_EXPORT_SALT' });
+    if (o.anonymize && salt !== undefined && salt === process.env.TOKENYARD_TRACE_SALT) {
+      return void (console.error('tokenyard traces export: the --anonymize salt must differ from TOKENYARD_TRACE_SALT (use a one-off salt, or none for a random one)'), process.exit(1));
+    }
+    if (o.anonymize && salt === undefined) {
+      salt = (await import('node:crypto')).randomBytes(24).toString('base64url');
+      console.error('tokenyard traces export: --anonymize used a random one-off salt (not stored; pseudonyms match no other export)');
+    }
     const now = Date.now();
     const sinceMs = sinceOf(o.since, now);
     const untilMs = o.until ? Date.parse(o.until) : now;
