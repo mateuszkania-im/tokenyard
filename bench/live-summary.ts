@@ -297,11 +297,13 @@ async function main(): Promise<void> {
       .filter((f) => f.endsWith('.ndjson') && statSync(f).isFile());
     const names = new Map<string, string>();
     // Linkable ids of the raw traces (record, instance, session, agent and prompt ids, prefix hashes, guardrail value
-    // HMACs): an anonymized export must contain none of them.
+    // HMACs, the process epoch of S-V4-4 and the server tool placeholders of S-V4-3): an anonymized export must contain
+    // none of them (S-V7-1: the epoch and the placeholders were missing from this list).
     const ids = new Set<string>();
     for (const r of await requests(files)) {
       const a0 = r.attribution;
-      for (const v of [r.id, r.instance, a0.session, a0.agent, a0.parentAgent, a0.promptId, r.features.prefixHash, ...r.guardrail.hits.map((h) => h.valueHmac)]) {
+      const placeholders = r.features.serverTools.map((t) => t.type).filter((t) => /^tool_[0-9a-f]{16}$/.test(t));
+      for (const v of [r.id, r.instance, a0.session, a0.agent, a0.parentAgent, a0.promptId, r.features.prefixHash, ...r.guardrail.hits.map((h) => h.valueHmac), r.decision.seqEpoch, r.candidateDecision?.seqEpoch, ...placeholders]) {
         if (v) ids.add(v);
       }
       const a = r.attribution;
