@@ -103,7 +103,7 @@ test('property: decide and resolve return deep-equal results for the same argume
       const keys = [...p1.reservations, ...p1.rateChecks, ...p1.streamSlots].map((r) => r.key).concat(p1.taint ? [p1.taint.key] : []);
       for (const k of keys) expect(k.startsWith(`ty:{${encodeURIComponent(f.tenant)}}:`)).toBe(true);
     }),
-    { numRuns: 500 },
+    fuzz(0xdec2, 500),
   );
 });
 
@@ -120,7 +120,7 @@ test('property: decide reads no clock (same features at different wall times giv
         Date.now = realNow;
       }
     }),
-    { numRuns: 100 },
+    fuzz(0xdec3, 100),
   );
 });
 

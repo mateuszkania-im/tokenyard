@@ -82,12 +82,15 @@ A low agreement or any missing instance means the diff should not be trusted.
 
 Each policy runs on its own in-memory counter store on a virtual clock. Records are admitted in the order the
 gateway's store saw them: at `ts` plus the recorded `decision.admitOffsetMs` (the body is read and scanned before
-admit, so a large body can admit after a small one that started later), then by instance and `decision.admitSeq`, then
+admit, so a large body can admit after a small one that started later), then by instance, `decision.seqEpoch` and
+`decision.admitSeq`, then
 by `ts` and `id`. Each is decided, admitted and resolved as the gateway does it (the same `src/policy/admission.ts`), from the features and guardrail hits the trace recorded
-(the input bound and its kind are used as recorded, never derived again), and settled at `ts + totalMs`. Against
-the admits of its own instance a settle is ordered by `outcome.settleSeq`, the admits the instance had issued when it
-called settle: `totalMs` is measured before settle, so a later admit can share its millisecond; traces written without
-the field use the time alone. A record whose
+(the input bound and its kind are used as recorded, never derived again), and settled at `ts + totalMs`. Within one
+process epoch, against the admits of its own process (same instance and `decision.seqEpoch`, a random id of the
+writing process), a settle is ordered by `outcome.settleSeq`, the admits the process had issued when it called settle:
+`totalMs` is measured before settle, so a later admit can share its millisecond. The count starts again when a
+process restarts while `--instance-id` may be reused, so across process epochs, across instances, and in traces
+written without these fields the time alone decides. A record whose
 admit found the store down is replayed with the store down. Settlement charges what the gateway charged
 (`outcome.chargedMicroUsd`) when the model, provider and price table are unchanged; the policy's reservation when the
 request was settled at its estimate or by the sweeper; otherwise the replayed cost.
