@@ -38,8 +38,9 @@ against a bound of 65,040 (0.20 of it).
 ```
 
 `input_tokens` includes the cached tokens (`total_tokens` is input plus output). The capture had
-`cache_write_tokens: 0`; it is not in the shape the spec expected and is parsed as a cache write inside
-`input_tokens`, priced at the input rate for the models in the table. The whole stream, with every id, text,
+`cache_write_tokens: 0` (the 64 above is synthetic); the field is not in the shape the spec expected. Until its
+semantics are confirmed it is billed as a cache write on top of `input_tokens`, and the worst-case estimate on the
+Responses surface covers that. The whole stream, with every id, text,
 timestamp and count replaced and the echoed instructions and tools dropped, is
 `test/fixtures/sse/responses-completed.txt` (R3). Events seen: `response.created`, `response.in_progress`,
 `response.output_item.added` and `.done`, `response.content_part.added` and `.done`, `response.output_text.delta`

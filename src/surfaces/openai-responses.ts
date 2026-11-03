@@ -5,12 +5,20 @@ import type { ExtractedFeatures } from './types.js';
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** Tools the caller defines and runs itself: bounded by their bytes in the body. */
+const USER_TOOL_TYPES: ReadonlySet<string> = new Set(['function', 'custom']);
 /**
- * Tool types the client runs itself (Codex runs its shell, patch and custom tools locally): bounded by their bytes.
+ * OpenAI-defined tools the client runs when they carry no hosted environment. OpenAI adds their definitions on its
+ * side, so like Anthropic-defined client tools they force the context-window bound (`expandsServerSide`). With an
+ * `environment` other than `{ type: "local" }`, or a `container`, they run in OpenAI-managed containers with a
+ * server-side loop and billed container time: server tools.
  * Every other tool `type` (web_search, file_search, code_interpreter, mcp, image_generation, computer use, and any type
- * added after this list) lands in `serverTools`: denied unless the route lists it, and unbounded unless it is priced.
+ * added after these lists) lands in `serverTools`: denied unless the route lists it, and unbounded unless it is priced.
  */
-const CLIENT_TOOL_TYPES: ReadonlySet<string> = new Set(['function', 'custom', 'local_shell', 'shell', 'apply_patch']);
+const OPENAI_CLIENT_TOOL_TYPES: ReadonlySet<string> = new Set(['local_shell', 'shell', 'apply_patch']);
+
+/** Runs on the client: no environment, or `{ type: "local" }`, and no container. */
+const runsLocally = (t: Obj): boolean => t.container === undefined && (t.environment === undefined || (isObj(t.environment) && t.environment.type === 'local' && Object.keys(t.environment).length === 1));
 /**
  * Top-level Responses fields that add no input on the provider side beyond the body's own bytes. Any other field
  * (`previous_response_id` and `conversation` load stored input, `prompt` a stored template, `background`, a field added
@@ -65,12 +73,16 @@ const MAX_NAMESPACE_DEPTH = 4;
  * its own tools are classified the same way, so a built-in tool cannot hide inside one. A namespace without a tools
  * array, or nested too deep, counts as a server tool itself.
  */
-function collectServerTools(tools: unknown[], maxUses: number | null, out: ExtractedFeatures['serverTools'], depth: number): void {
+function collectServerTools(tools: unknown[], maxUses: number | null, out: ExtractedFeatures['serverTools'], depth: number, seen: { openaiClient: boolean }): void {
   for (const t of tools) {
     const type = isObj(t) ? (typeof t.type === 'string' ? t.type : String(t.type)) : '(invalid)';
-    if (CLIENT_TOOL_TYPES.has(type)) continue;
+    if (isObj(t) && USER_TOOL_TYPES.has(type)) continue;
+    if (isObj(t) && OPENAI_CLIENT_TOOL_TYPES.has(type) && runsLocally(t)) {
+      seen.openaiClient = true;
+      continue;
+    }
     if (type === 'namespace' && isObj(t) && Array.isArray(t.tools) && depth < MAX_NAMESPACE_DEPTH) {
-      collectServerTools(t.tools, maxUses, out, depth + 1);
+      collectServerTools(t.tools, maxUses, out, depth + 1, seen);
       continue;
     }
     out.push({ type, maxUses });
@@ -145,7 +157,8 @@ export function extractResponsesFeatures(body: Buffer): ExtractedFeatures {
   // `max_tool_calls` caps every built-in tool call of the response together, so it bounds each tool's uses.
   const maxUses = typeof parsed.max_tool_calls === 'number' && Number.isFinite(parsed.max_tool_calls) && parsed.max_tool_calls >= 0 ? parsed.max_tool_calls : null;
   const serverTools: ExtractedFeatures['serverTools'] = [];
-  collectServerTools(tools, maxUses, serverTools, 0);
+  const seen = { openaiClient: false };
+  collectServerTools(tools, maxUses, serverTools, 0, seen);
 
   const types = new Set<string>();
   collectTypes(parsed.input, types);
@@ -164,7 +177,7 @@ export function extractResponsesFeatures(body: Buffer): ExtractedFeatures {
     bodyBytes: body.length,
     prefixHash,
     blockTypes: [...types],
-    expandsServerSide: hasExpandingField(parsed),
+    expandsServerSide: seen.openaiClient || hasExpandingField(parsed),
     fastMode: false,
     ...(parsed.service_tier === undefined || parsed.service_tier === null || parsed.service_tier === 'default' ? {} : { serviceTier: String(parsed.service_tier) }),
     parseError: false,

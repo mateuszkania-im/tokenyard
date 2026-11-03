@@ -11,10 +11,10 @@ const TERMINAL = new Set(['response.completed', 'response.incomplete', 'response
 
 /**
  * A Responses `usage` object as the four buckets (shape pinned by the R3 fixture, a real Codex 0.166.0 capture):
- * `input_tokens` counts every prompt token, so `input_tokens_details.cached_tokens` is the cache read,
- * `input_tokens_details.cache_write_tokens` a cache write (counted as `cacheWrite5m`; the price table prices writes of
- * the models it lists at their input rate), and the rest is input. `output_tokens` includes the reasoning tokens.
- * Null without a usable `input_tokens`.
+ * `input_tokens` counts the cached tokens, so `input_tokens_details.cached_tokens` is the cache read and the rest is
+ * input. `input_tokens_details.cache_write_tokens` (seen only as 0 so far) is billed as a cache write on top of that
+ * (`cacheWrite5m`) until its semantics are confirmed: never less than a subset reading would bill (ruling). The
+ * estimator covers it on this surface. `output_tokens` includes the reasoning tokens. Null without `input_tokens`.
  */
 function toUsage(raw: unknown): Usage | null {
   if (!isObj(raw)) return null;
@@ -22,8 +22,7 @@ function toUsage(raw: unknown): Usage | null {
   if (input === undefined) return null;
   const details = isObj(raw.input_tokens_details) ? raw.input_tokens_details : {};
   const cached = Math.min(input, num(details.cached_tokens) ?? 0);
-  const written = Math.min(input - cached, num(details.cache_write_tokens) ?? 0);
-  return { input: input - cached - written, cacheRead: cached, cacheWrite5m: written, cacheWrite1h: 0, output: num(raw.output_tokens) ?? 0 };
+  return { input: input - cached, cacheRead: cached, cacheWrite5m: num(details.cache_write_tokens) ?? 0, cacheWrite1h: 0, output: num(raw.output_tokens) ?? 0 };
 }
 
 /**

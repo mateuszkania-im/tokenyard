@@ -62,9 +62,10 @@ models:
         cacheRead: 0.05
     source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
     retrieved: 2026-11-02
-  # OpenAI models for Codex (Responses API). OpenAI bills no cache writes: written prompt tokens are plain input, so
-  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page's cached input price. Long-context rows apply
-  # above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing
+  # OpenAI models for Codex (Responses API). The pricing page lists no separate cache write price for these models, so
+  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page's cached input price. Models with distinct cache
+  # write prices (gpt-6.x, gpt-5.6.x) are left out until the usage fields for those writes are confirmed. Long-context
+  # rows apply above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing
   # Context window and max output: https://developers.openai.com/api/docs/models/<model id>
   gpt-5.5:
     input: 5

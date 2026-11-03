@@ -13,7 +13,7 @@ import {
 } from '../../src/limits/estimator.js';
 import type { RequestFeatures } from '../../src/policy/types.js';
 import { costMicroUsd } from '../../src/pricing/cost.js';
-import { parsePriceTable, type ModelPrice, type PriceTable } from '../../src/pricing/prices.js';
+import { lookupModel, parsePriceTable, type ModelPrice, type PriceTable } from '../../src/pricing/prices.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import type { ExtractedFeatures } from '../../src/surfaces/types.js';
 import { loadPrices } from '../helpers/prices.js';
@@ -215,8 +215,8 @@ test('property: any tool set with a server-side tool that has no price is blocke
 
 test('Responses request without max_output_tokens uses maxOutputTokens', () => {
   const f = req(extract({ model: 'claude-sonnet-5-5', messages: [] }), sonnet, { surface: 'openai-responses', inputTokensBound: 1000, boundKind: 'bytes', maxOutputTokens: null });
-  // (1000 * 4 + 128_000 * 10) * 1.1
-  expect(worstCaseMicroUsd(f, sonnet, table, opts).micro).toBe(1_412_400);
+  // (1000 * (4 + 4) + 128_000 * 10) * 1.1: on the Responses surface each input token may also be billed as a write.
+  expect(worstCaseMicroUsd(f, sonnet, table, opts).micro).toBe(1_416_800);
 });
 
 test('reserveOutputTokens caps the output of a product route; max_tokens above the model limit is capped', () => {
@@ -353,4 +353,25 @@ test('property edge: every input token at the top rate and full output equals th
       }
     }
   }
+});
+
+test('fix 3: on the Responses surface the worst case covers cache writes billed on top of input (up to every prompt token)', () => {
+  const table = loadPrices();
+  const lookup = lookupModel(table, 'gpt-5.4');
+  if (!lookup) throw new Error('gpt-5.4 is not priced');
+  const m = lookup.price;
+  fc.assert(
+    fc.property(fc.integer({ min: 1, max: 300_000 }), fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true }), fc.integer({ min: 1, max: 128_000 }), (bytes, cachedShare, writeShare, out) => {
+      const x = { ...extract({ model: 'gpt-5.4', max_tokens: out, messages: [{ role: 'user', content: 'x' }] }), bodyBytes: bytes };
+      const f = { ...req(x, m), surface: 'openai-responses' as const, maxOutputTokens: out };
+      const est = worstCaseMicroUsd(f, m, table, opts).micro;
+      // input_tokens up to the bound; cached part of it; writes up to all of it, billed on top.
+      const inputTokens = f.inputTokensBound;
+      const cached = Math.floor(inputTokens * cachedShare);
+      const written = Math.floor(inputTokens * writeShare);
+      const cost = costMicroUsd(table, 'gpt-5.4', { input: inputTokens - cached, cacheRead: cached, cacheWrite5m: written, cacheWrite1h: 0, output: out });
+      expect(cost).toBeLessThanOrEqual(est);
+    }),
+    { numRuns: 300 },
+  );
 });

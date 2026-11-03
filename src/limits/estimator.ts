@@ -64,6 +64,20 @@ export function maxInputRate(m: ModelPrice, fast = false, serviceTier: string | 
   return Math.max(...priceSets(m, fast, serviceTier).flatMap((p) => [p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead]));
 }
 
+/** Highest cache write rate across the request's price sets (`priceSets`). */
+export function maxCacheWriteRate(m: ModelPrice, fast = false, serviceTier: string | null = null): number {
+  return Math.max(...priceSets(m, fast, serviceTier).flatMap((p) => [p.cacheWrite5m, p.cacheWrite1h]));
+}
+
+/**
+ * Highest rate one bounded input token can cost. On the Responses surface `cache_write_tokens` is billed on top of
+ * `input_tokens` (ruling, until confirmed), and writes come from prompt tokens, so each input token may also be written
+ * once: the input rate plus the write rate.
+ */
+function inputTokenRate(f: RequestFeatures, m: ModelPrice, fast: boolean, tier: string | null): number {
+  return maxInputRate(m, fast, tier) + (f.surface === 'openai-responses' ? maxCacheWriteRate(m, fast, tier) : 0);
+}
+
 /** Highest output rate across the request's price sets (`priceSets`). */
 export function maxOutputRate(m: ModelPrice, fast = false, serviceTier: string | null = null): number {
   return Math.max(...priceSets(m, fast, serviceTier).map((p) => p.output));
@@ -162,7 +176,7 @@ export function worstCaseMicroUsd(
     outputTokens = iterations * m.maxOutputTokens;
   }
   const tier = f.serviceTier ?? null;
-  const tokenMicro = (inputTokens * maxInputRate(m, fast, tier) + outputTokens * maxOutputRate(m, fast, tier)) * modifierProduct(t);
+  const tokenMicro = (inputTokens * inputTokenRate(f, m, fast, tier) + outputTokens * maxOutputRate(m, fast, tier)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);
   const block = unpriced ? 'unpriced-server-tool' : withoutMaxUses && o.serverToolsWithoutMaxUses === 'block' ? 'server-tool-no-max-uses' : null;
   return { micro, boundAssumed: unpriced || withoutMaxUses, block };
@@ -185,7 +199,7 @@ export function sessionAwareMicroUsd(
   const share = prevCacheReadShare === null || Number.isNaN(prevCacheReadShare) ? 0 : Math.min(1, Math.max(0, prevCacheReadShare));
   const tier = f.serviceTier ?? null;
   const readRate = Math.max(...priceSets(m, fast, tier).map((p) => p.cacheRead));
-  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * maxInputRate(m, fast, tier));
+  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * inputTokenRate(f, m, fast, tier));
   const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast, tier);
   return roundUp((inputMicro + outputMicro) * modifierProduct(t), f.model);
 }

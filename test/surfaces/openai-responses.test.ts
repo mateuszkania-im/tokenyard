@@ -113,3 +113,25 @@ test('service_tier: absent, null and default are standard; any other value is ca
   expect(extractResponsesFeatures(respBody({ service_tier: 7 })).serviceTier).toBe('7');
   expect(extractResponsesFeatures(respBody({ service_tier: 'priority' })).fastMode).toBe(false);
 });
+
+test('fix 1: a shell tool with a hosted environment or a container is a server tool; local or no environment is client', () => {
+  const st = (tools: unknown[]) => extractResponsesFeatures(respBody({ tools })).serverTools;
+  expect(st([{ type: 'shell', environment: { type: 'container_auto' } }])).toEqual([{ type: 'shell', maxUses: null }]);
+  expect(st([{ type: 'shell', environment: { type: 'container_reference', container_id: 'c' } }])).toEqual([{ type: 'shell', maxUses: null }]);
+  expect(st([{ type: 'shell', environment: 'weird' }])).toEqual([{ type: 'shell', maxUses: null }]);
+  expect(st([{ type: 'local_shell', container: { type: 'auto' } }])).toEqual([{ type: 'local_shell', maxUses: null }]);
+  expect(st([{ type: 'apply_patch', environment: { type: 'container_auto' } }])).toEqual([{ type: 'apply_patch', maxUses: null }]);
+  expect(st([{ type: 'shell' }, { type: 'shell', environment: { type: 'local' } }, { type: 'apply_patch' }, { type: 'local_shell' }])).toEqual([]);
+  // Nested in a namespace, the same rule.
+  expect(st([{ type: 'namespace', name: 'n', tools: [{ type: 'shell', environment: { type: 'container_auto' } }] }])).toEqual([{ type: 'shell', maxUses: null }]);
+});
+
+test('fix 2: OpenAI-defined client tools (local_shell, shell, apply_patch) force the context-window bound; function and custom do not', () => {
+  for (const t of [{ type: 'local_shell' }, { type: 'shell' }, { type: 'shell', environment: { type: 'local' } }, { type: 'apply_patch' }]) {
+    const x = extractResponsesFeatures(respBody({ tools: [t] }));
+    expect(x.expandsServerSide, JSON.stringify(t)).toBe(true);
+    expect(inputTokenBound(x, mini()).kind).toBe('context-window');
+  }
+  expect(extractResponsesFeatures(respBody({ tools: [{ type: 'function', name: 'f' }, { type: 'custom', name: 'c' }] })).expandsServerSide).toBe(false);
+  expect(extractResponsesFeatures(respBody({ tools: [{ type: 'namespace', name: 'n', tools: [{ type: 'apply_patch' }] }] })).expandsServerSide).toBe(true);
+});

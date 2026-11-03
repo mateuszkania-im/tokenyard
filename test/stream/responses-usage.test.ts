@@ -12,15 +12,16 @@ function run(buf: Buffer) {
   return acc.result();
 }
 
-// The fixture is a real Codex 0.166.0 stream (gpt-5.4-mini, 2026-11-03) with every id, text and count replaced.
-test('response.completed usage: cached is cache read, cache_write_tokens a cache write, the rest input; output includes reasoning', () => {
+// The fixture is a real Codex 0.166.0 stream (gpt-5.4-mini, 2026-11-03) with every id, text and count replaced. The
+// capture had cache_write_tokens 0; the fixture's 64 is synthetic, to exercise the field.
+test('response.completed usage: cached is cache read, the rest input, cache_write_tokens a write on top (ruling: additive until confirmed)', () => {
   const r = run(fx('responses-completed'));
   expect(r).toMatchObject({
     source: 'final',
     sawStop: true,
     midStreamError: null,
     responseModel: 'gpt-5.4-mini-2026-03-17',
-    usage: { input: 1200 - 1024 - 64, cacheRead: 1024, cacheWrite5m: 64, cacheWrite1h: 0, output: 42 },
+    usage: { input: 1200 - 1024, cacheRead: 1024, cacheWrite5m: 64, cacheWrite1h: 0, output: 42 },
   });
   expect(r.streamedChars).toBe(71);
 });

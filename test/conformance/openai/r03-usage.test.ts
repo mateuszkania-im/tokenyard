@@ -26,10 +26,10 @@ test('R3 response.completed usage parsed: input_tokens, output_tokens, input_tok
   const o = settled[0] as RequestOutcome;
   expect(o.surface).toBe('openai-responses');
   expect(o.client.agent).toBe('codex');
-  // A real Codex 0.166.0 stream with values replaced. input_tokens counts the cached and written tokens too: billed
-  // input is the rest.
-  expect(o.usage).toMatchObject({ source: 'final', sawStop: true, responseModel: 'gpt-5.4-mini-2026-03-17', usage: { input: 112, cacheRead: 1024, cacheWrite5m: 64, output: 42 } });
-  // gpt-5.4-mini: (112 + 64) x 0.75 + 1024 x 0.075 + 42 x 4.5 micro-USD = 397.8, rounded half up.
-  expect(o.costMicroUsd).toBe(398);
+  // A real Codex 0.166.0 stream with values replaced (cache_write_tokens 64 is synthetic). input_tokens counts the
+  // cached tokens: billed input is the rest. Cache writes are billed on top until their semantics are confirmed.
+  expect(o.usage).toMatchObject({ source: 'final', sawStop: true, responseModel: 'gpt-5.4-mini-2026-03-17', usage: { input: 176, cacheRead: 1024, cacheWrite5m: 64, output: 42 } });
+  // gpt-5.4-mini: 176 x 0.75 + 64 x 0.75 + 1024 x 0.075 + 42 x 4.5 micro-USD = 445.8, rounded half up.
+  expect(o.costMicroUsd).toBe(446);
   expect(o.settledBy).toBeUndefined();
 });

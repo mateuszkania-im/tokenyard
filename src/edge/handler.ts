@@ -287,7 +287,12 @@ interface Held {
   known: Omit<RequestOutcome, 'status' | 'usage' | 'aborted' | 'ttfbMs' | 'totalMs' | 'costMicroUsd' | 'addedTtfbMs'> | null;
 }
 
-const totalInput = (u: NonNullable<UsageResult['usage']>): number => u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
+/**
+ * Prompt tokens the provider counted, for R11. On the Responses surface cache writes are billed on top of
+ * `input_tokens` (ruling), so they are not prompt tokens of their own.
+ */
+const totalInput = (u: NonNullable<UsageResult['usage']>, surface: Surface): number =>
+  u.input + u.cacheRead + (surface === 'openai-responses' ? 0 : u.cacheWrite5m + u.cacheWrite1h);
 
 /** Price table modifiers the request selects: `inference_geo: "us"` is `inferenceGeoUs`; a geo without an entry has none. */
 function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures): string[] {
@@ -361,12 +366,12 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
 
   // R11: the bytes bound rests on at most one token per byte; one violation turns it off for this process.
   const f = held.features;
-  if (r?.usage && f?.boundKind === 'bytes' && totalInput(r.usage) > f.inputTokensBound) {
+  if (r?.usage && f?.boundKind === 'bytes' && totalInput(r.usage, o.surface) > f.inputTokensBound) {
     o.boundExceeded = true;
     runtime.boundViolations++;
     if (!runtime.bytesBoundOff) {
       runtime.bytesBoundOff = true;
-      console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) until restart`);
+      console.error(`tokenyard: request ${o.id} billed ${totalInput(r.usage, o.surface)} input tokens, above its bytes bound of ${f.inputTokensBound}; the bytes bound is off (context-window bound for every request) until restart`);
     }
   }
   try {
