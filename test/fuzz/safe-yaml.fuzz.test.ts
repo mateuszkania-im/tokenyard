@@ -66,6 +66,21 @@ const mutated = fc.array(fc.tuple(fc.nat(), fc.constantFrom('insert', 'replace',
   return s;
 });
 
+/**
+ * Per-parse time bound (V4 review M6): relative to parsing the example policy on this machine, so a slow CI runner
+ * scales both, with a floor of 2 s. Generated inputs are at most a few times the example's size; an expanded alias
+ * bomb (12 levels of width 12) would take longer by orders of magnitude.
+ */
+const PARSE_BOUND_MS = (() => {
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < 5; i++) {
+    const t = performance.now();
+    parse(EXAMPLE);
+    best = Math.min(best, performance.now() - t);
+  }
+  return Math.max(2_000, 200 * best);
+})();
+
 test('the generators reach both outcomes (sanity: the fuzz is not all refusals)', () => {
   const samples = fc.sample(fc.oneof(doc, mutated), { numRuns: 400, seed: 0x9a71 }).map(parse);
   expect(samples.some((o) => o.ok)).toBe(true);
@@ -78,7 +93,7 @@ test('fuzz: hostile YAML gives plain data or a YamlError, never pollutes Object.
       const before = Object.getOwnPropertyNames(Object.prototype).length;
       const started = performance.now();
       const r = parse(text);
-      expect(performance.now() - started).toBeLessThan(500);
+      expect(performance.now() - started).toBeLessThan(PARSE_BOUND_MS);
       expect(Object.getOwnPropertyNames(Object.prototype).length).toBe(before);
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
       if (!r.ok) return;
@@ -99,7 +114,7 @@ test('fuzz: an alias bomb of any width and depth is refused quickly', () => {
       for (let d = 1; d <= depth; d++) lines.push(`a${d}: &a${d} [${Array.from({ length: width }, () => `*a${d - 1}`).join(', ')}]`);
       const started = performance.now();
       expect(parse(lines.join('\n'))).toEqual({ ok: false, code: 'E_YAML_UNSAFE' });
-      expect(performance.now() - started).toBeLessThan(500);
+      expect(performance.now() - started).toBeLessThan(PARSE_BOUND_MS);
     }),
     fuzz(0x9a73, 60),
   );

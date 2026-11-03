@@ -27,17 +27,33 @@ function parseChunks(chunks: readonly Buffer[], p = new SseParser()): SseEvent[]
   return out;
 }
 
+/** Fastest of three runs of one long line of `bytes` in 64-byte chunks, in ms; checks the event it yields. */
+function longLineMs(bytes: number): number {
+  let best = Number.POSITIVE_INFINITY;
+  for (let run = 0; run < 3; run++) {
+    const p = new SseParser();
+    const chunk = Buffer.alloc(64, 0x61);
+    const started = performance.now();
+    let early = p.push(Buffer.from('event: response.completed\ndata: ')).length;
+    for (let i = 0; i < bytes / 64; i++) early += p.push(chunk).length;
+    const events = p.push(Buffer.from('\n\n'));
+    best = Math.min(best, performance.now() - started);
+    expect(early).toBe(0);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.event).toBe('response.completed');
+    expect(events[0]?.data.length).toBe(bytes);
+  }
+  return best;
+}
+
+// Timing bounds that hold on a slow CI runner (V4 review M6): the time for 8 times the bytes is compared with the
+// small run's (linear: about 8 times; the old quadratic parser: about 64 times), and the absolute bound is far above
+// a linear run (milliseconds) and far below the old parser (76 s for 2 MiB).
 test('S-V4-1 a long line delivered in small chunks parses in linear time (was quadratic: 1 MiB in 64-byte chunks took 20 s)', () => {
-  const p = new SseParser();
-  const chunk = Buffer.alloc(64, 0x61);
-  const started = performance.now();
-  expect(p.push(Buffer.from('event: response.completed\ndata: '))).toEqual([]);
-  for (let i = 0; i < (2 * 1024 * 1024) / 64; i++) expect(p.push(chunk)).toEqual([]);
-  const events = p.push(Buffer.from('\n\n'));
-  expect(performance.now() - started).toBeLessThan(1_000);
-  expect(events).toHaveLength(1);
-  expect(events[0]?.event).toBe('response.completed');
-  expect(events[0]?.data.length).toBe(2 * 1024 * 1024);
+  const small = longLineMs(256 * 1024);
+  const large = longLineMs(2 * 1024 * 1024);
+  expect(large).toBeLessThan(10_000);
+  expect(large / Math.max(small, 1)).toBeLessThan(32);
 });
 
 test('S-V4-1 a line longer than the cap is dropped with its event, holds no more than the cap, and later events parse', () => {
