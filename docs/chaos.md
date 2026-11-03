@@ -153,8 +153,11 @@ the sweeper settles it at its estimate, and the store and the trace lines agree 
    | unparsable: card-number-shaped digits, near-emails, one bare number | 400, 0.27 to 0.35 s | 400 or 413, 0.66 to 1.36 s |
    | duplicate key: the same four contents | 400, 0.05 to 0.53 s | 400 or 413, 0.21 to 1.27 s |
 
-   Peak RSS above the level before the request: at most 75 MB for every refused body (receiving it: chunks, then one
-   Buffer) and at most 190 MB for any body within the budgets, against 1.5 to 2.2 GB before (short strings, bare tokens).
+   Peak RSS above the level before the request: at most 75 MB for every body the budgets refuse before or during the
+   scan (receiving it: chunks, then one Buffer) and at most 190 MB for any body within the budgets, against 1.5 to 2.2 GB
+   before (short strings, bare tokens). The rows added in R-V3-6 were measured for RSS in V5 (same sampler, worst of
+   three runs): answered bodies at most 142 MB (one 32 MiB bare number, coding agent), bodies refused with 400 or 413
+   after the scan at most 134 MB (unparsable card-shaped digits, product route).
    Within the budgets the cost is linear in the bytes and bounded by the 32 MiB body cap (ruling R-V3-6): the worst
    answered body is one 32 MiB bare number (0.68 s coding agent, 1.24 s product: the byte loops of the value counter,
    the body-shape check and the scan views, and the PII regexes on product routes), and the worst body overall is
