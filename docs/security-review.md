@@ -54,14 +54,14 @@ has a second layer; Low means hardening or a latent flaw with no current path.
 | B6 | leak | Low | Trace files, exports and reports world-readable | `test/security/b6-private-files.test.ts` | fixed: 0600 in 0700 directories | fc18eb5 |
 | B7 | leak | Low | `traces export --anonymize` fell back to the trace salt | `test/security/b7-export-salt.test.ts` | fixed: one-off salt, refused when equal to the trace salt | 33dafe7, 7bdf579 |
 | B8 | leak | Medium | PII hits traced as an HMAC of the value, enumerable (PESEL recovered) | `test/security/b8-pii-value-hmac.test.ts` | fixed: no value HMAC for PII rules; guardrail salt derived per guardrail | daba176 |
-| C1 | CI | Medium | Workflow-command injection from PR policy text into the Action's output | `test/security/c1-action-workflow-commands.test.ts` | fixed: single-line log output, run wrapped in `::stop-commands::` | 32d8e4c, bcea1bc |
-| C2 | CI | Medium | Replay traces read from the PR working tree; no decompressed-size cap | `test/security/c2-action-traces-at-base.test.ts` | fixed: workspace traces read at the base commit in a PR, sha256 in the comment, size and line caps | 86b6aa6 |
+| C1 | CI | Medium | Workflow-command injection from PR policy text into the Action's output | `test/security/c1-action-workflow-commands.test.ts` | fixed: single-line log output, legacy `##[` form broken, run wrapped in `::stop-commands::` | 32d8e4c, bcea1bc, d3ddfde |
+| C2 | CI | Medium | Replay traces read from the PR working tree; no decompressed-size cap | `test/security/c2-action-traces-at-base.test.ts` | fixed: workspace traces read at the base commit in a PR, sha256 in the comment, caps of 1 GiB decompressed and 1 MiB per line | 86b6aa6, 9bc8b73 |
 | C3 | CI | Low | The PR set its own `ci.failOn` gate | `test/security/c3-action-fail-on.test.ts` | fixed: stricter of base and head, comment says when the PR changes it | fa2d016 |
 | C4 | budget | Medium | Same as A1 on a header-selected route | `test/security/a1-reserve-output-tokens.test.ts` | fixed with A1 | 2d04d11 |
 | C5 | leak | Low | Same as B3 | `test/security/b3-ops-host.test.ts` | fixed with B3 | c5f9332 |
 | C6 | leak | Low | Client `openai-organization` and `openai-project` headers forwarded in API mode | `test/security/b2-upstream-echo.test.ts` (C6 tests) | fixed: dropped | 222c03d |
 | C7 | budget | Medium | Duplicate top-level keys: `JSON.parse` last wins, original bytes forwarded | `test/security/a5-parser-differential.test.ts` | fixed with A5 | b4c0e65 |
-| C8 | policy | Low | YAML 1.1 directive accepted, key collisions after conversion, quadratic duplicate check | `test/security/c8-yaml-hardening.test.ts` | fixed: only `%YAML 1.2`, keys compared as property names in linear time, node cap, one parse per load | 0b04d82 |
+| C8 | policy | Low | YAML 1.1 directive accepted, key collisions after conversion, quadratic duplicate check | `test/security/c8-yaml-hardening.test.ts` | fixed: only `%YAML 1.2`, only core-schema tags (`!!binary`, `!!timestamp`, `!!set`, `!!omap`, `!!pairs` and custom tags refused), `__proto__` and `<<` checked on every pair, keys compared as property names in linear time, node cap, one parse per load | 0b04d82, e517d35 |
 | C9 | CI | Low | Base-side git inherited `GIT_*` environment (replace refs) | `test/security/c9-base-git-env.test.ts` | fixed: environment built from scratch, replace objects off | dfab3f0 |
 | C10 | policy | Low | Last-known-good checks its own sha256, which authenticates nothing | `test/security/c10-lkg-integrity-scope.test.ts` | documented: corruption detection only, plus owner and 0600 check; no MAC by ruling | 79f414a |
 | C11 | CI | Medium | `policy replay --base main` preferred a directory named `main/` | `test/security/c11-cli-base-ref.test.ts` | fixed: `--base-ref` (git objects) and `--base-dir`; `--base` refuses a value that is both | 9a6bef7 |
@@ -144,6 +144,9 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   no stability re-read. Operators should replace policy files atomically (write to a temporary name, then rename).
 - **Last-known-good is not authenticated (C10).** Its sha256 detects corruption; anyone who can write the state
   directory can plant a policy. The loader requires gateway-user ownership and mode 0600, nothing more.
+- **Base-side git keeps PATH (C9).** git for the base side runs with an environment built from scratch, but PATH is
+  kept so git can be found. An earlier workflow step that can write `GITHUB_PATH` can put another `git` first; a step
+  that can write `GITHUB_ENV` can already set `NODE_OPTIONS`, which wins over anything the Action does.
 - **Counter store restart (task 13).** The Redis store maps settlement ids to tenants in process; after a restart a
   settle returns `unknown` and the sweeper settles at the estimate. This fails safe (charged at the reservation) but
   the actual cost of that request is lost.
