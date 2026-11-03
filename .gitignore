@@ -8,3 +8,5 @@ coverage/
 /traces/
 .live/
 bench/tmp/
+reports/
+.stryker-tmp/

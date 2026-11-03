@@ -1,4 +1,1 @@
-{
-  "categories": { "correctness": "error" },
-  "ignorePatterns": ["bin/**", "node_modules/**", "coverage/**", "dist/**"]
-}
+{"categories": {"correctness": "error"}, "ignorePatterns": ["bin/**", "node_modules/**", "coverage/**", "dist/**", "reports/**", ".stryker-tmp/**"]}
