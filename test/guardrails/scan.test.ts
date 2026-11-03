@@ -7,6 +7,7 @@ import { findSpans, keywordsIn, scanBody, shannonEntropy } from '../../src/guard
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
 import { cpuBoundMs, cpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 const AWS = RULE_FIXTURES['aws-access-key-id']?.positive as string;
 const GH = RULE_FIXTURES['github-pat']?.positive as string;
@@ -186,7 +187,7 @@ test('keywordsIn finds exactly the keywords String.includes finds, prefixes and 
       const want = new Set(keywords.filter((k) => text.includes(k)));
       expect(keywordsIn(text, keywords)).toEqual(want);
     }),
-    { numRuns: 2_000 },
+    fuzz(5101, 2_000),
   );
   const all = [...new Set([...DEFAULT_RULES, ...PII_RULES].flatMap((r) => r.keywords))];
   const text = `x ${all.join(' y ')} z api_key apiKey sk-ant- sk-proj-`;

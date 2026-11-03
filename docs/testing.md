@@ -44,6 +44,22 @@ seed, the shrunk counterexample and its path; `TOKENYARD_FUZZ_SEED` with that se
 | `test/fuzz/anonymize.fuzz.test.ts` | `0xa401` to `0xa403` | `traces export --anonymize`: generated secrets, Unix and Windows paths, emails, hostnames, tokens and phrases in the fields a client or key file chooses (the file header lists them; deployment-chosen values and gateway enums are copied and not fuzzed) never survive into the anonymized record, nor any 12-character piece of them; a server tool type no provider documents, letters-only words included, is exported only as a pseudonym or `(invalid)`; pseudonyms are stable within one salt and differ across salts. Ingest side: `test/security/s-v4-3-server-tool-type-allowlist.test.ts` (`0x5a43`) |
 | `test/fuzz/scanner.fuzz.test.ts` | `0x5ca1`, `0xb0d1`, `0xe5c1` | Secret scanner: a secret is found with the same rule, value HMAC and place however its characters are escaped (`\uXXXX`, `\/`) and however it is split over the text blocks of one message; body-shape finds a duplicate key at any depth whatever its escaping, and only then; the S-V3-1 escape count matches a reference; a body holding the escape budget in every turn scans within its time bound |
 
+## Other seeded properties
+
+Properties that sit next to the unit tests of their module also take a fixed seed through `fuzz(seed, runs)`, so they
+generate the same inputs on every run and `TOKENYARD_FUZZ_SEED` replaces their seed too. They are not in the
+`npm run test:fuzz` paths, so they run at their default size there as well.
+
+| File | Seed | Property |
+|---|---|---|
+| `test/guardrails/scan.test.ts` | `5101` | `keywordsIn` finds exactly the keywords `String.includes` finds (the NUL-joined list collision is an explicit case in `test/guardrails/scan-views.test.ts`) |
+| `test/guardrails/scan-differential.test.ts` | `5111` | The optimised scanner returns what the pre-V1 scanner returns |
+| `test/limits/gcra.test.ts` | `5121` | Never more than burst plus elapsed over emission requests are allowed |
+| `test/limits/estimator.test.ts` | `5131` to `5133` | An unpriced server tool blocks; usage within the bounds costs at most the reservation; the Responses worst case covers cache writes |
+| `test/upstream/breaker.test.ts` | `5141`, `5142` | Breaker decisions match a whole-window reference, compaction included |
+| `test/surfaces/walker-differential.test.ts` | `5151` to `5153` | The V1 JSON walkers, feature extraction and body-shape refusals match the pre-V1 references |
+| `test/limits/budget-proof.test.ts` | `5161` | Memory store admit outcomes equal a sequential model applied in commit order |
+
 ## Found and fixed
 
 - S-V4-1 (Medium): the SSE parser was quadratic in the length of a line delivered in small chunks, without a bound on

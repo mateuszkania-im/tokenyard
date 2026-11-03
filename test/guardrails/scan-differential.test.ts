@@ -8,6 +8,7 @@ import { findSpans, scanBody } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
 import * as ref from './scan-reference.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 const SECRETS = [...Object.values(RULE_FIXTURES).flatMap((f) => [f.positive, f.negative]), 'jan.kowalski@example.com', '44051401458', 'DE89370400440532013000', '4111 1111 1111 1111'];
 const FILLER = ['export const x = 1;\n', 'token: ', 'apiKey=', '"quoted"', '\\', '\t', 'é', ' ', '\0', ' ', 'AKIA', 'sk-ant-', 'ghp_', '-----BEGIN', 'secret = '];
@@ -51,6 +52,6 @@ test('optimised scanner returns what the pre-V1 scanner returns: hits, spans, se
       const rules = [...DEFAULT_RULES, ...PII_RULES];
       expect(spans(findSpans(b, rules, opts))).toEqual(spans(ref.findSpans(b, rules, opts)));
     }),
-    { numRuns: 1_500 },
+    fuzz(5111, 1_500),
   );
 });

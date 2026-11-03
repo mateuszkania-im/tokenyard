@@ -3,6 +3,7 @@ import fc from 'fast-check';
 import { Breaker } from '../../src/upstream/breaker.js';
 import { RetryBudget } from '../../src/upstream/retry-budget.js';
 import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 const opts = { minRequests: 4, failureRatio: 0.5, windowSeconds: 30, openSeconds: 10 };
 
@@ -139,7 +140,7 @@ test('breaker decisions match the whole-window reference for any outcome sequenc
         expect(b.allow('p')).toBe(ref.allow('p'));
       }
     }),
-    { numRuns: 300 },
+    fuzz(5141, 300),
   );
 });
 
@@ -171,6 +172,6 @@ test('long outcome sequences that compact the window (more than 1,024 expired ou
         expect(b.allow('p')).toBe(ref.allow('p'));
       }
     }),
-    { numRuns: 20 },
+    fuzz(5142, 20),
   );
 });

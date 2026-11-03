@@ -10,6 +10,7 @@ import * as refA from './reference/anthropic-messages.js';
 import * as refShape from './reference/body-shape.js';
 import * as refJ from './reference/json-ranges.js';
 import * as refO from './reference/openai-responses.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 /** The result or the error name, so a walker that throws on a broken body is compared too. */
 const outcome = (f: () => unknown): unknown => {
@@ -48,7 +49,7 @@ test('json-ranges: new walkers return what the pre-V1 walkers return, on valid a
       expect(skipValue(b, i)).toBe(refJ.skipValue(b, i));
       expect(duplicateTopLevelKey(b, [key, 'content'])).toBe(refJ.topLevelValueRanges(b, key).length > 1 || refJ.topLevelValueRanges(b, 'content').length > 1);
     }),
-    { numRuns: 3_000 },
+    fuzz(5151, 3_000),
   );
 });
 
@@ -61,7 +62,7 @@ test('feature extraction, rewrites and body-shape refusals are unchanged (Anthro
       expect(capTopLevelInteger(b, 'max_tokens', 5)).toEqual(refA.capTopLevelInteger(b, 'max_tokens', 5));
       for (const parsed of [true, false]) expect(bodyShapeRefusal(b, parsed)).toBe(refShape.bodyShapeRefusal(b, parsed));
     }),
-    { numRuns: 3_000 },
+    fuzz(5152, 3_000),
   );
 });
 
@@ -74,6 +75,6 @@ test('realistic message bodies: features and shape unchanged', () => {
       expect(extractResponsesFeatures(b)).toEqual(refO.extractResponsesFeatures(b));
       expect(bodyShapeRefusal(b, true)).toBe(refShape.bodyShapeRefusal(b, true));
     }),
-    { numRuns: 1_000 },
+    fuzz(5153, 1_000),
   );
 });

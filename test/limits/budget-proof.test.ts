@@ -15,6 +15,7 @@ import { authHeaders, send } from '../helpers/conformance.js';
 import { startGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV, testPolicy } from '../helpers/policy.js';
 import { spyStore } from '../helpers/store-spy.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 type Rec = Omit<TraceRecord, 'instance' | 'seq'>;
 const LIMIT = 1_000_000;
@@ -166,6 +167,6 @@ test('property: memory store admit outcomes equal a sequential model applied in 
       const snap = await store.snapshot(keys);
       expect(keys.map((k) => snap[k])).toEqual([0, 1].map((j) => ({ spent: model.s[j], reserved: model.r[j] })));
     }),
-    { numRuns: 200 },
+    fuzz(5161, 200),
   );
 });

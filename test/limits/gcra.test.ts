@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { gcra } from '../../src/limits/gcra.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 test('a fresh key allows `burst` requests at once, then asks to wait one emission interval', () => {
   let tat: number | null = null;
@@ -48,5 +49,6 @@ test('property: never more than burst + elapsed/emission requests are allowed', 
       }
       expect(allowed).toBeLessThanOrEqual(burst + Math.floor(now / e));
     }),
+    fuzz(5121, 100),
   );
 });

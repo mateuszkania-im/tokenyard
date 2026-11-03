@@ -17,6 +17,7 @@ import { lookupModel, parsePriceTable, type ModelPrice, type PriceTable } from '
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import type { ExtractedFeatures } from '../../src/surfaces/types.js';
 import { loadPrices } from '../helpers/prices.js';
+import { fuzz } from '../helpers/fuzz.js';
 
 const table = loadPrices();
 const opus = table.models['claude-opus-5-5'] as ModelPrice;
@@ -210,6 +211,7 @@ test('property: any tool set with a server-side tool that has no price is blocke
         expect(worstCaseMicroUsd(req(x, opus), opus, table, opts).block).toBe('unpriced-server-tool');
       },
     ),
+    fuzz(5131, 100),
   );
 });
 
@@ -329,7 +331,7 @@ test('property: any usage with input <= bound and output <= max_tokens costs <= 
       expect(est.block).toBeNull();
       expect(costMicroUsd(t, model, u, allModifiers)).toBeLessThanOrEqual(est.micro);
     }),
-    { numRuns: 3000 },
+    fuzz(5132, 3000),
   );
 });
 
@@ -372,6 +374,6 @@ test('fix 3: on the Responses surface the worst case covers cache writes billed 
       const cost = costMicroUsd(table, 'gpt-5.4', { input: inputTokens - cached, cacheRead: cached, cacheWrite5m: written, cacheWrite1h: 0, output: out });
       expect(cost).toBeLessThanOrEqual(est);
     }),
-    { numRuns: 300 },
+    fuzz(5133, 300),
   );
 });
