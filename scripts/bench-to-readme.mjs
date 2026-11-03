@@ -38,7 +38,14 @@ function overheadTable(rows) {
 
 function overheadSection(o) {
   const main = [10, 100, 500];
-  const lines = ['#### Gateway overhead', '', `${o.method}`, ''];
+  const lines = [
+    '#### Gateway overhead',
+    '',
+    `${o.method}`,
+    '',
+    'Errors count non-2xx answers and socket errors. autocannon reconnects at once after a connection reset, so a saturated server shows many socket errors per stream.',
+    '',
+  ];
   for (const store of ['memory', 'redis']) {
     const rows = o.rows.filter((r) => r.store === store);
     lines.push(`${store === 'memory' ? 'Memory' : 'Redis'} store:`, '');
