@@ -23,8 +23,8 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:redis": "node -e \"process.env.REDIS_URL || (console.error('test:redis needs REDIS_URL, for example redis://127.0.0.1:6379'), process.exit(1))\" && vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts",
-    "bench": "node -e \"console.error('bench: not implemented yet'); process.exit(1)\"",
-    "bench:check": "node -e \"console.error('bench:check: not implemented yet'); process.exit(1)\"",
+    "bench": "tsx bench/run.ts",
+    "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
     "live": "node --env-file=.env bin/tokenyard.mjs live",
     "check:secrets": "node scripts/check-no-secrets.mjs"
   },
@@ -34,6 +34,7 @@
     "@opentelemetry/resources": "^2.12.0",
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@types/node": "^22.20.5",
+    "autocannon": "^8.0.0",
     "commander": "^15.0.0",
     "esbuild": "^0.28.2",
     "fast-check": "^4.10.2",
