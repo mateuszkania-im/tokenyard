@@ -121550,6 +121550,28 @@ var init_otel = __esm({
   }
 });
 
+// src/edge/startup-warnings.ts
+var startup_warnings_exports = {};
+__export(startup_warnings_exports, {
+  startupWarnings: () => startupWarnings
+});
+function startupWarnings(policy2, o) {
+  const out = [];
+  if (o.store === "memory" && !o.traceDir && policy2.budgets.some((b) => b.enforce || b.enforceSubscription)) {
+    out.push("tokenyard: warning: budgets are enforced on the memory store without --trace-dir, so every restart starts their spend from zero; give --trace-dir (warm-up) or use --store redis");
+  }
+  for (const p of policy2.providers.values()) {
+    if (p.credential === "passthrough" || o.env[p.credential.env]) continue;
+    out.push(`tokenyard: warning: provider "${p.name}" reads its key from ${p.credential.env}, which is not set; its requests will get the provider's 401`);
+  }
+  return out;
+}
+var init_startup_warnings = __esm({
+  "src/edge/startup-warnings.ts"() {
+    "use strict";
+  }
+});
+
 // src/mock/traffic.ts
 var traffic_exports = {};
 __export(traffic_exports, {
@@ -127279,6 +127301,10 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   } catch (e2) {
     console.error(`tokenyard serve: counter store: ${e2 instanceof Error ? e2.message : String(e2)}`);
     process.exit(1);
+  }
+  if (!o.devUpstream) {
+    const { startupWarnings: startupWarnings2 } = await Promise.resolve().then(() => (init_startup_warnings(), startup_warnings_exports));
+    for (const w of startupWarnings2(activePolicy(), { store: o.store, traceDir: o.traceDir !== void 0, env: process.env })) console.error(w);
   }
   let ticks = 0;
   const stopSweeper = startSweeper2(counters.store, {

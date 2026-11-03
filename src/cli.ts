@@ -209,6 +209,12 @@ program
       console.error(`tokenyard serve: counter store: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(1);
     }
+    if (!o.devUpstream) {
+      // Restart loses memory-store spend without warm-up; an unset provider key is a 401 per request (FR-I2, FR-M7).
+      // The development upstream key is optional, so --dev-upstream gets neither.
+      const { startupWarnings } = await import('./edge/startup-warnings.js');
+      for (const w of startupWarnings(activePolicy(), { store: o.store, traceDir: o.traceDir !== undefined, env: process.env })) console.error(w);
+    }
     let ticks = 0;
     const stopSweeper = startSweeper(counters.store, {
       intervalMs: SWEEP_INTERVAL_MS,
