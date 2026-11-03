@@ -1,5 +1,5 @@
 // Policy files come from pull requests, so YAML is parsed as plain data and nothing else. Pure: parses text, no I/O.
-import { isCollection, isScalar, parseDocument, visit } from 'yaml';
+import { isAlias, isCollection, isMap, isScalar, parseDocument, visit } from 'yaml';
 
 export type YamlErrorCode = 'E_YAML_UNSAFE' | 'E_YAML_SYNTAX';
 
@@ -47,25 +47,22 @@ export function parseYamlSafe(text: string): unknown {
     throw new YamlError('E_YAML_UNSAFE', 'YAML directives other than %YAML 1.2 are not allowed in policy files');
   }
   let nodes = 0;
-  visit(doc, {
-    Node: () => {
-      if (++nodes > MAX_YAML_NODES) throw new YamlError('E_YAML_UNSAFE', `document has more than ${MAX_YAML_NODES} nodes`);
-    },
-    Alias: () => {
-      throw new YamlError('E_YAML_UNSAFE', 'YAML aliases are not allowed in policy files');
-    },
-    Map: (_k, map) => {
-      const seen = new Set<string>();
-      for (const pair of map.items) {
-        if (isCollection(pair.key)) throw new YamlError('E_YAML_UNSAFE', 'mappings and sequences are not allowed as keys');
-        const value = isScalar(pair.key) ? pair.key.value : pair.key;
-        if (value === '<<') throw new YamlError('E_YAML_UNSAFE', 'YAML merge keys (<<) are not allowed in policy files');
-        if (value === '__proto__') throw new YamlError('E_YAML_UNSAFE', 'key __proto__ is not allowed');
-        const key = jsKey(value);
-        if (seen.has(key)) throw new YamlError('E_YAML_SYNTAX', `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
-        seen.add(key);
-      }
-    },
+  // One function visitor: the library calls it for every node (maps, sequences, pairs, scalars, aliases). With named
+  // visitors only the most specific one runs, so a Map visitor would hide maps from a Node counter (S25-5).
+  visit(doc, (_k, node) => {
+    if (++nodes > MAX_YAML_NODES) throw new YamlError('E_YAML_UNSAFE', `document has more than ${MAX_YAML_NODES} nodes`);
+    if (isAlias(node)) throw new YamlError('E_YAML_UNSAFE', 'YAML aliases are not allowed in policy files');
+    if (!isMap(node)) return;
+    const seen = new Set<string>();
+    for (const pair of node.items) {
+      if (isCollection(pair.key)) throw new YamlError('E_YAML_UNSAFE', 'mappings and sequences are not allowed as keys');
+      const value = isScalar(pair.key) ? pair.key.value : pair.key;
+      if (value === '<<') throw new YamlError('E_YAML_UNSAFE', 'YAML merge keys (<<) are not allowed in policy files');
+      if (value === '__proto__') throw new YamlError('E_YAML_UNSAFE', 'key __proto__ is not allowed');
+      const key = jsKey(value);
+      if (seen.has(key)) throw new YamlError('E_YAML_SYNTAX', `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
+      seen.add(key);
+    }
   });
   try {
     return doc.toJS({ maxAliasCount: 0 });

@@ -2139,9 +2139,9 @@ var require_identity = __commonJS({
     var SCALAR = /* @__PURE__ */ Symbol.for("yaml.scalar");
     var SEQ = /* @__PURE__ */ Symbol.for("yaml.seq");
     var NODE_TYPE = /* @__PURE__ */ Symbol.for("yaml.node.type");
-    var isAlias = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === ALIAS;
+    var isAlias2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === ALIAS;
     var isDocument = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === DOC;
-    var isMap = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === MAP;
+    var isMap2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === MAP;
     var isPair = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === PAIR;
     var isScalar2 = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SCALAR;
     var isSeq = (node2) => !!node2 && typeof node2 === "object" && node2[NODE_TYPE] === SEQ;
@@ -2174,10 +2174,10 @@ var require_identity = __commonJS({
     exports.SCALAR = SCALAR;
     exports.SEQ = SEQ;
     exports.hasAnchor = hasAnchor;
-    exports.isAlias = isAlias;
+    exports.isAlias = isAlias2;
     exports.isCollection = isCollection2;
     exports.isDocument = isDocument;
-    exports.isMap = isMap;
+    exports.isMap = isMap2;
     exports.isNode = isNode;
     exports.isPair = isPair;
     exports.isScalar = isScalar2;
@@ -6289,9 +6289,9 @@ var require_resolve_flow_collection = __commonJS({
     var blockMsg = "Block collections are not allowed within flow collections";
     var isBlock = (token) => token && (token.type === "block-map" || token.type === "block-seq");
     function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onError, tag) {
-      const isMap = fc.start.source === "{";
-      const fcName = isMap ? "flow map" : "flow sequence";
-      const NodeClass = tag?.nodeClass ?? (isMap ? YAMLMap.YAMLMap : YAMLSeq.YAMLSeq);
+      const isMap2 = fc.start.source === "{";
+      const fcName = isMap2 ? "flow map" : "flow sequence";
+      const NodeClass = tag?.nodeClass ?? (isMap2 ? YAMLMap.YAMLMap : YAMLSeq.YAMLSeq);
       const coll = new NodeClass(ctx.schema);
       coll.flow = true;
       const atRoot = ctx.atRoot;
@@ -6327,7 +6327,7 @@ var require_resolve_flow_collection = __commonJS({
             offset = props.end;
             continue;
           }
-          if (!isMap && ctx.options.strict && utilContainsNewline.containsNewline(key))
+          if (!isMap2 && ctx.options.strict && utilContainsNewline.containsNewline(key))
             onError(
               key,
               // checked by containsNewline()
@@ -6367,7 +6367,7 @@ var require_resolve_flow_collection = __commonJS({
             }
           }
         }
-        if (!isMap && !sep3 && !props.found) {
+        if (!isMap2 && !sep3 && !props.found) {
           const valueNode = value ? composeNode(ctx, value, props, onError) : composeEmptyNode(ctx, props.end, sep3, null, props, onError);
           coll.items.push(valueNode);
           offset = valueNode.range[2];
@@ -6390,7 +6390,7 @@ var require_resolve_flow_collection = __commonJS({
             startOnNewline: false
           });
           if (valueProps.found) {
-            if (!isMap && !props.found && ctx.options.strict) {
+            if (!isMap2 && !props.found && ctx.options.strict) {
               if (sep3)
                 for (const st of sep3) {
                   if (st === valueProps.found)
@@ -6422,7 +6422,7 @@ var require_resolve_flow_collection = __commonJS({
           const pair = new Pair.Pair(keyNode, valueNode);
           if (ctx.options.keepSourceTokens)
             pair.srcToken = collItem;
-          if (isMap) {
+          if (isMap2) {
             const map2 = coll;
             if (utilMapIncludes.mapIncludes(ctx, map2.items, keyNode))
               onError(keyStart, "DUPLICATE_KEY", "Map keys must be unique");
@@ -6438,7 +6438,7 @@ var require_resolve_flow_collection = __commonJS({
           offset = valueNode ? valueNode.range[2] : valueProps.end;
         }
       }
-      const expectedEnd = isMap ? "}" : "]";
+      const expectedEnd = isMap2 ? "}" : "]";
       const [ce, ...ee] = fc.end;
       let cePos = offset;
       if (ce?.source === expectedEnd)
@@ -9476,24 +9476,19 @@ function parseYamlSafe(text2) {
     throw new YamlError("E_YAML_UNSAFE", "YAML directives other than %YAML 1.2 are not allowed in policy files");
   }
   let nodes = 0;
-  (0, import_yaml.visit)(doc, {
-    Node: () => {
-      if (++nodes > MAX_YAML_NODES) throw new YamlError("E_YAML_UNSAFE", `document has more than ${MAX_YAML_NODES} nodes`);
-    },
-    Alias: () => {
-      throw new YamlError("E_YAML_UNSAFE", "YAML aliases are not allowed in policy files");
-    },
-    Map: (_k, map2) => {
-      const seen = /* @__PURE__ */ new Set();
-      for (const pair of map2.items) {
-        if ((0, import_yaml.isCollection)(pair.key)) throw new YamlError("E_YAML_UNSAFE", "mappings and sequences are not allowed as keys");
-        const value = (0, import_yaml.isScalar)(pair.key) ? pair.key.value : pair.key;
-        if (value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
-        if (value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
-        const key = jsKey(value);
-        if (seen.has(key)) throw new YamlError("E_YAML_SYNTAX", `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
-        seen.add(key);
-      }
+  (0, import_yaml.visit)(doc, (_k, node2) => {
+    if (++nodes > MAX_YAML_NODES) throw new YamlError("E_YAML_UNSAFE", `document has more than ${MAX_YAML_NODES} nodes`);
+    if ((0, import_yaml.isAlias)(node2)) throw new YamlError("E_YAML_UNSAFE", "YAML aliases are not allowed in policy files");
+    if (!(0, import_yaml.isMap)(node2)) return;
+    const seen = /* @__PURE__ */ new Set();
+    for (const pair of node2.items) {
+      if ((0, import_yaml.isCollection)(pair.key)) throw new YamlError("E_YAML_UNSAFE", "mappings and sequences are not allowed as keys");
+      const value = (0, import_yaml.isScalar)(pair.key) ? pair.key.value : pair.key;
+      if (value === "<<") throw new YamlError("E_YAML_UNSAFE", "YAML merge keys (<<) are not allowed in policy files");
+      if (value === "__proto__") throw new YamlError("E_YAML_UNSAFE", "key __proto__ is not allowed");
+      const key = jsKey(value);
+      if (seen.has(key)) throw new YamlError("E_YAML_SYNTAX", `Map keys must be unique (duplicate key ${JSON.stringify(key.slice(0, 64))})`);
+      seen.add(key);
     }
   });
   try {
