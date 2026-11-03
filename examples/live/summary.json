@@ -1,0 +1,195 @@
+{
+  "source": "examples/live/live.ndjson.gz: tokenyard traces export --anonymize of the local live runs (spec 14.1); aggregates by bench/live-summary.ts",
+  "priceTable": "test/live/prices.yaml, version 2026-11-03",
+  "clients": [
+    {
+      "agent": "claude-code",
+      "version": "2.1.316",
+      "log": "test/live/claude-code.live.md",
+      "days": [
+        "2026-11-02"
+      ]
+    },
+    {
+      "agent": "codex",
+      "version": "0.166.0",
+      "log": "test/live/codex.live.md",
+      "days": [
+        "2026-11-02"
+      ]
+    }
+  ],
+  "records": 53,
+  "forwarded": 21,
+  "blocked": 32,
+  "blockedBy": {
+    "budget": 25,
+    "model-not-allowed": 1,
+    "server-tool-not-allowed": 6
+  },
+  "billed": 21,
+  "spendUsd": 0.529595,
+  "overruns": 0,
+  "settledBySweeper": 0,
+  "claudeCode": {
+    "requests": 40,
+    "billed": 18,
+    "costUsd": 0.516207,
+    "claudeCodeReportedCostUsd": 0.5162053,
+    "claudeCodeReportedSource": "test/live/claude-code.live.md (claude -p total_cost_usd per session)",
+    "cacheHitRatio": 0.7102,
+    "sessions": [
+      {
+        "session": 1,
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "requests": 7,
+        "billed": 7,
+        "blocked": 0,
+        "mainTurns": 4,
+        "subagentTurns": 3,
+        "tokenyardCostUsd": 0.17134,
+        "claudeCodeReportedCostUsd": 0.1713382,
+        "cacheHitRatio": 0.7096
+      },
+      {
+        "session": 2,
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "requests": 5,
+        "billed": 5,
+        "blocked": 0,
+        "mainTurns": 3,
+        "subagentTurns": 2,
+        "tokenyardCostUsd": 0.09903,
+        "claudeCodeReportedCostUsd": 0.09903,
+        "cacheHitRatio": 0.7719
+      },
+      {
+        "session": 3,
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "requests": 2,
+        "billed": 2,
+        "blocked": 0,
+        "mainTurns": 2,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0.158844,
+        "claudeCodeReportedCostUsd": 0.158844,
+        "cacheHitRatio": 0.4976
+      },
+      {
+        "session": 4,
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "requests": 12,
+        "billed": 1,
+        "blocked": 11,
+        "mainTurns": 1,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0.074617,
+        "claudeCodeReportedCostUsd": 0.0746165,
+        "cacheHitRatio": 0
+      },
+      {
+        "session": 5,
+        "models": [
+          "claude-sonnet-5-5"
+        ],
+        "requests": 14,
+        "billed": 3,
+        "blocked": 11,
+        "mainTurns": 3,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0.012376,
+        "claudeCodeReportedCostUsd": 0.0123766,
+        "cacheHitRatio": 0.9936
+      }
+    ]
+  },
+  "codex": {
+    "requests": 9,
+    "billed": 3,
+    "blocked": 6,
+    "costUsd": 0.013388,
+    "cacheHitRatio": 0.6535
+  },
+  "otherClients": {
+    "requests": 4,
+    "billed": 0
+  },
+  "r11": {
+    "billed": 21,
+    "violations": 0,
+    "bytesBound": 17,
+    "contextWindowBound": 4,
+    "actualToBytesBound": {
+      "min": 0.199,
+      "max": 0.348
+    }
+  },
+  "reservations": [
+    {
+      "model": "claude-sonnet-5-5",
+      "boundKind": "bytes",
+      "admitted": 14,
+      "minUsd": 1.657357,
+      "maxUsd": 1.837568
+    },
+    {
+      "model": "claude-opus-5-5",
+      "boundKind": "bytes",
+      "admitted": 2,
+      "minUsd": 3.572668,
+      "maxUsd": 3.580289
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "boundKind": "context-window",
+      "admitted": 2,
+      "minUsd": 5.808,
+      "maxUsd": 5.808
+    },
+    {
+      "model": "gpt-5.4-mini",
+      "boundKind": "bytes",
+      "admitted": 1,
+      "minUsd": 0.687258,
+      "maxUsd": 0.687258
+    },
+    {
+      "model": "gpt-5.4-mini",
+      "boundKind": "context-window",
+      "admitted": 2,
+      "minUsd": 0.9636,
+      "maxUsd": 0.9636
+    }
+  ],
+  "refusedByBudget": [
+    {
+      "what": "no server tools",
+      "model": "claude-opus-5-5",
+      "boundKind": "context-window",
+      "requests": 3,
+      "reservationUsd": 9.152
+    },
+    {
+      "what": "no server tools",
+      "model": "claude-sonnet-5-5",
+      "boundKind": "context-window",
+      "requests": 11,
+      "reservationUsd": 5.808
+    },
+    {
+      "what": "server tools web_search_20250305 (max_uses 8)",
+      "model": "claude-sonnet-5-5",
+      "boundKind": "context-window",
+      "requests": 11,
+      "reservationUsd": 58.16
+    }
+  ]
+}

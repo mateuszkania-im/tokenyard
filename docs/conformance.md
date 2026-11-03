@@ -37,5 +37,5 @@ C rules cover Anthropic Messages (Claude Code), R rules OpenAI Responses (Codex)
 
 | Client | Version | Date | Result |
 |---|---|---|---|
-| Claude Code | 2.1.316 | 2026-11-02 | `claude -p "say hi"` through tokenyard against the mock worked; it sent `POST /v1/messages?beta=true` |
+| Claude Code | 2.1.316 | 2026-11-02 | `claude -p "say hi"` through tokenyard against the mock worked; it sent `POST /v1/messages?beta=true`. Then live against the real API through the live harness: 5 sessions with subagents, tool calls and WebSearch, per-request tokens equal to Claude Code's own OTel events on the 11 requests where both were captured; see `test/live/claude-code.live.md` |
 | Codex | 0.166.0 | 2026-11-03 | `codex exec` with `wire_api = "responses"` through the live harness against the real OpenAI API (gpt-5.4-mini): a one-line edit in a scratch clone, 3 billed requests; see `test/live/codex.live.md` |

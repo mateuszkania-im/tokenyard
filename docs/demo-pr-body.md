@@ -15,10 +15,10 @@ Label: `demo`
 ## What to look at
 
 The policy replay comment appears only once the Action exists on the base branch (the workflow runs the Action from the
-base commit, so a PR cannot change the code that judges it). Once it does, it replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,587 requests) against
+base commit, so a PR cannot change the code that judges it). Once it does, it replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,649 requests) against
 the base and this branch and posts one sticky comment. With the current traces it reports (local run, seed 1):
 
-- Cost: -$2.87 (-5.7%), marked as estimated because the model changes.
+- Cost: -$2.87 (-5.6%), marked as estimated because the model changes.
 - 200 requests rerouted (184 auxiliary, 16 compaction).
 - 5 sessions of the web team cut mid-task by the tighter `team-day` budget, 117 later requests that would not have run.
 - The `ci.failOn.cutSessions: 0` gate fails on purpose: the check is red until the budget is loosened or the cut is
