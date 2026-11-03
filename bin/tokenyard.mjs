@@ -1437,15 +1437,22 @@ var init_writer = __esm({
         this.kick();
         return true;
       }
-      /** Queues a write-ahead `reserved` line (only with `writeAhead`); like control lines it never counts toward `queueMax`. */
+      /**
+       * Writes a write-ahead `reserved` line (only with `writeAhead`; true at once otherwise). Resolves once the line is on
+       * disk (true) or its write failed (false), so the caller forwards only a request whose spend a crash cannot hide
+       * (A11). Like control lines it never counts toward `queueMax`.
+       */
       reserved(r) {
-        if (this.closed || this.o.writeAhead !== true) return;
+        if (this.o.writeAhead !== true) return Promise.resolve(true);
+        if (this.closed) return Promise.resolve(false);
         const at = this.o.clock();
         const { path: path3 } = this.pathFor(r.tenant, at);
         this.tenants.add(r.tenant);
         const line = { v: 1, kind: "reserved", instance: this.o.instanceId, ...r };
-        this.queue.push({ path: path3, tenant: r.tenant, at, request: false, line: { ...line } });
-        this.kick();
+        return new Promise((done) => {
+          this.queue.push({ path: path3, tenant: r.tenant, at, request: false, line: { ...line }, done });
+          this.kick();
+        });
       }
       control(kind) {
         const now = this.o.clock();
@@ -1498,9 +1505,11 @@ var init_writer = __esm({
 `).join("");
           try {
             await writeFileUnder(this.root, path3, text2, { append: true, private: true });
+            for (const i of items) i.done?.(true);
           } catch {
             this.opened.delete(path3);
             this.dropped += items.filter((i) => i.request).length;
+            for (const i of items) i.done?.(false);
           }
         }
       }
@@ -59208,10 +59217,13 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? plan.reservations[0]?.estMicroUsd ?? 0 : 0;
   if (held.admitted) deps.metrics?.inc("tokenyard_reservations_open", {}, 1);
-  if (held.admitted && held.est > 0) {
+  let writeAheadFailed = false;
+  if (held.admitted && held.est > 0 && deps.traces?.reserved) {
+    const line = { id, ts: new Date(startedAt).toISOString(), tenant: f.tenant, team: f.team, keyId: f.keyId, billing: f.billing, attribution: { repo: f.attribution.repo, session: f.attribution.session }, reservedMicroUsd: held.est };
     try {
-      deps.traces?.reserved?.({ id, ts: new Date(startedAt).toISOString(), tenant: f.tenant, team: f.team, keyId: f.keyId, billing: f.billing, attribution: { repo: f.attribution.repo, session: f.attribution.session }, reservedMicroUsd: held.est });
+      writeAheadFailed = !await withDeadline(deps.traces.reserved(line), WRITE_AHEAD_TIMEOUT_MS);
     } catch {
+      writeAheadFailed = true;
     }
   }
   const admitted = {
@@ -59235,6 +59247,10 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
       policyRevision: policy2.revision,
       priceTable: policy2.priceTableVersion
     };
+  }
+  if (writeAheadFailed) {
+    sendError(req, res, own2(503, "api_error", "write-ahead-failed", "the trace line that records this reservation could not be written; it was not sent", 5));
+    return early({ ...decided, ...admitted, status: 503, decision: { action: "block", reason: "write-ahead-failed" }, errorClass: "api_error" });
   }
   const decision = admission === null ? pre : resolve2(policy2, plan, admission);
   const provider2 = first2 === void 0 ? void 0 : policy2.providers.get(first2.provider);
@@ -59387,7 +59403,7 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, ERROR_BODY_CAP_BYTES, TRUNCATED_MARKER, totalInput, isJson, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, WRITE_AHEAD_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, ERROR_BODY_CAP_BYTES, TRUNCATED_MARKER, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -59424,6 +59440,7 @@ var init_handler = __esm({
     init_paths();
     init_trace_record();
     DEFAULT_ADMIT_TIMEOUT_MS = 1e3;
+    WRITE_AHEAD_TIMEOUT_MS = 5e3;
     DEFAULT_REQUEST_DEADLINE_MS = 18 * 6e4;
     StoreTimeoutError = class extends Error {
     };
@@ -121554,7 +121571,7 @@ var init_engine = __esm({
     CLASSES2 = new Set(REQUEST_CLASSES2);
     STORE_DOWN = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
     NOTHING3 = { reason: null, name: "", scopeValue: "", provider: null, upstreamModel: null, cost: null };
-    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed", "output-cap-failed"]);
+    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed", "output-cap-failed", "write-ahead-failed"]);
     uniqSorted = (xs) => [...new Set(xs)].sort(cmp);
     recordedDecision = (r) => ({ action: r.decision.action, reason: r.decision.reason, route: r.decision.route, chain: [...r.decision.chain] });
   }

@@ -78,8 +78,8 @@ interface Outcome {
 const CLASSES: ReadonlySet<string> = new Set(REQUEST_CLASSES);
 const STORE_DOWN: Admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
 const NOTHING: Omit<Outcome, 'kind' | 'decision'> = { reason: null, name: '', scopeValue: '', provider: null, upstreamModel: null, cost: null };
-/** Gateway exits after decide that depend on body bytes the trace does not hold: carried over as recorded. */
-const BODY_EXITS: ReadonlySet<string> = new Set(['redaction-failed', 'model-rewrite-failed', 'output-cap-failed']);
+/** Gateway exits after decide that depend on body bytes the trace does not hold (or on the trace disk): carried over as recorded. */
+const BODY_EXITS: ReadonlySet<string> = new Set(['redaction-failed', 'model-rewrite-failed', 'output-cap-failed', 'write-ahead-failed']);
 
 /** Request features exactly as the gateway decided on them: the recorded bound and its kind are used, never re-derived (R11). */
 export function featuresOf(r: TraceRecord): RequestFeatures {

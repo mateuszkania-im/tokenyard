@@ -120,3 +120,42 @@ test('A11d fix round: the lock and the takeover file appear with their pid alrea
   expect(readFileSync(join(traceDir, LIVE_LOCK_FILE), 'utf8')).toBe(`${process.pid}\n`);
   expect(readdirSync(traceDir).filter((f) => f.includes('.lock'))).toEqual([LIVE_LOCK_FILE]);
 });
+
+test('A11e fix round: the upstream is called only after the reserved line is written; a failed write refuses the request', async () => {
+  const { startGateway } = await import('../helpers/gateway.js');
+  const { testPolicy, PROVIDER_KEY_ENV } = await import('../helpers/policy.js');
+  const { send } = await import('../helpers/conformance.js');
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const events: string[] = [];
+  const up = await raw(async (req, res) => {
+    await readJson(req);
+    events.push('upstream');
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id: 'm', type: 'message', model: 'claude-haiku-5-5', content: [], usage: { input_tokens: 5, output_tokens: 5 } }));
+  });
+  const { createMemoryStore } = await import('../../src/limits/memory-store.js');
+  let ok = true;
+  const sink = {
+    write: () => true,
+    reserved: () => new Promise<boolean>((r) => setTimeout(() => (events.push('reserved'), r(ok)), 150)),
+  };
+  const g = await startGateway({ policy: testPolicy({ upstream: up.url }), store: createMemoryStore({ clock: Date.now }), traces: sink, traceSalt: 's' });
+  closers.push(g.close);
+  const body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 16, messages: [{ role: 'user', content: 'x' }] });
+  expect((await send(g.url, { path: '/v1/messages', headers: authHeaders, body })).status).toBe(200);
+  expect(events).toEqual(['reserved', 'upstream']);
+  ok = false;
+  const refused = await send(g.url, { path: '/v1/messages', headers: authHeaders, body });
+  expect(refused.status).toBe(503);
+  expect(events).toEqual(['reserved', 'upstream', 'reserved']);
+});
+
+test('A11f fix round: TraceWriter.reserved resolves once the line is on disk', async () => {
+  const { TraceWriter } = await import('../../src/ledger/writer.js');
+  const dir = tmp();
+  const w = new TraceWriter({ dir, instanceId: 'i1', queueMax: 10, clock: Date.now, writeAhead: true });
+  const written = await w.reserved({ id: 'r1', ts: new Date().toISOString(), tenant: 'live', team: 'live', keyId: 'k', billing: 'api', attribution: { repo: null, session: null }, reservedMicroUsd: 5 });
+  expect(written).toBe(true);
+  const files = readdirSync(dir, { recursive: true }).map(String).filter((f) => f.endsWith('.ndjson'));
+  expect(files.some((f) => readFileSync(join(dir, f), 'utf8').includes('"kind":"reserved"'))).toBe(true);
+  await w.close();
+});

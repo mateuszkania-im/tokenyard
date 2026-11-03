@@ -23,6 +23,8 @@ interface Pending {
   /** A request record (counts toward `queueMax` and `dropped`), or a heartbeat or shutdown line. */
   request: boolean;
   line: Record<string, unknown>;
+  /** Called once the line is on disk (true) or its write failed (false). */
+  done?: (written: boolean) => void;
 }
 
 export class TraceWriter {
@@ -64,15 +66,22 @@ export class TraceWriter {
     return true;
   }
 
-  /** Queues a write-ahead `reserved` line (only with `writeAhead`); like control lines it never counts toward `queueMax`. */
-  reserved(r: Omit<ReservedRecord, 'v' | 'kind' | 'instance'>): void {
-    if (this.closed || this.o.writeAhead !== true) return;
+  /**
+   * Writes a write-ahead `reserved` line (only with `writeAhead`; true at once otherwise). Resolves once the line is on
+   * disk (true) or its write failed (false), so the caller forwards only a request whose spend a crash cannot hide
+   * (A11). Like control lines it never counts toward `queueMax`.
+   */
+  reserved(r: Omit<ReservedRecord, 'v' | 'kind' | 'instance'>): Promise<boolean> {
+    if (this.o.writeAhead !== true) return Promise.resolve(true);
+    if (this.closed) return Promise.resolve(false);
     const at = this.o.clock();
     const { path } = this.pathFor(r.tenant, at);
     this.tenants.add(r.tenant);
     const line: ReservedRecord = { v: 1, kind: 'reserved', instance: this.o.instanceId, ...r };
-    this.queue.push({ path, tenant: r.tenant, at, request: false, line: { ...line } });
-    this.kick();
+    return new Promise((done) => {
+      this.queue.push({ path, tenant: r.tenant, at, request: false, line: { ...line }, done });
+      this.kick();
+    });
   }
 
   private control(kind: 'heartbeat' | 'shutdown'): void {
@@ -128,9 +137,11 @@ export class TraceWriter {
       try {
         // Directories are created below the root one by one and the file is opened without following links (S-FS-1).
         await writeFileUnder(this.root, path, text, { append: true, private: true });
+        for (const i of items) i.done?.(true);
       } catch {
         this.opened.delete(path);
         this.dropped += items.filter((i) => i.request).length;
+        for (const i of items) i.done?.(false);
       }
     }
   }

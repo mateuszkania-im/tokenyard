@@ -44,8 +44,11 @@ import { buildTraceRecord, parseClient } from './trace-record.js';
 /** Where finished request records go. Implemented by `TraceWriter`; `null` when `--trace-dir` is not set. */
 export interface TraceSink {
   write(r: Omit<TraceRecord, 'instance' | 'seq'>): boolean;
-  /** Write-ahead line for an admitted request (A11); sinks without it skip it. */
-  reserved?(r: Omit<ReservedRecord, 'v' | 'kind' | 'instance'>): void;
+  /**
+   * Write-ahead line for an admitted request (A11): resolves true once it is written; the request is forwarded only
+   * then, and refused (503) when it resolves false. Sinks without it skip it.
+   */
+  reserved?(r: Omit<ReservedRecord, 'v' | 'kind' | 'instance'>): Promise<boolean>;
 }
 
 /** Process-local failure state (spec 8): never in `policy/`, which is pure. */
@@ -93,6 +96,8 @@ export interface GatewayDeps {
 }
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
+/** How long a write-ahead trace line may take to reach disk before the request is refused (A11, live harness). */
+const WRITE_AHEAD_TIMEOUT_MS = 5_000;
 /**
  * 18 minutes: above Claude Code's 10 minute request timeout, below the 20 minute reservation deadline (spec 7.2), with
  * time left to settle. undici's own timeouts only bound idle gaps, so a stream that keeps sending needs this (A8).
@@ -784,11 +789,15 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   held.admitted = isAdmitted(plan, admission);
   held.est = held.admitted ? (plan.reservations[0]?.estMicroUsd ?? 0) : 0;
   if (held.admitted) deps.metrics?.inc('tokenyard_reservations_open', {}, 1);
-  if (held.admitted && held.est > 0) {
+  // A11: the write-ahead line is on disk before anything is sent, so a crash cannot hide this request's spend from the
+  // next warm-up; a sink that cannot write it refuses the request (nothing sent, settled at 0).
+  let writeAheadFailed = false;
+  if (held.admitted && held.est > 0 && deps.traces?.reserved) {
+    const line = { id, ts: new Date(startedAt).toISOString(), tenant: f.tenant, team: f.team, keyId: f.keyId, billing: f.billing, attribution: { repo: f.attribution.repo, session: f.attribution.session }, reservedMicroUsd: held.est };
     try {
-      deps.traces?.reserved?.({ id, ts: new Date(startedAt).toISOString(), tenant: f.tenant, team: f.team, keyId: f.keyId, billing: f.billing, attribution: { repo: f.attribution.repo, session: f.attribution.session }, reservedMicroUsd: held.est });
+      writeAheadFailed = !(await withDeadline(deps.traces.reserved(line), WRITE_AHEAD_TIMEOUT_MS));
     } catch {
-      // a failing trace sink must not fail the request
+      writeAheadFailed = true;
     }
   }
   const admitted = {
@@ -812,6 +821,11 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
       policyRevision: policy.revision,
       priceTable: policy.priceTableVersion,
     };
+  }
+
+  if (writeAheadFailed) {
+    sendError(req, res, own(503, 'api_error', 'write-ahead-failed', 'the trace line that records this reservation could not be written; it was not sent', 5));
+    return early({ ...decided, ...admitted, status: 503, decision: { action: 'block', reason: 'write-ahead-failed' }, errorClass: 'api_error' });
   }
 
   // 8. Resolve.
