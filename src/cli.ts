@@ -413,7 +413,9 @@ policy
 policy
   .command('replay')
   .description('replay a merged trace export against a base and a head policy: fidelity, cost, reroutes, blocks, cut sessions, budget hits; exits 1 when a ci.failOn gate fails')
-  .requiredOption('--base <dir or git ref>', 'base policy directory, or a git ref whose copy of the --head directory is the base')
+  .option('--base-ref <git ref>', 'the base is the --head directory as committed at this git ref, read as git objects (never the working tree)')
+  .option('--base-dir <dir>', 'the base is this policy directory')
+  .option('--base <dir or git ref>', 'alias that takes either; refused when the value is both a directory and a git ref')
   .requiredOption('--head <dir>', 'head policy directory')
   .requiredOption('--traces <files...>', 'export file(s) written by tokenyard traces export (.ndjson or .ndjson.gz); a trace directory is refused')
   .option('--since <when>', 'duration such as 7d, or an ISO time; earlier records only seed budget windows (default: the export window)')
@@ -422,7 +424,7 @@ policy
   .option('--base-revision <rev>', 'revision the base was recorded under (default: the content revision serve --policy records)')
   .option('--head-revision <rev>', 'revision of the head (default: its content revision)')
   .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
-  .action(async (o: { base: string; head: string; traces: string[]; since?: string; tenant?: string; json?: string; baseRevision?: string; headRevision?: string; experimentalSubscription?: boolean }) => {
+  .action(async (o: { base?: string; baseRef?: string; baseDir?: string; head: string; traces: string[]; since?: string; tenant?: string; json?: string; baseRevision?: string; headRevision?: string; experimentalSubscription?: boolean }) => {
     const { cliRoot, writeFileUnder } = await import('./fsutil/safe-path.js');
     const { loadReplayPolicy, openReplayTraces } = await import('./policy-loader/replay-input.js');
     const { replay } = await import('./replay/engine.js');
@@ -431,9 +433,12 @@ policy
     const experimentalSubscription = o.experimentalSubscription === true;
     const sinceMs = o.since === undefined ? null : sinceOf(o.since, Date.now());
     if (sinceMs !== null && Number.isNaN(sinceMs)) return void (console.error('tokenyard policy replay: --since must be a duration or an ISO time'), process.exit(1));
+    const bases = [o.baseRef === undefined ? null : { source: o.baseRef, as: 'ref' as const }, o.baseDir === undefined ? null : { source: o.baseDir, as: 'dir' as const }, o.base === undefined ? null : { source: o.base, as: 'either' as const }].filter((b) => b !== null);
+    const chosen = bases[0];
+    if (bases.length !== 1 || chosen === undefined) return void (console.error('tokenyard policy replay: give exactly one of --base-ref <git ref> or --base-dir <dir>'), process.exit(1));
     try {
-      const base = await loadReplayPolicy({ source: o.base, headDir: o.head, experimentalSubscription, ...(o.baseRevision ? { revision: o.baseRevision } : {}) });
-      const head = await loadReplayPolicy({ source: o.head, headDir: o.head, experimentalSubscription, ...(o.headRevision ? { revision: o.headRevision } : {}) });
+      const base = await loadReplayPolicy({ ...chosen, headDir: o.head, experimentalSubscription, ...(o.baseRevision ? { revision: o.baseRevision } : {}) });
+      const head = await loadReplayPolicy({ source: o.head, as: 'dir', headDir: o.head, experimentalSubscription, ...(o.headRevision ? { revision: o.headRevision } : {}) });
       const result = await replay({ base, head, traces: await openReplayTraces(o.traces), sinceMs, tenant: o.tenant ?? null });
       if (o.json) await writeFileUnder(cliRoot(o.json), o.json, renderJson(result), { private: true });
       process.stdout.write(renderTerminal(result));

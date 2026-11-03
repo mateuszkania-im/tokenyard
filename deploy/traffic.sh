@@ -23,7 +23,7 @@ $TY traffic --gateway-url $urls
 sleep 3 # the gateways write traces asynchronously
 $TY traces export --trace-dir /var/lib/tokenyard/traces --out "$out/demo.ndjson.gz" --since "$start"
 set +e
-$TY policy replay --base /app/deploy/demo/base --head /app/deploy/demo/head --traces "$out/demo.ndjson.gz" > "$out/replay.txt"
+$TY policy replay --base-dir /app/deploy/demo/base --head /app/deploy/demo/head --traces "$out/demo.ndjson.gz" > "$out/replay.txt"
 set -e
 cat "$out/replay.txt" # a failed ci.failOn gate (exit 1) is a result of the demo PR, not an error of this job
 grep -q "tokenyard policy replay" "$out/replay.txt"

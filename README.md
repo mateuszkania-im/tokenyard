@@ -37,7 +37,7 @@ export TOKENYARD_TRACE_SALT=...                                # secrets come fr
 tokenyard serve --policy policy --trace-dir traces
 tokenyard serve --policy policy --store redis --redis-url-file /run/secrets/redis-url --trace-dir traces
 tokenyard traces export --since 7d --trace-dir traces --out traces.ndjson.gz
-tokenyard policy replay --base main --head policy --traces traces.ndjson.gz
+tokenyard policy replay --base-ref main --head policy --traces traces.ndjson.gz
 tokenyard report --traces traces.ndjson.gz --by team,repo --html report.html
 ```
 

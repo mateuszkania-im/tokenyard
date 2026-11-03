@@ -214,9 +214,33 @@ export function compileReplaySource(src: PolicySource, o: { revision?: string; e
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 
-/** A policy for replay from a directory, or from a git ref (the head directory's files at that ref). */
-export async function loadReplayPolicy(o: { source: string; headDir: string; revision?: string; experimentalSubscription: boolean; root?: string }): Promise<CompiledPolicy> {
-  const isDir = await stat(o.source).then((s) => s.isDirectory(), () => false);
-  const src = isDir ? await loadPolicyDir(o.source, o.root === undefined ? {} : { root: o.root }) : sourceAtRef(join(o.headDir, `@${o.source}`), o.source, locateRepoDir(o.headDir, null));
+/**
+ * A policy for replay. `as` says how `source` is read (C11): 'dir' a policy directory; 'ref' the head directory's files
+ * at that git ref, always as git objects through the hardened path, whatever the working tree holds; 'either' (the
+ * `--base` alias) whichever of the two it is, refused when it is both.
+ */
+export async function loadReplayPolicy(o: { source: string; headDir: string; as?: 'dir' | 'ref' | 'either'; revision?: string; experimentalSubscription: boolean; root?: string }): Promise<CompiledPolicy> {
+  const as = o.as ?? 'either';
+  const isDir = as === 'ref' ? false : await stat(o.source).then((s) => s.isDirectory(), () => false);
+  let src: PolicySource;
+  if (as === 'dir' || (as === 'either' && isDir)) {
+    if (as === 'either' && isRefIn(o.source, o.headDir)) {
+      throw new Error(`--base ${JSON.stringify(o.source)} is both a directory and a git ref; say which with --base-ref ${o.source} (git objects) or --base-dir ${o.source} (the directory)`);
+    }
+    src = await loadPolicyDir(o.source, o.root === undefined ? {} : { root: o.root });
+  } else {
+    const repo = locateRepoDir(o.headDir, null);
+    if (resolveGitCommit(o.source, repo) === null) throw new Error(as === 'ref' ? `--base-ref ${JSON.stringify(o.source)} is not a git ref` : `--base ${JSON.stringify(o.source)} is not a policy directory and not a git ref`);
+    src = sourceAtRef(join(o.headDir, `@${o.source}`), o.source, repo);
+  }
   return compileReplaySource(src, { ...(o.revision === undefined ? {} : { revision: o.revision }), experimentalSubscription: o.experimentalSubscription });
+}
+
+/** Whether `ref` is a git ref in the repository of `headDir` (false when that is not a repository). */
+function isRefIn(ref: string, headDir: string): boolean {
+  try {
+    return resolveGitCommit(ref, locateRepoDir(headDir, null)) !== null;
+  } catch {
+    return false;
+  }
 }

@@ -612,7 +612,7 @@ No prompt text, no tool content, no file paths from the body, no credentials. `a
 
 ### 9.2 Replay algorithm
 
-`tokenyard policy replay --base <policy dir or git ref> --head <policy dir> --traces <files or dir> [--since 7d] [--tenant acme] --md comment.md --json replay.json`
+`tokenyard policy replay --base-ref <git ref> | --base-dir <policy dir> --head <policy dir> --traces <files or dir> [--since 7d] [--tenant acme] --md comment.md --json replay.json`
 
 1. Load one merged trace set produced by `tokenyard traces export` (9.5), sorted by `ts`, then `id`. Replay refuses a directory of raw per-instance files and names the export command, because a partial set would undercount budgets **(my call)**.
 2. Run the **base** policy and the **head** policy separately over the same traces, each with its own `sim-store` on a virtual clock driven by `ts`. Diffing head against base (rather than head against what was recorded) keeps the comparison fair when traces were recorded under several revisions.

@@ -6,13 +6,16 @@ file: keys are written in the order below, arrays are sorted as described, and m
 
 ```sh
 tokenyard traces export --trace-dir traces --since 7d --out traces.ndjson.gz
-tokenyard policy replay --base main --head policy --traces traces.ndjson.gz --json replay.json
+tokenyard policy replay --base-ref main --head policy --traces traces.ndjson.gz --json replay.json
 ```
 
-`--base` is a policy directory or a git ref (the `--head` directory's files at that ref). A ref starting with `-` is
-refused, and any other is resolved to a commit with `git rev-parse --verify` before its files are read. Replay refuses a directory of
+`--base-ref <ref>` reads the base as the `--head` directory's files committed at that git ref, always as git objects:
+a directory in the working tree named like the ref is never consulted. A ref starting with `-` is refused, and any
+other is resolved to a commit with `git rev-parse --verify` before its files are read; git runs with an environment
+built from scratch and replace objects off. `--base-dir <dir>` reads the base from a policy directory. `--base` is
+kept as an alias that takes either, and refuses a value that is both a directory and a git ref. Replay refuses a directory of
 raw per-instance trace files and names `tokenyard traces export`: a partial set would undercount budgets. The command
-exits 1 when a `ci.failOn` gate of the head policy fails.
+exits 1 when a `ci.failOn` gate fails; each threshold is the stricter of the base and the head policy.
 
 ## Top level
 
