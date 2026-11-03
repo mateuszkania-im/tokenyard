@@ -207,7 +207,9 @@ export class PolicyLoader extends EventEmitter {
     } catch (e) {
       const message = msgOf(e);
       // A broken file that the poll or the watcher finds again is one failure, not one per tick or per event (one
-      // write can reach the watcher as several events, spread past the debounce on a loaded machine).
+      // write can reach the watcher as several events, spread past the debounce on a loaded machine). The key is the
+      // error message, so an edit that leaves the file broken with the identical message is neither counted nor
+      // logged again; a success or an unchanged directory clears it, and a different message counts and logs.
       if (!(trigger !== 'start' && message === this.lastError)) {
         this.errors++;
         this.lastError = message;

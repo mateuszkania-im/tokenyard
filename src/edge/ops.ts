@@ -35,7 +35,11 @@ export function matchOps(method: string, rawUrl: string, basePath: string | null
   return path === '/metrics' ? 'metrics' : path === '/healthz' ? 'healthz' : path === '/readyz' ? 'readyz' : null;
 }
 
-/** Loopback addresses: the ops listener may run without a token only here. */
+/**
+ * Loopback addresses: the ops listener may run without a token only here. An IPv4-mapped loopback address
+ * (`::ffff:127.0.0.1`) is not recognised, so it needs a token; test/cli/serve-ops.test.ts relies on that to test the
+ * token path on a listener reachable only through loopback. Recognising it here changes what that test covers.
+ */
 export function isLoopbackHost(host: string): boolean {
   const h = host.replace(/^\[|\]$/g, '').toLowerCase();
   return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
