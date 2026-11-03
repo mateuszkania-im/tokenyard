@@ -3,7 +3,7 @@
 import type { LedgerLine, ManifestRecord, TraceRecord } from '../ledger/record.js';
 import { warmupEntries } from '../limits/warmup.js';
 import { budgetEnforced, decide, levelValue } from '../policy/decide.js';
-import { isAdmitted, planAdmission } from '../policy/admission.js';
+import { atEstimateCharge, isAdmitted, planAdmission } from '../policy/admission.js';
 import { oversizedReservation, resolve } from '../policy/resolve.js';
 import { REQUEST_CLASSES } from '../policy/schema.js';
 import type { Admission, BlockReason, CompiledPolicy, Plan, RequestFeatures, Surface } from '../policy/types.js';
@@ -248,7 +248,7 @@ async function simulate(
       }
       return { ...NOTHING, kind: 'block', decision: compared('block', reason), reason, name: blockName(plan, f, reason, admission), scopeValue };
     }
-    const cost = replayedCost({ policy, r, provider: first.provider, upstreamModel: first.upstreamModel, estMicroUsd: est, ratios, firstSwitch });
+    const cost = replayedCost({ policy, r, provider: first.provider, upstreamModel: first.upstreamModel, estMicroUsd: est, atEstimateMicroUsd: atEstimateCharge(plan, est), ratios, firstSwitch });
     if (admitted) schedule(end, r.id, cost.chargeMicroUsd);
     return { ...NOTHING, kind: 'forward', decision: compared('forward', null), provider: first.provider, upstreamModel: first.upstreamModel, cost };
   };

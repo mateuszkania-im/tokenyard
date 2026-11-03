@@ -24,3 +24,12 @@ export function planAdmission(policy: CompiledPolicy, plan: Plan): { pre: Decisi
 export function isAdmitted(plan: Plan, admission: Admission | null): boolean {
   return admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
 }
+
+/**
+ * What a request whose cost cannot be read (no final usage, an unpriced answer) is charged: its reservation, or the
+ * worst-case estimate when that is higher (A2-2: the session-aware estimator reserves one sampling iteration and no
+ * server tool fees, so a client that drops a stream before its final usage would choose its own discount).
+ */
+export function atEstimateCharge(plan: Plan | null, est: number): number {
+  return (plan?.reservations.length ?? 0) > 0 ? Math.max(est, plan?.worstCaseMicroUsd ?? 0) : est;
+}

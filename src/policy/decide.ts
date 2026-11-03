@@ -270,12 +270,14 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   if (reserve !== null) plan.outputCap = reserve;
 
   let est = 0;
+  let worstMicro: number | undefined;
   if (hasModels(t)) {
     const price = reservationPrice(t, known).price;
     const uf = upstreamFeatures(f, t, upstreamModel, price);
     const r = policy.reservation;
     const worst = worstCaseMicroUsd(uf, price, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: reserve });
     est = r.estimator === 'session-aware' ? sessionAwareMicroUsd(uf, price, t, null, reserve) : worst.micro;
+    worstMicro = worst.micro;
     const enforced = levels.some((l) => l.enforce);
     // An unpriced server tool has no bound at all (its loop is reserved as one iteration): refused whenever an
     // enforced level applies; failure.unpricedModel: allow-and-flag admits it only when none does.
@@ -298,6 +300,9 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   }
 
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
+  // A request that ends without final usage settles at no less than this (A2-2): under session-aware the reservation
+  // prices one iteration and no server tool fees, so it is no charge for a loop the provider may have run and billed.
+  if (worstMicro !== undefined && levels.length > 0) plan.worstCaseMicroUsd = worstMicro;
   plan.rateChecks = policy.rateLimits.flatMap((l) => {
     const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];

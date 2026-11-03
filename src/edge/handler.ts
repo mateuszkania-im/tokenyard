@@ -13,7 +13,7 @@ import { findSpans, scanBody } from '../guardrails/scan.js';
 import { buildFeatures, decide, enforcedLevelApplies } from '../policy/decide.js';
 import { bodyShapeRefusal } from '../surfaces/body-shape.js';
 import { modelsForKey } from '../policy/match.js';
-import { isAdmitted, planAdmission } from '../policy/admission.js';
+import { atEstimateCharge, isAdmitted, planAdmission } from '../policy/admission.js';
 import { resolve } from '../policy/resolve.js';
 import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
 import { billedServiceTier, costMicroUsd } from '../pricing/cost.js';
@@ -503,7 +503,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
     let actual = cost ?? 0;
     if (costFailed) {
-      actual = held.est;
+      actual = atEstimateCharge(held.plan, held.est);
       o.settledAtEstimate = true;
     }
     o.costMicroUsd = actual;
@@ -1004,7 +1004,8 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
         held.settled = true;
         deps.metrics?.inc('tokenyard_reservations_open', {}, -1);
         const known = held.known;
-        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs)
+        const charge = atEstimateCharge(held.plan, held.est);
+        void withDeadline(deps.store.settle(id, charge), admitTimeoutMs)
           .then((r) => r === 'settled', () => false)
           .then((settled) => {
             if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
@@ -1024,13 +1025,13 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
                 aborted: false,
                 ttfbMs: null,
                 totalMs: Math.max(0, now - known.startedAt),
-                costMicroUsd: held.est,
+                costMicroUsd: charge,
                 addedTtfbMs: null,
                 errorClass: 'internal_error',
                 settledAtEstimate: true,
                 settledBy: swept ? 'sweeper' : 'request',
-                chargedMicroUsd: held.est,
-                overrun: false,
+                chargedMicroUsd: swept ? held.est : charge,
+                overrun: charge > held.est,
               },
               deps.traceSalt ?? '',
               current,

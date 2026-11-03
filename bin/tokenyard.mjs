@@ -30605,12 +30605,14 @@ function decide(policy2, f) {
   const reserve = route2.reserveOutputTokens !== null && bodyRewritable && (f.surface === "anthropic-messages" || f.surface === "openai-responses") ? route2.reserveOutputTokens : null;
   if (reserve !== null) plan.outputCap = reserve;
   let est = 0;
+  let worstMicro;
   if (hasModels(t)) {
     const price2 = reservationPrice(t, known).price;
     const uf = upstreamFeatures(f, t, upstreamModel, price2);
     const r = policy2.reservation;
     const worst = worstCaseMicroUsd(uf, price2, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: reserve });
     est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price2, t, null, reserve) : worst.micro;
+    worstMicro = worst.micro;
     const enforced = levels.some((l) => l.enforce);
     if (worst.block === "unpriced-server-tool") {
       if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
@@ -30628,6 +30630,7 @@ function decide(policy2, f) {
     throw new Error("the price table has no models, so no reservation can be priced");
   }
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
+  if (worstMicro !== void 0 && levels.length > 0) plan.worstCaseMicroUsd = worstMicro;
   plan.rateChecks = policy2.rateLimits.flatMap((l) => {
     const value = levelValue(l.scope, f, true);
     return value === null ? [] : [{ limit: l.name, key: gcraKey(f.tenant, l.name, value), emissionMs: l.emissionMs, burst: l.burst, quantity: 1 }];
@@ -30824,6 +30827,9 @@ function planAdmission(policy2, plan) {
 }
 function isAdmitted(plan, admission) {
   return admission?.admitted === true && admission.storeDown !== true && plan.preBlock === null;
+}
+function atEstimateCharge(plan, est) {
+  return (plan?.reservations.length ?? 0) > 0 ? Math.max(est, plan?.worstCaseMicroUsd ?? 0) : est;
 }
 var init_admission = __esm({
   "src/policy/admission.ts"() {
@@ -59072,7 +59078,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
     deps.metrics?.inc("tokenyard_reservations_open", {}, -1);
     let actual = cost ?? 0;
     if (costFailed) {
-      actual = held.est;
+      actual = atEstimateCharge(held.plan, held.est);
       o.settledAtEstimate = true;
     }
     o.costMicroUsd = actual;
@@ -59462,7 +59468,8 @@ function createHandler(deps) {
         held.settled = true;
         deps.metrics?.inc("tokenyard_reservations_open", {}, -1);
         const known = held.known;
-        void withDeadline(deps.store.settle(id, held.est), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
+        const charge = atEstimateCharge(held.plan, held.est);
+        void withDeadline(deps.store.settle(id, charge), admitTimeoutMs).then((r) => r === "settled", () => false).then((settled) => {
           if (known === null || !(deps.traces || deps.metrics || deps.spans)) return;
           const swept = runtime.takeSwept(id) || !settled;
           let now = known.startedAt;
@@ -59479,13 +59486,13 @@ function createHandler(deps) {
               aborted: false,
               ttfbMs: null,
               totalMs: Math.max(0, now - known.startedAt),
-              costMicroUsd: held.est,
+              costMicroUsd: charge,
               addedTtfbMs: null,
               errorClass: "internal_error",
               settledAtEstimate: true,
               settledBy: swept ? "sweeper" : "request",
-              chargedMicroUsd: held.est,
-              overrun: false
+              chargedMicroUsd: swept ? held.est : charge,
+              overrun: charge > held.est
             },
             deps.traceSalt ?? "",
             current
@@ -121186,7 +121193,7 @@ function replayedCost(c) {
   const t = policy2.prices;
   const same = modelId(t, c.upstreamModel) === modelId(t, recordedModel(r)) && c.provider === (r.decision.chain[0] ?? r.outcome.provider);
   const atEstimate = r.outcome.settledAtEstimate === true;
-  const charge = (cost) => atEstimate || r.outcome.settledBy === "sweeper" ? c.estMicroUsd : cost;
+  const charge = (cost) => r.outcome.settledBy === "sweeper" ? c.estMicroUsd : atEstimate ? c.atEstimateMicroUsd : cost;
   const result = (cost, estimated, cacheCold = false) => ({
     costMicroUsd: cost,
     chargeMicroUsd: charge(cost),
@@ -121195,7 +121202,7 @@ function replayedCost(c) {
     cacheCold
   });
   if (r.decision.action !== "forward") return result(0, true);
-  if (atEstimate) return result(c.estMicroUsd, !same);
+  if (atEstimate) return result(c.atEstimateMicroUsd, !same);
   const u = r.outcome.usage;
   if (u === null) return result(recorded, false);
   if (same) {
@@ -121508,7 +121515,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
       }
       return { ...NOTHING3, kind: "block", decision: compared("block", reason), reason, name: blockName(plan, f, reason, admission), scopeValue: scopeValue2 };
     }
-    const cost = replayedCost({ policy: policy2, r, provider: first2.provider, upstreamModel: first2.upstreamModel, estMicroUsd: est, ratios, firstSwitch });
+    const cost = replayedCost({ policy: policy2, r, provider: first2.provider, upstreamModel: first2.upstreamModel, estMicroUsd: est, atEstimateMicroUsd: atEstimateCharge(plan, est), ratios, firstSwitch });
     if (admitted) schedule(end, r.id, cost.chargeMicroUsd);
     return { ...NOTHING3, kind: "forward", decision: compared("forward", null), provider: first2.provider, upstreamModel: first2.upstreamModel, cost };
   };

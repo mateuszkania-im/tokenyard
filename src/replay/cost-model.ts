@@ -67,6 +67,8 @@ export interface CostInput {
   upstreamModel: string;
   /** The replayed reservation on each level, micro-USD. */
   estMicroUsd: number;
+  /** What the gateway charges a request settled at its estimate (no final usage): `atEstimateCharge` (A2-2). */
+  atEstimateMicroUsd: number;
   ratios: OutputRatios;
   /**
    * Called on a switched request with a session; true the first time for that session and target, when the cache
@@ -90,7 +92,7 @@ export function replayedCost(c: CostInput): ReplayedCost {
   const t = policy.prices;
   const same = modelId(t, c.upstreamModel) === modelId(t, recordedModel(r)) && c.provider === (r.decision.chain[0] ?? r.outcome.provider);
   const atEstimate = r.outcome.settledAtEstimate === true;
-  const charge = (cost: number): number => (atEstimate || r.outcome.settledBy === 'sweeper' ? c.estMicroUsd : cost);
+  const charge = (cost: number): number => (r.outcome.settledBy === 'sweeper' ? c.estMicroUsd : atEstimate ? c.atEstimateMicroUsd : cost);
   const result = (cost: number, estimated: boolean, cacheCold = false): ReplayedCost => ({
     costMicroUsd: cost,
     chargeMicroUsd: charge(cost),
@@ -102,7 +104,7 @@ export function replayedCost(c: CostInput): ReplayedCost {
   // Blocked when recorded: nothing ran, so there is no usage to price. Counted at zero and flagged.
   if (r.decision.action !== 'forward') return result(0, true);
   // The cost could not be computed when recorded, so the reservation was settled: this policy's reservation.
-  if (atEstimate) return result(c.estMicroUsd, !same);
+  if (atEstimate) return result(c.atEstimateMicroUsd, !same);
   const u = r.outcome.usage;
   // No usage: nothing was billed (refused upstream, unreachable), whatever the model.
   if (u === null) return result(recorded, false);
