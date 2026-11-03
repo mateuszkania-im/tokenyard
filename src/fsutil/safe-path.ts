@@ -1,11 +1,15 @@
 // One helper for every read and write of a user-controlled path (S-FS-1). Given a trusted root (the repository or
-// workspace, the working directory, or the directory an operator configured), every path component below the root is
-// checked with lstat and a symbolic link anywhere refuses the path; the real path must stay under the real root. Files
-// are opened with O_NOFOLLOW (so a link swapped in after the check is not followed either), reads are bounded, and
-// directories are created one component at a time below the root, never through a link.
+// workspace, the package root, or for a path from the command line or configuration the filesystem root), every path
+// component below the root is checked with lstat and a symbolic link refuses the path (below the filesystem root a
+// root-owned link such as macOS /tmp is allowed, as OpenSSH's safe_path does); the real path must stay under the real
+// root. This covers links that are already there, such as links committed to a repository. It is not proof against a
+// race: a directory component swapped for a link between the check and the open is followed; O_NOFOLLOW protects only
+// the last component, the file itself. Files are opened with O_NOFOLLOW and O_NONBLOCK (a FIFO is refused, never waited
+// on) and must be regular files, reads are bounded, and directories are created one component at a time below the
+// root, never through a link.
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, type Dirent } from 'node:fs';
-import { lstat, mkdir, open, readdir, realpath } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { lstat, mkdir, open, readdir, realpath, stat } from 'node:fs/promises';
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 
 export class UnsafePathError extends Error {
   override name = 'UnsafePathError';
@@ -15,14 +19,19 @@ const NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 const NONBLOCK = constants.O_NONBLOCK ?? 0;
 
 /**
- * The trusted root for a path given on the command line or in configuration: the working directory when the path lies
- * inside it (every component below it is checked), else the path's parent (an operator-chosen location outside the
- * working directory: only its last component is checked).
+ * The trusted root for a path given on the command line or in configuration: the filesystem root, so every component
+ * is checked and only root-owned links are allowed (ruling, OpenSSH safe_path). Windows, where ownership does not say
+ * the same, keeps the earlier rule: the working directory when the path lies inside it, else the path's parent.
  */
 export function cliRoot(target: string, cwd: string = process.cwd()): string {
   const abs = resolve(cwd, target);
+  if (process.platform !== 'win32') return parse(abs).root;
   return inside(resolve(cwd), abs) ? resolve(cwd) : dirname(abs);
 }
+
+/** Below the filesystem root (POSIX) a link owned by root is a system link and is allowed; any other link is refused. */
+const systemLinksAllowed = (absRoot: string): boolean => process.platform !== 'win32' && parse(absRoot).root === absRoot;
+const allowedLink = (absRoot: string, st: { isSymbolicLink(): boolean; uid: number }): boolean => st.isSymbolicLink() && systemLinksAllowed(absRoot) && st.uid === 0;
 
 /** Whether `target` (resolved against the working directory) lies at or below `root`. */
 export function isUnder(root: string, target: string): boolean {
@@ -69,7 +78,7 @@ export async function checkPath(root: string, target: string, o: { allowMissing?
       if (o.allowMissing && missing(e)) return abs;
       throw e;
     }
-    if (st.isSymbolicLink()) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
   }
   underRealRoot(await realpath(absRoot), await realpath(abs), target);
   return abs;
@@ -87,10 +96,21 @@ export function checkPathSync(root: string, target: string, o: { allowMissing?: 
       if (o.allowMissing && missing(e)) return abs;
       throw e;
     }
-    if (st.isSymbolicLink()) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
   }
   underRealRoot(realpathSync(absRoot), realpathSync(abs), target);
   return abs;
+}
+
+/**
+ * An open for writing that failed: a link at the file itself (ELOOP) or a FIFO without a reader (ENXIO, from
+ * O_NONBLOCK) is refused as unsafe. O_NONBLOCK stays set: it changes nothing for a regular file.
+ */
+function openFailed(e: unknown, target: string): never {
+  const code = (e as NodeJS.ErrnoException).code;
+  if (code === 'ELOOP') refuseLink(target, target);
+  if (code === 'ENXIO') throw new UnsafePathError(`${target} is not a regular file`);
+  throw e;
 }
 
 const tooLarge = (target: string, cap: number): Error => new UnsafePathError(`${target} is larger than ${cap} bytes`);
@@ -187,7 +207,10 @@ export async function ensureDirUnder(root: string, dir: string): Promise<string>
       }
       st = await lstat(c);
     }
-    if (st.isSymbolicLink()) refuseLink(c, dir);
+    if (st.isSymbolicLink()) {
+      if (!allowedLink(absRoot, st)) refuseLink(c, dir);
+      st = await stat(c);
+    }
     if (!st.isDirectory()) throw new UnsafePathError(`${c} is not a directory`);
   }
   underRealRoot(await realpath(absRoot), await realpath(abs), dir);
@@ -200,13 +223,12 @@ export async function ensureDirUnder(root: string, dir: string): Promise<string>
  */
 export async function writeFileUnder(root: string, target: string, data: string | Uint8Array, o: { append?: boolean; exclusive?: boolean; mode?: number } = {}): Promise<void> {
   await ensureDirUnder(root, dirname(resolve(target)));
-  const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
+  const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | NONBLOCK | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
   let fh;
   try {
     fh = await open(resolve(target), flags, o.mode ?? 0o666);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ELOOP') refuseLink(target, target);
-    throw e;
+    openFailed(e, target);
   }
   try {
     const st = await fh.stat();
@@ -222,10 +244,9 @@ export async function createWriteStreamUnder(root: string, target: string): Prom
   await ensureDirUnder(root, dirname(resolve(target)));
   let fh;
   try {
-    fh = await open(resolve(target), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | NOFOLLOW, 0o666);
+    fh = await open(resolve(target), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | NOFOLLOW | NONBLOCK, 0o666);
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ELOOP') refuseLink(target, target);
-    throw e;
+    openFailed(e, target);
   }
   if (!(await fh.stat()).isFile()) {
     await fh.close();

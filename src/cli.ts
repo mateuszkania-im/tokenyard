@@ -249,6 +249,7 @@ policy
       const r = validatePolicy(await loadPolicyDir(dir), { experimentalSubscription: o.experimentalSubscription === true });
       ({ errors, warnings } = r);
     } catch (e) {
+      if (e instanceof Error && e.name === 'UnsafePathError') return void (console.error(`tokenyard policy check: ${e.message}`), process.exit(1));
       if (!(e instanceof PolicyLoadError)) throw e;
       errors = e.issues;
     }
@@ -280,6 +281,7 @@ policy
       await writeFileUnder(cliRoot(o.out), o.out, serializeBundle(bundle));
       console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
     } catch (e) {
+      if (e instanceof Error && e.name === 'UnsafePathError') return void (console.error(`tokenyard policy build: ${e.message}`), process.exit(1));
       if (!(e instanceof PolicyLoadError)) throw e;
       for (const i of e.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
       process.exit(1);

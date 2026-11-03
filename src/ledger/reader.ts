@@ -10,8 +10,14 @@ import type { LedgerLine } from './record.js';
  */
 export async function* readLedger(paths: string[]): AsyncIterable<LedgerLine> {
   for (const path of paths) {
-    // Never through a symbolic link at the file itself; callers check the directories (S-FS-1).
-    const file = (await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))).createReadStream();
+    // Never through a symbolic link at the file itself, never a FIFO or device (O_NONBLOCK, then a regular file only);
+    // callers check the directories (S-FS-1).
+    const fh = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    if (!(await fh.stat()).isFile()) {
+      await fh.close();
+      throw new Error(`${path} is not a regular file`);
+    }
+    const file = fh.createReadStream();
     const input = path.endsWith('.gz') ? file.pipe(createGunzip()) : file;
     file.on('error', (e) => input.destroy(e));
     for await (const text of createInterface({ input, crlfDelay: Infinity })) {

@@ -1,11 +1,14 @@
 // S-FS-1: one helper for every read and write of a user-controlled path. Symbolic links anywhere below the trusted
 // root are refused, the real path must stay under the root, files are opened without following links and reads are
 // bounded.
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { cp, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { checkPath, cliRoot, ensureDirUnder, readFileUnder, readFileUnderSync, UnsafePathError, writeFileUnder } from '../../src/fsutil/safe-path.js';
+import { checkPath, cliRoot, createWriteStreamUnder, ensureDirUnder, readFileUnder, readFileUnderSync, UnsafePathError, writeFileUnder } from '../../src/fsutil/safe-path.js';
+import { readLedger } from '../../src/ledger/reader.js';
+import { validatePolicy } from '../../src/policy/validate.js';
 import { exportTraces, listLedgerFiles, loadTraceRecords } from '../../src/ledger/export.js';
 import { TraceWriter } from '../../src/ledger/writer.js';
 import { readLkg, writeLkg } from '../../src/policy-loader/lkg.js';
@@ -13,6 +16,7 @@ import { loadPolicyDir } from '../../src/policy-loader/load-dir.js';
 import { openReplayTraces } from '../../src/policy-loader/replay-input.js';
 import { baseRecord } from '../helpers/trace.js';
 
+const EXAMPLES = join(import.meta.dirname, '..', '..', 'examples');
 let root: string;
 let outside: string;
 beforeEach(async () => {
@@ -39,12 +43,54 @@ test('checkPath accepts a plain path under the root and refuses a link in any co
   expect(await checkPath(root, join(root, 'missing', 'deeper'), { allowMissing: true })).toBe(join(root, 'missing', 'deeper'));
 });
 
-test('cliRoot is the working directory for a path inside it, else the path itself is the only checked component', () => {
-  expect(cliRoot('policy', '/work/repo')).toBe('/work/repo');
-  expect(cliRoot('/work/repo/a/b', '/work/repo')).toBe('/work/repo');
-  expect(cliRoot('/etc/tokenyard/policy', '/work/repo')).toBe('/etc/tokenyard');
-  expect(cliRoot('../other/policy', '/work/repo')).toBe('/work/other');
+test('fix 5: a CLI path is walked from the filesystem root; a user-owned link anywhere refuses it, a root-owned system link is allowed', async () => {
+  if (process.platform === 'win32') return;
+  // ../x/link/policy relative to the working directory, through a link the user owns: refused with the default root.
+  await mkdir(join(outside, 'policy'));
+  await cp(join(EXAMPLES, 'policy'), join(outside, 'policy'), { recursive: true });
+  await mkdir(join(root, 'x'));
+  await symlink(outside, join(root, 'x', 'link'));
+  const rel = relative(process.cwd(), join(root, 'x', 'link', 'policy'));
+  expect(rel.startsWith('..')).toBe(true);
+  await expect(loadPolicyDir(rel)).rejects.toThrow(UnsafePathError);
+  await expect(checkPath(cliRoot(rel), rel)).rejects.toThrow(/symbolic link/);
+  // The same files without the link load.
+  expect((await loadPolicyDir(relative(process.cwd(), join(outside, 'policy')))).policy.metadata.name).toBeTruthy();
 });
+
+test('fix 5: a path through a root-owned system link (/tmp on macOS) is allowed with the default root', async (ctx) => {
+  let st;
+  try {
+    st = await lstat('/tmp');
+  } catch {
+    return ctx.skip();
+  }
+  if (process.platform === 'win32' || !st.isSymbolicLink() || st.uid !== 0) return ctx.skip();
+  const dir = await mkdtemp('/tmp/ty-systemlink-');
+  try {
+    await cp(join(EXAMPLES, 'policy'), join(dir, 'policy'), { recursive: true });
+    expect((await loadPolicyDir(join(dir, 'policy'))).policy.metadata.name).toBeTruthy();
+    await writeFileUnder(cliRoot(join(dir, 'out', 'f.txt')), join(dir, 'out', 'f.txt'), 'ok');
+    expect(await readFile(join(dir, 'out', 'f.txt'), 'utf8')).toBe('ok');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('fix 6: a FIFO is refused at once by writes and by the ledger reader, never waited on', async (ctx) => {
+  if (process.platform === 'win32') return ctx.skip();
+  const fifo = join(root, 'pipe');
+  execFileSync('mkfifo', [fifo]);
+  await expect(writeFileUnder(root, fifo, 'x')).rejects.toThrow();
+  await expect(createWriteStreamUnder(root, fifo)).rejects.toThrow();
+  const lines = async (): Promise<number> => {
+    let n = 0;
+    for await (const _ of readLedger([fifo])) n++;
+    return n;
+  };
+  await expect(lines()).rejects.toThrow(/regular file/);
+  await expect(readFileUnder(root, fifo, 10)).rejects.toThrow(/regular file/);
+}, 5_000);
 
 test('reads are bounded and never follow a link; writes refuse a linked file or directory', async () => {
   await writeFile(join(root, 'f.txt'), 'hello');
@@ -69,15 +115,30 @@ const POLICY = 'apiVersion: tokenyard/v1\nkind: Policy\n';
 
 test('a symlinked policy directory, or one below a symlinked component, is refused; a plain one still loads', async () => {
   const real = join(root, 'policy');
-  await mkdir(real);
-  await writeFile(join(real, 'policy.yaml'), POLICY);
-  await expect(loadPolicyDir(real, { root })).rejects.not.toThrow(UnsafePathError);
+  await cp(join(EXAMPLES, 'policy'), real, { recursive: true });
+  // fix 8: a full example policy loads and validates without errors.
+  const loaded = await loadPolicyDir(real, { root });
+  expect(validatePolicy(loaded, { experimentalSubscription: false }).errors).toEqual([]);
   await symlink(real, join(root, 'policy-link'));
   await expect(loadPolicyDir(join(root, 'policy-link'), { root })).rejects.toThrow(UnsafePathError);
   await mkdir(join(outside, 'p'));
   await writeFile(join(outside, 'p', 'policy.yaml'), POLICY);
   await symlink(outside, join(root, 'parent-link'));
   await expect(loadPolicyDir(join(root, 'parent-link', 'p'), { root })).rejects.toThrow(UnsafePathError);
+});
+
+test('fix 9: policy check and build print one line for a refused path, no stack', async () => {
+  const real = join(root, 'policy');
+  await cp(join(EXAMPLES, 'policy'), real, { recursive: true });
+  await symlink(real, join(root, 'policy-link'));
+  const rel = relative(process.cwd(), join(root, 'policy-link'));
+  for (const args of [['policy', 'check', rel], ['policy', 'build', rel, '--out', join(root, 'b.json')]]) {
+    const r = spawnSync('node', ['bin/tokenyard.mjs', ...args], { encoding: 'utf8' });
+    expect(r.status, args.join(' ')).toBe(1);
+    expect(r.stderr.trim().split('\n')).toHaveLength(1);
+    expect(r.stderr).toMatch(/^tokenyard policy (check|build): .*symbolic link/);
+    expect(r.stderr).not.toMatch(/\n\s+at /);
+  }
 });
 
 test('a trace dir symlinked outside is refused for reading, export, replay and writing; symlinked entries inside are skipped', async () => {

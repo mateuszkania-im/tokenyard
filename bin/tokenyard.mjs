@@ -65,10 +65,11 @@ __export(safe_path_exports, {
   writeFileUnder: () => writeFileUnder
 });
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from "node:fs";
-import { lstat, mkdir, open, readdir, realpath } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { lstat, mkdir, open, readdir, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 function cliRoot(target, cwd = process.cwd()) {
   const abs = resolve(cwd, target);
+  if (process.platform !== "win32") return parse(abs).root;
   return inside(resolve(cwd), abs) ? resolve(cwd) : dirname(abs);
 }
 function isUnder(root, target) {
@@ -102,7 +103,7 @@ async function checkPath(root, target, o = {}) {
       if (o.allowMissing && missing(e2)) return abs;
       throw e2;
     }
-    if (st.isSymbolicLink()) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
   }
   underRealRoot(await realpath(absRoot), await realpath(abs), target);
   return abs;
@@ -118,10 +119,16 @@ function checkPathSync(root, target, o = {}) {
       if (o.allowMissing && missing(e2)) return abs;
       throw e2;
     }
-    if (st.isSymbolicLink()) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
   }
   underRealRoot(realpathSync(absRoot), realpathSync(abs), target);
   return abs;
+}
+function openFailed(e2, target) {
+  const code2 = e2.code;
+  if (code2 === "ELOOP") refuseLink(target, target);
+  if (code2 === "ENXIO") throw new UnsafePathError(`${target} is not a regular file`);
+  throw e2;
 }
 async function readFileUnder(root, target, capBytes) {
   try {
@@ -204,7 +211,10 @@ async function ensureDirUnder(root, dir) {
       }
       st = await lstat(c);
     }
-    if (st.isSymbolicLink()) refuseLink(c, dir);
+    if (st.isSymbolicLink()) {
+      if (!allowedLink(absRoot, st)) refuseLink(c, dir);
+      st = await stat(c);
+    }
     if (!st.isDirectory()) throw new UnsafePathError(`${c} is not a directory`);
   }
   underRealRoot(await realpath(absRoot), await realpath(abs), dir);
@@ -212,13 +222,12 @@ async function ensureDirUnder(root, dir) {
 }
 async function writeFileUnder(root, target, data, o = {}) {
   await ensureDirUnder(root, dirname(resolve(target)));
-  const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
+  const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | NONBLOCK | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
   let fh;
   try {
     fh = await open(resolve(target), flags, o.mode ?? 438);
   } catch (e2) {
-    if (e2.code === "ELOOP") refuseLink(target, target);
-    throw e2;
+    openFailed(e2, target);
   }
   try {
     const st = await fh.stat();
@@ -232,10 +241,9 @@ async function createWriteStreamUnder(root, target) {
   await ensureDirUnder(root, dirname(resolve(target)));
   let fh;
   try {
-    fh = await open(resolve(target), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | NOFOLLOW, 438);
+    fh = await open(resolve(target), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | NOFOLLOW | NONBLOCK, 438);
   } catch (e2) {
-    if (e2.code === "ELOOP") refuseLink(target, target);
-    throw e2;
+    openFailed(e2, target);
   }
   if (!(await fh.stat()).isFile()) {
     await fh.close();
@@ -247,7 +255,7 @@ async function listDirUnder(root, dir) {
   await checkPath(root, dir);
   return (await readdir(resolve(dir), { withFileTypes: true })).filter((e2) => e2.isFile() || e2.isDirectory());
 }
-var UnsafePathError, NOFOLLOW, NONBLOCK, missing, tooLarge;
+var UnsafePathError, NOFOLLOW, NONBLOCK, systemLinksAllowed, allowedLink, missing, tooLarge;
 var init_safe_path = __esm({
   "src/fsutil/safe-path.ts"() {
     "use strict";
@@ -256,6 +264,8 @@ var init_safe_path = __esm({
     };
     NOFOLLOW = constants.O_NOFOLLOW ?? 0;
     NONBLOCK = constants.O_NONBLOCK ?? 0;
+    systemLinksAllowed = (absRoot) => process.platform !== "win32" && parse(absRoot).root === absRoot;
+    allowedLink = (absRoot, st) => st.isSymbolicLink() && systemLinksAllowed(absRoot) && st.uid === 0;
     missing = (e2) => e2.code === "ENOENT" || e2.code === "ENOTDIR";
     tooLarge = (target, cap2) => new UnsafePathError(`${target} is larger than ${cap2} bytes`);
   }
@@ -318,7 +328,12 @@ import { createInterface } from "node:readline";
 import { createGunzip } from "node:zlib";
 async function* readLedger(paths) {
   for (const path2 of paths) {
-    const file2 = (await open2(path2, constants2.O_RDONLY | (constants2.O_NOFOLLOW ?? 0))).createReadStream();
+    const fh = await open2(path2, constants2.O_RDONLY | (constants2.O_NOFOLLOW ?? 0) | (constants2.O_NONBLOCK ?? 0));
+    if (!(await fh.stat()).isFile()) {
+      await fh.close();
+      throw new Error(`${path2} is not a regular file`);
+    }
+    const file2 = fh.createReadStream();
     const input3 = path2.endsWith(".gz") ? file2.pipe(createGunzip()) : file2;
     file2.on("error", (e2) => input3.destroy(e2));
     for await (const text2 of createInterface({ input: input3, crlfDelay: Infinity })) {
@@ -8862,7 +8877,7 @@ var require_public_api = __commonJS({
       }
       return doc;
     }
-    function parse3(src, reviver, options) {
+    function parse4(src, reviver, options) {
       let _reviver = void 0;
       if (typeof reviver === "function") {
         _reviver = reviver;
@@ -8903,7 +8918,7 @@ var require_public_api = __commonJS({
         return value.toString(options);
       return new Document.Document(value, _replacer, options).toString(options);
     }
-    exports.parse = parse3;
+    exports.parse = parse4;
     exports.parseAllDocuments = parseAllDocuments;
     exports.parseDocument = parseDocument2;
     exports.stringify = stringify;
@@ -10230,7 +10245,7 @@ function validateFallback(schema, value, _ctx) {
   }
   return result.issues.length === 0;
 }
-var _parse, parse, _parseAsync, parseAsync, _safeParse, safeParse, _safeParseAsync, safeParseAsync, COMPILE_INVALID, COMPILE_FALLBACK, validate, validateAsync, _encode, encode, _decode, decode, _encodeAsync, encodeAsync, _decodeAsync, decodeAsync, _safeEncode, safeEncode, _safeDecode, safeDecode, _safeEncodeAsync, safeEncodeAsync, _safeDecodeAsync, safeDecodeAsync;
+var _parse, parse2, _parseAsync, parseAsync, _safeParse, safeParse, _safeParseAsync, safeParseAsync, COMPILE_INVALID, COMPILE_FALLBACK, validate, validateAsync, _encode, encode, _decode, decode, _encodeAsync, encodeAsync, _decodeAsync, decodeAsync, _safeEncode, safeEncode, _safeDecode, safeDecode, _safeEncodeAsync, safeEncodeAsync, _safeDecodeAsync, safeDecodeAsync;
 var init_parse = __esm({
   "node_modules/zod/v4/core/parse.js"() {
     init_core();
@@ -10252,7 +10267,7 @@ var init_parse = __esm({
       };
       return fn;
     };
-    parse = /* @__PURE__ */ _parse($ZodRealError);
+    parse2 = /* @__PURE__ */ _parse($ZodRealError);
     _parseAsync = (_Err) => {
       const fn = async (schema, value, _ctx, params) => {
         const ctx = _ctx ? { ..._ctx, async: true } : { async: true };
@@ -10306,18 +10321,18 @@ var init_parse = __esm({
       return result.issues.length === 0;
     };
     _encode = (_Err) => {
-      const parse3 = _parse(_Err);
+      const parse4 = _parse(_Err);
       const fn = (schema, value, _ctx, _params) => {
         const ctx = _ctx ? { ..._ctx, direction: "backward" } : { direction: "backward" };
-        return parse3(schema, value, ctx, finalizeParams(fn, _params));
+        return parse4(schema, value, ctx, finalizeParams(fn, _params));
       };
       return fn;
     };
     encode = /* @__PURE__ */ _encode($ZodRealError);
     _decode = (_Err) => {
-      const parse3 = _parse(_Err);
+      const parse4 = _parse(_Err);
       const fn = (schema, value, _ctx, _params) => {
-        return parse3(schema, value, _ctx, finalizeParams(fn, _params));
+        return parse4(schema, value, _ctx, finalizeParams(fn, _params));
       };
       return fn;
     };
@@ -11242,7 +11257,7 @@ function capSize(inst, size) {
   if (!caps.length)
     return;
   const cap2 = Math.min(...caps.map((c) => c[0]));
-  const parse3 = inst._zod.parse;
+  const parse4 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
     const n2 = size(payload.value);
     if (n2 > cap2 && !ctx?.skipChecks && ctx?.direction !== "backward") {
@@ -11256,7 +11271,7 @@ function capSize(inst, size) {
         }
       }
     }
-    return parse3(payload, ctx);
+    return parse4(payload, ctx);
   };
 }
 function handleArrayResult(result, final, index) {
@@ -13425,10 +13440,10 @@ var init_schemas = __esm({
           throw new Error("implement() must be called with a function");
         }
         return Object.defineProperty(function(...args) {
-          const parsedArgs = inst._def.input ? parse(inst._def.input, args) : args;
+          const parsedArgs = inst._def.input ? parse2(inst._def.input, args) : args;
           const result = Reflect.apply(func, this, parsedArgs);
           if (inst._def.output) {
-            return parse(inst._def.output, result);
+            return parse2(inst._def.output, result);
           }
           return result;
         }, "_zod", { value: inst._zod, enumerable: false });
@@ -26243,7 +26258,7 @@ __export(core_exports2, {
   memoizer: () => memoizer,
   mergeValues: () => mergeValues,
   meta: () => meta,
-  parse: () => parse,
+  parse: () => parse2,
   parseAsync: () => parseAsync,
   parseURLObject: () => parseURLObject,
   prettifyError: () => prettifyError,
@@ -26391,13 +26406,13 @@ var init_errors2 = __esm({
 });
 
 // node_modules/zod/v4/classic/parse.js
-var parse2, parseAsync2, safeParse2, safeParseAsync2, encode2, decode2, encodeAsync2, decodeAsync2, safeEncode2, safeDecode2, safeEncodeAsync2, safeDecodeAsync2;
+var parse3, parseAsync2, safeParse2, safeParseAsync2, encode2, decode2, encodeAsync2, decodeAsync2, safeEncode2, safeDecode2, safeEncodeAsync2, safeDecodeAsync2;
 var init_parse2 = __esm({
   "node_modules/zod/v4/classic/parse.js"() {
     init_core2();
     init_errors2();
     init_core2();
-    parse2 = /* @__PURE__ */ _parse(ZodRealError);
+    parse3 = /* @__PURE__ */ _parse(ZodRealError);
     parseAsync2 = /* @__PURE__ */ _parseAsync(ZodRealError);
     safeParse2 = /* @__PURE__ */ _safeParse(ZodRealError);
     safeParseAsync2 = /* @__PURE__ */ _safeParseAsync(ZodRealError);
@@ -27210,7 +27225,7 @@ var init_schemas2 = __esm({
         util_exports.own(this, "~standard", value);
       },
       parse: function _parse2(data, params) {
-        return parse2(this, data, params, { callee: _parse2 });
+        return parse3(this, data, params, { callee: _parse2 });
       },
       parseAsync: async function _parseAsync2(data, params) {
         return await parseAsync2(this, data, params, { callee: _parseAsync2 });
@@ -29321,7 +29336,7 @@ __export(external_exports, {
   optional: () => optional,
   output: () => output,
   overwrite: () => _overwrite,
-  parse: () => parse2,
+  parse: () => parse3,
   parseAsync: () => parseAsync2,
   partialRecord: () => partialRecord,
   pipe: () => pipe,
@@ -105102,7 +105117,7 @@ __export(replay_input_exports, {
   resolveGitCommit: () => resolveGitCommit
 });
 import { execFileSync } from "node:child_process";
-import { lstat as lstat4, stat } from "node:fs/promises";
+import { lstat as lstat4, stat as stat2 } from "node:fs/promises";
 import { lstatSync as lstatSync2, realpathSync as realpathSync2 } from "node:fs";
 import { dirname as dirname3, isAbsolute as isAbsolute2, join as join9, relative as relative2, resolve as resolve3, sep as sep2 } from "node:path";
 async function openReplayTraces(paths, o = {}) {
@@ -105177,7 +105192,7 @@ function loadPolicyAtCommit(o) {
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
 }
 async function loadReplayPolicy(o) {
-  const isDir = await stat(o.source).then((s2) => s2.isDirectory(), () => false);
+  const isDir = await stat2(o.source).then((s2) => s2.isDirectory(), () => false);
   const src = isDir ? await loadPolicyDir(o.source, o.root === void 0 ? {} : { root: o.root }) : parsePolicyFiles(join9(o.headDir, `@${o.source}`), filesAtRef(o.source, locateRepoDir(o.headDir, null)));
   const revision = o.revision ?? buildBundle(src, { createdAt: "1970-01-01T00:00:00.000Z" }).manifest.revision;
   return compilePolicy(src, revision, { experimentalSubscription: o.experimentalSubscription });
@@ -109211,6 +109226,7 @@ policy.command("check").description("validate a policy directory: schema, then t
     const r = validatePolicy2(await loadPolicyDir2(dir), { experimentalSubscription: o.experimentalSubscription === true });
     ({ errors, warnings } = r);
   } catch (e2) {
+    if (e2 instanceof Error && e2.name === "UnsafePathError") return void (console.error(`tokenyard policy check: ${e2.message}`), process.exit(1));
     if (!(e2 instanceof PolicyLoadError2)) throw e2;
     errors = e2.issues;
   }
@@ -109236,6 +109252,7 @@ policy.command("build").description("write one bundle file (manifest, policy, pr
     await writeFileUnder2(cliRoot2(o.out), o.out, serializeBundle2(bundle));
     console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
   } catch (e2) {
+    if (e2 instanceof Error && e2.name === "UnsafePathError") return void (console.error(`tokenyard policy build: ${e2.message}`), process.exit(1));
     if (!(e2 instanceof PolicyLoadError2)) throw e2;
     for (const i of e2.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
     process.exit(1);
