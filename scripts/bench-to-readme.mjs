@@ -254,9 +254,9 @@ export function writeBenchBlock(readme, results) {
   return `${readme.slice(0, m.start + BENCH_START.length)}\n${renderBenchBlock(results)}\n${readme.slice(m.end)}`;
 }
 
-/** True when the README holds exactly the block the results render to. */
+/** True when the README holds exactly the block the results render to, from a full run (a quick run never passes). */
 export function checkBenchBlock(readme, results) {
-  if (!markers(readme)) return false;
+  if (results.quick || !markers(readme)) return false;
   return writeBenchBlock(readme, results) === readme;
 }
 
@@ -279,6 +279,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (write) {
     writeFileSync(file, writeBenchBlock(readme, results));
     console.log(`${file}: benchmark block written from ${resultsPath}`);
+  } else if (results.quick) {
+    console.error(`${resultsPath} is from a quick run (BENCH_QUICK=1), which is not for publishing; run npm run bench in full`);
+    process.exit(1);
   } else if (checkBenchBlock(readme, results)) {
     console.log(`${file}: benchmark block matches ${resultsPath}`);
   } else {

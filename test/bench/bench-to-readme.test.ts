@@ -184,3 +184,11 @@ test('the misses are listed from the results, at the SLO levels and at the other
   for (const x of none.overhead.rows as Array<Record<string, unknown>>) x.addedTtfbMet = true;
   expect(renderBenchBlock(none)).toContain('Rows that miss the added TTFB targets at the SLO levels (10, 100 and 500 streams): none.');
 });
+
+test('bench:check refuses a quick run: its numbers are shortened runs, not for publishing (Task 23 minor)', () => {
+  const r = { ...results(), quick: true };
+  const out = writeBenchBlock(README, r);
+  expect(out).toContain('not for publishing');
+  expect(checkBenchBlock(out, r)).toBe(false);
+  expect(checkBenchBlock(writeBenchBlock(README, results()), results())).toBe(true);
+});
