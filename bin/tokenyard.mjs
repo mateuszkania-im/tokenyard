@@ -30304,6 +30304,12 @@ function taintKey(tenant, session) {
 function keyTaintKey(tenant, keyId) {
   return `${prefix(tenant)}:taint:k:${part(keyId)}`;
 }
+function sessionKey(tenant, session) {
+  return `${prefix(tenant)}:sess:${part(session)}`;
+}
+function newSessionsKey(tenant, keyId) {
+  return `${prefix(tenant)}:ns:${part(keyId)}`;
+}
 function reservationKey(tenant, id) {
   return `${prefix(tenant)}:res:${part(id)}`;
 }
@@ -30385,7 +30391,7 @@ var init_match = __esm({
 });
 
 // src/policy/schema.ts
-var SURFACES, name, fileRef, httpUrl2, REQUEST_CLASSES2, chainEntry, provider, route, budget, rateLimit, reservation, guardrails, failure2, ci, policySchema, chainProvider, keyRecordSchema, keysFileSchema, SURFACE_LIST;
+var SURFACES, name, fileRef, httpUrl2, REQUEST_CLASSES2, chainEntry, provider, route, budget, rateLimit, reservation, sessions, guardrails, failure2, ci, policySchema, chainProvider, keyRecordSchema, keysFileSchema, SURFACE_LIST;
 var init_schema = __esm({
   "src/policy/schema.ts"() {
     "use strict";
@@ -30463,6 +30469,10 @@ var init_schema = __esm({
       serverToolsWithoutMaxUses: external_exports.enum(["block", "assume"]).default("block"),
       assumedMaxUses: external_exports.number().int().positive().default(25)
     });
+    sessions = external_exports.strictObject({
+      idleTtlHours: external_exports.number().int().min(1).max(720).default(24),
+      newPerKeyPerHour: external_exports.number().int().positive().max(1e6).default(1e3)
+    });
     guardrails = external_exports.strictObject({
       secrets: external_exports.strictObject({
         rules: external_exports.literal("default").default("default"),
@@ -30504,6 +30514,7 @@ var init_schema = __esm({
       routes: external_exports.array(route),
       budgets: external_exports.array(budget).default([]),
       reservation: reservation.prefault({}),
+      sessions: sessions.prefault({}),
       rateLimits: external_exports.array(rateLimit).default([]),
       guardrails: guardrails.prefault({}),
       failure: failure2.prefault({}),
@@ -30656,6 +30667,11 @@ function decide(policy2, f) {
     ...Object.keys(messages).length > 0 ? { messages } : {}
   };
   const plan = { id: f.id, policyRevision: policy2.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
+  const idleTtlMs = policy2.sessions.idleTtlHours * 36e5;
+  if (session !== null) {
+    const perHour = policy2.sessions.newPerKeyPerHour;
+    plan.newSession = { limit: "sessions.newPerKeyPerHour", markerKey: sessionKey(f.tenant, session), key: newSessionsKey(f.tenant, f.keyId), emissionMs: Math.ceil(36e5 / perHour), burst: perHour, ttlMs: idleTtlMs };
+  }
   const route2 = findRoute(policy2, f);
   if (!route2) return { ...plan, preBlock: "no-route" };
   plan.route = route2.name;
@@ -30713,6 +30729,7 @@ function decide(policy2, f) {
     throw new Error("the price table has no models, so no reservation can be priced");
   }
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
+  if (levels.some((l) => l.resetsAt === null)) plan.sessionIdleTtlMs = idleTtlMs;
   if (worstMicro !== void 0 && levels.length > 0) plan.worstCaseMicroUsd = worstMicro;
   plan.rateChecks = policy2.rateLimits.flatMap((l) => {
     const value = levelValue(l.scope, f, true);
@@ -30989,7 +31006,8 @@ function failedBlock(plan, failed) {
     case "budget": {
       const level = plan.reservations.find((r) => r.budget === failed.name);
       const spent = failed.spentMicroUsd === void 0 || level === void 0 ? "" : ` (spent ${usd(failed.spentMicroUsd)} of ${usd(level.limitMicroUsd)}; this request's reservation is ${usd(level.estMicroUsd)})`;
-      const resets = level?.resetsAt ? `; it resets at ${level.resetsAt}` : level ? "; it does not reset (session budget)" : "";
+      const idle = plan.sessionIdleTtlMs === void 0 ? null : Math.round(plan.sessionIdleTtlMs / 36e5);
+      const resets = level?.resetsAt ? `; it resets at ${level.resetsAt}` : level ? `; a session budget resets only after the session is idle for ${idle ?? 24} h` : "";
       return block(429, "rate_limit_error", "budget", `budget "${failed.name}" is exhausted${spent}${resets}`);
     }
     case "rate": {
@@ -31002,6 +31020,10 @@ function failedBlock(plan, failed) {
       const at = failed.valueHmac === void 0 ? void 0 : plan.taint?.messages?.[failed.valueHmac];
       const where = at === void 0 ? "" : ` (message ${at})`;
       return block(400, "invalid_request_error", "taint", `this session's history${where} holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+    }
+    case "sessions": {
+      const limit = plan.newSession?.burst;
+      return block(429, "rate_limit_error", "session-churn", `this key started more than ${limit ?? "its limit of"} new sessions per hour (sessions.newPerKeyPerHour); continue in a session it already uses, or ask the policy owner to raise the limit`);
     }
     case "duplicate":
       return block(409, "invalid_request_error", "duplicate", `request id ${plan.id} already holds a reservation; it was not sent again`);
@@ -34829,16 +34851,16 @@ var require_connect = __commonJS({
           }
         });
       }
-      get(sessionKey) {
-        const ref = this._sessionCache.get(sessionKey);
+      get(sessionKey2) {
+        const ref = this._sessionCache.get(sessionKey2);
         return ref ? ref.deref() : null;
       }
-      set(sessionKey, session) {
+      set(sessionKey2, session) {
         if (this._maxCachedSessions === 0) {
           return;
         }
-        if (this._sessionCache.has(sessionKey)) {
-          this._sessionCache.delete(sessionKey);
+        if (this._sessionCache.has(sessionKey2)) {
+          this._sessionCache.delete(sessionKey2);
         } else if (this._sessionCache.size >= this._maxCachedSessions) {
           let evicted = false;
           for (const [key, ref] of this._sessionCache) {
@@ -34855,8 +34877,8 @@ var require_connect = __commonJS({
             }
           }
         }
-        this._sessionCache.set(sessionKey, new WeakRef(session));
-        this._sessionRegistry.register(session, sessionKey);
+        this._sessionCache.set(sessionKey2, new WeakRef(session));
+        this._sessionRegistry.register(session, sessionKey2);
       }
     };
     function buildConnector({ allowH2, useH2c, maxCachedSessions, socketPath, timeout, session: customSession, ...opts }) {
@@ -34874,9 +34896,9 @@ var require_connect = __commonJS({
             tls = __require("node:tls");
           }
           servername = servername || options.servername || util.getServerName(host) || null;
-          const sessionKey = servername || hostname4;
-          assert2(sessionKey);
-          const session = customSession || sessionCache.get(sessionKey) || null;
+          const sessionKey2 = servername || hostname4;
+          assert2(sessionKey2);
+          const session = customSession || sessionCache.get(sessionKey2) || null;
           port = port || 443;
           socket = tls.connect({
             highWaterMark: 16384,
@@ -34892,7 +34914,7 @@ var require_connect = __commonJS({
             host: hostname4
           });
           socket.on("session", function(session2) {
-            sessionCache.set(sessionKey, session2);
+            sessionCache.set(sessionKey2, session2);
           });
         } else {
           assert2(!httpSocket, "httpSocket can only be sent on TLS update");
@@ -58604,6 +58626,7 @@ function openaiTypeAndCode(anthropicType, reason) {
       return { type: "insufficient_quota", code: "insufficient_quota" };
     case "rate":
     case "streams":
+    case "session-churn":
       return { type: "requests", code: "rate_limit_exceeded" };
     case "secret":
     case "taint":
@@ -58636,7 +58659,8 @@ var init_errors3 = __esm({
       "unpriced",
       "server-tool-no-max-uses",
       "server-tool-not-allowed",
-      "duplicate"
+      "duplicate",
+      "session-churn"
     ]);
     retryable = (reason) => !NOT_RETRYABLE.has(reason);
   }
@@ -60125,6 +60149,7 @@ function compilePolicy(src, revision, o) {
     rateLimits,
     streamLimits,
     reservation: structuredClone(policy2.reservation),
+    sessions: structuredClone(policy2.sessions),
     guardrails: structuredClone(policy2.guardrails),
     failure: structuredClone(policy2.failure),
     ci: structuredClone(policy2.ci),
@@ -60790,8 +60815,8 @@ var init_gcra = __esm({
 });
 
 // src/limits/store.ts
-function budgetExpiresAt(resetsAt, nowMs) {
-  return resetsAt === null ? nowMs + SESSION_BUDGET_TTL_MS : Date.parse(resetsAt) + WINDOW_GRACE_MS;
+function budgetExpiresAt(resetsAt, nowMs, sessionIdleTtlMs = DEFAULT_SESSION_IDLE_TTL_MS) {
+  return resetsAt === null ? nowMs + sessionIdleTtlMs : Date.parse(resetsAt) + WINDOW_GRACE_MS;
 }
 function assertMicroUsd(n2, what) {
   if (!isMicro(n2)) throw new Error(`${what} must be a non-negative integer number of micro-USD, got ${n2}`);
@@ -60801,7 +60826,8 @@ function planTenant(plan) {
     ...plan.reservations.map((r) => r.key),
     ...plan.rateChecks.map((r) => r.key),
     ...plan.streamSlots.map((s2) => s2.key),
-    ...plan.taint ? [plan.taint.key] : []
+    ...plan.taint ? [plan.taint.key] : [],
+    ...plan.newSession ? [plan.newSession.markerKey, plan.newSession.key] : []
   ];
   let tenant = null;
   for (const key of keys2) {
@@ -60816,14 +60842,14 @@ function planTenant(plan) {
   }
   return tenant;
 }
-var DAY_MS3, WINDOW_GRACE_MS, SESSION_BUDGET_TTL_MS, DEFAULT_DEADLINE_MS, isMicro;
+var DAY_MS3, WINDOW_GRACE_MS, DEFAULT_SESSION_IDLE_TTL_MS, DEFAULT_DEADLINE_MS, isMicro;
 var init_store = __esm({
   "src/limits/store.ts"() {
     "use strict";
     init_keys();
     DAY_MS3 = 864e5;
     WINDOW_GRACE_MS = DAY_MS3;
-    SESSION_BUDGET_TTL_MS = 30 * DAY_MS3;
+    DEFAULT_SESSION_IDLE_TTL_MS = DAY_MS3;
     DEFAULT_DEADLINE_MS = 20 * 6e4;
     isMicro = (n2) => Number.isSafeInteger(n2) && n2 >= 0;
   }
@@ -60837,6 +60863,7 @@ function createMemoryStore(o) {
   const streams = /* @__PURE__ */ new Map();
   const taints = /* @__PURE__ */ new Map();
   const reservations = /* @__PURE__ */ new Map();
+  const markers = /* @__PURE__ */ new Map();
   let r11 = false;
   function live(m, key, now) {
     const v = m.get(key);
@@ -60864,6 +60891,20 @@ function createMemoryStore(o) {
     const tenant = planTenant(plan);
     if (tenant === null) return NOTHING;
     if (reservations.has(plan.id)) return refused({ kind: "duplicate", name: "duplicate" });
+    const ns = plan.newSession ?? null;
+    let nsTat = null;
+    if (ns) {
+      if (live(markers, ns.markerKey, now) === void 0) {
+        const g = gcra(live(tats, ns.key, now)?.tat ?? null, now, ns.emissionMs, ns.burst, 1);
+        if (!g.allowed) return refused({ kind: "sessions", name: ns.limit, retryAfterMs: g.retryAfterMs });
+        nsTat = g.tatMs;
+      }
+    }
+    const registerSession = () => {
+      if (!ns) return;
+      if (nsTat !== null) tats.set(ns.key, { tat: nsTat, exp: nsTat });
+      markers.set(ns.markerKey, { exp: now + ns.ttlMs });
+    };
     const t = plan.taint;
     if (t !== null) {
       const first2 = t.add[0];
@@ -60875,6 +60916,7 @@ function createMemoryStore(o) {
         }
         for (const a of t.add) set3.rules.set(a.valueHmac, a.rule);
         set3.exp = now + t.ttlMs;
+        registerSession();
         return refused({ kind: "taint", name: "taint", rule: first2.rule });
       }
       const set2 = live(taints, t.key, now);
@@ -60918,7 +60960,7 @@ function createMemoryStore(o) {
         budgets.set(l.key, b);
       }
       b.r += l.estMicroUsd;
-      b.exp = budgetExpiresAt(l.resetsAt, now);
+      b.exp = budgetExpiresAt(l.resetsAt, now, plan.sessionIdleTtlMs);
       seen[i].r = b.r;
     });
     plan.rateChecks.forEach((c, i) => {
@@ -60926,6 +60968,7 @@ function createMemoryStore(o) {
       tats.set(c.key, { tat, exp: tat });
     });
     for (const s2 of plan.streamSlots) streams.set(s2.key, (streams.get(s2.key) ?? 0) + 1);
+    registerSession();
     reservations.set(plan.id, {
       tenant,
       levels: plan.reservations.map((l) => ({ key: l.key, est: l.estMicroUsd })),
@@ -60954,7 +60997,7 @@ function createMemoryStore(o) {
         ids.push(id);
       }
       if (ids.length > 0) o.onSwept?.(ids);
-      for (const m of [budgets, tats, taints]) for (const key of m.keys()) live(m, key, nowMs);
+      for (const m of [budgets, tats, taints, markers]) for (const key of m.keys()) live(m, key, nowMs);
       return ids.length;
     },
     async snapshot(keys2) {
@@ -60991,7 +61034,7 @@ function createMemoryStore(o) {
       const now = o.clock();
       const out = /* @__PURE__ */ new Set();
       if (r11) out.add(r11LatchKey());
-      for (const m of [budgets, tats, taints]) for (const key of m.keys()) if (live(m, key, now)) out.add(key);
+      for (const m of [budgets, tats, taints, markers]) for (const key of m.keys()) if (live(m, key, now)) out.add(key);
       for (const key of streams.keys()) out.add(key);
       for (const [id, res] of reservations) {
         out.add(reservationKey(res.tenant, id));
@@ -61017,6 +61060,8 @@ var init_memory_store = __esm({
 async function warmupEntries(records, policy2, nowMs) {
   const current = new Map(policy2.budgets.flatMap((b) => b.window === null ? [] : [[b.window, windowOf(b.window, nowMs)]]));
   const sums = /* @__PURE__ */ new Map();
+  const sessionUses = /* @__PURE__ */ new Map();
+  const idleMs = policy2.sessions.idleTtlHours * 36e5;
   const settled = /* @__PURE__ */ new Set();
   const pending = /* @__PURE__ */ new Map();
   for await (const r of records) {
@@ -61030,6 +61075,17 @@ async function warmupEntries(records, policy2, nowMs) {
     add2(r, r.outcome.chargedMicroUsd ?? r.outcome.costMicroUsd);
   }
   for (const r of pending.values()) add2(r, r.reservedMicroUsd);
+  for (const [key, uses] of sessionUses) {
+    uses.sort((a, b) => a.ts - b.ts);
+    let spent = 0;
+    let last = Number.NEGATIVE_INFINITY;
+    for (const u of uses) {
+      if (u.ts - last >= idleMs) spent = 0;
+      spent += u.cost;
+      last = u.ts;
+    }
+    if (last + idleMs > nowMs) sums.set(key, { spent, expiresAt: last + idleMs });
+  }
   return [...sums].map(([key, s2]) => ({ key, spentMicroUsd: s2.spent, ttlMs: s2.expiresAt - nowMs }));
   function add2(r, cost) {
     if (cost === null || !(cost > 0)) return;
@@ -61047,6 +61103,12 @@ async function warmupEntries(records, policy2, nowMs) {
         resetsAt = now.end;
       }
       const key = budgetKey(r.tenant, b.name, value, start);
+      if (b.window === null) {
+        const uses = sessionUses.get(key);
+        if (uses) uses.push({ ts, cost: Math.round(cost) });
+        else sessionUses.set(key, [{ ts, cost: Math.round(cost) }]);
+        continue;
+      }
       const sum = sums.get(key);
       if (sum) sum.spent += Math.round(cost);
       else sums.set(key, { spent: Math.round(cost), expiresAt: budgetExpiresAt(resetsAt, nowMs) });
@@ -106100,12 +106162,38 @@ local nb, ng, ns = #p.b, #p.g, #p.s
 local bOff, gOff, sOff = 2, 2 + nb, 2 + nb + ng
 if redis.call('EXISTS', resKey) == 1 then return cjson.encode({ r = 'dup' }) end
 
+-- -1) new sessions per key (S-V2-1): a session without a marker uses one of the key's GCRA allowance; over it, refused
+-- before anything is written. The marker (refreshed on every admit) and the allowance are written with the request's state.
+local nsNew, nsTat, mk, nk = false, nil, nil, nil
+if p.ns then
+  local base = 2 + nb + ng + ns + (p.t and 1 or 0)
+  mk, nk = KEYS[base + 1], KEYS[base + 2]
+  if redis.call('EXISTS', mk) == 0 then
+    local tat = tonumber(redis.call('GET', nk) or '0')
+    if tat < now then tat = now end
+    local nextTat = tat + p.ns.e
+    local allowAt = nextTat - p.ns.e * p.ns.b
+    if allowAt > now then return cjson.encode({ r = 'sessions', name = p.ns.n, retry = int(allowAt - now) }) end
+    nsNew, nsTat = true, nextTat
+  end
+end
+local function registerSession()
+  if not p.ns then return end
+  if nsNew then
+    local ttl = nsTat - now
+    if ttl < 1 then ttl = 1 end
+    redis.call('SET', nk, int(nsTat), 'PX', int(ttl))
+  end
+  redis.call('SET', mk, '1', 'PX', int(p.ns.ttl))
+end
+
 -- 0) taint: a last-turn block writes its HMACs (with the rule) and nothing else; else a history HMAC in the set blocks
 if p.t then
   local tk = KEYS[3 + nb + ng + ns]
   if #p.t.a > 0 then
     for _, a in ipairs(p.t.a) do redis.call('HSET', tk, a[1], a[2]) end
     redis.call('PEXPIRE', tk, int(p.t.ttl))
+    registerSession()
     return cjson.encode({ r = 'taint', rule = p.t.a[1][2] })
   end
   for _, h in ipairs(p.t.c) do
@@ -106168,6 +106256,7 @@ for i, s in ipairs(p.s) do
   redis.call('PEXPIRE', KEYS[sOff + i], int(p.sttl))
   table.insert(slots, KEYS[sOff + i])
 end
+registerSession()
 redis.call('SET', resKey, cjson.encode({ l = levels, s = slots }))
 redis.call('ZADD', dlKey, int(now + p.dl), resKey)
 return cjson.encode({ r = 'ok', audit = audit, totals = totals() })
@@ -106233,16 +106322,18 @@ function createRedisStore(client, o) {
         ...plan.reservations.map((l) => l.key),
         ...plan.rateChecks.map((c) => c.key),
         ...plan.streamSlots.map((s2) => s2.key),
-        ...plan.taint ? [plan.taint.key] : []
+        ...plan.taint ? [plan.taint.key] : [],
+        ...plan.newSession ? [plan.newSession.markerKey, plan.newSession.key] : []
       ];
       const arg = {
         dl: o.deadlineMs,
         sttl: 2 * o.deadlineMs,
-        sx: SESSION_BUDGET_TTL_MS,
+        sx: plan.sessionIdleTtlMs ?? DEFAULT_SESSION_IDLE_TTL_MS,
         b: plan.reservations.map((l) => ({ n: l.budget, e: l.estMicroUsd, l: l.limitMicroUsd, f: l.enforce, x: l.resetsAt === null ? -1 : budgetExpiresAt(l.resetsAt, now) })),
         g: plan.rateChecks.map((c) => ({ n: c.limit, e: c.emissionMs, b: c.burst, q: c.quantity })),
         s: plan.streamSlots.map((s2) => ({ n: s2.limit, m: s2.max })),
-        ...plan.taint ? { t: { c: plan.taint.check, a: plan.taint.add.map((a) => [a.valueHmac, a.rule]), ttl: plan.taint.ttlMs } } : {}
+        ...plan.taint ? { t: { c: plan.taint.check, a: plan.taint.add.map((a) => [a.valueHmac, a.rule]), ttl: plan.taint.ttlMs } } : {},
+        ...plan.newSession ? { ns: { n: plan.newSession.limit, e: plan.newSession.emissionMs, b: plan.newSession.burst, ttl: plan.newSession.ttlMs } } : {}
       };
       const reply = JSON.parse(String(await run2(ADMIT, keys2, [JSON.stringify(arg)])));
       const audit = list(reply.audit).map(([name3, wouldFail]) => ({ name: name3, wouldFail }));
@@ -106258,6 +106349,8 @@ function createRedisStore(client, o) {
           return { admitted: false, failed: { kind: "taint", name: "taint", rule: reply.rule ?? "", ...reply.h ? { valueHmac: reply.h } : {} }, audit: [], totals: [] };
         case "rate":
           return { admitted: false, failed: { kind: "rate", name: name2, retryAfterMs: Number(reply.retry) }, audit: [], totals: [] };
+        case "sessions":
+          return { admitted: false, failed: { kind: "sessions", name: name2, retryAfterMs: Number(reply.retry) }, audit: [], totals: [] };
         case "streams":
           return { admitted: false, failed: { kind: "streams", name: name2 }, audit: [], totals: [] };
         case "budget":
@@ -121161,7 +121254,7 @@ async function generateTraffic(o) {
   const startMs = o.startMs ?? DEMO_START_MS;
   const planned = [];
   const counter = { n: 0 };
-  const sessions = [];
+  const sessions2 = [];
   for (let d = 0; d < o.days; d++) {
     const dayStart = startMs + d * DAY_MS4;
     const weekend = new Date(dayStart).getUTCDay() % 6 === 0;
@@ -121170,7 +121263,7 @@ async function generateTraffic(o) {
       for (let s2 = 0; s2 < n2; s2++) {
         const startAt = dayStart + (8 + s2 * 4) * 36e5 + between(rng, 0, 90) * 6e4 + between(rng, 0, 59) * 1e3;
         const secret = dev.name === SECRET_DEV && d === SECRET_DAY && s2 === 0;
-        sessions.push(planSession(rng, dev, startAt, secret, planned, counter));
+        sessions2.push(planSession(rng, dev, startAt, secret, planned, counter));
       }
     }
   }
@@ -121183,7 +121276,7 @@ async function generateTraffic(o) {
       if (!dev || codexRng() < 0.4) continue;
       const model = c.models[Math.floor(codexRng() * c.models.length)];
       const startAt = dayStart + 14 * 36e5 + between(codexRng, 0, 180) * 6e4;
-      sessions.push(planCodexSession(codexRng, dev, model, startAt, planned, counter));
+      sessions2.push(planCodexSession(codexRng, dev, model, startAt, planned, counter));
     }
   }
   planned.sort((a, b) => a.at - b.at || a.order - b.order);
@@ -121229,7 +121322,7 @@ async function generateTraffic(o) {
     await o.afterRequest?.();
     if (res.status >= 400 && ++s2.failures >= s2.tolerance) stopped.add(s2);
   }
-  return { requests, sessions: sessions.length };
+  return { requests, sessions: sessions2.length };
 }
 var DEMO_DEVELOPERS, FAKE_AWS_KEY, SECRET_DEV, SECRET_DAY, DEMO_START_MS, DAY_MS4, WORDS, text, between, hex3, toolDefs, MAIN_TOOLS, SUB_TOOLS, Conversation, CodexConversation, CODEX_TOOLS, CODEX_DEVS, MODELS;
 var init_traffic = __esm({
@@ -121712,7 +121805,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
   };
   const outcomes = [];
   const cuts = [];
-  const sessions = /* @__PURE__ */ new Map();
+  const sessions2 = /* @__PURE__ */ new Map();
   for (const { i, at: ms } of admitOrder(window2)) {
     const r = window2[i];
     await drain(ms);
@@ -121720,8 +121813,8 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
     const session = r.attribution.session;
     let s2 = null;
     if (session !== null) {
-      s2 = sessions.get(session) ?? { index: 0, forwarded: false, cut: null };
-      sessions.set(session, s2);
+      s2 = sessions2.get(session) ?? { index: 0, forwarded: false, cut: null };
+      sessions2.set(session, s2);
       s2.index++;
     }
     if (s2?.cut) {
@@ -126596,7 +126689,7 @@ var package_default = {
     typecheck: "tsc --noEmit",
     lint: "oxlint",
     test: "vitest run",
-    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts",
+    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts",
     bench: "tsx bench/run.ts",
     soak: "tsx bench/soak.ts",
     "bench:check": "node scripts/bench-to-readme.mjs --check README.md",

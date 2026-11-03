@@ -33,11 +33,12 @@ end
 `;
 
 /**
- * KEYS: res, deadlines, budget keys..., gcra keys..., stream keys..., [taint key]
- * ARGV[1]: JSON { id, dl (deadline ms), sttl (stream key ttl ms), sx (session budget ttl ms),
+ * KEYS: res, deadlines, budget keys..., gcra keys..., stream keys..., [taint key], [session marker, new-sessions GCRA]
+ * ARGV[1]: JSON { id, dl (deadline ms), sttl (stream key ttl ms), sx (session budget idle ttl ms),
+ *   ns?: { n name, e emission ms, b burst, ttl marker ttl ms } (S-V2-1),
  *   b: [{ n name, e est, l limit, f enforce, x expire-at ms or -1 for a session budget }],
  *   g: [{ n, e emission ms, b burst, q quantity }], s: [{ n, m max }], t?: { c: [hmac], a: [[hmac, rule]], ttl } }
- * Returns a JSON string: { r: 'ok' | 'dup' | 'taint' | 'rate' | 'streams' | 'budget', ... }.
+ * Returns a JSON string: { r: 'ok' | 'dup' | 'sessions' | 'taint' | 'rate' | 'streams' | 'budget', ... }.
  */
 export const ADMIT_LUA = `
 local function int(n) return string.format('%d', n) end
@@ -49,12 +50,38 @@ local nb, ng, ns = #p.b, #p.g, #p.s
 local bOff, gOff, sOff = 2, 2 + nb, 2 + nb + ng
 if redis.call('EXISTS', resKey) == 1 then return cjson.encode({ r = 'dup' }) end
 
+-- -1) new sessions per key (S-V2-1): a session without a marker uses one of the key's GCRA allowance; over it, refused
+-- before anything is written. The marker (refreshed on every admit) and the allowance are written with the request's state.
+local nsNew, nsTat, mk, nk = false, nil, nil, nil
+if p.ns then
+  local base = 2 + nb + ng + ns + (p.t and 1 or 0)
+  mk, nk = KEYS[base + 1], KEYS[base + 2]
+  if redis.call('EXISTS', mk) == 0 then
+    local tat = tonumber(redis.call('GET', nk) or '0')
+    if tat < now then tat = now end
+    local nextTat = tat + p.ns.e
+    local allowAt = nextTat - p.ns.e * p.ns.b
+    if allowAt > now then return cjson.encode({ r = 'sessions', name = p.ns.n, retry = int(allowAt - now) }) end
+    nsNew, nsTat = true, nextTat
+  end
+end
+local function registerSession()
+  if not p.ns then return end
+  if nsNew then
+    local ttl = nsTat - now
+    if ttl < 1 then ttl = 1 end
+    redis.call('SET', nk, int(nsTat), 'PX', int(ttl))
+  end
+  redis.call('SET', mk, '1', 'PX', int(p.ns.ttl))
+end
+
 -- 0) taint: a last-turn block writes its HMACs (with the rule) and nothing else; else a history HMAC in the set blocks
 if p.t then
   local tk = KEYS[3 + nb + ng + ns]
   if #p.t.a > 0 then
     for _, a in ipairs(p.t.a) do redis.call('HSET', tk, a[1], a[2]) end
     redis.call('PEXPIRE', tk, int(p.t.ttl))
+    registerSession()
     return cjson.encode({ r = 'taint', rule = p.t.a[1][2] })
   end
   for _, h in ipairs(p.t.c) do
@@ -117,6 +144,7 @@ for i, s in ipairs(p.s) do
   redis.call('PEXPIRE', KEYS[sOff + i], int(p.sttl))
   table.insert(slots, KEYS[sOff + i])
 end
+registerSession()
 redis.call('SET', resKey, cjson.encode({ l = levels, s = slots }))
 redis.call('ZADD', dlKey, int(now + p.dl), resKey)
 return cjson.encode({ r = 'ok', audit = audit, totals = totals() })

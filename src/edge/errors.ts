@@ -6,7 +6,7 @@ import type { BlockReason } from '../policy/types.js';
  * minutes). Rate, stream and store-down blocks clear with time and keep their `retry-after`.
  */
 const NOT_RETRYABLE: ReadonlySet<BlockReason> = new Set<BlockReason>([
-  'no-route', 'model-not-allowed', 'secret', 'taint', 'budget', 'unpriced', 'server-tool-no-max-uses', 'server-tool-not-allowed', 'duplicate',
+  'no-route', 'model-not-allowed', 'secret', 'taint', 'budget', 'unpriced', 'server-tool-no-max-uses', 'server-tool-not-allowed', 'duplicate', 'session-churn',
 ]);
 export const retryable = (reason: BlockReason): boolean => !NOT_RETRYABLE.has(reason);
 
@@ -65,6 +65,7 @@ function openaiTypeAndCode(anthropicType: string, reason: string): { type: strin
       return { type: 'insufficient_quota', code: 'insufficient_quota' };
     case 'rate':
     case 'streams':
+    case 'session-churn':
       return { type: 'requests', code: 'rate_limit_exceeded' };
     case 'secret':
     case 'taint':

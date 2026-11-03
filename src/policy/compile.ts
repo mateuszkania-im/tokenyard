@@ -115,6 +115,7 @@ export function compilePolicy(src: PolicySource, revision: string, o: { experime
     rateLimits,
     streamLimits,
     reservation: structuredClone(policy.reservation),
+    sessions: structuredClone(policy.sessions),
     guardrails: structuredClone(policy.guardrails),
     failure: structuredClone(policy.failure),
     ci: structuredClone(policy.ci),

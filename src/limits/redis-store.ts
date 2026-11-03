@@ -5,7 +5,7 @@ import type { RedisClientType } from 'redis';
 import type { Admission } from '../policy/types.js';
 import { deadlinesKey, r11LatchKey, reservationKey, sweepLockKey, tenantOfKey } from './keys.js';
 import { ADMIT_LUA, SEED_LUA, SETTLE_LUA, SWEEP_LUA } from './lua.js';
-import { assertMicroUsd, budgetExpiresAt, type CounterStore, planTenant, SESSION_BUDGET_TTL_MS } from './store.js';
+import { assertMicroUsd, budgetExpiresAt, type CounterStore, DEFAULT_SESSION_IDLE_TTL_MS, planTenant } from './store.js';
 
 /** The one client method the store uses; any node-redis client (single node, RESP 2 or 3) has it. */
 type Client = Pick<RedisClientType, 'sendCommand'>;
@@ -27,7 +27,7 @@ const NOTHING: Admission = { admitted: true, failed: null, audit: [], totals: []
 const list = <T>(x: unknown): T[] => (Array.isArray(x) ? (x as T[]) : []); // cjson encodes an empty array as {}
 
 interface AdmitReply {
-  r: 'ok' | 'dup' | 'taint' | 'rate' | 'streams' | 'budget';
+  r: 'ok' | 'dup' | 'sessions' | 'taint' | 'rate' | 'streams' | 'budget';
   name?: string;
   rule?: string;
   /** Taint: the history HMAC found in the set. */
@@ -80,15 +80,17 @@ export function createRedisStore(client: Client, o: { deadlineMs: number; onSwep
         ...plan.rateChecks.map((c) => c.key),
         ...plan.streamSlots.map((s) => s.key),
         ...(plan.taint ? [plan.taint.key] : []),
+        ...(plan.newSession ? [plan.newSession.markerKey, plan.newSession.key] : []),
       ];
       const arg = {
         dl: o.deadlineMs,
         sttl: 2 * o.deadlineMs,
-        sx: SESSION_BUDGET_TTL_MS,
+        sx: plan.sessionIdleTtlMs ?? DEFAULT_SESSION_IDLE_TTL_MS,
         b: plan.reservations.map((l) => ({ n: l.budget, e: l.estMicroUsd, l: l.limitMicroUsd, f: l.enforce, x: l.resetsAt === null ? -1 : budgetExpiresAt(l.resetsAt, now) })),
         g: plan.rateChecks.map((c) => ({ n: c.limit, e: c.emissionMs, b: c.burst, q: c.quantity })),
         s: plan.streamSlots.map((s) => ({ n: s.limit, m: s.max })),
         ...(plan.taint ? { t: { c: plan.taint.check, a: plan.taint.add.map((a) => [a.valueHmac, a.rule]), ttl: plan.taint.ttlMs } } : {}),
+        ...(plan.newSession ? { ns: { n: plan.newSession.limit, e: plan.newSession.emissionMs, b: plan.newSession.burst, ttl: plan.newSession.ttlMs } } : {}),
       };
       const reply = JSON.parse(String(await run(ADMIT, keys, [JSON.stringify(arg)]))) as AdmitReply;
       const audit = list<[string, boolean]>(reply.audit).map(([name, wouldFail]) => ({ name, wouldFail }));
@@ -105,6 +107,8 @@ export function createRedisStore(client: Client, o: { deadlineMs: number; onSwep
           return { admitted: false, failed: { kind: 'taint', name: 'taint', rule: reply.rule ?? '', ...(reply.h ? { valueHmac: reply.h } : {}) }, audit: [], totals: [] };
         case 'rate':
           return { admitted: false, failed: { kind: 'rate', name, retryAfterMs: Number(reply.retry) }, audit: [], totals: [] };
+        case 'sessions':
+          return { admitted: false, failed: { kind: 'sessions', name, retryAfterMs: Number(reply.retry) }, audit: [], totals: [] };
         case 'streams':
           return { admitted: false, failed: { kind: 'streams', name }, audit: [], totals: [] };
         case 'budget':

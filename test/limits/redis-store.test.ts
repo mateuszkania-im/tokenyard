@@ -1,6 +1,6 @@
 import { createClient } from 'redis';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { budgetKey, gcraKey, taintKey } from '../../src/limits/keys.js';
+import { budgetKey, gcraKey, newSessionsKey, sessionKey, taintKey } from '../../src/limits/keys.js';
 import { createRedisStore, redisSweepLock } from '../../src/limits/redis-store.js';
 import type { Plan } from '../../src/policy/types.js';
 import { runStoreContract } from './store-contract.js';
@@ -73,6 +73,25 @@ describe.skipIf(!url)('redis store (REDIS_URL)', () => {
     expect(await client.pTTL(sk)).toBeGreaterThan(59_000);
     await s.seed([{ key: sk, spentMicroUsd: 5, ttlMs: 1_000 }]);
     expect(await client.pTTL(sk)).toBeGreaterThan(59_000);
+  });
+
+  test('S-V2-1: session budget keys and session markers get the idle TTL from each admit (default 24 h), not 30 days', async () => {
+    const s = await make();
+    const key = budgetKey('acme', 'session', 's1', null);
+    const marker = sessionKey('acme', 's1');
+    const level = { budget: 'session', key, limitMicroUsd: 1_000_000, estMicroUsd: 10, enforce: true, resetsAt: null };
+    const ns = { limit: 'new-sessions', markerKey: marker, key: newSessionsKey('acme', 'k1'), emissionMs: 3_600, burst: 1_000, ttlMs: 3_600_000 };
+    await s.admit(plan({ sessionIdleTtlMs: 3_600_000, reservations: [level], newSession: ns }));
+    for (const k of [key, marker]) {
+      const ttl = await client.pTTL(k);
+      expect(ttl).toBeGreaterThan(3_590_000);
+      expect(ttl).toBeLessThanOrEqual(3_600_000);
+    }
+    const other = budgetKey('acme', 'session', 's2', null);
+    await s.admit(plan({ reservations: [{ ...level, key: other }] }));
+    const ttl = await client.pTTL(other);
+    expect(ttl).toBeGreaterThan(86_390_000);
+    expect(ttl).toBeLessThanOrEqual(86_400_000);
   });
 
   test('GCRA runs on the Redis clock, not the caller nowMs', async () => {

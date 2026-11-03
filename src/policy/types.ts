@@ -17,7 +17,8 @@ export type BlockReason =
   | 'unpriced'
   | 'server-tool-no-max-uses'
   | 'server-tool-not-allowed'          // not in spec 6.5: a server tool type the matched route does not list
-  | 'duplicate';                       // not in spec 6.5: admit found a reservation under this id already (never admitted twice)
+  | 'duplicate'                        // not in spec 6.5: admit found a reservation under this id already (never admitted twice)
+  | 'session-churn';                   // not in spec 6.5 (S-V2-1): the key started more new sessions than `sessions.newPerKeyPerHour` allows
 
 /** A note carried on a plan: guardrail warns and what the reservation could not bound. */
 export type Warning =
@@ -128,6 +129,7 @@ export interface CompiledPolicy {
   rateLimits: readonly CompiledRate[];
   streamLimits: readonly CompiledStreamLimit[];
   reservation: PolicyDoc['reservation'];
+  sessions: PolicyDoc['sessions'];
   guardrails: PolicyDoc['guardrails'];
   failure: PolicyDoc['failure'];
   ci: PolicyDoc['ci'];
@@ -186,6 +188,13 @@ export interface Plan {
     messages?: Record<string, number>; // not in spec 6.5: message index of each history HMAC, for the taint error message
   } | null;
   preBlock: BlockReason | null;        // decided without counters: model not allowed, no route, last-turn secret
+  /** Not in spec 6.5 (S-V2-1): idle TTL of session-scoped keys from their last admit, ms; absent means DEFAULT_SESSION_IDLE_TTL_MS. */
+  sessionIdleTtlMs?: number;
+  /**
+   * Not in spec 6.5 (S-V2-1): when the request names a session, the store counts it against the key's allowance of new
+   * sessions (a GCRA at `newPerKeyPerHour`) unless its marker exists, and refreshes the marker on every admit.
+   */
+  newSession?: { limit: string; markerKey: string; key: string; emissionMs: number; burst: number; ttlMs: number } | null;
   outputCap?: number;
   worstCaseMicroUsd?: number;          // not in spec 6.5: the worst-case estimate (spec 7.3) whatever the estimator; a request without final usage settles at no less (A2-2)                  // not in spec 6.5: the route's reserveOutputTokens, written into the body as max_tokens / max_output_tokens (A1)
   warnings: Warning[];                 // guardrail warns, audit-mode notes
@@ -193,7 +202,7 @@ export interface Plan {
 
 export interface Admission {           // returned by CounterStore.admit(plan)
   admitted: boolean;
-  failed: { kind: 'budget' | 'rate' | 'streams' | 'taint' | 'duplicate'; name: string; spentMicroUsd?: number; retryAfterMs?: number; rule?: string;
+  failed: { kind: 'budget' | 'rate' | 'streams' | 'taint' | 'duplicate' | 'sessions'; name: string; spentMicroUsd?: number; retryAfterMs?: number; rule?: string;
             valueHmac?: string } | null;   // not in spec 6.5: the tainted HMAC a history hit matched, to name its message
   audit: Array<{ name: string; wouldFail: boolean }>;
   totals: Array<{ key: string; spentMicroUsd: number; reservedMicroUsd: number; limitMicroUsd: number }>;  // post-admit, enforced levels

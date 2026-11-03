@@ -34,6 +34,16 @@ export function keyTaintKey(tenant: string, keyId: string): string {
   return `${prefix(tenant)}:taint:k:${part(keyId)}`;
 }
 
+/** Marker of a session the store has seen (S-V2-1): while it lives, the session is not new. */
+export function sessionKey(tenant: string, session: string): string {
+  return `${prefix(tenant)}:sess:${part(session)}`;
+}
+
+/** GCRA state of the new sessions one key may start (S-V2-1). */
+export function newSessionsKey(tenant: string, keyId: string): string {
+  return `${prefix(tenant)}:ns:${part(keyId)}`;
+}
+
 /** Reservation record of one admitted request; the request id is the reservation id. */
 export function reservationKey(tenant: string, id: string): string {
   return `${prefix(tenant)}:res:${part(id)}`;

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
-import { budgetKey, gcraKey, streamKey, taintKey } from '../../src/limits/keys.js';
+import { budgetKey, gcraKey, newSessionsKey, sessionKey, streamKey, taintKey } from '../../src/limits/keys.js';
 import { createMemoryStore, type MemoryCounterStore } from '../../src/limits/memory-store.js';
 import type { CounterStore } from '../../src/limits/store.js';
 import type { Plan } from '../../src/policy/types.js';
@@ -29,7 +29,7 @@ test('taint expires after its TTL on the store clock', async () => {
   expect(s.keys()).not.toContain(key);
 });
 
-test('budget keys expire one day after their window ends; session keys after 30 days idle', async () => {
+test('budget keys expire one day after their window ends; session keys after the idle TTL (S-V2-1: 24 h by default, was 30 days)', async () => {
   let now = Date.UTC(2026, 10, 2, 12);
   const s = createMemoryStore({ clock: () => now });
   const day = budgetKey('acme', 'd', 'v', '2026-11-02');
@@ -43,10 +43,9 @@ test('budget keys expire one day after their window ends; session keys after 30 
   await s.settle('req_1', 10);
   now = Date.UTC(2026, 10, 3, 23, 59);
   expect((await s.snapshot([day]))[day]).toEqual({ spent: 10, reserved: 0 });
+  expect((await s.snapshot([sess]))[sess]).toEqual({ spent: 0, reserved: 0 }); // idle since 12:00 on 11-02, past 24 h
   now = Date.UTC(2026, 10, 4);
-  expect((await s.snapshot([day, sess]))).toEqual({ [day]: { spent: 0, reserved: 0 }, [sess]: { spent: 10, reserved: 0 } });
-  now = Date.UTC(2026, 11, 3);
-  expect((await s.snapshot([sess]))[sess]).toEqual({ spent: 0, reserved: 0 });
+  expect((await s.snapshot([day]))).toEqual({ [day]: { spent: 0, reserved: 0 } });
 });
 
 test('admit uses nowMs when given (sim store on a virtual clock)', async () => {
@@ -81,4 +80,41 @@ test('prototype-like names are plain keys', async () => {
   expect(await s.settle('constructor', 7)).toBe('unknown');
   expect((await s.snapshot([key]))[key]).toEqual({ spent: 7, reserved: 0 });
   expect(({} as Record<string, unknown>).s).toBeUndefined();
+});
+
+test('S-V2-1: a session budget key and the session marker expire after the idle TTL from their last admit, not after 30 days', async () => {
+  let now = 1_000_000;
+  const s = createMemoryStore({ clock: () => now });
+  const key = budgetKey('acme', 'session', 's1', null);
+  const marker = sessionKey('acme', 's1');
+  const p = (id: string): Plan =>
+    plan({
+      id,
+      sessionIdleTtlMs: 3_600_000,
+      reservations: [{ budget: 'session', key, limitMicroUsd: 1_000_000, estMicroUsd: 10, enforce: true, resetsAt: null }],
+      newSession: { limit: 'new-sessions', markerKey: marker, key: newSessionsKey('acme', 'k1'), emissionMs: 3_600, burst: 1_000, ttlMs: 3_600_000 },
+    });
+  await s.admit(p('a'));
+  await s.settle('a', 5);
+  now += 3_599_999;
+  await s.admit(p('b')); // used again just before it expires: the TTL slides
+  await s.settle('b', 5);
+  now += 3_599_999;
+  expect(s.keys()).toEqual(expect.arrayContaining([key, marker]));
+  expect((await s.snapshot([key]))[key]).toEqual({ spent: 10, reserved: 0 });
+  now += 1;
+  await s.sweep(now);
+  expect(s.keys()).not.toContain(key);
+  expect(s.keys()).not.toContain(marker);
+});
+
+test('S-V2-1: without sessionIdleTtlMs a session budget key lives 24 hours after its last admit', async () => {
+  let now = 1_000_000;
+  const s = createMemoryStore({ clock: () => now });
+  const key = budgetKey('acme', 'session', 's1', null);
+  await s.admit(plan({ id: 'a', reservations: [{ budget: 'session', key, limitMicroUsd: 1_000_000, estMicroUsd: 10, enforce: true, resetsAt: null }] }));
+  await s.settle('a', 1);
+  now += 86_400_000;
+  await s.sweep(now);
+  expect(s.keys()).not.toContain(key);
 });

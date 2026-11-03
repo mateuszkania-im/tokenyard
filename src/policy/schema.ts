@@ -87,6 +87,16 @@ const reservation = z.strictObject({
   assumedMaxUses: z.number().int().positive().default(25),
 });
 
+/**
+ * Session-scoped state (S-V2-1). A session id is chosen by the client, and every new one creates counter state, so
+ * session keys expire `idleTtlHours` after their last use and one key may start at most `newPerKeyPerHour` new sessions
+ * (a GCRA: that many at once, refilled evenly over the hour).
+ */
+const sessions = z.strictObject({
+  idleTtlHours: z.number().int().min(1).max(720).default(24),
+  newPerKeyPerHour: z.number().int().positive().max(1_000_000).default(1_000),
+});
+
 const guardrails = z.strictObject({
   secrets: z
     .strictObject({
@@ -139,6 +149,7 @@ export const policySchema = z.strictObject({
   routes: z.array(route),
   budgets: z.array(budget).default([]),
   reservation: reservation.prefault({}),
+  sessions: sessions.prefault({}),
   rateLimits: z.array(rateLimit).default([]),
   guardrails: guardrails.prefault({}),
   failure: failure.prefault({}),

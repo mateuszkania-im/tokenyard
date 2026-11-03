@@ -44,6 +44,8 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
   const streams = new Map<string, number>();
   const taints = new Map<string, Taint>();
   const reservations = new Map<string, Reservation>();
+  /** Sessions seen (S-V2-1), by marker key. */
+  const markers = new Map<string, Expiring>();
   let r11 = false;
 
   function live<V extends Expiring>(m: Map<string, V>, key: string, now: number): V | undefined {
@@ -78,6 +80,23 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
     // A duplicate admit for this id is refused: answering admitted would forward it without a reservation of its own.
     if (reservations.has(plan.id)) return refused({ kind: 'duplicate', name: 'duplicate' });
 
+    // -1) New sessions per key (S-V2-1): a session without a live marker uses one of the key's allowance; over it, refused
+    // before anything is written (taint sets included). The marker and the allowance are written with the request's state.
+    const ns = plan.newSession ?? null;
+    let nsTat: number | null = null;
+    if (ns) {
+      if (live(markers, ns.markerKey, now) === undefined) {
+        const g = gcra(live(tats, ns.key, now)?.tat ?? null, now, ns.emissionMs, ns.burst, 1);
+        if (!g.allowed) return refused({ kind: 'sessions', name: ns.limit, retryAfterMs: g.retryAfterMs });
+        nsTat = g.tatMs;
+      }
+    }
+    const registerSession = (): void => {
+      if (!ns) return;
+      if (nsTat !== null) tats.set(ns.key, { tat: nsTat, exp: nsTat });
+      markers.set(ns.markerKey, { exp: now + ns.ttlMs });
+    };
+
     // 0) Taint. A last-turn block writes its HMACs and nothing else; otherwise any history HMAC in the set blocks.
     const t = plan.taint;
     if (t !== null) {
@@ -90,6 +109,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
         }
         for (const a of t.add) set.rules.set(a.valueHmac, a.rule);
         set.exp = now + t.ttlMs;
+        registerSession();
         return refused({ kind: 'taint', name: 'taint', rule: first.rule });
       }
       const set = live(taints, t.key, now);
@@ -142,7 +162,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
         budgets.set(l.key, b);
       }
       b.r += l.estMicroUsd;
-      b.exp = budgetExpiresAt(l.resetsAt, now);
+      b.exp = budgetExpiresAt(l.resetsAt, now, plan.sessionIdleTtlMs);
       (seen[i] as { r: number }).r = b.r;
     });
     plan.rateChecks.forEach((c, i) => {
@@ -150,6 +170,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
       tats.set(c.key, { tat, exp: tat });
     });
     for (const s of plan.streamSlots) streams.set(s.key, (streams.get(s.key) ?? 0) + 1);
+    registerSession();
     reservations.set(plan.id, {
       tenant,
       levels: plan.reservations.map((l) => ({ key: l.key, est: l.estMicroUsd })),
@@ -181,7 +202,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
         ids.push(id);
       }
       if (ids.length > 0) o.onSwept?.(ids);
-      for (const m of [budgets, tats, taints] as Array<Map<string, Expiring>>) for (const key of m.keys()) live(m, key, nowMs);
+      for (const m of [budgets, tats, taints, markers] as Array<Map<string, Expiring>>) for (const key of m.keys()) live(m, key, nowMs);
       return ids.length;
     },
 
@@ -225,7 +246,7 @@ export function createMemoryStore(o: { clock(): number; deadlineMs?: number; onS
       const now = o.clock();
       const out = new Set<string>();
       if (r11) out.add(r11LatchKey());
-      for (const m of [budgets, tats, taints] as Array<Map<string, Expiring>>) for (const key of m.keys()) if (live(m, key, now)) out.add(key);
+      for (const m of [budgets, tats, taints, markers] as Array<Map<string, Expiring>>) for (const key of m.keys()) if (live(m, key, now)) out.add(key);
       for (const key of streams.keys()) out.add(key);
       for (const [id, res] of reservations) {
         out.add(reservationKey(res.tenant, id));

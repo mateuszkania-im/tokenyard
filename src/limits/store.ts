@@ -17,14 +17,18 @@ export interface CounterStore {
 const DAY_MS = 86_400_000;
 /** A window budget key lives one day past its window's end: longer than any reservation, so a late settle still lands. */
 export const WINDOW_GRACE_MS = DAY_MS;
-/** A session budget has no window; its key expires 30 days after the session's last admit. */
-export const SESSION_BUDGET_TTL_MS = 30 * DAY_MS;
+/**
+ * A session budget has no window; its key expires this long after the session's last admit unless the policy sets
+ * `sessions.idleTtlHours` (S-V2-1: it was 30 days, so a client sending a new session id per request grew the store
+ * for a month).
+ */
+export const DEFAULT_SESSION_IDLE_TTL_MS = DAY_MS;
 /** Reservation deadline of the memory store when none is given: 2 times a 10 minute request timeout (spec 7.2). */
 export const DEFAULT_DEADLINE_MS = 20 * 60_000;
 
-/** When a budget key expires (ms since epoch): `resetsAt` plus the grace, or now plus the session TTL. */
-export function budgetExpiresAt(resetsAt: string | null, nowMs: number): number {
-  return resetsAt === null ? nowMs + SESSION_BUDGET_TTL_MS : Date.parse(resetsAt) + WINDOW_GRACE_MS;
+/** When a budget key expires (ms since epoch): `resetsAt` plus the grace, or now plus the session idle TTL. */
+export function budgetExpiresAt(resetsAt: string | null, nowMs: number, sessionIdleTtlMs = DEFAULT_SESSION_IDLE_TTL_MS): number {
+  return resetsAt === null ? nowMs + sessionIdleTtlMs : Date.parse(resetsAt) + WINDOW_GRACE_MS;
 }
 
 const isMicro = (n: number): boolean => Number.isSafeInteger(n) && n >= 0;
@@ -44,6 +48,7 @@ export function planTenant(plan: Plan): string | null {
     ...plan.rateChecks.map((r) => r.key),
     ...plan.streamSlots.map((s) => s.key),
     ...(plan.taint ? [plan.taint.key] : []),
+    ...(plan.newSession ? [plan.newSession.markerKey, plan.newSession.key] : []),
   ];
   let tenant: string | null = null;
   for (const key of keys) {

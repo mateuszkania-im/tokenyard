@@ -32,7 +32,7 @@ async function* lines(xs: LedgerLine[]): AsyncIterable<LedgerLine> {
   yield* xs;
 }
 
-test('sums recorded spend per budget key in the windows that contain now; session budgets take every record', async () => {
+test('sums recorded spend per budget key in the windows that contain now; session budgets since their last idle gap (S-V2-1)', async () => {
   const entries = await warmupEntries(lines([
     { v: 1, kind: 'segment', instance: 'i1', startedAt: '2026-11-04T00:00:00.000Z', firstSeq: 1 },
     rec('2026-11-04T10:00:00.000Z', 1_000),
@@ -54,7 +54,9 @@ test('sums recorded spend per budget key in the windows that contain now; sessio
   expect(at(budgetKey('acme', 'repo-day', '(unattributed)', '2026-11-04'))?.spentMicroUsd).toBe(300);
   expect(at(budgetKey('acme', 'audit-repo', 'shop', '2026-11-04'))?.spentMicroUsd).toBe(1_000);
   expect(at(budgetKey('acme', 'audit-repo', '(unattributed)', '2026-11-04'))).toBeUndefined();
-  expect(at(budgetKey('acme', 'session', 'sess', null))).toEqual({ key: budgetKey('acme', 'session', 'sess', null), spentMicroUsd: 1_700, ttlMs: 30 * DAY });
+  // Session keys idle out 24 h after their last admit: the 11-03 record is 24 h before the 11-04 one, so that key had
+  // expired and the session's spend restarts at 11-04 10:00; the key lives until 24 h after it.
+  expect(at(budgetKey('acme', 'session', 'sess', null))).toEqual({ key: budgetKey('acme', 'session', 'sess', null), spentMicroUsd: 1_000, ttlMs: Date.UTC(2026, 10, 5, 10) - NOW });
   expect(at(budgetKey('acme', 'session', '(unattributed)', null))?.spentMicroUsd).toBe(300);
   // Other tenant, no team: tenant and key levels only, plus the unattributed header levels.
   expect(entries.filter((e) => e.key.startsWith('ty:{beta}:')).map((e) => e.key).sort()).toEqual([
@@ -81,4 +83,9 @@ test('warm-up seeds what the store charged (chargedMicroUsd), not the computed c
   const charged = { ...swept, outcome: { ...swept.outcome, chargedMicroUsd: 500, settledBy: 'sweeper' as const } };
   const entries = await warmupEntries(lines([charged, rec('2026-11-04T11:00:00.000Z', 40)]), POLICY, NOW);
   expect(entries.find((e) => e.key === budgetKey('acme', 'org-month', 'acme', '2026-11-01'))?.spentMicroUsd).toBe(540);
+});
+
+test('S-V2-1: a session idle for longer than sessions.idleTtlHours is not seeded at all', async () => {
+  const entries = await warmupEntries(lines([rec('2026-11-03T15:00:00.000Z', 400)]), POLICY, NOW);
+  expect(entries.find((e) => e.key === budgetKey('acme', 'session', 'sess', null))).toBeUndefined();
 });

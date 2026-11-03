@@ -1,6 +1,6 @@
 // Shared CounterStore contract (spec 7.1, 7.2, 7.4, 7.5, 6.6). Every implementation runs the same suite.
 import { expect, test } from 'vitest';
-import { budgetKey, gcraKey, streamKey, taintKey } from '../../src/limits/keys.js';
+import { budgetKey, gcraKey, newSessionsKey, sessionKey, streamKey, taintKey } from '../../src/limits/keys.js';
 import type { CounterStore } from '../../src/limits/store.js';
 import type { Plan } from '../../src/policy/types.js';
 
@@ -263,5 +263,37 @@ export function runStoreContract(name: string, make: (o?: { onSwept?: (ids: stri
     expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 750, reserved: 0 });
     await s.seed([{ key: org.key, spentMicroUsd: 900, ttlMs: DAY }]);
     expect((await s.snapshot([org.key]))[org.key]).toEqual({ spent: 900, reserved: 0 });
+  });
+  // S-V2-1: a key may start at most `burst` new sessions at once, refilled at one per `emissionMs`; a known session is
+  // never counted again. A refused request writes nothing, so a client that sends a new session id per request cannot
+  // grow per-session state beyond its allowance.
+  const newSession = (t: string, session: string, burst: number) => ({ limit: 'new-sessions', markerKey: sessionKey(t, session), key: newSessionsKey(t, 'k1'), emissionMs: 3_600_000 / burst, burst, ttlMs: 86_400_000 });
+
+  test(`${name}: new sessions per key: the allowance admits that many new sessions, then refuses kind sessions and writes nothing`, async () => {
+    const s = await make();
+    const t = freshTenant();
+    const req = (session: string) => plan({ reservations: [{ ...level(t, 'sess', 10_000_000, 1, true, true), key: budgetKey(t, 'sess', session, null) }], newSession: newSession(t, session, 2) });
+    expect((await s.admit(req('s1'))).admitted).toBe(true);
+    expect((await s.admit(req('s2'))).admitted).toBe(true);
+    const before = listKeys ? await listKeys(s) : [];
+    const third = await s.admit(req('s3'));
+    expect(third.admitted).toBe(false);
+    expect(third.failed).toMatchObject({ kind: 'sessions', name: 'new-sessions' });
+    expect(third.failed?.retryAfterMs).toBeGreaterThan(0);
+    if (listKeys) expect(await listKeys(s)).toEqual(before);
+    // Known sessions are not new: they keep working at any rate.
+    for (let i = 0; i < 5; i++) expect((await s.admit(req(i % 2 === 0 ? 's1' : 's2'))).admitted).toBe(true);
+  });
+
+  test(`${name}: a last-turn secret in a new session counts as a new session; over the allowance it writes no taint set`, async () => {
+    const s = await make();
+    const t = freshTenant();
+    const secret = (session: string) => plan({ preBlock: 'secret', taint: { key: taintKey(t, session), check: [], add: [{ rule: 'gh', valueHmac: 'h1' }], ttlMs: 60_000 }, newSession: newSession(t, session, 1) });
+    expect((await s.admit(secret('s1'))).failed?.kind).toBe('taint');
+    const before = listKeys ? await listKeys(s) : [];
+    expect((await s.admit(secret('s2'))).failed?.kind).toBe('sessions');
+    if (listKeys) expect(await listKeys(s)).toEqual(before);
+    // The first session is known: its taint still blocks a later history hit.
+    expect((await s.admit(plan({ taint: { key: taintKey(t, 's1'), check: ['h1'], add: [], ttlMs: 60_000 }, newSession: newSession(t, 's1', 1) }))).failed?.kind).toBe('taint');
   });
 }

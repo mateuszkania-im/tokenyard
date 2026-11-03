@@ -2,7 +2,7 @@
 // (weighted splits hash the session or request id). Same arguments, same plan: replay over traces relies on it.
 import { createHash } from 'node:crypto';
 import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd, worstCaseMicroUsd } from '../limits/estimator.js';
-import { budgetKey, gcraKey, keyTaintKey, streamKey, taintKey } from '../limits/keys.js';
+import { budgetKey, gcraKey, keyTaintKey, newSessionsKey, sessionKey, streamKey, taintKey } from '../limits/keys.js';
 import { lookupModel, type ModelPrice, type PriceTable, serverToolFormat, serverToolPrice, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { findAuthzRoute, findRoute, modelMatches } from './match.js';
@@ -214,6 +214,13 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
           ...(Object.keys(messages).length > 0 ? { messages } : {}),
         };
   const plan: Plan = { id: f.id, policyRevision: policy.revision, route: null, chain: [], reservations: [], rateChecks: [], streamSlots: [], taint, preBlock: null, warnings };
+  // S-V2-1: a session counts against its key's allowance of new sessions until the store has seen it, for any request
+  // that reaches the store (a last-turn secret writes a taint set for the session, so it counts too).
+  const idleTtlMs = policy.sessions.idleTtlHours * 3_600_000;
+  if (session !== null) {
+    const perHour = policy.sessions.newPerKeyPerHour;
+    plan.newSession = { limit: 'sessions.newPerKeyPerHour', markerKey: sessionKey(f.tenant, session), key: newSessionsKey(f.tenant, f.keyId), emissionMs: Math.ceil(3_600_000 / perHour), burst: perHour, ttlMs: idleTtlMs };
+  }
 
   const route = findRoute(policy, f);
   if (!route) return { ...plan, preBlock: 'no-route' };
@@ -297,6 +304,7 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
   }
 
   plan.reservations = levels.map((l) => ({ ...l, estMicroUsd: est }));
+  if (levels.some((l) => l.resetsAt === null)) plan.sessionIdleTtlMs = idleTtlMs;
   // A request that ends without final usage settles at no less than this (A2-2): under session-aware the reservation
   // prices one iteration and no server tool fees, so it is no charge for a loop the provider may have run and billed.
   if (worstMicro !== undefined && levels.length > 0) plan.worstCaseMicroUsd = worstMicro;

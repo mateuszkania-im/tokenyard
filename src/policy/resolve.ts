@@ -57,7 +57,8 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
     case 'budget': {
       const level = plan.reservations.find((r) => r.budget === failed.name);
       const spent = failed.spentMicroUsd === undefined || level === undefined ? '' : ` (spent ${usd(failed.spentMicroUsd)} of ${usd(level.limitMicroUsd)}; this request's reservation is ${usd(level.estMicroUsd)})`;
-      const resets = level?.resetsAt ? `; it resets at ${level.resetsAt}` : level ? '; it does not reset (session budget)' : '';
+      const idle = plan.sessionIdleTtlMs === undefined ? null : Math.round(plan.sessionIdleTtlMs / 3_600_000);
+      const resets = level?.resetsAt ? `; it resets at ${level.resetsAt}` : level ? `; a session budget resets only after the session is idle for ${idle ?? 24} h` : '';
       // No retry-after: that is how Anthropic answers a reached spend cap (spec 5.6).
       return block(429, 'rate_limit_error', 'budget', `budget "${failed.name}" is exhausted${spent}${resets}`);
     }
@@ -71,6 +72,10 @@ function failedBlock(plan: Plan, failed: NonNullable<Admission['failed']>): Bloc
       const at = failed.valueHmac === undefined ? undefined : plan.taint?.messages?.[failed.valueHmac];
       const where = at === undefined ? '' : ` (message ${at})`;
       return block(400, 'invalid_request_error', 'taint', `this session's history${where} holds a secret that rule ${failed.rule ?? failed.name} blocked earlier; ${ADVICE}`);
+    }
+    case 'sessions': {
+      const limit = plan.newSession?.burst;
+      return block(429, 'rate_limit_error', 'session-churn', `this key started more than ${limit ?? 'its limit of'} new sessions per hour (sessions.newPerKeyPerHour); continue in a session it already uses, or ask the policy owner to raise the limit`);
     }
     case 'duplicate':
       // A second admit under an id that already holds a reservation: never forwarded on the first one's reservation.
