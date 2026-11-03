@@ -122502,7 +122502,7 @@ var init_replay_input = __esm({
     init_load_dir();
     init_engine();
     init_load_dir2();
-    REPLAY_TRACE_LIMITS = { maxBytes: 4 * 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 };
+    REPLAY_TRACE_LIMITS = { maxBytes: 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 };
     emptyConfig = null;
     gitArgs = (repo, args) => ["--no-replace-objects", "--literal-pathspecs", "-c", "safe.bareRepository=explicit", "--git-dir", join9(repo.top, ".git"), "--work-tree", repo.top, ...args];
   }

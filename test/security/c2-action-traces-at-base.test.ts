@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { runAction } from '../../src/action/main.js';
-import { openReplayTraces } from '../../src/policy-loader/replay-input.js';
+import { openReplayTraces, REPLAY_TRACE_LIMITS } from '../../src/policy-loader/replay-input.js';
 import { actionRepo, fakeGh, HEAD_POLICY, ROOT, TRACES, type ActionRepo } from './action-fixture.js';
 
 let r: ActionRepo;
@@ -74,4 +74,15 @@ test('C2 local traces: a gzip bomb and a line without a break are refused while 
   await expect(drain([long])).rejects.toThrow(/line/);
   // the demo export is well inside both caps
   expect(await drain([TRACES], undefined, ROOT)).toBeGreaterThan(100);
+});
+
+// Fix round 1: 4 GiB of decompressed records would exhaust the heap before the cap fired; 1 GiB fails with a clean error.
+test('C2 the default decompressed cap is 1 GiB and one line 1 MiB, applied without explicit limits', async () => {
+  expect(REPLAY_TRACE_LIMITS).toEqual({ maxBytes: 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 });
+  const long = join(r.tmp, 'long.ndjson');
+  writeFileSync(long, Buffer.alloc(REPLAY_TRACE_LIMITS.maxLineBytes + 1, 'a'));
+  const read = async (): Promise<void> => {
+    for await (const _ of await openReplayTraces([long], { root: r.tmp })) void _;
+  };
+  await expect(read()).rejects.toThrow(/longer than 1048576 bytes/);
 });

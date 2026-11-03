@@ -18,7 +18,7 @@ import { RawTraceDirError } from '../replay/engine.js';
 import { loadPolicyDir } from './load-dir.js';
 
 /** Caps on one trace export after decompression (C2): a gzip bomb or a file without line breaks stops the read. */
-export const REPLAY_TRACE_LIMITS = { maxBytes: 4 * 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 } as const;
+export const REPLAY_TRACE_LIMITS = { maxBytes: 1024 * 1024 * 1024, maxLineBytes: 1024 * 1024 } as const;
 
 /**
  * Lines of one or more export files (plain or .gz). A directory is refused before anything is read: replay needs the
