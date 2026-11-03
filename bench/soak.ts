@@ -210,6 +210,12 @@ interface Planned {
   stream: boolean;
   /** Abort the response this many ms after its first byte. */
   abortAfterMs?: number;
+  /**
+   * Send on a new connection instead of the keep-alive pool. A pooled socket the server closes after its keep-alive
+   * timeout while a request is being written on it resets that request (the race Node's http docs describe under
+   * `request.reusedSocket`); the 1.1 MB heavy requests, a burst every two minutes, hit it 4 times in one run.
+   */
+  fresh?: boolean;
 }
 
 class Load {
@@ -403,7 +409,7 @@ class Load {
     this.sessionValues.add(`acme\0${id}`);
     const devs = this.setup.devs.filter((d) => d.tenant === 'acme').slice(0, 8);
     const body = messagesBody({ model: 'claude-opus-5-5', maxTokens: 128_000, stream: false, turns: 2, last: 'Refactor everything.', extraKb: 1_100 });
-    return devs.flatMap((dev) => Array.from({ length: 3 }, () => ({ kind: 'heavy' as const, path: '/v1/messages?beta=true', stream: false, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-output': '100' }, body })));
+    return devs.flatMap((dev) => Array.from({ length: 3 }, () => ({ kind: 'heavy' as const, path: '/v1/messages?beta=true', stream: false, headers: { ...this.ccHeaders(dev, id, 'main'), 'x-soak-output': '100' }, body, fresh: true })));
   }
 
   /** Per key, its stream limit plus one at once, each on a slow stream and a new session. */
@@ -444,7 +450,9 @@ function send(agent: Agent, base: string, p: Planned): Promise<Result> {
       done = true;
       resolve({ kind: p.kind, status, error, totalMs: performance.now() - t0, reason: status !== null && status >= 400 ? refusal(errBody) : null });
     };
-    const req = request({ host: url.hostname, port: url.port, method: 'POST', path: p.path, headers: { ...p.headers, 'content-length': String(p.body.length) }, agent }, (res) => {
+    let answered = false;
+    const req = request({ host: url.hostname, port: url.port, method: 'POST', path: p.path, headers: { ...p.headers, 'content-length': String(p.body.length) }, agent: p.fresh ? false : agent }, (res) => {
+      answered = true;
       let first = true;
       res.on('data', (c: Buffer) => {
         if ((res.statusCode ?? 0) >= 400 && errBody.length < 2048) errBody += c.toString('utf8');
@@ -456,7 +464,8 @@ function send(agent: Agent, base: string, p: Planned): Promise<Result> {
       res.on('close', () => finish(res.statusCode ?? null, res.complete ? null : 'closed-early'));
     });
     req.setTimeout(120_000, () => req.destroy(Object.assign(new Error('timeout'), { code: 'timeout' })));
-    req.on('error', (e: NodeJS.ErrnoException) => finish(null, e.code ?? 'socket'));
+    // A reset on a reused keep-alive socket before any answer is labelled as such (diagnosis; it still counts).
+    req.on('error', (e: NodeJS.ErrnoException) => finish(null, `${e.code ?? 'socket'}${req.reusedSocket && !answered ? ' on a reused socket' : ''}`));
     req.end(p.body);
   });
 }
