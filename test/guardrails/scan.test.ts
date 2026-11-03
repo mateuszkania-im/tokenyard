@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { pseudonym } from '../../src/guardrails/hmac.js';
 import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES, type SecretRule } from '../../src/guardrails/rules.js';
-import { keywordsIn, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
+import { findSpans, keywordsIn, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
 
@@ -189,4 +189,11 @@ test('keywordsIn finds exactly the keywords String.includes finds, prefixes and 
   const text = `x ${all.join(' y ')} z api_key apiKey sk-ant- sk-proj-`;
   expect(keywordsIn(text, all)).toEqual(new Set(all));
   expect(keywordsIn('nothing here', all)).toEqual(new Set());
+});
+
+test('a rule with an empty keyword is never skipped by the prefilter, as String.includes("") is always true (V1 fix round)', () => {
+  expect(keywordsIn('abc', ['', 'x'])).toEqual(new Set(['']));
+  const rule: SecretRule = { id: 'any-digits', keywords: [''], regex: /(\d{6})/, source: 'test', licence: 'MIT' };
+  const b = Buffer.from(JSON.stringify({ model: 'm', messages: [{ role: 'user', content: 'code 123456' }] }));
+  expect(findSpans(b, [rule]).map((s) => s.value)).toEqual(['123456']);
 });

@@ -296,6 +296,8 @@ function keywordAlternation(keywords: readonly string[]): RegExp {
  */
 export function keywordsIn(text: string, keywords: readonly string[]): Set<string> {
   const found = new Set<string>();
+  // An empty keyword occurs in every text, as `''.includes` says: its rule always runs.
+  if (keywords.includes('')) found.add('');
   const list = keywords.filter((k) => k.length > 0);
   if (list.length === 0) return found;
   const re = keywordAlternation(list);

@@ -2041,6 +2041,7 @@ function keywordAlternation(keywords) {
 }
 function keywordsIn(text2, keywords) {
   const found = /* @__PURE__ */ new Set();
+  if (keywords.includes("")) found.add("");
   const list3 = keywords.filter((k) => k.length > 0);
   if (list3.length === 0) return found;
   const re2 = keywordAlternation(list3);
