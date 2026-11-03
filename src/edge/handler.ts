@@ -294,6 +294,15 @@ function sendError(req: IncomingMessage, res: ServerResponse, e: ErrorReply, clo
   res.writeHead(e.status, closeConnection ? { ...e.headers, connection: 'close' } : e.headers).end(e.body);
 }
 
+/**
+ * An answer to a request that has not authenticated (404 no route, 401): such a client must not keep the connection busy
+ * uploading a body the gateway only drains (FR-M6). One turn of the loop lets a body that already arrived finish
+ * parsing; a body still incomplete then gets `connection: close` and the socket is closed after the answer.
+ */
+function sendUnauthenticated(req: IncomingMessage, res: ServerResponse, e: ErrorReply): void {
+  setImmediate(() => sendError(req, res, e, !req.complete));
+}
+
 /** Session, agent, parent agent and prompt id as the trace stores them, so replay decides on the same values (spec 9.1). */
 function pseudonymised(a: RawAttribution, salt: string | undefined): RawAttribution {
   if (!salt) return a;
@@ -645,7 +654,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const match = matchRoute(method, req.url ?? '/', deps.basePath);
   if (!match) {
     const path = (req.url ?? '/').split('?')[0];
-    return sendError(req, res, anthropicError(404, 'not_found_error', `no route for ${method} ${path}`, null, id));
+    return sendUnauthenticated(req, res, anthropicError(404, 'not_found_error', `no route for ${method} ${path}`, null, id));
   }
   const envelope: ErrorEnvelope = match.surface === 'openai-responses' ? 'openai' : 'anthropic';
   held.envelope = envelope;
@@ -672,10 +681,10 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     else if (c.source === 'x-api-key') keyHeaders.add('x-api-key');
   }
   if (!key) {
-    return sendError(req, res, own(401, 'authentication_error', 'unknown-key', 'missing or unknown tokenyard key'));
+    return sendUnauthenticated(req, res, own(401, 'authentication_error', 'unknown-key', 'missing or unknown tokenyard key'));
   }
   if (key.billing === 'subscription' && !deps.experimentalSubscription) {
-    return sendError(req, res, own(401, 'authentication_error', 'subscription-disabled', 'subscription keys are not enabled on this gateway'));
+    return sendUnauthenticated(req, res, own(401, 'authentication_error', 'subscription-disabled', 'subscription keys are not enabled on this gateway'));
   }
 
   if (match.surface === 'models') {

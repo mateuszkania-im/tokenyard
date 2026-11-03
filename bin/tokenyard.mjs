@@ -59421,6 +59421,9 @@ function sendError(req, res, e2, closeConnection = false) {
   req.resume();
   res.writeHead(e2.status, closeConnection ? { ...e2.headers, connection: "close" } : e2.headers).end(e2.body);
 }
+function sendUnauthenticated(req, res, e2) {
+  setImmediate(() => sendError(req, res, e2, !req.complete));
+}
 function pseudonymised(a, salt) {
   if (!salt) return a;
   const h = (v) => v === null ? null : pseudonym(salt, v);
@@ -59645,7 +59648,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   const match = matchRoute(method, req.url ?? "/", deps.basePath);
   if (!match) {
     const path3 = (req.url ?? "/").split("?")[0];
-    return sendError(req, res, anthropicError(404, "not_found_error", `no route for ${method} ${path3}`, null, id));
+    return sendUnauthenticated(req, res, anthropicError(404, "not_found_error", `no route for ${method} ${path3}`, null, id));
   }
   const envelope = match.surface === "openai-responses" ? "openai" : "anthropic";
   held.envelope = envelope;
@@ -59669,10 +59672,10 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     else if (c.source === "x-api-key") keyHeaders.add("x-api-key");
   }
   if (!key) {
-    return sendError(req, res, own2(401, "authentication_error", "unknown-key", "missing or unknown tokenyard key"));
+    return sendUnauthenticated(req, res, own2(401, "authentication_error", "unknown-key", "missing or unknown tokenyard key"));
   }
   if (key.billing === "subscription" && !deps.experimentalSubscription) {
-    return sendError(req, res, own2(401, "authentication_error", "subscription-disabled", "subscription keys are not enabled on this gateway"));
+    return sendUnauthenticated(req, res, own2(401, "authentication_error", "subscription-disabled", "subscription keys are not enabled on this gateway"));
   }
   if (match.surface === "models") {
     req.resume();
