@@ -22,6 +22,10 @@ afterEach(async () => {
   h = null;
 });
 
+/** 40 events 25 ms apart: about 1 s of stream, so it is still sending when the 400 ms deadline fires. */
+const STILL_SENDING = { primary: { kind: 'ok' as const, stream: true, padEvents: 40, chunkDelayMs: 25 }, backup: { kind: 'ok' as const } };
+const HANG = { primary: { kind: 'hang' as const }, backup: { kind: 'ok' as const } };
+
 const behaviour: fc.Arbitrary<{ primary: Behaviour; backup: Behaviour }> = fc.oneof(
   fc.record({ stream: fc.boolean(), ttfbMs: fc.integer({ min: 0, max: 30 }), padEvents: fc.integer({ min: 0, max: 30 }) }).map((o) => ({ primary: { kind: 'ok' as const, chunkDelayMs: 1, ...o }, backup: { kind: 'ok' as const } })),
   fc.integer({ min: 50, max: 2_000 }).map((cutAt) => ({ primary: { kind: 'ok' as const, stream: true, cutAt, padEvents: 30 }, backup: { kind: 'ok' as const } })),
@@ -29,8 +33,8 @@ const behaviour: fc.Arbitrary<{ primary: Behaviour; backup: Behaviour }> = fc.on
   fc.constant({ primary: { kind: 'reset' as const }, backup: { kind: 'ok' as const } }),
   fc.constant({ primary: { kind: 'ok' as const, stream: true, cutAfterHeaders: true }, backup: { kind: 'ok' as const } }),
   // Past the request deadline: no headers at all, or a stream still sending when it fires.
-  fc.constant({ primary: { kind: 'hang' as const }, backup: { kind: 'ok' as const } }),
-  fc.constant({ primary: { kind: 'ok' as const, stream: true, padEvents: 40, chunkDelayMs: 25 }, backup: { kind: 'ok' as const } }),
+  fc.constant(HANG),
+  fc.constant(STILL_SENDING),
 );
 const client: fc.Arbitrary<ClientMode> = fc.oneof(
   { weight: 3, arbitrary: fc.constant({ kind: 'normal' as const }) },
@@ -43,6 +47,13 @@ const request = fc.record({ behaviour, client, stream: fc.boolean(), padBytes: f
 let batch = 0;
 /** Hanging requests that ran, across all runs (the generator must reach the deadline case). */
 const hangs = new Set<string>();
+/** Streams that had started (200 to a client that stayed) and were still sending when the deadline fired. */
+const stillSending = new Set<string>();
+/** One batch with both deadline cases runs first, whatever the seed, so the two counts above can never be zero. */
+const deadlineBatch: Array<{ behaviour: { primary: Behaviour; backup: Behaviour }; client: ClientMode; stream: boolean; padBytes: number }> = [
+  { behaviour: HANG, client: { kind: 'normal' as const }, stream: true, padBytes: 0 },
+  { behaviour: STILL_SENDING, client: { kind: 'normal' as const }, stream: true, padBytes: 0 },
+];
 test('property: every admitted request settles exactly once and nothing stays held, for any mix of upstream and client failures', async () => {
   await fc.assert(
     fc.asyncProperty(fc.array(request, { minLength: 1, maxLength: 12 }), async (reqs) => {
@@ -55,11 +66,15 @@ test('property: every admitted request settles exactly once and nothing stays he
       });
       const sent = await Promise.all(reqs.map((r, i) => chaosRequest((h as Harness).url, `rel${b}x${i}`, chatBody(`rel${b}x${i}`, { stream: r.stream, padBytes: r.padBytes }), r.client)));
       await checkInvariants(h, sent);
-      for (const [i, r] of reqs.entries()) if (r.behaviour.primary.kind === 'hang') hangs.add(`${b}x${i}`);
+      for (const [i, r] of reqs.entries()) {
+        if (r.behaviour.primary.kind === 'hang') hangs.add(`${b}x${i}`);
+        if (r.behaviour === STILL_SENDING && r.client.kind === 'normal' && sent[i]?.status === 200) stillSending.add(`${b}x${i}`);
+      }
       await h.close();
       h = null;
     }),
-    fuzz(0x4e1e, 12, { endOnFailure: true }),
+    fuzz(0x4e1e, 12, { endOnFailure: true, examples: [[deadlineBatch] as [typeof deadlineBatch]] }),
   );
   expect(hangs.size).toBeGreaterThan(0);
+  expect(stillSending.size).toBeGreaterThan(0);
 }, fuzzTimeout(60_000));

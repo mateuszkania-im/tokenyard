@@ -11,6 +11,7 @@ import { buildTraceRecord } from '../../src/edge/trace-record.js';
 import { anonymizeRecord, saltedPseudonyms } from '../../src/ledger/anonymize.js';
 import type { PriceTable } from '../../src/pricing/prices.js';
 import type { CompiledRoute } from '../../src/policy/types.js';
+import { isKnownToolType } from '../../src/surfaces/labels.js';
 import { fuzz } from '../helpers/fuzz.js';
 import { baseRecord } from '../helpers/trace.js';
 
@@ -46,6 +47,7 @@ const exported = (type: string): string => {
   return anonymizeRecord({ ...r, instance: 'i', seq: 1, features: { ...r.features, serverTools: [{ type, maxUses: 1 }] } }, saltedPseudonyms('s')).features.serverTools[0]?.type as string;
 };
 
+/** Examples of known types (the full list is KNOWN_SERVER_TOOLS; the fuzz case below filters with isKnownToolType). */
 const KNOWN = ['web_search_20250305', 'web_fetch_20250910', 'code_execution_20250825', 'tool_search_tool_regex_20251119', 'tool_search_tool_bm25', 'mcp_toolset', 'mcp_servers', 'web_search', 'web_search_preview', 'file_search', 'code_interpreter', 'image_generation', 'computer_use_preview', 'mcp', 'shell', '(invalid)'];
 
 test('S-V4-3 a raw trace keeps known server tool types and the ones the recording policy names, in clear', () => {
@@ -79,11 +81,10 @@ const anyType = fc.oneof(
   fc.stringMatching(/^[a-z0-9_]{1,64}$/),
   fc.string({ maxLength: 80 }),
 );
-const isKnown = (t: string): boolean => KNOWN.includes(t) || KNOWN.includes(t.replace(/_\d{8}$/, ''));
 
 test('fuzz: any unknown server tool type becomes a placeholder at ingest (exports: test/fuzz/anonymize.fuzz.test.ts)', () => {
   fc.assert(
-    fc.property(anyType.filter((t) => !isKnown(t) && !['priced_custom', 'listed_custom'].includes(t.replace(/_\d{8}$/, ''))), (t) => {
+    fc.property(anyType.filter((t) => !isKnownToolType(t) && !['priced_custom', 'listed_custom'].includes(t.replace(/_\d{8}$/, ''))), (t) => {
       const raw = traced(t);
       expect(raw === '(invalid)' || /^tool_[0-9a-f]{16}$/.test(raw), raw).toBe(true);
       expect(raw).not.toBe(t);
