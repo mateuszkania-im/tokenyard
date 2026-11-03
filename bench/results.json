@@ -4031,41 +4031,41 @@
       },
       {
         "source": "live-claude-code",
-        "label": "Live Claude Code 2.1.316, 2026-11-02",
-        "requests": 18,
+        "label": "Live Claude Code 2.1.316, 2.1.317, 2026-11-02, 2026-11-03",
+        "requests": 60,
         "boundKinds": {
-          "bytes": 16,
+          "bytes": 58,
           "context-window": 2
         },
         "boundToActual": {
           "min": 2.88,
-          "median": 2.91,
-          "max": 2.95
+          "median": 3.07,
+          "max": 3.28
         },
         "reservationToCost": {
           "min": 22.52,
-          "median": 230.85,
-          "max": 1448.02
+          "median": 329.49,
+          "max": 1574.93
         },
         "violations": 0
       },
       {
         "source": "live-codex",
-        "label": "Live Codex 0.166.0, 2026-11-02",
-        "requests": 3,
+        "label": "Live Codex 0.166.0, 2026-11-02, 2026-11-03",
+        "requests": 7,
         "boundKinds": {
-          "bytes": 1,
-          "context-window": 2
+          "bytes": 2,
+          "context-window": 5
         },
         "boundToActual": {
-          "min": 5.03,
-          "median": 5.03,
+          "min": 5.02,
+          "median": 5.02,
           "max": 5.03
         },
         "reservationToCost": {
           "min": 68.07,
-          "median": 493.65,
-          "max": 719.1
+          "median": 519.73,
+          "max": 815.64
         },
         "violations": 0
       }

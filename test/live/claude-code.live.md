@@ -70,6 +70,75 @@ about 3 minutes, then the main turn received the tool error and the session ende
 and one for `claude-sonnet-4-6` (403, model not allowed by the live route). Their source is not identified (a
 background or hook process inheriting the environment is the likely one); nothing was billed for them.
 
+## Run 2: 2026-11-03 (V6)
+
+**Setup.** Claude Code 2.1.317, `claude -p` (non-interactive) in a small throwaway JavaScript project created for the
+run, with a temporary `CLAUDE_CONFIG_DIR` (removed afterwards; the global Claude Code config was not used),
+`--strict-mcp-config`, `ANTHROPIC_BASE_URL` pointing at the harness, the printed `ty_` key in
+`ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_GATEWAY_HINT_HEADERS=1`, and OTel (`CLAUDE_CODE_ENABLE_TELEMETRY=1`, logs and
+metrics over OTLP HTTP JSON to a local file sink). Started under `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY`, so the
+provider keys were only in the gateway process. Multi-turn sessions are `claude -p` turns chained with `--resume`.
+The harness started with `TOKENYARD_LIVE_BUDGET_USD=8.53` (spent $0.53 seeded, $8.00 remaining), so tokenyard
+itself capped this run at $8. Two later starts lowered the cap to the spent amount plus about 3 and 8 cents for the
+budget block checks.
+
+**Sessions.** Six sessions (numbered after run 1), 44 Claude Code requests, 42 billed:
+
+| Session | Model | What it did | Billed requests | Claude Code `total_cost_usd` | tokenyard cost |
+|---|---|---|---|---|---|
+| 6 | Haiku 5.5 | one-word reply | 1 | 0.002156575 | 0.002157 |
+| 7 | Haiku 5.5 | 5 turns: an Explore subagent, two edits with Bash test runs, `/compact`, a question after the compaction | 17 (11 main, 5 subagent, 1 compaction) | 0.012180325 | 0.012180 |
+| 8 | Opus 5.5 (Claude Code's default model) | one file read | 2 | 0.1019788 | 0.101979 |
+| 9 | Haiku 5.5 | 2 turns: two Explore subagents in parallel, then a general-purpose subagent editing a file | 15 (6 main, 9 subagent) | 0.010197095 | 0.010198 |
+| 10 | Haiku 5.5 | budget block at the first request | 0 | 0 | 0 |
+| 11 | Haiku 5.5 | budget block after 7 billed requests | 7 | 0.002589415 | 0.002590 |
+
+**Spend.** This run through the gateway: $0.147837 (Claude Code $0.129104, Codex $0.016497, scripted probes
+$0.002236). **Total live spend (tokenyard's own counter): $0.677432.** The direct baseline below went around the
+gateway and cost $0.002236 on top (computed from its usage at the price table); with it, everything spent on the
+live key so far is $0.679668. Every billed request was settled by the request, none overran its reservation.
+
+**tokenyard cost against OTel `cost_usd`.** All 42 OTel `api_request` events joined one to one to a trace record
+(same model and the same four token counts, nearest in time); no billed Claude Code record was left unjoined.
+
+| Session | Events joined | OTel `cost_usd` | tokenyard | Difference |
+|---|---|---|---|---|
+| 6 | 1 of 1 | 0.002156575 | 0.002157 | +0.425 micro-USD |
+| 7 | 17 of 17 | 0.012180325 | 0.012180 | -0.325 micro-USD |
+| 8 | 2 of 2 | 0.1019788 | 0.101979 | +0.2 micro-USD |
+| 9 | 15 of 15 | 0.010197095 | 0.010198 | +0.905 micro-USD |
+| 11 | 7 of 7 | 0.002589415 | 0.002590 | +0.585 micro-USD |
+| All | 42 of 42 | 0.12910221 | 0.129104 | +1.79 micro-USD (0.00139%) |
+
+Per request the difference was at most 0.495 micro-USD: tokenyard rounds each request half up to a whole micro-USD,
+OTel reports a float.
+
+**Cache hit ratio.** 0.831 over the 42 billed Claude Code requests of this run (0.8578 in session 7, 0.8314 in
+session 9, 0.9555 in session 11). Same comparison as run 1: cache read tokens over all input tokens.
+
+**Cache through the gateway against direct.** The same scripted 5-turn Messages session on Haiku 5.5 (a 13,500
+token system block with a cache breakpoint, a breakpoint on the last user message, each run with its own random
+nonce so both start cold) was sent once through the gateway and once straight to the API. Cache read share:
+0.7994087 through the gateway, 0.7994088 direct (the nonce tokenized 2 tokens differently). Per turn the cache
+writes and reads were the same up to those 2 tokens. The gateway does not change caching.
+
+**Compaction.** `/compact` in session 7 sent one compaction request (traced with request class `compaction`); the
+next turn read 15,090 cached tokens of the compacted history.
+
+**R11.** Held: 0 violations over all billed requests of both runs; bytes-bound requests billed 0.199 to 0.348 of
+their bound.
+
+**Budget block (sessions 10 and 11).** The harness was restarted with a cap $0.03 above the spent amount
+(`live-total` $0.704842, spent $0.674842). Session 10's first request reserved $0.066392 and was refused at once:
+429 `rate_limit_error` with `x-should-retry: false` and no `retry-after`; `claude -p` printed `API Error: Request
+rejected (429) · tokenyard: budget "live-total" is exhausted (spent $0.67 of $0.70; this request's reservation is
+$0.07); it resets at 2026-12-01T00:00:00.000Z` after 1 s and exited with `is_error`. One request, no retries. The
+harness was then restarted at $0.754842 (spent $0.674842) and session 11 ran with `CLAUDE_CODE_MAX_OUTPUT_TOKENS=1000`
+so each Haiku turn reserved $0.066 to $0.078: 7 requests were admitted and billed, the 8th (reservation $0.07796,
+spent $0.677432) was refused because it would pass the cap, Claude Code printed the same message after 9 s and did
+not retry (1 refused request in the trace). Spend at the end of that start: $0.677432 of $0.754842. Every harness
+start in `examples/live/summary.json` (`starts`) ends within its cap.
+
 ## Own errors in Claude Code (against the mock, not the live key)
 
 Each error came from the real gateway in front of the deterministic mock: budget by seeding $19.99 spent under a

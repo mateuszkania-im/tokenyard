@@ -68,6 +68,39 @@ its fallback).
 - Every turn after the first carries reasoning items with `encrypted_content`, so it uses the context-window bound
   ($0.96 reserved on gpt-5.4-mini for a turn that cost about $0.002).
 
+## Run 2: 2026-11-03 (V6)
+
+**Setup.** Codex CLI 0.166.0 (the latest on npm that day), `codex exec` with a temporary `CODEX_HOME` (removed
+afterwards) holding the same provider block as run 1 (`wire_api = "responses"`, `env_key` naming a variable with the
+printed `ty_` key, `requires_openai_auth = false`, `supports_websockets = false`, gpt-5.4-mini, reasoning effort
+low), started under `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY`. Between Codex and the harness ran a local recorder
+that logged method, path, status and header names, and the values only of `content-encoding`, `content-type`,
+`content-length`, `accept`, `accept-encoding`, `user-agent` and `originator` (never `authorization`). Harness cap
+$8.53 (see the Claude Code log, run 2).
+
+**Task.** "Read src/units.js and add one short comment line at the top of src/scale.js saying what the module does.
+Then run npm test." Done in 4 billed requests, $0.016497, cache reads 73.5% of prompt tokens.
+
+| Request | Bound | Reserved | Input / cache read / output tokens | tokenyard cost |
+|---|---|---|---|---|
+| 1 | bytes | $0.740789 | 12,938 / 0 / 244 | $0.010802 |
+| 2 | context-window | $1.293600 | 1,168 / 12,800 / 145 | $0.002489 |
+| 3 | context-window | $1.293600 | 340 / 13,824 / 73 | $0.001620 |
+| 4 | context-window | $1.293600 | 226 / 14,080 / 80 | $0.001586 |
+
+The context-window reservation is $1.29 now (run 1: $0.96) because the Responses worst case counts cache writes on
+top of input since the Task 25 fixes.
+
+**Content-Encoding.** Codex 0.166.0 sent no `Content-Encoding` header to the API-key `base_url` on any of the 4
+requests (and no `Accept-Encoding`); bodies were plain JSON of 60,867 to 71,800 bytes. tokenyard handles both cases:
+plain bodies are forwarded unchanged, and a body with `Content-Encoding: zstd` or `gzip`, sent to the harness by hand,
+got 400 `invalid_request_error` with code `content_encoding` and `x-should-retry: false` before anything was read
+or forwarded (no spend).
+
+**Budget block.** Under the cap $0.03 above the spent amount, `codex exec "Say hi."` sent one request (reservation
+$0.740598), got 429 `insufficient_quota` with `x-should-retry: false`, printed `ERROR: Quota exceeded. Check your plan
+and billing details.` and exited after 1 s. The recorder saw 1 request: no retry.
+
 ## Own errors in Codex (against the mock, no spend)
 
 A gateway in front of the OpenAI mock with `org-month` at $0.01: Codex printed `ERROR: Quota exceeded. Check your plan

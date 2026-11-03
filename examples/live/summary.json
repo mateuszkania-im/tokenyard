@@ -5,43 +5,203 @@
   "clients": [
     {
       "agent": "claude-code",
-      "version": "2.1.316",
       "log": "test/live/claude-code.live.md",
+      "run": 1,
+      "version": "2.1.316",
       "days": [
         "2026-11-02"
       ]
     },
     {
       "agent": "codex",
-      "version": "0.166.0",
       "log": "test/live/codex.live.md",
+      "run": 1,
+      "version": "0.166.0",
       "days": [
         "2026-11-02"
       ]
+    },
+    {
+      "agent": "claude-code",
+      "log": "test/live/claude-code.live.md",
+      "run": 2,
+      "version": "2.1.317",
+      "days": [
+        "2026-11-03"
+      ]
+    },
+    {
+      "agent": "codex",
+      "log": "test/live/codex.live.md",
+      "run": 2,
+      "version": "0.166.0",
+      "days": [
+        "2026-11-03"
+      ]
     }
   ],
-  "records": 53,
-  "forwarded": 21,
-  "blocked": 32,
+  "runs": [
+    {
+      "run": 1,
+      "days": [
+        "2026-11-02"
+      ],
+      "records": 53,
+      "billed": 21,
+      "spendUsd": 0.529595,
+      "claudeCodeSessions": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "claudeCodeBilled": 18,
+      "claudeCodeCostUsd": 0.516207,
+      "codexCostUsd": 0.013388,
+      "claudeCodeCacheHitRatio": 0.7102,
+      "codexBilled": 3,
+      "codexCacheHitRatio": 0.6535,
+      "requestClasses": {
+        "main": 13,
+        "subagent": 5
+      }
+    },
+    {
+      "run": 2,
+      "days": [
+        "2026-11-03"
+      ],
+      "records": 58,
+      "billed": 51,
+      "spendUsd": 0.147837,
+      "claudeCodeSessions": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "claudeCodeBilled": 42,
+      "claudeCodeCostUsd": 0.129104,
+      "codexCostUsd": 0.016497,
+      "claudeCodeCacheHitRatio": 0.831,
+      "codexBilled": 4,
+      "codexCacheHitRatio": 0.735,
+      "requestClasses": {
+        "compaction": 1,
+        "main": 27,
+        "subagent": 14
+      }
+    }
+  ],
+  "starts": [
+    {
+      "start": 1,
+      "run": 1,
+      "capUsd": 3,
+      "spentAtStartUsd": 0,
+      "spentAtEndUsd": 0.17134,
+      "withinCap": true,
+      "requests": 11,
+      "refusedByBudget": 3
+    },
+    {
+      "start": 2,
+      "run": 1,
+      "capUsd": 5,
+      "spentAtStartUsd": 0.17134,
+      "spentAtEndUsd": 0.503831,
+      "withinCap": true,
+      "requests": 19,
+      "refusedByBudget": 11
+    },
+    {
+      "start": 3,
+      "run": 1,
+      "capUsd": 8,
+      "spentAtStartUsd": 0.503831,
+      "spentAtEndUsd": 0.516207,
+      "withinCap": true,
+      "requests": 14,
+      "refusedByBudget": 11
+    },
+    {
+      "start": 4,
+      "run": 1,
+      "capUsd": 3.5,
+      "spentAtStartUsd": 0.516207,
+      "spentAtEndUsd": 0.516207,
+      "withinCap": true,
+      "requests": 6,
+      "refusedByBudget": 0
+    },
+    {
+      "start": 5,
+      "run": 1,
+      "capUsd": 3.5,
+      "spentAtStartUsd": 0.516207,
+      "spentAtEndUsd": 0.529595,
+      "withinCap": true,
+      "requests": 3,
+      "refusedByBudget": 0
+    },
+    {
+      "start": 6,
+      "run": 2,
+      "capUsd": 8.53,
+      "spentAtStartUsd": 0.529595,
+      "spentAtEndUsd": 0.674842,
+      "withinCap": true,
+      "requests": 46,
+      "refusedByBudget": 0
+    },
+    {
+      "start": 7,
+      "run": 2,
+      "capUsd": 0.704842,
+      "spentAtStartUsd": 0.674842,
+      "spentAtEndUsd": 0.674842,
+      "withinCap": true,
+      "requests": 4,
+      "refusedByBudget": 4
+    },
+    {
+      "start": 8,
+      "run": 2,
+      "capUsd": 0.754842,
+      "spentAtStartUsd": 0.674842,
+      "spentAtEndUsd": 0.677432,
+      "withinCap": true,
+      "requests": 8,
+      "refusedByBudget": 1
+    }
+  ],
+  "records": 111,
+  "forwarded": 72,
+  "blocked": 39,
   "blockedBy": {
-    "budget": 25,
+    "budget": 30,
     "model-not-allowed": 1,
-    "server-tool-not-allowed": 6
+    "server-tool-not-allowed": 6,
+    "content-encoding": 2
   },
-  "billed": 21,
-  "spendUsd": 0.529595,
+  "billed": 72,
+  "spendUsd": 0.677432,
   "overruns": 0,
   "settledBySweeper": 0,
   "claudeCode": {
-    "requests": 40,
-    "billed": 18,
-    "costUsd": 0.516207,
-    "claudeCodeReportedCostUsd": 0.5162053,
+    "requests": 84,
+    "billed": 60,
+    "costUsd": 0.645311,
+    "claudeCodeReportedCostUsd": 0.6453075,
     "claudeCodeReportedSource": "test/live/claude-code.live.md (claude -p total_cost_usd per session)",
-    "cacheHitRatio": 0.7102,
+    "cacheHitRatio": 0.7827,
     "sessions": [
       {
         "session": 1,
+        "run": 1,
         "models": [
           "claude-sonnet-5-5"
         ],
@@ -56,6 +216,7 @@
       },
       {
         "session": 2,
+        "run": 1,
         "models": [
           "claude-sonnet-5-5"
         ],
@@ -70,6 +231,7 @@
       },
       {
         "session": 3,
+        "run": 1,
         "models": [
           "claude-opus-5-5"
         ],
@@ -84,6 +246,7 @@
       },
       {
         "session": 4,
+        "run": 1,
         "models": [
           "claude-sonnet-5-5"
         ],
@@ -98,6 +261,7 @@
       },
       {
         "session": 5,
+        "run": 1,
         "models": [
           "claude-sonnet-5-5"
         ],
@@ -109,25 +273,115 @@
         "tokenyardCostUsd": 0.012376,
         "claudeCodeReportedCostUsd": 0.0123766,
         "cacheHitRatio": 0.9936
+      },
+      {
+        "session": 6,
+        "run": 2,
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "requests": 1,
+        "billed": 1,
+        "blocked": 0,
+        "mainTurns": 1,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0.002157,
+        "claudeCodeReportedCostUsd": 0.002156575,
+        "cacheHitRatio": 0
+      },
+      {
+        "session": 7,
+        "run": 2,
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "requests": 17,
+        "billed": 17,
+        "blocked": 0,
+        "mainTurns": 11,
+        "subagentTurns": 5,
+        "tokenyardCostUsd": 0.01218,
+        "claudeCodeReportedCostUsd": 0.012180325,
+        "cacheHitRatio": 0.8578
+      },
+      {
+        "session": 8,
+        "run": 2,
+        "models": [
+          "claude-opus-5-5"
+        ],
+        "requests": 2,
+        "billed": 2,
+        "blocked": 0,
+        "mainTurns": 2,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0.101979,
+        "claudeCodeReportedCostUsd": 0.1019788,
+        "cacheHitRatio": 0.4966
+      },
+      {
+        "session": 9,
+        "run": 2,
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "requests": 15,
+        "billed": 15,
+        "blocked": 0,
+        "mainTurns": 6,
+        "subagentTurns": 9,
+        "tokenyardCostUsd": 0.010198,
+        "claudeCodeReportedCostUsd": 0.010197095,
+        "cacheHitRatio": 0.8314
+      },
+      {
+        "session": 10,
+        "run": 2,
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "requests": 1,
+        "billed": 0,
+        "blocked": 1,
+        "mainTurns": 0,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0,
+        "claudeCodeReportedCostUsd": 0,
+        "cacheHitRatio": null
+      },
+      {
+        "session": 11,
+        "run": 2,
+        "models": [
+          "claude-haiku-5-5"
+        ],
+        "requests": 8,
+        "billed": 7,
+        "blocked": 1,
+        "mainTurns": 7,
+        "subagentTurns": 0,
+        "tokenyardCostUsd": 0.00259,
+        "claudeCodeReportedCostUsd": 0.002589415,
+        "cacheHitRatio": 0.9555
       }
     ]
   },
   "codex": {
-    "requests": 9,
-    "billed": 3,
-    "blocked": 6,
-    "costUsd": 0.013388,
-    "cacheHitRatio": 0.6535
+    "requests": 14,
+    "billed": 7,
+    "blocked": 7,
+    "costUsd": 0.029885,
+    "cacheHitRatio": 0.7011
   },
   "otherClients": {
-    "requests": 4,
-    "billed": 0
+    "requests": 13,
+    "billed": 5
   },
   "r11": {
-    "billed": 21,
+    "billed": 72,
     "violations": 0,
-    "bytesBound": 17,
-    "contextWindowBound": 4,
+    "bytesBound": 65,
+    "contextWindowBound": 7,
     "actualToBytesBound": {
       "min": 0.199,
       "max": 0.348
@@ -144,8 +398,8 @@
     {
       "model": "claude-opus-5-5",
       "boundKind": "bytes",
-      "admitted": 2,
-      "minUsd": 3.572668,
+      "admitted": 4,
+      "minUsd": 3.300678,
       "maxUsd": 3.580289
     },
     {
@@ -158,23 +412,33 @@
     {
       "model": "gpt-5.4-mini",
       "boundKind": "bytes",
-      "admitted": 1,
+      "admitted": 2,
       "minUsd": 0.687258,
-      "maxUsd": 0.687258
+      "maxUsd": 0.740789
     },
     {
       "model": "gpt-5.4-mini",
       "boundKind": "context-window",
-      "admitted": 2,
+      "admitted": 5,
       "minUsd": 0.9636,
-      "maxUsd": 0.9636
+      "maxUsd": 1.2936
+    },
+    {
+      "model": "claude-haiku-5-5",
+      "boundKind": "bytes",
+      "admitted": 45,
+      "minUsd": 0.044247,
+      "maxUsd": 0.4402
     }
   ],
   "runCapsUsd": {
     "claudeCode": [
       3,
       5,
-      8
+      8,
+      8.53,
+      0.704842,
+      0.754842
     ],
     "codex": 3.5,
     "source": "test/live/claude-code.live.md and test/live/codex.live.md: TOKENYARD_LIVE_BUDGET_USD of each harness start, lowered from the shell; the cap is cumulative over all live runs"
@@ -182,7 +446,9 @@
   "refusedByBudget": [
     {
       "what": "no server tools",
+      "client": "other",
       "model": "claude-opus-5-5",
+      "maxOutputTokens": 16000,
       "boundKind": "context-window",
       "requests": 3,
       "reservationUsd": 9.152,
@@ -194,7 +460,9 @@
     },
     {
       "what": "no server tools",
+      "client": "claude-code",
       "model": "claude-sonnet-5-5",
+      "maxOutputTokens": 128000,
       "boundKind": "context-window",
       "requests": 11,
       "reservationUsd": 5.808,
@@ -206,7 +474,9 @@
     },
     {
       "what": "server tools web_search_20250305 (max_uses 8)",
+      "client": "claude-code",
       "model": "claude-sonnet-5-5",
+      "maxOutputTokens": 128000,
       "boundKind": "context-window",
       "requests": 11,
       "reservationUsd": 58.16,
@@ -215,7 +485,95 @@
         "min": 0.512196,
         "max": 0.512196
       }
+    },
+    {
+      "what": "no server tools",
+      "client": "claude-code",
+      "model": "claude-haiku-5-5",
+      "maxOutputTokens": 1000,
+      "boundKind": "bytes",
+      "requests": 1,
+      "reservationUsd": 0.066392,
+      "runCapUsd": 0.704842,
+      "spentBeforeUsd": {
+        "min": 0.674842,
+        "max": 0.674842
+      }
+    },
+    {
+      "what": "no server tools",
+      "client": "other",
+      "model": "claude-haiku-5-5",
+      "maxOutputTokens": 200000,
+      "boundKind": "bytes",
+      "requests": 1,
+      "reservationUsd": 0.356607,
+      "runCapUsd": 0.704842,
+      "spentBeforeUsd": {
+        "min": 0.674842,
+        "max": 0.674842
+      }
+    },
+    {
+      "what": "no server tools",
+      "client": "other",
+      "model": "gpt-5.4-mini",
+      "maxOutputTokens": null,
+      "boundKind": "bytes",
+      "requests": 1,
+      "reservationUsd": 0.64042,
+      "runCapUsd": 0.704842,
+      "spentBeforeUsd": {
+        "min": 0.674842,
+        "max": 0.674842
+      }
+    },
+    {
+      "what": "no server tools",
+      "client": "codex",
+      "model": "gpt-5.4-mini",
+      "maxOutputTokens": null,
+      "boundKind": "bytes",
+      "requests": 1,
+      "reservationUsd": 0.740598,
+      "runCapUsd": 0.704842,
+      "spentBeforeUsd": {
+        "min": 0.674842,
+        "max": 0.674842
+      }
+    },
+    {
+      "what": "no server tools",
+      "client": "claude-code",
+      "model": "claude-haiku-5-5",
+      "maxOutputTokens": 1000,
+      "boundKind": "bytes",
+      "requests": 1,
+      "reservationUsd": 0.07796,
+      "runCapUsd": 0.754842,
+      "spentBeforeUsd": {
+        "min": 0.677432,
+        "max": 0.677432
+      }
     }
   ],
+  "run2FromLog": {
+    "source": "test/live/claude-code.live.md, run 2 (copied from the log; no trace holds OTel events or the direct run)",
+    "otel": {
+      "apiRequestEvents": 42,
+      "joined": 42,
+      "otelCostUsd": 0.12910221,
+      "tokenyardCostUsd": 0.129104,
+      "deltaMicroUsd": 1.79,
+      "deltaPct": 0.00139,
+      "maxPerRequestDeltaMicroUsd": 0.495
+    },
+    "cacheBaseline": {
+      "what": "the same 5-turn scripted Messages session on Haiku 5.5, a 13,500-token cached system block, each run with its own nonce so both start cold",
+      "gatewayCacheReadShare": 0.7994087,
+      "directCacheReadShare": 0.7994088,
+      "directSpendUsd": 0.002236
+    }
+  },
   "refusedByBudgetNote": "reservationUsd is what the worst-case estimator computes from the traced features with the price table above (refused records carry no reservation); a request is refused when its reservation is larger than the run cap in total, or larger than the cap minus spent and reserved"
 }
