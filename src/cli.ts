@@ -454,12 +454,14 @@ traces
   .option('--anonymize', 'replace tenant, team, key id, repo, branch and ticket with salted pseudonyms and drop client.version')
   .option('--salt-file <path>', 'file holding a one-off salt for --anonymize (or TOKENYARD_EXPORT_SALT); default: a random salt, never stored; never the trace salt')
   .option('--salt <salt>', 'refused: a salt on the command line is visible to every local user; use TOKENYARD_EXPORT_SALT or --salt-file')
-  .action(async (o: { traceDir: string; out: string; since: string; until?: string; anonymize?: boolean; salt?: string; saltFile?: string }) => {
+  .option('--trace-salt-file <path>', 'the gateway trace salt, when it is kept in a file rather than TOKENYARD_TRACE_SALT: the --anonymize salt must differ from it')
+  .action(async (o: { traceDir: string; out: string; since: string; until?: string; anonymize?: boolean; salt?: string; saltFile?: string; traceSaltFile?: string }) => {
     // A one-off salt (B7): never the gateway's trace salt, whose holder would reverse the pseudonyms by dictionary and
     // link every export made with it. Without one, a random salt is used and forgotten.
     let salt = await secretInput('tokenyard traces export', { flag: 'salt', value: o.salt, file: o.saltFile, env: 'TOKENYARD_EXPORT_SALT' });
-    if (o.anonymize && salt !== undefined && salt === process.env.TOKENYARD_TRACE_SALT) {
-      return void (console.error('tokenyard traces export: the --anonymize salt must differ from TOKENYARD_TRACE_SALT (use a one-off salt, or none for a random one)'), process.exit(1));
+    const traceSalt = await secretInput('tokenyard traces export', { flag: 'trace-salt', file: o.traceSaltFile, env: 'TOKENYARD_TRACE_SALT' });
+    if (o.anonymize && salt !== undefined && salt === traceSalt) {
+      return void (console.error('tokenyard traces export: the --anonymize salt must differ from the trace salt (TOKENYARD_TRACE_SALT or --trace-salt-file); use a one-off salt, or none for a random one'), process.exit(1));
     }
     if (o.anonymize && salt === undefined) {
       salt = (await import('node:crypto')).randomBytes(24).toString('base64url');

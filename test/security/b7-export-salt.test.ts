@@ -59,7 +59,7 @@ test('B7 with only TOKENYARD_TRACE_SALT set, --anonymize uses a random one-off s
 test('B7 an export salt equal to the trace salt is refused', () => {
   const r = exportWith({ TOKENYARD_TRACE_SALT: TRACE_SALT, TOKENYARD_EXPORT_SALT: TRACE_SALT });
   expect(r.status).toBe(1);
-  expect(r.stderr).toMatch(/must differ from TOKENYARD_TRACE_SALT/);
+  expect(r.stderr).toMatch(/must differ from the trace salt/);
   writeFileSync(join(dir, 'salt'), `${TRACE_SALT}\n`);
   expect(exportWith({ TOKENYARD_TRACE_SALT: TRACE_SALT }, ['--salt-file', join(dir, 'salt')]).status).toBe(1);
 });
@@ -71,4 +71,15 @@ test('B7 an explicit one-off salt (env or file) gives the same pseudonyms each t
   expect(a.status, a.stderr).toBe(0);
   expect(recovered(a.text, 'one-off-export-salt')).toEqual(['tenant', 'repo']);
   expect(b.text.split('\n')[1]).toBe(a.text.split('\n')[1]);
+});
+
+test('B7r the equality check also covers a trace salt given with --trace-salt-file', () => {
+  writeFileSync(join(dir, 'trace-salt'), 'gateway-salt-from-file\n');
+  writeFileSync(join(dir, 'export-salt'), 'gateway-salt-from-file');
+  const viaEnv = exportWith({ TOKENYARD_EXPORT_SALT: 'gateway-salt-from-file' }, ['--trace-salt-file', join(dir, 'trace-salt')]);
+  expect(viaEnv.status).toBe(1);
+  expect(viaEnv.stderr).toMatch(/must differ from the trace salt/);
+  expect(exportWith({}, ['--trace-salt-file', join(dir, 'trace-salt'), '--salt-file', join(dir, 'export-salt')]).status).toBe(1);
+  // A different one-off salt with the trace salt file given is fine.
+  expect(exportWith({ TOKENYARD_EXPORT_SALT: 'one-off' }, ['--trace-salt-file', join(dir, 'trace-salt')]).status).toBe(0);
 });
