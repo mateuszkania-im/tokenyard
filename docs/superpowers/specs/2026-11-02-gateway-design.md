@@ -345,6 +345,7 @@ Errors:
 - Every model in `allowModels` patterns that resolves to a concrete id in `rewriteModel`, and every model a route can produce, has a price. A model without a price is an error, because unpriced models counted as $0 is a known failure in other gateways ([Portkey budget limits](https://portkey.ai/docs/product/ai-gateway/virtual-keys/budget-limits), [LiteLLM #48937](https://github.com/BerriAI/litellm/issues/48937)).
 - Budget names unique; `window` is `day`, `week` or `month` (UTC) except `scope: session`, which has none; `usd > 0`.
 - `failure.counterStoreDown.budgets` must be stated explicitly when any budget uses `mode: enforce`.
+- **(updated 2026-11-03 during the build)** `reserveOutputTokens` on a route chosen by client headers (`requestClass`, `agentType`, `repo`, `feature`) on coding-agent traffic needs `allowBodyRewrite: true`, so the cap is written into the body (`E_RESERVE_OUTPUT_NO_REWRITE`, 7.3).
 
 Warnings:
 
