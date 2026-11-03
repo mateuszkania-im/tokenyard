@@ -2,15 +2,16 @@ name: ci
 on:
   push:
   pull_request:
-  # Mutation testing is slow (see docs/quality.md); it runs only when started by hand.
+  # Mutation testing is slow (see docs/quality-gates.md); it runs only when started by hand.
   workflow_dispatch:
 # Least privilege: every job only reads the repository. There is deliberately no publish job; Mateusz publishes by hand.
 permissions:
   contents: read
-# A newer push to the same ref cancels the superseded run.
+# A newer push to the same ref cancels the superseded run. The group keys on the event too, so a push never cancels a
+# run started by hand (the mutation job takes up to two hours), and a run started by hand is never cancelled.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 env:
   # Third-party actions are pinned to full commit SHAs (version in the trailing comment):
   #   actions/checkout    3d3c42e5aac5ba805825da76410c181273ba90b1  v7.0.1
@@ -103,6 +104,10 @@ jobs:
   # Stryker on decide, the budget accounting, the estimator and the scanner; fails under the break threshold.
   mutation:
     if: github.event_name == 'workflow_dispatch'
+    # Its own group, never cancelled: a second manual run's mutation job on the ref waits for this one.
+    concurrency:
+      group: mutation-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
