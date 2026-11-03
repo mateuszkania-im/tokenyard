@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import type { Usage } from '../stream/anthropic-usage.js';
 import { CacheSimulator, countTokens } from './cache-sim.js';
-import { DEFAULT_SCENARIO, mulberry32, type ReceivedRequest, type Scenario } from './scenarios.js';
+import { DEFAULT_SCENARIO, mulberry32, type ReceivedRequest, record, type Scenario } from './scenarios.js';
 
 export type { ReceivedRequest, Scenario } from './scenarios.js';
 
@@ -20,6 +20,8 @@ export interface MockOptions {
   host?: string;
   workspace?: string;
   scenario?: Scenario;
+  /** Most requests kept in `received`, newest last (default all; `tokenyard mock` keeps none). */
+  keepReceived?: number;
   /** Clock for the cache simulator; defaults to Date.now. */
   now?: () => number;
 }
@@ -224,7 +226,7 @@ export async function startAnthropicMock(opts: MockOptions = {}): Promise<MockSe
       const headers: Record<string, string | string[]> = {};
       for (const [k, v] of Object.entries(req.headers)) if (v !== undefined) headers[k] = v;
       const rec: ReceivedRequest = { method: req.method ?? 'GET', pathAndQuery: req.url ?? '/', headers, body: Buffer.concat(chunks) };
-      received.push(rec);
+      record(received, rec, opts.keepReceived);
       requestCount++;
       respond(rec, res, receivedAt).catch(() => res.destroy());
     });

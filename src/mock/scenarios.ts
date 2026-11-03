@@ -14,6 +14,16 @@ export type Scenario =
   | { kind: 'pauseAfterStart'; pauseMs: number }
   | { kind: 'randomUsage'; seed: number };
 
+/**
+ * Records a request, keeping at most `max` (the newest): a long-running mock must not keep every body it was sent
+ * (V2). Tests read `received` and leave `max` unset; `tokenyard mock` keeps none.
+ */
+export function record(received: ReceivedRequest[], rec: ReceivedRequest, max = Number.POSITIVE_INFINITY): void {
+  if (max <= 0) return;
+  received.push(rec);
+  if (received.length > max) received.splice(0, received.length - max);
+}
+
 /** Seeded PRNG returning floats in [0, 1). */
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;

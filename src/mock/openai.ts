@@ -3,7 +3,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { MockServer } from './anthropic.js';
-import { DEFAULT_SCENARIO, type ReceivedRequest, type Scenario } from './scenarios.js';
+import { DEFAULT_SCENARIO, type ReceivedRequest, record, type Scenario } from './scenarios.js';
 
 /** The shared scenarios, plus the two Responses terminal events that are not `response.completed`. */
 export type OpenAIScenario = Scenario | { kind: 'failed'; afterEvents: number; code: string } | { kind: 'incomplete'; reason: string };
@@ -17,6 +17,10 @@ export interface OpenAIMockOptions {
   /** Address to bind (default 127.0.0.1; the compose demo binds 0.0.0.0 inside its container). */
   host?: string;
   scenario?: OpenAIScenario;
+  /** Most requests kept in `received`, newest last (default all; `tokenyard mock` keeps none). */
+  keepReceived?: number;
+  /** Most prompt cache keys remembered, least recently used dropped first (default 10,000). */
+  maxCacheKeys?: number;
 }
 
 type Obj = Record<string, unknown>;
@@ -62,6 +66,7 @@ export async function startOpenAIMock(opts: OpenAIMockOptions = {}): Promise<Ope
   let respCount = 0;
   /** Prompt cache by `prompt_cache_key`: the bytes of the previous request count as cached when the prefix repeats. */
   const cache = new Map<string, number>();
+  const maxCacheKeys = opts.maxCacheKeys ?? 10_000;
 
   async function respond(rec: ReceivedRequest, res: ServerResponse): Promise<void> {
     const path = rec.pathAndQuery.split('?')[0];
@@ -81,7 +86,15 @@ export async function startOpenAIMock(opts: OpenAIMockOptions = {}): Promise<Ope
     const input = Math.ceil(rec.body.length / 4);
     const key = typeof body.prompt_cache_key === 'string' ? body.prompt_cache_key : null;
     const prev = key === null ? 0 : (cache.get(key) ?? 0);
-    if (key !== null) cache.set(key, rec.body.length);
+    if (key !== null) {
+      // Least recently used first: a key is moved to the end on every use and the oldest goes past the cap (V2).
+      cache.delete(key);
+      cache.set(key, rec.body.length);
+      for (const old of cache.keys()) {
+        if (cache.size <= maxCacheKeys) break;
+        cache.delete(old);
+      }
+    }
     const usage: MockUsage = { input, cached: Math.min(input, Math.floor(Math.min(prev, rec.body.length) / 4 / 128) * 128), output: outputTokens };
     const id = `resp_mock_${String(++respCount).padStart(6, '0')}`;
     const text = splitTokens(outputTokens).map((t) => 'x'.repeat(t * 4));
@@ -155,7 +168,7 @@ export async function startOpenAIMock(opts: OpenAIMockOptions = {}): Promise<Ope
       const headers: Record<string, string | string[]> = {};
       for (const [k, v] of Object.entries(req.headers)) if (v !== undefined) headers[k] = v;
       const rec: ReceivedRequest = { method: req.method ?? 'GET', pathAndQuery: req.url ?? '/', headers, body: Buffer.concat(chunks) };
-      received.push(rec);
+      record(received, rec, opts.keepReceived);
       respond(rec, res).catch(() => res.destroy());
     });
   });

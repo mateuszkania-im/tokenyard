@@ -229,3 +229,13 @@ test('200 responses carry x-mock-wait-ms, the mock\'s own wait before the header
     expect(wait).toBeLessThan(1000);
   }
 });
+
+test('V2 leak: keepReceived bounds the requests the mock keeps (the CLI mock keeps none)', async () => {
+  mock = await startAnthropicMock({ scenario: fast, keepReceived: 2 });
+  for (let i = 0; i < 5; i++) await post(mock.url, '/v1/messages', msg({ metadata: { user_id: `u${i}` } }));
+  expect(mock.received.map((r) => JSON.parse(r.body.toString('utf8')).metadata.user_id)).toEqual(['u3', 'u4']);
+  await mock.close();
+  mock = await startAnthropicMock({ scenario: fast, keepReceived: 0 });
+  await post(mock.url, '/v1/messages', msg());
+  expect(mock.received).toHaveLength(0);
+});

@@ -82,9 +82,18 @@ interface Entry {
  */
 export class CacheSimulator {
   private entries = new Map<string, Entry>();
+  private prunedAt = Number.NEGATIVE_INFINITY;
   constructor(private readonly workspace = 'default') {}
 
+  /** Drops expired entries at most once a minute, so a long-running mock keeps only live prefixes (V2). */
+  private prune(nowMs: number): void {
+    if (nowMs - this.prunedAt < 60_000) return;
+    this.prunedAt = nowMs;
+    for (const [k, e] of this.entries) if (e.expiresAt <= nowMs) this.entries.delete(k);
+  }
+
   usageFor(body: unknown, model: string, nowMs: number): Usage {
+    this.prune(nowMs);
     const units = prefixUnits(toObject(body));
     const h = createHash('sha256');
     let bytes = 0;

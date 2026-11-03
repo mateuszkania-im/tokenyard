@@ -53,8 +53,9 @@ program
   .option('--openai-port <n>', 'also run the mock OpenAI provider on this port')
   .action(async (o: { port: string; host: string; openaiPort?: string }) => {
     const { startAnthropicMock } = await import('./mock/anthropic.js');
-    const mock = await startAnthropicMock({ port: Number(o.port), host: o.host });
-    const openai = o.openaiPort === undefined ? null : await (await import('./mock/openai.js')).startOpenAIMock({ port: Number(o.openaiPort), host: o.host });
+    // Nothing reads the requests a standalone mock receives, so it keeps none (V2: they held every body sent).
+    const mock = await startAnthropicMock({ port: Number(o.port), host: o.host, keepReceived: 0 });
+    const openai = o.openaiPort === undefined ? null : await (await import('./mock/openai.js')).startOpenAIMock({ port: Number(o.openaiPort), host: o.host, keepReceived: 0 });
     console.log(mock.url);
     if (openai) console.log(openai.url);
     const stop = (): void => void Promise.all([mock.close(), openai?.close()]).then(() => process.exit(0));

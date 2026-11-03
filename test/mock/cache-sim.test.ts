@@ -108,3 +108,14 @@ test('mulberry32 is seeded and stays in [0,1)', () => {
     expect(x).toBeLessThan(1);
   }
 });
+
+test('V2 leak: expired entries are dropped, so a long-running mock does not keep every prefix it ever saw', () => {
+  const sim = new CacheSimulator();
+  const size = (): number => (sim as unknown as { entries: Map<string, unknown> }).entries.size;
+  // A new 5-minute breakpoint every minute for 1,000 minutes: at most the last few are live.
+  for (let i = 0; i < 1_000; i++) {
+    const body = { system: [{ type: 'text', text: `prompt ${i}`, cache_control: { type: 'ephemeral' } }], messages: [{ role: 'user', content: 'hi' }] };
+    sim.usageFor(body, MODEL, i * 60_000);
+  }
+  expect(size()).toBeLessThanOrEqual(10);
+});

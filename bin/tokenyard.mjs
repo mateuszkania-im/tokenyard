@@ -842,7 +842,15 @@ var init_cache_sim = __esm({
       }
       workspace;
       entries = /* @__PURE__ */ new Map();
+      prunedAt = Number.NEGATIVE_INFINITY;
+      /** Drops expired entries at most once a minute, so a long-running mock keeps only live prefixes (V2). */
+      prune(nowMs) {
+        if (nowMs - this.prunedAt < 6e4) return;
+        this.prunedAt = nowMs;
+        for (const [k, e2] of this.entries) if (e2.expiresAt <= nowMs) this.entries.delete(k);
+      }
       usageFor(body, model, nowMs) {
+        this.prune(nowMs);
         const units = prefixUnits(toObject(body));
         const h = createHash("sha256");
         let bytes = 0;
@@ -897,6 +905,11 @@ var init_cache_sim = __esm({
 });
 
 // src/mock/scenarios.ts
+function record(received, rec, max = Number.POSITIVE_INFINITY) {
+  if (max <= 0) return;
+  received.push(rec);
+  if (received.length > max) received.splice(0, received.length - max);
+}
 function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
@@ -1101,7 +1114,7 @@ async function startAnthropicMock(opts = {}) {
       const headers = {};
       for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
       const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
-      received.push(rec);
+      record(received, rec, opts.keepReceived);
       requestCount++;
       respond(rec, res, receivedAt).catch(() => res.destroy());
     });
@@ -1163,6 +1176,7 @@ async function startOpenAIMock(opts = {}) {
   let scenario = opts.scenario ?? DEFAULT_SCENARIO;
   let respCount = 0;
   const cache = /* @__PURE__ */ new Map();
+  const maxCacheKeys = opts.maxCacheKeys ?? 1e4;
   async function respond(rec, res) {
     const path3 = rec.pathAndQuery.split("?")[0];
     if (rec.method !== "POST" || path3 !== "/responses" && path3 !== "/v1/responses") {
@@ -1181,7 +1195,14 @@ async function startOpenAIMock(opts = {}) {
     const input3 = Math.ceil(rec.body.length / 4);
     const key = typeof body.prompt_cache_key === "string" ? body.prompt_cache_key : null;
     const prev = key === null ? 0 : cache.get(key) ?? 0;
-    if (key !== null) cache.set(key, rec.body.length);
+    if (key !== null) {
+      cache.delete(key);
+      cache.set(key, rec.body.length);
+      for (const old of cache.keys()) {
+        if (cache.size <= maxCacheKeys) break;
+        cache.delete(old);
+      }
+    }
     const usage = { input: input3, cached: Math.min(input3, Math.floor(Math.min(prev, rec.body.length) / 4 / 128) * 128), output: outputTokens2 };
     const id = `resp_mock_${String(++respCount).padStart(6, "0")}`;
     const text2 = splitTokens2(outputTokens2).map((t) => "x".repeat(t * 4));
@@ -1250,7 +1271,7 @@ async function startOpenAIMock(opts = {}) {
       const headers = {};
       for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
       const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
-      received.push(rec);
+      record(received, rec, opts.keepReceived);
       respond(rec, res).catch(() => res.destroy());
     });
   });
@@ -25790,8 +25811,8 @@ function rewriteKeyNames(ctx) {
       bySchema.set(entry.schema, entry);
   }
   const rewrites = /* @__PURE__ */ new Map();
-  for (const record2 of pendingRecords.get(ctx) ?? []) {
-    const seen = ctx.seen.get(record2);
+  for (const record3 of pendingRecords.get(ctx) ?? []) {
+    const seen = ctx.seen.get(record3);
     const names = (seen?.def ?? seen?.schema)?.propertyNames;
     if (!names || names === true || rewrites.has(names))
       continue;
@@ -27165,7 +27186,7 @@ __export(schemas_exports2, {
   preprocess: () => preprocess,
   promise: () => promise,
   readonly: () => readonly,
-  record: () => record,
+  record: () => record2,
   refine: () => refine,
   set: () => set,
   strictObject: () => strictObject,
@@ -27432,7 +27453,7 @@ function tuple(items, _paramsOrRest, _params) {
     ...util_exports.normalizeParams(params)
   });
 }
-function record(keyType, valueType, params) {
+function record2(keyType, valueType, params) {
   if (!valueType || !valueType._zod) {
     return new ZodRecord({
       type: "record",
@@ -27674,7 +27695,7 @@ function _instanceof(cls, params = {}) {
 }
 function json(params) {
   const jsonSchema = lazy(() => {
-    return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record(string2(), jsonSchema)]);
+    return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record2(string2(), jsonSchema)]);
   });
   return jsonSchema;
 }
@@ -29934,7 +29955,7 @@ __export(external_exports, {
   properties: () => _properties,
   property: () => _property,
   readonly: () => readonly,
-  record: () => record,
+  record: () => record2,
   refine: () => refine,
   regex: () => _regex,
   regexes: () => regexes_exports,
@@ -47265,17 +47286,17 @@ var require_dns = __commonJS({
         const timestamp = Date.now();
         const records = { records: { 4: null, 6: null } };
         let minTTL = this.#maxTTL;
-        for (const record2 of addresses) {
-          record2.timestamp = timestamp;
-          if (typeof record2.ttl === "number") {
-            record2.ttl = Math.min(record2.ttl, this.#maxTTL);
-            minTTL = Math.min(minTTL, record2.ttl);
+        for (const record3 of addresses) {
+          record3.timestamp = timestamp;
+          if (typeof record3.ttl === "number") {
+            record3.ttl = Math.min(record3.ttl, this.#maxTTL);
+            minTTL = Math.min(minTTL, record3.ttl);
           } else {
-            record2.ttl = this.#maxTTL;
+            record3.ttl = this.#maxTTL;
           }
-          const familyRecords = records.records[record2.family] ?? { ips: [] };
-          familyRecords.ips.push(record2);
-          records.records[record2.family] = familyRecords;
+          const familyRecords = records.records[record3.family] ?? { ips: [] };
+          familyRecords.ips.push(record3);
+          records.records[record3.family] = familyRecords;
         }
         this.storage.set(origin.hostname, records, { ttl: minTTL });
       }
@@ -59034,9 +59055,9 @@ import { pipeline } from "node:stream/promises";
 function emitTelemetry(deps, policy2, rec, attempts) {
   try {
     if (deps.metrics) {
-      let record2 = recorders.get(deps.metrics);
-      if (!record2) recorders.set(deps.metrics, record2 = createRequestRecorder(deps.metrics));
-      record2(rec, policy2.prices);
+      let record3 = recorders.get(deps.metrics);
+      if (!record3) recorders.set(deps.metrics, record3 = createRequestRecorder(deps.metrics));
+      record3(rec, policy2.prices);
     }
     deps.spans?.requestSpan(rec, attempts, modelLabel(policy2.prices, rec.features.model));
   } catch {
@@ -114844,9 +114865,9 @@ var require_logs_serializer = __commonJS({
     }
     function createResourceMap(logRecords) {
       const resourceMap = /* @__PURE__ */ new Map();
-      for (const record2 of logRecords) {
-        const resource = record2.resource;
-        const scope = record2.instrumentationScope;
+      for (const record3 of logRecords) {
+        const resource = record3.resource;
+        const scope = record3.instrumentationScope;
         let ismMap = resourceMap.get(resource);
         if (!ismMap) {
           ismMap = /* @__PURE__ */ new Map();
@@ -114857,7 +114878,7 @@ var require_logs_serializer = __commonJS({
           records = [];
           ismMap.set(scope, records);
         }
-        records.push(record2);
+        records.push(record3);
       }
       return resourceMap;
     }
@@ -117774,13 +117795,13 @@ var require_TemporalMetricProcessor = __commonJS({
         const iterator = current.entries();
         let next = iterator.next();
         while (next.done !== true) {
-          const [key, record2, hash2] = next.value;
+          const [key, record3, hash2] = next.value;
           if (last.has(key, hash2)) {
             const lastAccumulation = last.get(key, hash2);
-            const accumulation = aggregator.merge(lastAccumulation, record2);
+            const accumulation = aggregator.merge(lastAccumulation, record3);
             result.set(key, accumulation, hash2);
           } else {
-            result.set(key, record2, hash2);
+            result.set(key, record3, hash2);
           }
           next = iterator.next();
         }
@@ -118214,13 +118235,13 @@ var require_ObservableRegistry = __commonJS({
         });
       }
       _findCallback(callback, instrument) {
-        return this._callbacks.findIndex((record2) => {
-          return record2.callback === callback && record2.instrument === instrument;
+        return this._callbacks.findIndex((record3) => {
+          return record3.callback === callback && record3.instrument === instrument;
         });
       }
       _findBatchCallback(callback, instruments) {
-        return this._batchCallbacks.findIndex((record2) => {
-          return record2.callback === callback && (0, utils_1.setEquals)(record2.instruments, instruments);
+        return this._batchCallbacks.findIndex((record3) => {
+          return record3.callback === callback && (0, utils_1.setEquals)(record3.instruments, instruments);
         });
       }
     };
@@ -119656,8 +119677,8 @@ var require_internal2 = __commonJS({
     exports.createExportLogsServiceRequest = createExportLogsServiceRequest;
     function createResourceMap(logRecords) {
       const resourceMap = /* @__PURE__ */ new Map();
-      for (const record2 of logRecords) {
-        const { resource, instrumentationScope } = record2;
+      for (const record3 of logRecords) {
+        const { resource, instrumentationScope } = record3;
         let ismMap = resourceMap.get(resource);
         if (!ismMap) {
           ismMap = /* @__PURE__ */ new Map();
@@ -119668,7 +119689,7 @@ var require_internal2 = __commonJS({
           records = [];
           ismMap.set(instrumentationScope, records);
         }
-        records.push(record2);
+        records.push(record3);
       }
       return resourceMap;
     }
@@ -120089,19 +120110,19 @@ var require_internal4 = __commonJS({
     exports.createExportTraceServiceRequest = createExportTraceServiceRequest;
     function createResourceMap(readableSpans) {
       const resourceMap = /* @__PURE__ */ new Map();
-      for (const record2 of readableSpans) {
-        let ilsMap = resourceMap.get(record2.resource);
+      for (const record3 of readableSpans) {
+        let ilsMap = resourceMap.get(record3.resource);
         if (!ilsMap) {
           ilsMap = /* @__PURE__ */ new Map();
-          resourceMap.set(record2.resource, ilsMap);
+          resourceMap.set(record3.resource, ilsMap);
         }
-        const instrumentationScopeKey = `${record2.instrumentationScope.name}@${record2.instrumentationScope.version || ""}:${record2.instrumentationScope.schemaUrl || ""}`;
+        const instrumentationScopeKey = `${record3.instrumentationScope.name}@${record3.instrumentationScope.version || ""}:${record3.instrumentationScope.schemaUrl || ""}`;
         let records = ilsMap.get(instrumentationScopeKey);
         if (!records) {
           records = [];
           ilsMap.set(instrumentationScopeKey, records);
         }
-        records.push(record2);
+        records.push(record3);
       }
       return resourceMap;
     }
@@ -126577,6 +126598,7 @@ var package_default = {
     test: "vitest run",
     "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts",
     bench: "tsx bench/run.ts",
+    soak: "tsx bench/soak.ts",
     "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
     live: "node --env-file=.env bin/tokenyard.mjs live",
     "check:secrets": "node scripts/check-no-secrets.mjs"
@@ -126700,8 +126722,8 @@ var program2 = new Command();
 program2.name("tokenyard").description(package_default.description).version(package_default.version);
 program2.command("mock").description("run the deterministic mock Anthropic provider (and with --openai-port the OpenAI one)").option("--port <n>", "port to listen on (0 picks a free one)", "0").option("--host <host>", "address to bind (the compose demo uses 0.0.0.0 inside its container)", "127.0.0.1").option("--openai-port <n>", "also run the mock OpenAI provider on this port").action(async (o) => {
   const { startAnthropicMock: startAnthropicMock2 } = await Promise.resolve().then(() => (init_anthropic(), anthropic_exports));
-  const mock = await startAnthropicMock2({ port: Number(o.port), host: o.host });
-  const openai = o.openaiPort === void 0 ? null : await (await Promise.resolve().then(() => (init_openai(), openai_exports))).startOpenAIMock({ port: Number(o.openaiPort), host: o.host });
+  const mock = await startAnthropicMock2({ port: Number(o.port), host: o.host, keepReceived: 0 });
+  const openai = o.openaiPort === void 0 ? null : await (await Promise.resolve().then(() => (init_openai(), openai_exports))).startOpenAIMock({ port: Number(o.openaiPort), host: o.host, keepReceived: 0 });
   console.log(mock.url);
   if (openai) console.log(openai.url);
   const stop = () => void Promise.all([mock.close(), openai?.close()]).then(() => process.exit(0));
