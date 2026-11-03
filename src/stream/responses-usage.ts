@@ -26,18 +26,11 @@ function toUsage(raw: unknown): Usage | null {
   return { input: input - cached - written, cacheRead: cached, cacheWrite5m: written, cacheWrite1h: 0, output: num(raw.output_tokens) ?? 0 };
 }
 
-export interface ResponsesUsageOptions {
-  /**
-   * Input tokens to settle when the stream ends without usage (cut off, or `response.failed` without it): the request's
-   * own input bound, so a truncated request is never settled as if its prompt were free. 0 when absent.
-   */
-  inputTokensIfUnknown?: number;
-}
-
 /**
  * Usage comes only in the terminal event (`response.completed`, `response.incomplete`, `response.failed`). A stream
- * that started (`response.created`) and ends without usage is `partial`: output from the streamed text
- * (`ceil(chars / 4)`, flagged `outputEstimated`), input at `inputTokensIfUnknown`.
+ * that started (`response.created`) and ends without usage (cut off, or `response.failed` without it) is `partial`
+ * with no usage: the prompt and the hidden reasoning tokens are unknown, so the gateway settles it at the reservation
+ * (ruling S20-2). The streamed text is still counted in `streamedChars`.
  */
 export class ResponsesUsageAccumulator {
   private started = false;
@@ -46,8 +39,7 @@ export class ResponsesUsageAccumulator {
   private chars = 0;
   private error: string | null = null;
   private model: string | null = null;
-
-  constructor(private readonly o: ResponsesUsageOptions = {}) {}
+  private tier: string | null = null;
 
   onEvent(e: SseEvent): void {
     let d: unknown;
@@ -60,6 +52,7 @@ export class ResponsesUsageAccumulator {
     const type = typeof d.type === 'string' ? d.type : (e.event ?? '');
     const response = isObj(d.response) ? d.response : null;
     if (response && typeof response.model === 'string') this.model = response.model;
+    if (response && typeof response.service_tier === 'string') this.tier = response.service_tier;
     if (type === 'response.created' || type === 'response.in_progress') {
       this.started = true;
       return;
@@ -84,11 +77,9 @@ export class ResponsesUsageAccumulator {
   }
 
   result(): UsageResult {
-    const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model };
+    const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model, ...(this.tier !== null ? { serviceTier: this.tier } : {}) };
     if (this.usage) return { ...base, usage: { ...this.usage }, source: 'final' };
-    if (!this.started) return { ...base, usage: null, source: 'none' };
-    const usage: Usage = { input: this.o.inputTokensIfUnknown ?? 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: Math.ceil(this.chars / 4) };
-    return { ...base, usage, source: 'partial', outputEstimated: true };
+    return { ...base, usage: null, source: this.started ? 'partial' : 'none' };
   }
 }
 
@@ -103,6 +94,7 @@ export function parseResponsesJsonUsage(body: Buffer): UsageResult {
   }
   if (!isObj(d)) return none;
   const responseModel = typeof d.model === 'string' ? d.model : null;
+  const tier = typeof d.service_tier === 'string' ? { serviceTier: d.service_tier } : {};
   const usage = toUsage(d.usage);
-  return usage ? { ...none, usage, source: 'final', sawStop: true, responseModel } : { ...none, responseModel };
+  return usage ? { ...none, usage, source: 'final', sawStop: true, responseModel, ...tier } : { ...none, responseModel, ...tier };
 }

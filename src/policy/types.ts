@@ -148,6 +148,7 @@ export interface RequestFeatures {
   serverTools: Array<{ type: string; maxUses: number | null }>;
   toolCount: number; thinking: boolean;
   fastMode: boolean;                   // body selects fast mode (speed "fast"); priced at the model's fast rates (Task 9)
+  serviceTier?: string;                // not in spec 6.5: OpenAI service_tier other than default (auto, priority, flex, ...)
   attribution: {
     session: string | null; agent: string | null; parentAgent: string | null;
     requestClass: 'main' | 'subagent' | 'workflow' | 'compaction' | 'auxiliary' | null;

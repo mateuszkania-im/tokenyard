@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { inputTokenBound, reservationPrice, serverToolKey, sessionAwareMicroUsd, worstCaseMicroUsd } from '../limits/estimator.js';
 import { budgetKey, gcraKey, keyTaintKey, streamKey, taintKey } from '../limits/keys.js';
-import { lookupModel, type ModelPrice, type PriceTable } from '../pricing/prices.js';
+import { lookupModel, type ModelPrice, type PriceTable, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 import { findAuthzRoute, findRoute, globTest } from './match.js';
 import { REQUEST_CLASSES } from './schema.js';
@@ -64,6 +64,7 @@ export function buildFeatures(
     toolCount: x.toolCount,
     thinking: x.thinking,
     fastMode: x.fastMode,
+    ...(x.serviceTier !== undefined ? { serviceTier: x.serviceTier } : {}),
     attribution: {
       session: attr.session,
       agent: attr.agent,
@@ -222,6 +223,13 @@ export function decide(policy: CompiledPolicy, f: RequestFeatures): Plan {
 
   const t = policy.prices;
   const known = pricedName(t, upstreamModel);
+  // An OpenAI service tier is priced only from the model's own tier prices: a named tier without them (priority, flex,
+  // an unknown value) is never priced as standard (ruling S20-1). `auto` reserves at the highest listed tier.
+  const tier = f.serviceTier;
+  if (tier !== undefined && tier !== 'auto') {
+    const m = known === null ? null : lookupModel(t, known)?.price;
+    if (!m || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: 'unpriced' };
+  }
   if (known === null) {
     if (policy.failure.unpricedModel !== 'allow-and-flag') return { ...plan, preBlock: 'unpriced' };
     warnings.push({ kind: 'unpriced', model: upstreamModel });

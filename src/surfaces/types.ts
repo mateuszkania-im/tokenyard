@@ -18,6 +18,11 @@ export interface ExtractedFeatures {
   expandsServerSide: boolean;
   /** `speed` is present and not `"standard"`: priced at the model's fast mode rates. */
   fastMode: boolean;
+  /**
+   * OpenAI `service_tier` when it asks for a tier other than the standard one (`auto`, `priority`, `flex`, any value);
+   * absent for no tier, null or `default`. A named tier is priced only from the model's `serviceTiers` (spec 7.3).
+   */
+  serviceTier?: string;
   /** `inference_geo` when it is a string (for example "us"); it selects a price modifier (`inferenceGeoUs`). Absent otherwise. */
   inferenceGeo?: string;
   parseError: boolean;

@@ -20,7 +20,9 @@ export interface TraceRecord {
               toolCount: number; thinking: boolean; bodyBytes: number; prefixHash: string | null;
               contextCompacted: boolean;
               /** Not in spec 9.1: set (true) when the body selected fast mode; the reservation is priced at fast rates (replay reproduces it). */
-              fastMode?: true };
+              fastMode?: true;
+              /** Not in spec 9.1: the OpenAI service_tier the request asked for, when not default (replay prices the reservation with it). */
+              serviceTier?: string };
   guardrail: { hits: Array<{ rule: string; action: 'block' | 'warn' | 'redact'; valueHmac: string; where: 'last-turn' | 'history' }> };
   policy: { revision: string; candidateRevision?: string; candidateError?: string };
   decision: { route: string | null; action: 'forward' | 'block'; reason: string | null;
@@ -46,6 +48,8 @@ export interface TraceRecord {
     costMicroUsd: number | null; costBasis: 'billed' | 'api-equivalent'; priceTable: string;
     /** Not in spec 9.1: the cost was priced at fast mode rates (response or request). Replay reprices with it. */
     fast?: true;
+    /** Not in spec 9.1: the OpenAI service tier the cost was priced at, when not default (replay reprices with it). */
+    serviceTier?: string;
     /** Not in spec 9.1: price table modifiers the request selected (for example `inferenceGeoUs`). Absent when none. */
     modifiers?: string[];
     /** Not in spec 9.1: server tool uses by price table tool name, as billed. Absent when none. */

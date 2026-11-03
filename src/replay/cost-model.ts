@@ -78,7 +78,7 @@ export interface CostInput {
 function price(t: PriceTable, model: string, u: Usage, r: TraceRecord): number | null {
   try {
     const fast = r.outcome.fast === true && lookupModel(t, model)?.price.fast !== undefined;
-    return costMicroUsd(t, model, u, { fast, modifiers: r.outcome.modifiers ?? [], ...(r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {}) });
+    return costMicroUsd(t, model, u, { fast, serviceTier: r.outcome.serviceTier ?? null, modifiers: r.outcome.modifiers ?? [], ...(r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {}) });
   } catch {
     return null; // unpriced model, modifier or tool under this table
   }

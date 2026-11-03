@@ -1,6 +1,6 @@
 // Cost of one request (spec 7.6). Prices are USD per million tokens, so tokens times price is micro-USD.
 import type { Usage } from '../stream/anthropic-usage.js';
-import { lookupModel, type PriceTable } from './prices.js';
+import { lookupModel, type PriceTable, serviceTierPrice } from './prices.js';
 
 export interface CostOptions {
   /** Names from the table's `modifiers`, each multiplying every token bucket (for example `inferenceGeoUs`). */
@@ -9,6 +9,17 @@ export interface CostOptions {
   serverToolUses?: Record<string, number>;
   /** The response reported `usage.speed: "fast"`: the model's `fast` prices apply instead of the base prices and tiers. */
   fast?: boolean;
+  /**
+   * The OpenAI service tier the request was served on: its `serviceTiers` prices (and their tiers) replace the base
+   * prices. `default` or none is standard; `auto` (the tier served is unknown) or a tier without prices throws.
+   */
+  serviceTier?: string | null;
+}
+
+/** The tier a response is billed at: the one it reports, else the one the request asked for; undefined for standard. */
+export function billedServiceTier(u: { serviceTier?: string }, x: { serviceTier?: string }): string | undefined {
+  const tier = u.serviceTier ?? x.serviceTier;
+  return tier === undefined || tier === 'default' ? undefined : tier;
 }
 
 /**
@@ -23,12 +34,19 @@ export function costMicroUsd(t: PriceTable, modelId: string, u: Usage, o: CostOp
   const m = found.price;
   const promptTokens = u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
   let p: { input: number; output: number; cacheWrite5m: number; cacheWrite1h: number; cacheRead: number } = m;
+  let tiers = m.tiers ?? [];
   let above = -1;
   if (o.fast) {
     if (!m.fast) throw new Error(`unpriced fast mode: ${modelId}`);
     p = m.fast;
+    tiers = [];
+  } else if (o.serviceTier !== undefined && o.serviceTier !== null && o.serviceTier !== 'default') {
+    const st = serviceTierPrice(m, o.serviceTier);
+    if (!st) throw new Error(`unpriced service tier ${o.serviceTier}: ${modelId}`);
+    p = st;
+    tiers = st.tiers ?? [];
   }
-  for (const tier of o.fast ? [] : (m.tiers ?? [])) {
+  for (const tier of tiers) {
     if (promptTokens > tier.aboveInputTokens && tier.aboveInputTokens > above) {
       p = tier;
       above = tier.aboveInputTokens;

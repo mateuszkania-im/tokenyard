@@ -48,9 +48,7 @@ test('Codex 0.166.0: a namespace of client function tools is a client tool; one 
   expect(extractResponsesFeatures(respBody({ tools: [{ type: 'namespace', name: 'bad', tools: 'x' }] })).serverTools).toEqual([{ type: 'namespace', maxUses: null }]);
 });
 
-test('a non-standard service tier is fast mode; unparseable and non-object bodies are parse errors', () => {
-  expect(extractResponsesFeatures(respBody({ service_tier: 'priority' })).fastMode).toBe(true);
-  expect(extractResponsesFeatures(respBody({ service_tier: 'flex' })).fastMode).toBe(false);
+test('unparseable and non-object bodies are parse errors', () => {
   expect(extractResponsesFeatures(Buffer.from('{"model":')).parseError).toBe(true);
   expect(extractResponsesFeatures(Buffer.from('[1]')).parseError).toBe(true);
 });
@@ -107,4 +105,11 @@ test('guardrails on Responses: escaped secrets in a tool output, duplicate keys 
     expect(JSON.parse(res.body.toString()).error.code).toBe('secret_detected');
   }
   expect(stack.mock.received).toHaveLength(0);
+});
+
+test('service_tier: absent, null and default are standard; any other value is carried as the tier', () => {
+  for (const v of [undefined, null, 'default']) expect(extractResponsesFeatures(respBody(v === undefined ? {} : { service_tier: v })).serviceTier).toBeUndefined();
+  for (const v of ['auto', 'priority', 'flex', 'scale', 'x']) expect(extractResponsesFeatures(respBody({ service_tier: v })).serviceTier).toBe(v);
+  expect(extractResponsesFeatures(respBody({ service_tier: 7 })).serviceTier).toBe('7');
+  expect(extractResponsesFeatures(respBody({ service_tier: 'priority' })).fastMode).toBe(false);
 });

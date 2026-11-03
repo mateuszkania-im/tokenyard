@@ -19,6 +19,8 @@ export interface UsageResult {
   outputEstimated?: boolean;
   /** The usage reported `speed: "fast"`: priced at the model's fast rates. Absent otherwise. */
   fast?: true;
+  /** OpenAI: the `service_tier` the response reports it was served on (`default`, `priority`, ...). Absent otherwise. */
+  serviceTier?: string;
   /** `usage.server_tool_use` counts by price table tool name (`web_search_requests` is `web_search`). Absent when none. */
   serverToolUses?: Record<string, number>;
 }

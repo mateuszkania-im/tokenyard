@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from 'vitest';
-import { authHeaders, msgBody, parseSse, send, sendTolerant, startStack } from '../../helpers/conformance.js';
+import type { RequestOutcome } from '../../../src/edge/handler.js';
+import { createMemoryStore } from '../../../src/limits/memory-store.js';
+import { authHeaders, msgBody, parseSse, send, sendTolerant, startRawUpstream, startStack } from '../../helpers/conformance.js';
 import { startAnthropicMock, type MockServer } from '../../../src/mock/anthropic.js';
 
 let stack: Awaited<ReturnType<typeof startStack>> | undefined;
@@ -42,4 +44,26 @@ test('C8 stream cut after message_delta but before message_stop is usage partial
   const parsed = parseSse(got.body);
   expect(parsed.source).toBe('partial');
   expect(parsed.usage?.output).toBe(16);
+});
+
+test('C8c a 2xx stream that ends before message_start is settled at the reservation, never as free [https://code.claude.com/docs/en/llm-gateway-protocol.md]', async () => {
+  const raw = await startRawUpstream((req, res) => {
+    req.resume();
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write('event: ping\ndata: {"type": "ping"}\n\n', () => setTimeout(() => res.socket?.destroy(), 20));
+  });
+  const settled: RequestOutcome[] = [];
+  try {
+    stack = await startStack({ upstream: raw.url, gw: { store: createMemoryStore({ clock: Date.now }), onSettled: (o) => settled.push(o) } });
+    await sendTolerant(stack.gw.url, '/v1/messages', authHeaders, msgBody({ stream: true }));
+    await expect.poll(() => settled.length).toBe(1);
+    const o = settled[0] as RequestOutcome;
+    expect(o.usage?.source).toBe('none');
+    expect(o.settledAtEstimate).toBe(true);
+    expect(o.reservedMicroUsd).toBeGreaterThan(0);
+    expect(o.costMicroUsd).toBe(o.reservedMicroUsd);
+    expect(o.chargedMicroUsd).toBe(o.reservedMicroUsd);
+  } finally {
+    await raw.close();
+  }
 });

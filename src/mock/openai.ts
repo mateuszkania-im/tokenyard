@@ -90,6 +90,8 @@ export async function startOpenAIMock(opts: OpenAIMockOptions = {}): Promise<Ope
       created_at: 1_700_000_000,
       status: st,
       model,
+      // The tier that served the request: the one asked for, `default` for `auto` or none.
+      service_tier: typeof body.service_tier === 'string' && body.service_tier !== 'auto' ? body.service_tier : 'default',
       output: st === 'in_progress' ? [] : [{ type: 'message', id: `msg_${id}`, status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: text.join(''), annotations: [] }] }],
       ...(sc.kind === 'incomplete' && st === 'incomplete' ? { incomplete_details: { reason: sc.reason } } : {}),
       usage: withUsage ? usageJson(usage) : null,

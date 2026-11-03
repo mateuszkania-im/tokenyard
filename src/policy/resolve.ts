@@ -33,7 +33,7 @@ function preBlock(policy: CompiledPolicy, plan: Plan, reason: BlockReason): Bloc
     case 'model-not-allowed':
       return block(403, 'permission_error', reason, `this model is not allowed${route}`);
     case 'unpriced':
-      return block(403, 'permission_error', reason, `the model or a server tool has no price in table ${policy.priceTableVersion}, and failure.unpricedModel is block`);
+      return block(403, 'permission_error', reason, `the model, its service tier or a server tool has no price in table ${policy.priceTableVersion}${policy.failure.unpricedModel === 'block' ? ', and failure.unpricedModel is block' : ''}`);
     case 'server-tool-no-max-uses':
       return block(403, 'permission_error', reason, 'a server tool without max_uses has no cost bound under an enforced budget; set max_uses on the tool');
     case 'server-tool-not-allowed': {

@@ -5,6 +5,7 @@ import { compilePolicy } from '../../src/policy/compile.js';
 import { parsePolicyFiles } from '../../src/policy/load-dir.js';
 import type { PolicyDoc, RouteSpec } from '../../src/policy/schema.js';
 import type { CompiledPolicy, KeyRecord, ProviderSpec } from '../../src/policy/types.js';
+import type { PriceTable } from '../../src/pricing/prices.js';
 
 /** Plaintext tokenyard key accepted by the test policy. */
 export const TEST_KEY = 'ty_live_test';
@@ -34,6 +35,8 @@ export function testPolicy(o: {
   rewriteModel?: string;
   /** Last edit of the parsed routes before compiling. */
   editRoutes?: (routes: RouteSpec[]) => void;
+  /** Last edit of the parsed price table before compiling. */
+  editPrices?: (prices: PriceTable) => void;
   /** Last edit of the whole parsed policy (budgets, rate limits, failure) before compiling. */
   edit?: (policy: PolicyDoc) => void;
   /** Keys added beside TEST_KEY, for example a service key for product routes. */
@@ -63,6 +66,7 @@ export function testPolicy(o: {
   if (o.rewriteModel !== undefined) Object.assign(route, { rewriteModel: o.rewriteModel, allowBodyRewrite: true, because: 'test' });
   o.editRoutes?.(src.policy.routes);
   o.edit?.(src.policy);
+  o.editPrices?.(src.prices);
   const compiled = compilePolicy(src, 'test', { experimentalSubscription: passthrough || billing === 'subscription' });
   if (!passthrough) return compiled;
   const providers = new Map([...compiled.providers].map(([n, p]) => [n, n.startsWith('anthropic') ? { ...p, baseUrl: o.upstream } : n === 'openai' ? { ...p, baseUrl: o.openaiUpstream ?? o.upstream } : p]));

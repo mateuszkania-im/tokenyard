@@ -29203,6 +29203,15 @@ function parsePriceTable(text2) {
         throw new Error(`invalid price table: ${section}: key __proto__ is not allowed`);
       }
     }
+    const models = raw.models;
+    if (typeof models === "object" && models !== null) {
+      for (const [id, m] of Object.entries(models)) {
+        const tiers = typeof m === "object" && m !== null ? m.serviceTiers : void 0;
+        if (typeof tiers === "object" && tiers !== null && Object.hasOwn(tiers, "__proto__")) {
+          throw new Error(`invalid price table: models.${id}.serviceTiers: key __proto__ is not allowed`);
+        }
+      }
+    }
   }
   const r = tableSchema.safeParse(raw);
   if (!r.success) {
@@ -29223,7 +29232,11 @@ function lookupModel(t, model) {
   const price2 = best === null ? void 0 : t.models[best];
   return best !== null && price2 ? { id: best, price: price2 } : null;
 }
-var rate, tokens, provenance, tierSchema, fastSchema, modelSchema, tableSchema, DATE_SUFFIX;
+function serviceTierPrice(m, tier) {
+  const tiers = m.serviceTiers;
+  return tiers !== void 0 && Object.hasOwn(tiers, tier) ? tiers[tier] ?? null : null;
+}
+var rate, tokens, provenance, tierSchema, fastSchema, serviceTierSchema, modelSchema, tableSchema, DATE_SUFFIX;
 var init_prices = __esm({
   "src/pricing/prices.ts"() {
     "use strict";
@@ -29248,6 +29261,15 @@ var init_prices = __esm({
       cacheRead: rate,
       ...provenance
     });
+    serviceTierSchema = external_exports.strictObject({
+      input: rate,
+      output: rate,
+      cacheWrite5m: rate,
+      cacheWrite1h: rate,
+      cacheRead: rate,
+      tiers: external_exports.array(tierSchema).optional(),
+      ...provenance
+    });
     modelSchema = external_exports.strictObject({
       input: rate,
       output: rate,
@@ -29258,6 +29280,7 @@ var init_prices = __esm({
       maxOutputTokens: tokens,
       tiers: external_exports.array(tierSchema).optional(),
       fast: fastSchema.optional(),
+      serviceTiers: external_exports.record(external_exports.string(), serviceTierSchema).optional(),
       ...provenance
     });
     tableSchema = external_exports.strictObject({
@@ -29276,13 +29299,18 @@ function inputTokenBound(x, m) {
   if (!textOnly) return { tokens: m.maxContextTokens, kind: "context-window" };
   return { tokens: Math.min(x.bodyBytes + OVERHEAD_TOKENS, m.maxContextTokens), kind: "bytes" };
 }
-function maxInputRate(m, fast = false) {
-  const sets = fast && m.fast ? [m.fast] : [m, ...m.tiers ?? []];
-  return Math.max(...sets.flatMap((p) => [p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead]));
+function priceSets(m, fast = false, serviceTier = null) {
+  if (fast && m.fast) return [m.fast];
+  const base = [m, ...m.tiers ?? []];
+  if (serviceTier === "auto") return [...base, ...Object.values(m.serviceTiers ?? {}).flatMap((st2) => [st2, ...st2.tiers ?? []])];
+  const st = serviceTier === null ? null : serviceTierPrice(m, serviceTier);
+  return st ? [st, ...st.tiers ?? []] : base;
 }
-function maxOutputRate(m, fast = false) {
-  const sets = fast && m.fast ? [m.fast] : [m, ...m.tiers ?? []];
-  return Math.max(...sets.map((p) => p.output));
+function maxInputRate(m, fast = false, serviceTier = null) {
+  return Math.max(...priceSets(m, fast, serviceTier).flatMap((p) => [p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead]));
+}
+function maxOutputRate(m, fast = false, serviceTier = null) {
+  return Math.max(...priceSets(m, fast, serviceTier).map((p) => p.output));
 }
 function modifierProduct(t) {
   let product = 1;
@@ -29294,8 +29322,8 @@ function reservationPrice(t, model) {
   if (found) return { price: found.price, unpriced: false };
   const models = Object.values(t.models);
   if (models.length === 0) throw new Error("price table has no models");
-  const input3 = Math.max(...models.map((m) => maxInputRate(m, true)));
-  const output2 = Math.max(...models.map((m) => maxOutputRate(m, true)));
+  const input3 = Math.max(...models.flatMap((m) => [maxInputRate(m, true), maxInputRate(m, false, "auto")]));
+  const output2 = Math.max(...models.flatMap((m) => [maxOutputRate(m, true), maxOutputRate(m, false, "auto")]));
   return {
     price: {
       input: input3,
@@ -29351,7 +29379,8 @@ function worstCaseMicroUsd(f, m, t, o) {
     inputTokens = iterations * m.maxContextTokens;
     outputTokens2 = iterations * m.maxOutputTokens;
   }
-  const tokenMicro = (inputTokens * maxInputRate(m, fast) + outputTokens2 * maxOutputRate(m, fast)) * modifierProduct(t);
+  const tier = f.serviceTier ?? null;
+  const tokenMicro = (inputTokens * maxInputRate(m, fast, tier) + outputTokens2 * maxOutputRate(m, fast, tier)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);
   const block2 = unpriced ? "unpriced-server-tool" : withoutMaxUses && o.serverToolsWithoutMaxUses === "block" ? "server-tool-no-max-uses" : null;
   return { micro, boundAssumed: unpriced || withoutMaxUses, block: block2 };
@@ -29359,10 +29388,10 @@ function worstCaseMicroUsd(f, m, t, o) {
 function sessionAwareMicroUsd(f, m, t, prevCacheReadShare, reserveOutputTokens) {
   const fast = f.fastMode && m.fast !== void 0;
   const share = prevCacheReadShare === null || Number.isNaN(prevCacheReadShare) ? 0 : Math.min(1, Math.max(0, prevCacheReadShare));
-  const sets = fast && m.fast ? [m.fast] : [m, ...m.tiers ?? []];
-  const readRate = Math.max(...sets.map((p) => p.cacheRead));
-  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * maxInputRate(m, fast));
-  const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast);
+  const tier = f.serviceTier ?? null;
+  const readRate = Math.max(...priceSets(m, fast, tier).map((p) => p.cacheRead));
+  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * maxInputRate(m, fast, tier));
+  const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast, tier);
   return roundUp((inputMicro + outputMicro) * modifierProduct(t), f.model);
 }
 var OVERHEAD_TOKENS, TEXT_BLOCK_TYPES, RESPONSES_TEXT_TYPES, TEXT_TYPES, NOISE_MICRO;
@@ -29642,6 +29671,7 @@ function buildFeatures(x, key, attr, hits, prices, id, ts, surface, o = {}) {
     toolCount: x.toolCount,
     thinking: x.thinking,
     fastMode: x.fastMode,
+    ...x.serviceTier !== void 0 ? { serviceTier: x.serviceTier } : {},
     attribution: {
       session: attr.session,
       agent: attr.agent,
@@ -29757,6 +29787,11 @@ function decide(policy2, f) {
   if (f.surface === "anthropic-count-tokens") return plan;
   const t = policy2.prices;
   const known = pricedName(t, upstreamModel);
+  const tier = f.serviceTier;
+  if (tier !== void 0 && tier !== "auto") {
+    const m = known === null ? null : lookupModel(t, known)?.price;
+    if (!m || serviceTierPrice(m, tier) === null) return { ...plan, preBlock: "unpriced" };
+  }
   if (known === null) {
     if (policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
     warnings.push({ kind: "unpriced", model: upstreamModel });
@@ -29835,7 +29870,7 @@ function preBlock(policy2, plan, reason) {
     case "model-not-allowed":
       return block(403, "permission_error", reason, `this model is not allowed${route2}`);
     case "unpriced":
-      return block(403, "permission_error", reason, `the model or a server tool has no price in table ${policy2.priceTableVersion}, and failure.unpricedModel is block`);
+      return block(403, "permission_error", reason, `the model, its service tier or a server tool has no price in table ${policy2.priceTableVersion}${policy2.failure.unpricedModel === "block" ? ", and failure.unpricedModel is block" : ""}`);
     case "server-tool-no-max-uses":
       return block(403, "permission_error", reason, "a server tool without max_uses has no cost bound under an enforced budget; set max_uses on the tool");
     case "server-tool-not-allowed": {
@@ -29931,18 +29966,29 @@ var init_admission = __esm({
 });
 
 // src/pricing/cost.ts
+function billedServiceTier(u, x) {
+  const tier = u.serviceTier ?? x.serviceTier;
+  return tier === void 0 || tier === "default" ? void 0 : tier;
+}
 function costMicroUsd(t, modelId2, u, o = {}) {
   const found = lookupModel(t, modelId2);
   if (!found) throw new Error(`unpriced model: ${modelId2}`);
   const m = found.price;
   const promptTokens = u.input + u.cacheRead + u.cacheWrite5m + u.cacheWrite1h;
   let p = m;
+  let tiers = m.tiers ?? [];
   let above = -1;
   if (o.fast) {
     if (!m.fast) throw new Error(`unpriced fast mode: ${modelId2}`);
     p = m.fast;
+    tiers = [];
+  } else if (o.serviceTier !== void 0 && o.serviceTier !== null && o.serviceTier !== "default") {
+    const st = serviceTierPrice(m, o.serviceTier);
+    if (!st) throw new Error(`unpriced service tier ${o.serviceTier}: ${modelId2}`);
+    p = st;
+    tiers = st.tiers ?? [];
   }
-  for (const tier of o.fast ? [] : m.tiers ?? []) {
+  for (const tier of tiers) {
     if (promptTokens > tier.aboveInputTokens && tier.aboveInputTokens > above) {
       p = tier;
       above = tier.aboveInputTokens;
@@ -30130,8 +30176,9 @@ function parseResponsesJsonUsage(body) {
   }
   if (!isObj3(d)) return none;
   const responseModel = typeof d.model === "string" ? d.model : null;
+  const tier = typeof d.service_tier === "string" ? { serviceTier: d.service_tier } : {};
   const usage = toUsage(d.usage);
-  return usage ? { ...none, usage, source: "final", sawStop: true, responseModel } : { ...none, responseModel };
+  return usage ? { ...none, usage, source: "final", sawStop: true, responseModel, ...tier } : { ...none, responseModel, ...tier };
 }
 var isObj3, num2, TERMINAL, ResponsesUsageAccumulator;
 var init_responses_usage = __esm({
@@ -30141,16 +30188,13 @@ var init_responses_usage = __esm({
     num2 = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : void 0;
     TERMINAL = /* @__PURE__ */ new Set(["response.completed", "response.incomplete", "response.failed"]);
     ResponsesUsageAccumulator = class {
-      constructor(o = {}) {
-        this.o = o;
-      }
-      o;
       started = false;
       usage = null;
       sawStop = false;
       chars = 0;
       error = null;
       model = null;
+      tier = null;
       onEvent(e2) {
         let d;
         try {
@@ -30162,6 +30206,7 @@ var init_responses_usage = __esm({
         const type = typeof d.type === "string" ? d.type : e2.event ?? "";
         const response = isObj3(d.response) ? d.response : null;
         if (response && typeof response.model === "string") this.model = response.model;
+        if (response && typeof response.service_tier === "string") this.tier = response.service_tier;
         if (type === "response.created" || type === "response.in_progress") {
           this.started = true;
           return;
@@ -30184,11 +30229,9 @@ var init_responses_usage = __esm({
         if (type.endsWith(".delta") && typeof d.delta === "string") this.chars += d.delta.length;
       }
       result() {
-        const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model };
+        const base = { midStreamError: this.error, sawStop: this.sawStop, streamedChars: this.chars, responseModel: this.model, ...this.tier !== null ? { serviceTier: this.tier } : {} };
         if (this.usage) return { ...base, usage: { ...this.usage }, source: "final" };
-        if (!this.started) return { ...base, usage: null, source: "none" };
-        const usage = { input: this.o.inputTokensIfUnknown ?? 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: Math.ceil(this.chars / 4) };
-        return { ...base, usage, source: "partial", outputEstimated: true };
+        return { ...base, usage: null, source: this.started ? "partial" : "none" };
       }
     };
   }
@@ -30714,13 +30757,14 @@ function extractResponsesFeatures(body) {
     prefixHash,
     blockTypes: [...types],
     expandsServerSide: hasExpandingField2(parsed),
-    fastMode: !STANDARD_TIERS.has(parsed.service_tier),
+    fastMode: false,
+    ...parsed.service_tier === void 0 || parsed.service_tier === null || parsed.service_tier === "default" ? {} : { serviceTier: String(parsed.service_tier) },
     parseError: false,
     ...turnRanges2(body, parsed.input),
     ...hasAmbiguousKeys2(body) ? { ambiguousKeys: true } : {}
   };
 }
-var isObj5, CLIENT_TOOL_TYPES, PLAIN_FIELDS2, STANDARD_TIERS, MAX_NAMESPACE_DEPTH, isClientItem;
+var isObj5, CLIENT_TOOL_TYPES, PLAIN_FIELDS2, MAX_NAMESPACE_DEPTH, isClientItem;
 var init_openai_responses = __esm({
   "src/surfaces/openai-responses.ts"() {
     "use strict";
@@ -30755,7 +30799,6 @@ var init_openai_responses = __esm({
       // Codex 0.166.0 sends session, thread and turn ids here on every request (seen live): request metadata, like `metadata`.
       "client_metadata"
     ]);
-    STANDARD_TIERS = /* @__PURE__ */ new Set([void 0, null, "auto", "default", "flex"]);
     MAX_NAMESPACE_DEPTH = 4;
     isClientItem = (item) => isObj5(item) && (item.type === void 0 || item.type === "message" ? item.role !== "assistant" : typeof item.type === "string" && item.type.endsWith("_output"));
   }
@@ -57568,7 +57611,8 @@ function buildTraceRecord(o, salt) {
       bodyBytes: o.features.bodyBytes,
       prefixHash: o.features.prefixHash,
       contextCompacted: false,
-      ...o.features.fastMode ? { fastMode: true } : {}
+      ...o.features.fastMode ? { fastMode: true } : {},
+      ...o.features.serviceTier !== void 0 ? { serviceTier: o.features.serviceTier } : {}
     },
     // The message index stays out: it is for the error message only.
     guardrail: { hits: (o.guardrailHits ?? []).map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) },
@@ -57617,6 +57661,7 @@ function buildTraceRecord(o, salt) {
       costBasis: o.costBasis,
       priceTable: o.priceTable,
       ...u?.usage && (u.fast === true || o.features.fastMode) ? { fast: true } : {},
+      ...u?.usage && billedServiceTier(u, o.features) !== void 0 ? { serviceTier: billedServiceTier(u, o.features) } : {},
       ...o.costModifiers && o.costModifiers.length > 0 ? { modifiers: [...o.costModifiers] } : {},
       ...u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {},
       aborted: o.aborted,
@@ -57633,6 +57678,7 @@ var init_trace_record = __esm({
   "src/edge/trace-record.ts"() {
     "use strict";
     init_hmac();
+    init_cost();
   }
 });
 
@@ -57707,13 +57753,13 @@ function extractFeatures(surface, body) {
   if (surface === "openai-responses") return extractResponsesFeatures(body);
   return extractAnthropicFeatures(body);
 }
-function usageTap(surface, up, capBytes, inputBound) {
+function usageTap(surface, up, capBytes) {
   if (surface !== "anthropic-messages" && surface !== "openai-responses") return { onChunk: () => void 0, result: () => null };
   const responses = surface === "openai-responses";
   const ct = String(up.headers["content-type"] ?? "");
   if (ct.startsWith("text/event-stream")) {
     const parser = new SseParser();
-    const acc = responses ? new ResponsesUsageAccumulator({ inputTokensIfUnknown: inputBound }) : new AnthropicUsageAccumulator();
+    const acc = responses ? new ResponsesUsageAccumulator() : new AnthropicUsageAccumulator();
     return {
       onChunk: (c) => {
         for (const e2 of parser.push(c)) acc.onEvent(e2);
@@ -57740,6 +57786,8 @@ function requestModifiers(policy2, x) {
 function actualCost(policy2, model, r, x) {
   return costMicroUsd(policy2.prices, model, r.usage, {
     fast: r.fast === true || x.fastMode,
+    // The tier the response reports it was served on, else the one asked for (`auto` with no answer throws: estimate).
+    serviceTier: billedServiceTier(r, x) ?? null,
     modifiers: requestModifiers(policy2, x),
     ...r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}
   });
@@ -57757,7 +57805,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
     } catch {
       costFailed = true;
     }
-  } else if (o.provider !== null && o.status >= 200 && o.status < 300 && !held.streamed) {
+  } else if (o.provider !== null && o.status >= 200 && o.status < 300) {
     costFailed = true;
   }
   if (held.admitted) {
@@ -58017,8 +58065,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     })
   );
   res.flushHeaders();
-  const tap = usageTap(surface, up, deps.bodyCapBytes, f.inputTokensBound);
-  held.streamed = String(up.headers["content-type"] ?? "").startsWith("text/event-stream");
+  const tap = usageTap(surface, up, deps.bodyCapBytes);
   try {
     await pipeline(up.body, createTee(tap.onChunk), res);
   } catch {
@@ -58061,7 +58108,7 @@ function createHandler(deps) {
   };
   return (req, res) => {
     const id = deps.newId();
-    const held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, envelope: "anthropic", known: null };
+    const held = { plan: null, features: null, admitted: false, est: 0, settled: false, envelope: "anthropic", known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
@@ -103303,6 +103350,8 @@ async function startOpenAIMock(opts = {}) {
       created_at: 17e8,
       status: st,
       model,
+      // The tier that served the request: the one asked for, `default` for `auto` or none.
+      service_tier: typeof body.service_tier === "string" && body.service_tier !== "auto" ? body.service_tier : "default",
       output: st === "in_progress" ? [] : [{ type: "message", id: `msg_${id}`, status: "completed", role: "assistant", content: [{ type: "output_text", text: text2.join(""), annotations: [] }] }],
       ...sc.kind === "incomplete" && st === "incomplete" ? { incomplete_details: { reason: sc.reason } } : {},
       usage: withUsage ? usageJson2(usage) : null
@@ -103697,7 +103746,7 @@ var init_traffic = __esm({
 function price(t, model, u, r) {
   try {
     const fast = r.outcome.fast === true && lookupModel(t, model)?.price.fast !== void 0;
-    return costMicroUsd(t, model, u, { fast, modifiers: r.outcome.modifiers ?? [], ...r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {} });
+    return costMicroUsd(t, model, u, { fast, serviceTier: r.outcome.serviceTier ?? null, modifiers: r.outcome.modifiers ?? [], ...r.outcome.serverToolUses ? { serverToolUses: r.outcome.serverToolUses } : {} });
   } catch {
     return null;
   }
@@ -103919,6 +103968,7 @@ function featuresOf(r) {
     toolCount: r.features.toolCount,
     thinking: r.features.thinking,
     fastMode: r.features.fastMode === true,
+    ...r.features.serviceTier !== void 0 ? { serviceTier: r.features.serviceTier } : {},
     attribution: {
       session: a.session,
       agent: a.agent,

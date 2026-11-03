@@ -23,8 +23,6 @@ const PLAIN_FIELDS: ReadonlySet<string> = new Set([
   // Codex 0.166.0 sends session, thread and turn ids here on every request (seen live): request metadata, like `metadata`.
   'client_metadata',
 ]);
-/** Service tiers priced at the standard rates; any other tier (priority, now called fast) is marked fast mode. */
-const STANDARD_TIERS: ReadonlySet<unknown> = new Set([undefined, null, 'auto', 'default', 'flex']);
 
 function emptyFeatures(bodyBytes: number): ExtractedFeatures {
   return {
@@ -167,7 +165,8 @@ export function extractResponsesFeatures(body: Buffer): ExtractedFeatures {
     prefixHash,
     blockTypes: [...types],
     expandsServerSide: hasExpandingField(parsed),
-    fastMode: !STANDARD_TIERS.has(parsed.service_tier),
+    fastMode: false,
+    ...(parsed.service_tier === undefined || parsed.service_tier === null || parsed.service_tier === 'default' ? {} : { serviceTier: String(parsed.service_tier) }),
     parseError: false,
     ...turnRanges(body, parsed.input),
     ...(hasAmbiguousKeys(body) ? { ambiguousKeys: true as const } : {}),

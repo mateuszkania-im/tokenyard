@@ -25,6 +25,20 @@ const fastSchema = z.strictObject({
   ...provenance,
 });
 
+/**
+ * Prices of an OpenAI service tier (`service_tier` in the request, for example `priority` or `flex`), from the pricing
+ * page: they replace the base prices, with their own long-context tiers when the page lists them.
+ */
+const serviceTierSchema = z.strictObject({
+  input: rate,
+  output: rate,
+  cacheWrite5m: rate,
+  cacheWrite1h: rate,
+  cacheRead: rate,
+  tiers: z.array(tierSchema).optional(),
+  ...provenance,
+});
+
 const modelSchema = z.strictObject({
   input: rate,
   output: rate,
@@ -35,6 +49,7 @@ const modelSchema = z.strictObject({
   maxOutputTokens: tokens,
   tiers: z.array(tierSchema).optional(),
   fast: fastSchema.optional(),
+  serviceTiers: z.record(z.string(), serviceTierSchema).optional(),
   ...provenance,
 });
 
@@ -48,6 +63,7 @@ const tableSchema = z.strictObject({
 });
 
 export type ModelPrice = z.infer<typeof modelSchema>;
+export type ServiceTierPrice = z.infer<typeof serviceTierSchema>;
 export type PriceTable = z.infer<typeof tableSchema>;
 
 /** Parses and validates a price table. A model without `maxContextTokens` or `maxOutputTokens` is an error (the worst-case bound needs them). */
@@ -59,6 +75,15 @@ export function parsePriceTable(text: string): PriceTable {
       const map = (raw as Record<string, unknown>)[section];
       if (typeof map === 'object' && map !== null && Object.hasOwn(map, '__proto__')) {
         throw new Error(`invalid price table: ${section}: key __proto__ is not allowed`);
+      }
+    }
+    const models = (raw as Record<string, unknown>).models;
+    if (typeof models === 'object' && models !== null) {
+      for (const [id, m] of Object.entries(models)) {
+        const tiers = typeof m === 'object' && m !== null ? (m as Record<string, unknown>).serviceTiers : undefined;
+        if (typeof tiers === 'object' && tiers !== null && Object.hasOwn(tiers, '__proto__')) {
+          throw new Error(`invalid price table: models.${id}.serviceTiers: key __proto__ is not allowed`);
+        }
       }
     }
   }
@@ -89,4 +114,10 @@ export function lookupModel(t: PriceTable, model: string): { id: string; price: 
   }
   const price = best === null ? undefined : t.models[best];
   return best !== null && price ? { id: best, price } : null;
+}
+
+/** The model's prices for service tier `tier`, or null when the table lists none (own entries only). */
+export function serviceTierPrice(m: ModelPrice, tier: string): ServiceTierPrice | null {
+  const tiers = m.serviceTiers;
+  return tiers !== undefined && Object.hasOwn(tiers, tier) ? (tiers[tier] ?? null) : null;
 }

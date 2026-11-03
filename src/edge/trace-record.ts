@@ -1,5 +1,6 @@
 // The one place a trace record (spec 9.1) is built from what a request knew at its end.
 import { pseudonym } from '../guardrails/hmac.js';
+import { billedServiceTier } from '../pricing/cost.js';
 import type { TraceRecord } from '../ledger/record.js';
 import type { RequestOutcome } from './handler.js';
 
@@ -61,6 +62,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       prefixHash: o.features.prefixHash,
       contextCompacted: false,
       ...(o.features.fastMode ? { fastMode: true as const } : {}),
+      ...(o.features.serviceTier !== undefined ? { serviceTier: o.features.serviceTier } : {}),
     },
     // The message index stays out: it is for the error message only.
     guardrail: { hits: (o.guardrailHits ?? []).map((h) => ({ rule: h.rule, action: h.action, valueHmac: h.valueHmac, where: h.where })) },
@@ -111,6 +113,7 @@ export function buildTraceRecord(o: RequestOutcome, salt: string): Omit<TraceRec
       costBasis: o.costBasis,
       priceTable: o.priceTable,
       ...(u?.usage && (u.fast === true || o.features.fastMode) ? { fast: true as const } : {}),
+      ...(u?.usage && billedServiceTier(u, o.features) !== undefined ? { serviceTier: billedServiceTier(u, o.features) as string } : {}),
       ...(o.costModifiers && o.costModifiers.length > 0 ? { modifiers: [...o.costModifiers] } : {}),
       ...(u?.serverToolUses && Object.keys(u.serverToolUses).length > 0 ? { serverToolUses: { ...u.serverToolUses } } : {}),
       aborted: o.aborted,

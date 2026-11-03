@@ -13,7 +13,7 @@ import { modelsForKey } from '../policy/match.js';
 import { isAdmitted, planAdmission } from '../policy/admission.js';
 import { resolve } from '../policy/resolve.js';
 import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
-import { costMicroUsd } from '../pricing/cost.js';
+import { billedServiceTier, costMicroUsd } from '../pricing/cost.js';
 import { AnthropicUsageAccumulator, parseAnthropicJsonUsage, type UsageResult } from '../stream/anthropic-usage.js';
 import { parseResponsesJsonUsage, ResponsesUsageAccumulator } from '../stream/responses-usage.js';
 import { SseParser } from '../stream/sse.js';
@@ -245,17 +245,14 @@ function extractFeatures(surface: Surface, body: Buffer): ExtractedFeatures {
   return extractAnthropicFeatures(body);
 }
 
-/**
- * Watches the response bytes for usage without delaying or changing them (spec 5.3 step 11, 5.4). `inputBound` is
- * what a Responses stream that ends without usage settles as input.
- */
-function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number, inputBound: number): { onChunk(c: Buffer): void; result(): UsageResult | null } {
+/** Watches the response bytes for usage without delaying or changing them (spec 5.3 step 11, 5.4). */
+function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { onChunk(c: Buffer): void; result(): UsageResult | null } {
   if (surface !== 'anthropic-messages' && surface !== 'openai-responses') return { onChunk: () => undefined, result: () => null };
   const responses = surface === 'openai-responses';
   const ct = String(up.headers['content-type'] ?? '');
   if (ct.startsWith('text/event-stream')) {
     const parser = new SseParser();
-    const acc = responses ? new ResponsesUsageAccumulator({ inputTokensIfUnknown: inputBound }) : new AnthropicUsageAccumulator();
+    const acc = responses ? new ResponsesUsageAccumulator() : new AnthropicUsageAccumulator();
     return {
       onChunk: (c) => {
         for (const e of parser.push(c)) acc.onEvent(e);
@@ -282,8 +279,6 @@ interface Held {
   admitted: boolean;
   /** The estimate reserved on each budget level (0 without budget levels). */
   est: number;
-  /** The response was an SSE stream: no `message_start` means nothing was billed. */
-  streamed: boolean;
   /** Settlement has started; the fault path in `createHandler` settles an admitted request that never got here. */
   settled: boolean;
   /** The surface's error envelope for own errors, the fault path's included. */
@@ -309,6 +304,8 @@ function requestModifiers(policy: CompiledPolicy, x: ExtractedFeatures): string[
 function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { usage: NonNullable<UsageResult['usage']> }, x: ExtractedFeatures): number {
   return costMicroUsd(policy.prices, model, r.usage, {
     fast: r.fast === true || x.fastMode,
+    // The tier the response reports it was served on, else the one asked for (`auto` with no answer throws: estimate).
+    serviceTier: billedServiceTier(r, x) ?? null,
     modifiers: requestModifiers(policy, x),
     ...(r.serverToolUses ? { serverToolUses: r.serverToolUses } : {}),
   });
@@ -331,9 +328,10 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     } catch {
       costFailed = true; // unpriced model or fast mode, an invalid cost: fail closed below
     }
-  } else if (o.provider !== null && o.status >= 200 && o.status < 300 && !held.streamed) {
-    // A successful JSON answer was billed even when its usage cannot be read: cut off by the upstream or by a client
-    // abort, unparsable, larger than the cap, or without a usage object. Fail closed: the estimate stands.
+  } else if (o.provider !== null && o.status >= 200 && o.status < 300) {
+    // A successful answer may have been billed even when no usage can be read: a JSON body cut off, unparsable, larger
+    // than the cap or without a usage object; a stream that ended before message_start, or a Responses stream without
+    // terminal usage (ruling S20-2). Fail closed: the estimate stands.
     costFailed = true;
   }
   if (held.admitted) {
@@ -668,8 +666,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   res.flushHeaders();
 
   // 11. Body: every chunk goes on unchanged before it is parsed; backpressure through pipeline.
-  const tap = usageTap(surface, up, deps.bodyCapBytes, f.inputTokensBound);
-  held.streamed = String(up.headers['content-type'] ?? '').startsWith('text/event-stream');
+  const tap = usageTap(surface, up, deps.bodyCapBytes);
   try {
     await pipeline(up.body, createTee(tap.onChunk), res);
   } catch {
@@ -717,7 +714,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
   };
   return (req, res) => {
     const id = deps.newId();
-    const held: Held = { plan: null, features: null, admitted: false, est: 0, streamed: false, settled: false, envelope: 'anthropic', known: null };
+    const held: Held = { plan: null, features: null, admitted: false, est: 0, settled: false, envelope: 'anthropic', known: null };
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
       // (whether upstream billed is unknown, so fail closed), and queue the trace line with that charge so warm-up

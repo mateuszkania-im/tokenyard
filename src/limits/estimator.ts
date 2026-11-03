@@ -1,6 +1,6 @@
 // Reservation estimates (spec 7.3). Pure: no I/O. Prices are USD per million tokens, so tokens times price is micro-USD.
 import type { RequestFeatures } from '../policy/types.js';
-import { lookupModel, type ModelPrice, type PriceTable } from '../pricing/prices.js';
+import { lookupModel, type ModelPrice, type PriceTable, serviceTierPrice } from '../pricing/prices.js';
 import type { ExtractedFeatures } from '../surfaces/types.js';
 
 /** Tokens the provider may add for the tool-use system prompt and message framing (286 to 406 on 5.5 models, pricing page). */
@@ -43,16 +43,30 @@ export function inputTokenBound(x: ExtractedFeatures, m: ModelPrice): { tokens: 
   return { tokens: Math.min(x.bodyBytes + OVERHEAD_TOKENS, m.maxContextTokens), kind: 'bytes' };
 }
 
-/** Highest input-side rate (input, cache writes, cache reads) across tiers; with `fast`, of the fast prices when the model has them. */
-export function maxInputRate(m: ModelPrice, fast = false): number {
-  const sets = fast && m.fast ? [m.fast] : [m, ...(m.tiers ?? [])];
-  return Math.max(...sets.flatMap((p) => [p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead]));
+type PriceSet = { input: number; output: number; cacheWrite5m: number; cacheWrite1h: number; cacheRead: number };
+
+/**
+ * The price sets a request may be billed at: fast mode prices when asked for and listed; for an OpenAI service tier its
+ * `serviceTiers` prices and their tiers; for `auto` (the provider picks the tier) the base prices and every listed
+ * service tier, so the highest applies; otherwise the base prices and their tiers. A named tier the model does not
+ * list is refused before this (decide: `unpriced`); here it falls back to the base prices.
+ */
+export function priceSets(m: ModelPrice, fast = false, serviceTier: string | null = null): PriceSet[] {
+  if (fast && m.fast) return [m.fast];
+  const base: PriceSet[] = [m, ...(m.tiers ?? [])];
+  if (serviceTier === 'auto') return [...base, ...Object.values(m.serviceTiers ?? {}).flatMap((st) => [st, ...(st.tiers ?? [])])];
+  const st = serviceTier === null ? null : serviceTierPrice(m, serviceTier);
+  return st ? [st, ...(st.tiers ?? [])] : base;
 }
 
-/** Highest output rate across tiers; with `fast`, the fast output price when the model has one. */
-export function maxOutputRate(m: ModelPrice, fast = false): number {
-  const sets = fast && m.fast ? [m.fast] : [m, ...(m.tiers ?? [])];
-  return Math.max(...sets.map((p) => p.output));
+/** Highest input-side rate (input, cache writes, cache reads) across the request's price sets (`priceSets`). */
+export function maxInputRate(m: ModelPrice, fast = false, serviceTier: string | null = null): number {
+  return Math.max(...priceSets(m, fast, serviceTier).flatMap((p) => [p.input, p.cacheWrite5m, p.cacheWrite1h, p.cacheRead]));
+}
+
+/** Highest output rate across the request's price sets (`priceSets`). */
+export function maxOutputRate(m: ModelPrice, fast = false, serviceTier: string | null = null): number {
+  return Math.max(...priceSets(m, fast, serviceTier).map((p) => p.output));
 }
 
 /** Product of every modifier above 1: the estimator assumes each one that raises the price may apply. */
@@ -72,8 +86,8 @@ export function reservationPrice(t: PriceTable, model: string | null): { price: 
   if (found) return { price: found.price, unpriced: false };
   const models = Object.values(t.models);
   if (models.length === 0) throw new Error('price table has no models');
-  const input = Math.max(...models.map((m) => maxInputRate(m, true)));
-  const output = Math.max(...models.map((m) => maxOutputRate(m, true)));
+  const input = Math.max(...models.flatMap((m) => [maxInputRate(m, true), maxInputRate(m, false, 'auto')]));
+  const output = Math.max(...models.flatMap((m) => [maxOutputRate(m, true), maxOutputRate(m, false, 'auto')]));
   return {
     price: {
       input, output, cacheWrite5m: input, cacheWrite1h: input, cacheRead: input,
@@ -147,7 +161,8 @@ export function worstCaseMicroUsd(
     inputTokens = iterations * m.maxContextTokens;
     outputTokens = iterations * m.maxOutputTokens;
   }
-  const tokenMicro = (inputTokens * maxInputRate(m, fast) + outputTokens * maxOutputRate(m, fast)) * modifierProduct(t);
+  const tier = f.serviceTier ?? null;
+  const tokenMicro = (inputTokens * maxInputRate(m, fast, tier) + outputTokens * maxOutputRate(m, fast, tier)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);
   const block = unpriced ? 'unpriced-server-tool' : withoutMaxUses && o.serverToolsWithoutMaxUses === 'block' ? 'server-tool-no-max-uses' : null;
   return { micro, boundAssumed: unpriced || withoutMaxUses, block };
@@ -168,9 +183,9 @@ export function sessionAwareMicroUsd(
 ): number {
   const fast = f.fastMode && m.fast !== undefined;
   const share = prevCacheReadShare === null || Number.isNaN(prevCacheReadShare) ? 0 : Math.min(1, Math.max(0, prevCacheReadShare));
-  const sets = fast && m.fast ? [m.fast] : [m, ...(m.tiers ?? [])];
-  const readRate = Math.max(...sets.map((p) => p.cacheRead));
-  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * maxInputRate(m, fast));
-  const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast);
+  const tier = f.serviceTier ?? null;
+  const readRate = Math.max(...priceSets(m, fast, tier).map((p) => p.cacheRead));
+  const inputMicro = f.inputTokensBound * (share * readRate + (1 - share) * maxInputRate(m, fast, tier));
+  const outputMicro = outputTokenBound(f, m, reserveOutputTokens) * maxOutputRate(m, fast, tier);
   return roundUp((inputMicro + outputMicro) * modifierProduct(t), f.model);
 }

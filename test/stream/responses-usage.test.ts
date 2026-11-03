@@ -5,9 +5,9 @@ import { SseParser } from '../../src/stream/sse.js';
 
 const fx = (n: string) => readFileSync(new URL(`../fixtures/sse/${n}.txt`, import.meta.url));
 
-function run(buf: Buffer, o?: ConstructorParameters<typeof ResponsesUsageAccumulator>[0]) {
+function run(buf: Buffer) {
   const p = new SseParser();
-  const acc = new ResponsesUsageAccumulator(o);
+  const acc = new ResponsesUsageAccumulator();
   for (const e of [...p.push(buf), ...p.end()]) acc.onEvent(e);
   return acc.result();
 }
@@ -29,22 +29,16 @@ test('response.incomplete carries usage and ends the stream', () => {
   expect(run(fx('responses-incomplete'))).toMatchObject({ source: 'final', sawStop: true, usage: { input: 500, cacheRead: 0, output: 16 } });
 });
 
-test('response.failed without usage is partial at the input bound, with the error code', () => {
-  expect(run(fx('responses-failed'), { inputTokensIfUnknown: 9000 })).toMatchObject({
-    source: 'partial',
-    sawStop: true,
-    midStreamError: 'server_error',
-    usage: { input: 9000, cacheRead: 0, output: 0 },
-  });
+test('response.failed without usage is partial without usage (settled at the reservation), with the error code', () => {
+  expect(run(fx('responses-failed'))).toMatchObject({ source: 'partial', sawStop: true, midStreamError: 'server_error', usage: null });
 });
 
-test('a stream cut before a terminal event is partial: output from the streamed text, input at the bound', () => {
-  const r = run(fx('responses-truncated'), { inputTokensIfUnknown: 5000 });
+test('a stream cut before a terminal event is partial without usage: the streamed text is counted, not billed', () => {
+  const r = run(fx('responses-truncated'));
   expect(r.source).toBe('partial');
   expect(r.sawStop).toBe(false);
-  expect(r.outputEstimated).toBe(true);
+  expect(r.usage).toBeNull();
   expect(r.streamedChars).toBe('0123456789'.length + '{"command":'.length);
-  expect(r.usage).toEqual({ input: 5000, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0, output: Math.ceil(21 / 4) });
 });
 
 test('no response.created: nothing was started, usage none', () => {

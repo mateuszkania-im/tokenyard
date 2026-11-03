@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { lookupModel, parsePriceTable } from '../../src/pricing/prices.js';
+import { lookupModel, parsePriceTable, serviceTierPrice } from '../../src/pricing/prices.js';
 import { loadPrices } from '../helpers/prices.js';
 
 test('the example price table parses and every model carries source, date, context and output limits', () => {
@@ -110,4 +110,29 @@ models:
 `;
   expect(parsePriceTable(text('{ input: 2, output: 2, cacheWrite5m: 2, cacheWrite1h: 2, cacheRead: 2, source: s, retrieved: r }')).models['claude-a']?.fast?.input).toBe(2);
   expect(() => parsePriceTable(text('{ input: 2, output: 2, source: s, retrieved: r }'))).toThrow(/fast/);
+});
+
+test('a model may list service tier prices, each with source and date; a __proto__ tier is refused', () => {
+  const base = `
+version: x
+models:
+  gpt-x:
+    input: 1
+    output: 2
+    cacheWrite5m: 1
+    cacheWrite1h: 1
+    cacheRead: 0.1
+    maxContextTokens: 10
+    maxOutputTokens: 10
+    serviceTiers:
+      TIER: { input: 2, output: 4, cacheWrite5m: 2, cacheWrite1h: 2, cacheRead: 0.2, source: s, retrieved: r }
+    source: s
+    retrieved: r
+`;
+  const t = parsePriceTable(base.replace('TIER', 'priority'));
+  expect(serviceTierPrice(t.models['gpt-x']!, 'priority')?.output).toBe(4);
+  expect(serviceTierPrice(t.models['gpt-x']!, 'flex')).toBeNull();
+  expect(serviceTierPrice(t.models['gpt-x']!, 'constructor')).toBeNull();
+  expect(() => parsePriceTable(base.replace('TIER', '__proto__'))).toThrow(/__proto__/);
+  expect(() => parsePriceTable(base.replace(', source: s, retrieved: r }', ' }'))).toThrow(/serviceTiers/);
 });
