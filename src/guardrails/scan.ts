@@ -358,11 +358,12 @@ function matchView(view: View, rule: SecretRule, crossingOnly: boolean, out: Spa
 }
 
 /**
- * Most JSON escapes the scanned part of a body may hold (S-V3-1). Each escape is decoded on its own, about 0.1 us on a
+ * Most JSON escapes a body may hold (S-V3-1; the handler counts the whole body, which the scanner decodes whole
+ * whenever a rule blocks, on product routes and for bodies it cannot trust). Each escape is decoded on its own, about 0.1 us on a
  * coding-agent route and 0.2 us on a product route against about 3 ns per plain byte, so 32 MiB of escapes held the
- * event loop for 1.0 to 2.9 s. With 1 Mi escapes a 32 MiB body scans in at most about 0.27 s (coding agent) and 0.7 s
- * (product), measured. JSON-encoded source code holds one escape per 16 to 30 bytes, so the scanned part may hold 16
- * to 30 MiB of it; on coding-agent routes that part is only the last turn.
+ * event loop for 1.0 to 2.9 s. With 1 Mi escapes a 32 MiB body scans in at most about 0.27 s (coding agent) and 0.75 s
+ * (product), measured. JSON-encoded source code holds one escape per 16 to 30 bytes, so a body may hold 16 to 30 MiB
+ * of it, far more than any model's context window.
  */
 export const SCAN_ESCAPE_BUDGET = 1024 * 1024;
 

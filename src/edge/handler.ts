@@ -728,13 +728,13 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // 4. Extract features (read-only; the body Buffer is forwarded as received).
   const features = extractFeatures(surface, body);
 
-  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan. A body whose scanned part
-  // holds more escapes than the scan budget is refused first: decoding them would hold the event loop (S-V3-1). The
-  // scanned part is the last turn, or the whole body on product routes (redaction) and for a body that cannot be trusted.
+  // 5. Guardrails: before admit, no store call; only HMACs of matched values leave the scan. A body holding more escapes
+  // than the scan budget is refused first: decoding them would hold the event loop (S-V3-1). The whole body counts:
+  // the scanner decodes it whole whenever a rule blocks (history rules), on product routes (redaction), for a body that
+  // cannot be trusted and when there is no last turn; counting less would let escapes in earlier turns through.
   const product = key.kind === 'service';
-  const scanned = product || features.parseError || features.ambiguousKeys === true ? { start: 0, end: body.length } : features.lastTurn;
-  if (scanned && countEscapesUpTo(body, scanned, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
-    const msg = `the part of the request body tokenyard scans for secrets holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences; send the text unescaped where JSON allows it, or split the request`;
+  if (countEscapesUpTo(body, { start: 0, end: body.length }, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
+    const msg = `the request body holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences, more than tokenyard scans for secrets; send the text unescaped where JSON allows it, or split the request`;
     sendError(req, res, own(413, 'request_too_large', 'scan-budget', msg, null, { shouldRetry: false }));
     return early({ features, status: 413, decision: { action: 'block', reason: 'scan-budget' }, errorClass: 'request_too_large' });
   }

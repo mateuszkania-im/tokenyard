@@ -49,11 +49,29 @@ test('S-V3-1 a coding-agent body whose last turn holds more escapes than the bud
   expect(g.outcomes[0]?.reservedMicroUsd ?? 0).toBe(0);
 });
 
-test('S-V3-1 coding-agent history is not scanned, so escapes there do not count: forwarded', async () => {
+test('S-V3-1 escapes in earlier turns count too: history rules decode the whole body (block rules run there), 413', async () => {
   const { g, calls } = await stack();
   const r = await send(g.url, { path: '/v1/messages', headers: authHeaders, body: body([{ role: 'user', content: '@ESC@' }, { role: 'assistant', content: 'ok' }, { role: 'user', content: 'next' }]) });
-  expect(r.status).toBe(200);
-  expect(calls()).toBe(1);
+  expect(r.status).toBe(413);
+  expect(calls()).toBe(0);
+});
+
+test('S-V3-1 escapes split over many earlier turns, \\u escapes, under the budget per turn: still counted together, 413', async () => {
+  const { g, calls } = await stack();
+  const per = Math.ceil((SCAN_ESCAPE_BUDGET + 1) / 8);
+  const turns = Array.from({ length: 8 }, (_, i) => ({ role: i % 2 === 0 ? 'user' : 'assistant', content: 'X'.repeat(per) }));
+  const b = Buffer.from(JSON.stringify({ model: MODEL, max_tokens: 64, messages: [...turns, { role: 'user', content: 'next' }] }).replaceAll('X', '\\u0041'));
+  const r = await send(g.url, { path: '/v1/messages', headers: authHeaders, body: b });
+  expect(r.status).toBe(413);
+  expect(calls()).toBe(0);
+});
+
+test('S-V3-1 a body with no last turn (no messages array) is scanned whole: escapes in any field count, 413', async () => {
+  const { g, calls } = await stack();
+  const b = Buffer.from(`{"model":"${MODEL}","max_tokens":64,"system":"${escapes(SCAN_ESCAPE_BUDGET + 1)}"}`);
+  const r = await send(g.url, { path: '/v1/messages', headers: authHeaders, body: b });
+  expect(r.status).toBe(413);
+  expect(calls()).toBe(0);
 });
 
 test('S-V3-1 a product body is scanned whole (redaction), so escapes in its history count: 413', async () => {

@@ -59457,9 +59457,8 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   await readLatch(deps, runtime);
   const features = extractFeatures(surface, body);
   const product = key.kind === "service";
-  const scanned = product || features.parseError || features.ambiguousKeys === true ? { start: 0, end: body.length } : features.lastTurn;
-  if (scanned && countEscapesUpTo(body, scanned, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
-    const msg = `the part of the request body tokenyard scans for secrets holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences; send the text unescaped where JSON allows it, or split the request`;
+  if (countEscapesUpTo(body, { start: 0, end: body.length }, SCAN_ESCAPE_BUDGET) > SCAN_ESCAPE_BUDGET) {
+    const msg = `the request body holds more than ${SCAN_ESCAPE_BUDGET} JSON escape sequences, more than tokenyard scans for secrets; send the text unescaped where JSON allows it, or split the request`;
     sendError(req, res, own2(413, "request_too_large", "scan-budget", msg, null, { shouldRetry: false }));
     return early({ features, status: 413, decision: { action: "block", reason: "scan-budget" }, errorClass: "request_too_large" });
   }
