@@ -126847,6 +126847,7 @@ var package_default = {
     lint: "oxlint",
     test: "vitest run",
     "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts test/property/store.property.test.ts test/property/admit-concurrency.property.test.ts",
+    "test:fuzz": "node scripts/local-redis.mjs env TOKENYARD_FUZZ=1 vitest run --no-file-parallelism test/fuzz test/property test/policy/decide.property.test.ts test/security/s-v4-1-sse-long-line.test.ts",
     "test:chaos": "node scripts/local-redis.mjs env TOKENYARD_CHAOS=1 vitest run --no-file-parallelism test/chaos",
     bench: "tsx bench/run.ts",
     soak: "tsx bench/soak.ts",
