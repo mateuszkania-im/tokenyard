@@ -192,6 +192,15 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   `TOKENYARD_TRACE_SALT` is unset; a recycled pid makes the lock look live and fails closed.
 - **Two instances and the R11 latch (A9).** The first request of each process reads the latch from the store, later
   reads happen in the background every 30 seconds, so another instance follows a new violation within 30 seconds.
+- **The R11 latch is store-wide (ledger 247, final review ruling).** One request, of any tenant, that bills more input
+  than its bytes bound sets `ty:{_global}:r11`, which turns the bytes bound off for every tenant on that counter
+  store until the key is deleted (restarts keep it). This fails safe (reservations grow, never shrink), but it is a
+  cross-tenant availability switch: under tight budgets the context-window bound refuses requests the bytes bound
+  admitted. A per-tenant latch is a design change beyond the MVP. What to alert on: the instance that saw the
+  violation increments `tokenyard_bound_violations_total` (ops listener, `/metrics`) and, the first time, writes a
+  stderr line that starts `tokenyard: request <id> billed <n> input tokens, above its bytes bound of <m>; the bytes bound is off`, and
+  that request's trace line carries `outcome.boundExceeded: true`. Other instances follow the latch within 30 s
+  without a signal of their own, so alert on any increase of the counter summed over instances, or on that log line.
 - **Live cap per checkout (second pass).** `npm run live` keeps its spend in `.live/traces` under the package root,
   so two checkouts or worktrees each get the full `TOKENYARD_LIVE_BUDGET_USD` cap. Documented in the README; run live
   tests from one checkout.
