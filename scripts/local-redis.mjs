@@ -20,6 +20,17 @@ export function hostPort(output) {
   return Number(m[1]);
 }
 
+/** True when the URL's host is a loopback address (127.0.0.0/8, ::1 or localhost): only such a Redis may be flushed. */
+export function isLoopbackRedisUrl(url) {
+  let host;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return false;
+  }
+  return host === 'localhost' || host === '[::1]' || host === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
 export const localRedisUrl = (port, password) => `redis://:${encodeURIComponent(password)}@127.0.0.1:${port}`;
 
 /**

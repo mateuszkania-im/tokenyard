@@ -219,3 +219,13 @@ test('session fixture is deterministic and Claude Code shaped', () => {
   expect(body.messages.length).toBeGreaterThan(JSON.parse((a[0] as Buffer).toString('utf8')).messages.length);
   expect(JSON.stringify(body)).toContain('"signature"');
 });
+
+test('200 responses carry x-mock-wait-ms, the mock\'s own wait before the headers (streaming and not)', async () => {
+  mock = await startAnthropicMock({ scenario: { kind: 'ok', ttftMs: 30, tokensPerSec: 0, pingEveryMs: null, outputTokens: 4 } });
+  for (const stream of [false, true]) {
+    const r = await post(mock.url, '/v1/messages', JSON.stringify({ model: 'm', max_tokens: 8, stream, messages: [{ role: 'user', content: 'hi' }] }));
+    const wait = Number(r.headers['x-mock-wait-ms']);
+    expect(wait).toBeGreaterThanOrEqual(29);
+    expect(wait).toBeLessThan(1000);
+  }
+});

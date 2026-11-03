@@ -1,4 +1,4 @@
-// G4 (spec 7.4): the budget proof. 1,000 concurrent requests through the gateway against a $1 budget, actual cost
+// G4 (spec 7.4): the budget proof. 1,000 requests issued at once (up to 100 in flight) through the gateway against a $1 budget, actual cost
 // drawn (seeded) between 0 and each request's reservation, on the memory store always and on Redis with REDIS_URL.
 import { Agent } from 'node:http';
 import fc from 'fast-check';
@@ -90,7 +90,7 @@ async function proof(inner: CounterStore): Promise<void> {
   expect(traces.every((t) => t.outcome.settledBy === 'request')).toBe(true);
 }
 
-test('G4: 1,000 concurrent requests, $1 budget, random actual cost up to each reservation (memory store)', async () => {
+test('G4: 1,000 requests issued at once, up to 100 in flight, $1 budget, random actual cost up to each reservation (memory store)', async () => {
   await proof(createMemoryStore({ clock: Date.now }));
 }, 60_000);
 
@@ -105,7 +105,7 @@ describe.skipIf(!url)('G4 on Redis (REDIS_URL)', () => {
     await client.flushDb();
     await client.close();
   });
-  test('G4: 1,000 concurrent requests, $1 budget, random actual cost up to each reservation (redis store)', async () => {
+  test('G4: 1,000 requests issued at once, up to 100 in flight, $1 budget, random actual cost up to each reservation (redis store)', async () => {
     await proof(createRedisStore(client, { deadlineMs: 600_000 }));
   }, 60_000);
 });

@@ -1,4 +1,4 @@
-// Spec 12.3 item 2: budget correctness. The G4 scenario of spec 7.4 (1,000 concurrent requests through the gateway
+// Spec 12.3 item 2: budget correctness. The G4 scenario of spec 7.4 (1,000 requests sent at once through the gateway
 // against a $1 budget, actual cost drawn between 0 and each request's limits) on each store and estimator, and the
 // in-flight headroom of the 150,000-byte example turn under a $25 session budget (the README's concurrency trade-off).
 import { Agent } from 'node:http';
@@ -10,7 +10,7 @@ import { authHeaders, send } from '../test/helpers/conformance.js';
 import { startGateway } from '../test/helpers/gateway.js';
 import { PROVIDER_KEY_ENV, testPolicy } from '../test/helpers/policy.js';
 import { spyStore } from '../test/helpers/store-spy.js';
-import { BENCH_PROVIDER_KEY } from './lib.js';
+import { BENCH_PROVIDER_KEY, preconnect } from './lib.js';
 
 type Rec = Omit<TraceRecord, 'instance' | 'seq'>;
 type Estimator = 'worst-case' | 'session-aware';
@@ -22,6 +22,10 @@ export interface BudgetRun {
   estimator: Estimator;
   limitUsd: number;
   requests: number;
+  /** Admit calls made before the first settle call: requests decided while the first admitted ones were still open. */
+  admitsBeforeFirstSettle: number;
+  /** Most admitted, unsettled reservations at once. */
+  maxOpenReservations: number;
   admitted: number;
   rejected: number;
   finalSpentUsd: number;
@@ -59,7 +63,30 @@ export async function g4Run(store: 'memory' | 'redis', inner: CounterStore, esti
   try {
     const mock = await startAnthropicMock({ scenario: { kind: 'randomUsage', seed: 42 } });
     closers.push(mock.close);
-    const spy = spyStore(inner);
+    // How concurrent the run really was: admit calls made before the first settle (all of them decided while the first
+    // admitted requests were still open), and the most admitted, unsettled reservations at once.
+    let admits = 0;
+    let admitsBeforeFirstSettle: number | null = null;
+    let open = 0;
+    let maxOpenReservations = 0;
+    const counted: CounterStore = {
+      admit: async (plan, nowMs) => {
+        admits++;
+        const a = await inner.admit(plan, nowMs);
+        if (a.admitted) maxOpenReservations = Math.max(maxOpenReservations, ++open);
+        return a;
+      },
+      settle: async (id, actual, perLevel) => {
+        admitsBeforeFirstSettle ??= admits;
+        const r = await inner.settle(id, actual, perLevel);
+        open--;
+        return r;
+      },
+      sweep: (n) => inner.sweep(n),
+      snapshot: (k) => inner.snapshot(k),
+      seed: (e) => inner.seed(e),
+    };
+    const spy = spyStore(counted);
     const traces: Rec[] = [];
     const policy = testPolicy({
       upstream: mock.url,
@@ -71,9 +98,11 @@ export async function g4Run(store: 'memory' | 'redis', inner: CounterStore, esti
     });
     const gw = await startGateway({ policy, store: spy.store, traces: { write: (r) => (traces.push(r), true) }, traceSalt: 's' });
     closers.push(gw.close);
-    const agent = new Agent({ keepAlive: true, maxSockets: 100 });
-    closers.push(async () => agent.destroy());
-    await Promise.all(Array.from({ length: N }, (_, i) => send(gw.url, { path: '/v1/messages', headers: authHeaders, body: g4Body(i), agent })));
+    // One open connection per request, opened beforehand, so all 1,000 requests are sent at the same moment.
+    const agents = Array.from({ length: N }, () => new Agent({ keepAlive: true, maxSockets: 1 }));
+    closers.push(async () => agents.forEach((a) => a.destroy()));
+    await preconnect(agents, gw.url);
+    await Promise.all(agents.map((agent, i) => send(gw.url, { path: '/v1/messages', headers: authHeaders, body: g4Body(i), agent })));
     for (let i = 0; i < 400 && (traces.length < N || spy.settles.length < spy.admits.filter((a) => a.admission.admitted).length); i++) await new Promise((r) => setTimeout(r, 50));
     const admitted = spy.admits.filter((a) => a.admission.admitted);
     const key = spy.admits[0]?.plan.reservations[0]?.key as string;
@@ -85,6 +114,8 @@ export async function g4Run(store: 'memory' | 'redis', inner: CounterStore, esti
       estimator,
       limitUsd: LIMIT_MICRO / 1e6,
       requests: N,
+      admitsBeforeFirstSettle: admitsBeforeFirstSettle ?? admits,
+      maxOpenReservations,
       admitted: admitted.length,
       rejected: spy.admits.length - admitted.length,
       finalSpentUsd: final.spent / 1e6,

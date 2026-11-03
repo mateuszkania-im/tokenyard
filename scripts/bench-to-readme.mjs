@@ -19,18 +19,19 @@ function num(n, digits = 0) {
 const usd = (n, digits = 2) => (typeof n === 'number' ? `$${num(n, digits)}` : 'n/a');
 const ms = (n) => num(n, 2);
 const triple = (p) => `${ms(p.p50)} / ${ms(p.p95)} / ${ms(p.p99)}`;
+const pair = (p) => `${ms(p.p50)} / ${ms(p.p99)}`;
 const ratio = (r) => (r ? `${num(r.min, 2)} / ${num(r.median, 2)} / ${num(r.max, 2)}` : 'n/a');
 const verdict = (met) => (met === true ? 'met' : met === false ? 'missed' : 'not measured');
 const SCENARIOS = { 'non-streaming': 'Non-streaming, small body', 'streaming-500': 'Streaming, 500 tokens', 'body-150kb': 'Streaming, 150 KB body' };
 
 function overheadTable(rows) {
   const out = [
-    '| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms) | Added total p50 / p95 / p99 (ms) | Gateway CPU per 100 streams | Gateway RSS per 100 streams | Errors (direct / gateway) |',
-    '|---|---:|---|---|---:|---:|---:|',
+    '| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms), gateway-measured | TTFB outside the provider p50 / p99 (ms), direct | Same, through the gateway | Total time p50 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS growth | Errors (direct / gateway) |',
+    '|---|---:|---|---|---|---|---|---:|---:|---:|',
   ];
   for (const r of rows) {
     out.push(
-      `| ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${triple(r.added.ttfb)} | ${triple(r.added.total)} | ${num(r.cpuPctPer100Streams, 1)}% | ${num(r.rssMbPer100Streams, 1)} MB | ${num(r.errors.direct)} / ${num(r.errors.gateway)} |`,
+      `| ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${triple(r.addedTtfb)} (n = ${num(r.addedTtfb.n)}) | ${pair(r.direct.outsideProvider)} | ${pair(r.gateway.outsideProvider)} | ${pair(r.direct.total)} | ${pair(r.gateway.total)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.rssGrowthMb, 1)} MB | ${num(r.errors.direct)} / ${num(r.errors.gateway)} |`,
     );
   }
   return out.join('\n');
@@ -43,7 +44,7 @@ function overheadSection(o) {
     '',
     `${o.method}`,
     '',
-    'Errors count non-2xx answers and socket errors. autocannon reconnects at once after a connection reset, so a saturated server shows many socket errors per stream.',
+    'Errors count non-2xx answers and socket errors; scheduled requests the run could not send within its drain time are listed as dropped in bench/results.json.',
     '',
   ];
   for (const store of ['memory', 'redis']) {
@@ -56,15 +57,20 @@ function overheadSection(o) {
     const shown = rows.filter((r) => main.includes(r.concurrency));
     lines.push(overheadTable(shown.length > 0 ? shown : rows), '');
   }
+  if (o.slopes && o.slopes.length > 0) {
+    lines.push('Gateway cost per 100 more streams (slope between two levels):', '', '| Store | Scenario | Streams | CPU per 100 streams | RSS growth per 100 streams |', '|---|---|---|---:|---:|');
+    for (const x of o.slopes) lines.push(`| ${x.store} | ${SCENARIOS[x.scenario] ?? x.scenario} | ${num(x.from)} to ${num(x.to)} | ${num(x.cpuPctPer100Streams, 1)}% | ${num(x.rssMbPer100Streams, 1)} MB |`);
+    lines.push('');
+  }
   if (o.rows.some((r) => !main.includes(r.concurrency))) {
-    lines.push('<details><summary>Every concurrency level, with absolute latencies</summary>', '');
+    lines.push('<details><summary>Every concurrency level, with client-side TTFB from the scheduled send time</summary>', '');
     lines.push(
-      '| Store | Scenario | Streams | Rate per stream (req/s) | Requests (direct / gateway) | Direct TTFB p50 / p95 / p99 (ms) | Gateway TTFB p50 / p95 / p99 (ms) | Direct total p50 / p95 / p99 (ms) | Gateway total p50 / p95 / p99 (ms) | Gateway CPU | Gateway RSS |',
-      '|---|---|---:|---:|---:|---|---|---|---|---:|---:|',
+      '| Store | Scenario | Streams | Rate per stream (req/s) | Seconds | Answered (direct / gateway) | Added TTFB p50 / p95 / p99 (ms) | TTFB p50 / p95 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS |',
+      '|---|---|---:|---:|---:|---:|---|---|---|---:|---:|',
     );
     for (const r of o.rows) {
       lines.push(
-        `| ${r.store} | ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${num(r.ratePerConnection, 2)} | ${num(r.requests.direct)} / ${num(r.requests.gateway)} | ${triple(r.direct.ttfb)} | ${triple(r.gateway.ttfb)} | ${triple(r.direct.total)} | ${triple(r.gateway.total)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.gatewayRssMb, 1)} MB |`,
+        `| ${r.store} | ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${num(r.ratePerConnection, 2)} | ${num(r.durationS)} | ${num(r.requests.direct)} / ${num(r.requests.gateway)} | ${triple(r.addedTtfb)} | ${triple(r.direct.ttfb)} | ${triple(r.gateway.ttfb)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.gatewayRssMb, 1)} MB |`,
       );
     }
     lines.push('', '</details>', '');
@@ -76,14 +82,14 @@ function budgetSection(b) {
   const lines = [
     '#### Budget correctness',
     '',
-    'The G4 proof scenario of spec 7.4: concurrent requests through the gateway against one enforced budget, each with an actual cost drawn (seeded) between 0 and its limits.',
+    'The G4 proof scenario of spec 7.4: requests sent at the same moment, each on its own connection opened beforehand, through the gateway against one enforced budget, each with an actual cost drawn (seeded) between 0 and its limits. "Admit calls before the first settle" counts the requests the store decided while the first admitted ones were still open.',
     '',
-    '| Store | Estimator | Budget | Concurrent requests | Admitted | Rejected | Final spend | Max spent + reserved after any admit | Max overspend | Final spend minus settled costs | Reserved left |',
-    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '| Store | Estimator | Budget | Requests sent at once | Admit calls before the first settle | Most open reservations | Admitted | Rejected | Final spend | Max spent + reserved after any admit | Max overspend | Final spend minus settled costs | Reserved left |',
+    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
   ];
   for (const r of b.runs) {
     lines.push(
-      `| ${r.store} | ${r.estimator} | ${usd(r.limitUsd)} | ${num(r.requests)} | ${num(r.admitted)} | ${num(r.rejected)} | ${usd(r.finalSpentUsd, 6)} | ${usd(r.maxSpentPlusReservedUsd, 6)} | ${usd(r.maxOverspendUsd, 6)} | ${num(r.spendDriftMicroUsd)} micro-USD | ${num(r.reservedLeftMicroUsd)} micro-USD |`,
+      `| ${r.store} | ${r.estimator} | ${usd(r.limitUsd)} | ${num(r.requests)} | ${num(r.admitsBeforeFirstSettle)} | ${num(r.maxOpenReservations)} | ${num(r.admitted)} | ${num(r.rejected)} | ${usd(r.finalSpentUsd, 6)} | ${usd(r.maxSpentPlusReservedUsd, 6)} | ${usd(r.maxOverspendUsd, 6)} | ${num(r.spendDriftMicroUsd)} micro-USD | ${num(r.reservedLeftMicroUsd)} micro-USD |`,
     );
   }
   if (b.notMeasured) lines.push('', `${b.notMeasured}.`);
@@ -115,6 +121,7 @@ function cacheSection(c) {
   for (const r of c.rows) {
     lines.push(`| ${r.path} | ${usd(r.costUsd, 4)} | ${num(r.inputTokens)} | ${num(r.cacheReadTokens)} | ${num(r.cacheWriteTokens)} | ${num(r.cacheHitRatio * 100, 2)}% |`);
   }
+  if (c.note) lines.push('', c.note);
   lines.push('');
   return lines.join('\n');
 }

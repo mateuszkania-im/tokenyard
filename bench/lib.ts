@@ -1,6 +1,7 @@
-// Shared pieces of `npm run bench` (spec 12.3): percentiles with coordinated-omission correction, the gateway policy
+// Shared pieces of `npm run bench` (spec 12.3): percentiles, the open-loop schedule, CPU and RSS slopes, the gateway policy
 // the benchmarks run under, and the environment description that goes into bench/results.json.
 import { execFileSync } from 'node:child_process';
+import { type Agent, request } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { arch, cpus, release, totalmem } from 'node:os';
 import { join } from 'node:path';
@@ -11,9 +12,10 @@ import { testPolicy } from '../test/helpers/policy.js';
 export const ROOT = join(import.meta.dirname, '..');
 
 export interface Percentiles {
-  p50: number;
-  p95: number;
-  p99: number;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+  n: number;
 }
 
 /** Nearest-rank percentile of an ascending array. */
@@ -29,28 +31,51 @@ export const round = (n: number, digits = 2): number => {
 };
 
 /**
- * Latency samples with coordinated-omission correction, the HdrHistogram `recordValueWithExpectedInterval` rule: a
- * request that took L ms on a connection meant to send every I ms also stood for the requests that should have been
- * sent while it was outstanding, so L - I, L - 2I, ... down to I are added. autocannon 8.0.0 applies this rule with an
- * interval of `Math.ceil(1 / rate)` ms (1 ms for any rate of 1 per second or more), which floods the histogram with
- * small values; the benchmark therefore records raw samples itself and corrects them with the intended interval.
+ * Nearest-rank p50, p95 and p99 of raw samples, with their count. Coordinated omission is handled where the samples
+ * are taken (latency counted from each request's intended send time), so no synthetic values are added here.
  */
-export function coCorrected(samples: readonly number[], intervalMs: number): number[] {
+export function percentiles(samples: readonly number[]): Percentiles {
+  if (samples.length === 0) return { p50: null, p95: null, p99: null, n: 0 };
+  const s = [...samples].sort((a, b) => a - b);
+  return { p50: round(percentile(s, 50)), p95: round(percentile(s, 95)), p99: round(percentile(s, 99)), n: s.length };
+}
+
+/**
+ * Open-loop schedule of one connection: intended send times `startMs + phaseMs + k * intervalMs` before `endMs`. The
+ * phase (in [0, interval)) differs per connection, so connections do not fire together.
+ */
+export function intendedStarts(o: { startMs: number; endMs: number; intervalMs: number; phaseMs: number }): number[] {
+  if (!(o.phaseMs >= 0 && o.phaseMs < o.intervalMs)) throw new Error(`phase ${o.phaseMs} is outside [0, ${o.intervalMs})`);
   const out: number[] = [];
-  for (const v of samples) {
-    out.push(v);
-    if (intervalMs <= 0) continue;
-    for (let missing = v - intervalMs; missing >= intervalMs; missing -= intervalMs) out.push(missing);
+  for (let t = o.startMs + o.phaseMs; t < o.endMs; t += o.intervalMs) out.push(t);
+  return out;
+}
+
+/**
+ * Gateway CPU and RSS growth per 100 streams as the slope between two concurrency levels of the same store and
+ * scenario, so the fixed cost of an idle process does not scale with the stream count.
+ */
+export function cpuRssSlopes(
+  rows: ReadonlyArray<{ store: string; scenario: string; concurrency: number; gatewayCpuPct: number; rssGrowthMb: number }>,
+  from: number,
+  to: number,
+): Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number }> {
+  const out: Array<{ store: string; scenario: string; from: number; to: number; cpuPctPer100Streams: number; rssMbPer100Streams: number }> = [];
+  for (const lo of rows.filter((r) => r.concurrency === from)) {
+    const hi = rows.find((r) => r.concurrency === to && r.store === lo.store && r.scenario === lo.scenario);
+    if (!hi) continue;
+    const per100 = 100 / (to - from);
+    out.push({
+      store: lo.store,
+      scenario: lo.scenario,
+      from,
+      to,
+      cpuPctPer100Streams: round((hi.gatewayCpuPct - lo.gatewayCpuPct) * per100, 1),
+      rssMbPer100Streams: round((hi.rssGrowthMb - lo.rssGrowthMb) * per100, 1),
+    });
   }
-  return out.sort((a, b) => a - b);
+  return out;
 }
-
-export function percentiles(samples: readonly number[], intervalMs: number): Percentiles {
-  const s = coCorrected(samples, intervalMs);
-  return { p50: round(percentile(s, 50)), p95: round(percentile(s, 95)), p99: round(percentile(s, 99)) };
-}
-
-export const minus = (a: Percentiles, b: Percentiles): Percentiles => ({ p50: round(a.p50 - b.p50), p95: round(a.p95 - b.p95), p99: round(a.p99 - b.p99) });
 
 /** The provider key variable the test policy reads; the mock never checks its value. */
 export const BENCH_PROVIDER_KEY = 'bench-not-a-key';
@@ -104,6 +129,30 @@ export function environment(redisVersion: string | null): {
     hardware: { cpu: cpus()[0]?.model.trim() ?? 'unknown', cores: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), arch: arch() },
     os: { platform: process.platform, release: release() },
     node: process.version,
-    tools: { autocannon: pkgVersion('autocannon'), tsx: pkgVersion('tsx'), redis: redisVersion },
+    tools: { tsx: pkgVersion('tsx'), redis: redisVersion },
   };
+}
+
+/**
+ * Opens one keep-alive connection per agent (`GET /healthz`, any answer will do), 64 at a time: macOS caps the listen
+ * backlog at kern.ipc.somaxconn (128), and a few hundred connects at once get reset. Each agent should have
+ * maxSockets 1, so its next request reuses that connection.
+ */
+export async function preconnect(agents: Agent[], base: string): Promise<void> {
+  const url = new URL(base);
+  for (let i = 0; i < agents.length; i += 64) {
+    await Promise.all(
+      agents.slice(i, i + 64).map(
+        (agent) =>
+          new Promise<void>((resolve) => {
+            const req = request({ host: url.hostname, port: url.port, method: 'GET', path: '/healthz', agent }, (res) => {
+              res.resume();
+              res.on('end', () => resolve());
+            });
+            req.on('error', () => resolve());
+            req.end();
+          }),
+      ),
+    );
+  }
 }

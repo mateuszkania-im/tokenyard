@@ -8,12 +8,12 @@ import { join } from 'node:path';
 import { createClient } from 'redis';
 import { createRedisStore } from '../src/limits/redis-store.js';
 import type { CounterStore } from '../src/limits/store.js';
-import { startLocalRedis } from '../scripts/local-redis.mjs';
+import { isLoopbackRedisUrl, startLocalRedis } from '../scripts/local-redis.mjs';
 import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
-import { environment, ROOT } from './lib.js';
-import { benchOverhead, MOCK, type OverheadRow, SCENARIOS } from './overhead.js';
+import { cpuRssSlopes, environment, type Percentiles, ROOT } from './lib.js';
+import { benchOverhead, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
 import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
 
@@ -21,6 +21,11 @@ const log = (s: string): void => console.error(`bench: ${s}`);
 
 /** A Redis to bench against: REDIS_URL, else a throwaway local container (scripts/local-redis.mjs). */
 async function redis(): Promise<{ url: string; version: string; stop(): void } | { notMeasured: string }> {
+  const given = process.env.REDIS_URL;
+  // The budget benchmark flushes the Redis it is given: only a loopback one, unless explicitly allowed.
+  if (given && !isLoopbackRedisUrl(given) && process.env.BENCH_ALLOW_FLUSH !== '1') {
+    return { notMeasured: 'not measured: REDIS_URL is not a loopback address and the benchmark flushes it (set BENCH_ALLOW_FLUSH=1 to allow)' };
+  }
   let url: string;
   let stop: () => void;
   try {
@@ -45,6 +50,8 @@ async function redis(): Promise<{ url: string; version: string; stop(): void } |
   return { notMeasured: 'not measured: Redis did not answer' };
 }
 
+const count = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
 type Slo = { sli: string; target: string; measured: string; met: boolean | null };
 
 const SCENARIO_NAMES: Record<string, string> = { 'non-streaming': 'non-streaming', 'streaming-500': 'streaming 500 tokens', 'body-150kb': 'streaming 150 KB body' };
@@ -53,14 +60,21 @@ function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow
   const out: Slo[] = [];
   for (const store of ['memory', 'redis'] as const) {
     for (const scenario of SCENARIOS) {
-      for (const c of [10, 100, 500]) {
+      for (const c of SLO_LEVELS) {
         const row = o.overhead.find((r) => r.store === store && r.scenario === scenario && r.concurrency === c);
         const sli = `Added TTFB p50 / p99, ${SCENARIO_NAMES[scenario]}, ${c} streams, ${store} store`;
         if (!row) {
           out.push({ sli, target: 'under 5 ms / under 25 ms', measured: store === 'redis' ? o.redis : 'not measured', met: null });
           continue;
         }
-        out.push({ sli, target: 'under 5 ms / under 25 ms', measured: `${row.added.ttfb.p50} ms / ${row.added.ttfb.p99} ms`, met: row.added.ttfb.p50 < 5 && row.added.ttfb.p99 < 25 });
+        const a = row.addedTtfb;
+        const pp = (p: Percentiles): string => `${p.p50 ?? 'n/a'} / ${p.p99 ?? 'n/a'} ms`;
+        out.push({
+          sli,
+          target: 'under 5 ms / under 25 ms',
+          measured: `${a.p50 ?? 'n/a'} ms / ${a.p99 ?? 'n/a'} ms (n = ${count(a.n)}); client-side TTFB outside the provider, p50 / p99: direct ${pp(row.direct.outsideProvider)}, through the gateway ${pp(row.gateway.outsideProvider)}`,
+          met: a.p50 === null || a.p99 === null ? null : a.p50 < 5 && a.p99 < 25,
+        });
       }
     }
   }
@@ -74,7 +88,7 @@ function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow
   out.push({
     sli: 'Admitted spend above an enforced budget (worst-case estimator)',
     target: 'zero',
-    measured: `$${over} over ${worst.length} run(s) of 1,000 concurrent requests (${worst.map((r) => r.store).join(', ')})${lost ? ', with a lost update' : ''}`,
+    measured: `$${over} over ${worst.length} run(s) of 1,000 requests sent at once (${worst.map((r) => r.store).join(', ')})${lost ? ', with a lost update' : ''}`,
     met: over === 0 && !lost,
   });
   out.push({ sli: 'Conformance suite on the pinned Claude Code and Codex versions', target: '100%', measured: 'not measured by the benchmark (docs/conformance.md)', met: null });
@@ -86,7 +100,7 @@ function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow
     measured: `${(via.cacheHitRatio * 100).toFixed(2)}% versus ${(direct.cacheHitRatio * 100).toFixed(2)}%`,
     met: via.cacheHitRatio === direct.cacheHitRatio && via.costUsd === direct.costUsd,
   });
-  out.push({ sli: `Replay of ${o.replay.records.toLocaleString('en-US')} trace records`, target: 'under 60 s on a CI runner', measured: `${o.replay.seconds} s on the machine above (not a CI runner)`, met: o.replay.seconds < 60 });
+  out.push({ sli: `Replay of ${o.replay.records.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')} trace records`, target: 'under 60 s on a CI runner', measured: `${o.replay.seconds} s on the machine above (not a CI runner)`, met: o.replay.seconds < 60 });
   return out;
 }
 
@@ -127,10 +141,18 @@ async function main(): Promise<void> {
       ...env,
       quick,
       overhead: {
-        method: `autocannon drives each scenario at the mock provider directly and through the gateway (both in their own processes, loopback); the mock answers after a fixed ${MOCK.ttftMs} ms time to first token and streams ${MOCK.outputTokens} tokens at ${MOCK.tokensPerSec} tokens/s. Each connection is one stream with a fixed request rate below what it can complete directly; latencies are corrected for coordinated omission with that intended interval. Added time is the gateway percentile minus the direct percentile; CPU and RSS are the gateway process's; RSS per 100 streams is its peak growth during the run above its size just before it, scaled to 100 streams. The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.`,
+        method: [
+          `An open-loop load generator in the benchmark process sends each scenario to the mock provider directly and through the gateway (each in its own process, loopback). The mock answers after a fixed ${MOCK.ttftMs} ms time to first token and streams ${MOCK.outputTokens} tokens at ${MOCK.tokensPerSec} tokens/s.`,
+          `Each stream is one keep-alive connection, opened before the run, with its own schedule of evenly spaced send times (${RATE['non-streaming']} requests/s non-streaming, ${RATE['streaming-500']} requests/s streaming) starting at a seeded random phase, so connections do not fire together; a request still running at the next scheduled time delays the next one, and client-side latency always counts from the scheduled time (coordinated omission included).`,
+          'Added TTFB is the gateway\'s own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path.',
+          'The client-side columns are absolute percentiles of each path, never subtracted from each other; "outside the provider" is each request\'s TTFB minus the mock\'s own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock\'s timer jitter drops out.',
+          'n is the number of samples behind each percentile. CPU is the gateway process\'s user plus system time over the run\'s wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams.',
+          'The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.',
+        ].join(' '),
         mock: MOCK,
         redis: redisNote,
         rows: overhead,
+        slopes: cpuRssSlopes(overhead, 100, 500),
       },
       budget: {
         ...budget,

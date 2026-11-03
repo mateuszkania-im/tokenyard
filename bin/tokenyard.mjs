@@ -822,7 +822,8 @@ async function startAnthropicMock(opts = {}) {
     if (!s2) sims.set(ws, s2 = new CacheSimulator(ws));
     return s2;
   };
-  async function respond(rec, res) {
+  async function respond(rec, res, receivedAt) {
+    const wait = () => (performance.now() - receivedAt).toFixed(3);
     const path3 = rec.pathAndQuery.split("?")[0];
     const body = parseBody(rec.body);
     const sc = typeof scenario === "function" ? scenario(rec) : scenario;
@@ -872,7 +873,7 @@ async function startAnthropicMock(opts = {}) {
         return;
       }
       if (timing.ttftMs > 0) await sleep(timing.ttftMs);
-      res.writeHead(200, { "content-type": "application/json", "request-id": id });
+      res.writeHead(200, { "content-type": "application/json", "request-id": id, "x-mock-wait-ms": wait() });
       res.end(
         JSON.stringify({
           id,
@@ -897,7 +898,7 @@ async function startAnthropicMock(opts = {}) {
     const all = [...head, ...deltas, ...tail];
     if (timing.ttftMs > 0) await sleep(timing.ttftMs);
     if (closed) return;
-    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", "request-id": id });
+    res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", "request-id": id, "x-mock-wait-ms": wait() });
     let pinger;
     const stopPings = () => {
       if (pinger) clearInterval(pinger);
@@ -931,12 +932,13 @@ async function startAnthropicMock(opts = {}) {
     const chunks = [];
     req.on("data", (c) => chunks.push(c));
     req.on("end", () => {
+      const receivedAt = performance.now();
       const headers = {};
       for (const [k, v] of Object.entries(req.headers)) if (v !== void 0) headers[k] = v;
       const rec = { method: req.method ?? "GET", pathAndQuery: req.url ?? "/", headers, body: Buffer.concat(chunks) };
       received.push(rec);
       requestCount++;
-      respond(rec, res).catch(() => res.destroy());
+      respond(rec, res, receivedAt).catch(() => res.destroy());
     });
   });
   await new Promise((resolve5) => server.listen(opts.port ?? 0, opts.host ?? "127.0.0.1", resolve5));
@@ -125537,7 +125539,6 @@ var package_default = {
     "@opentelemetry/resources": "^2.12.0",
     "@opentelemetry/sdk-trace-base": "^2.12.0",
     "@types/node": "^22.20.5",
-    autocannon: "^8.0.0",
     commander: "^15.0.0",
     esbuild: "^0.28.2",
     "fast-check": "^4.10.2",

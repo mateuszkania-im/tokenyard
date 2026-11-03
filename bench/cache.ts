@@ -35,7 +35,11 @@ function row(path: CacheRow['path'], usage: Usage[]): CacheRow {
   };
 }
 
-export async function benchCache(): Promise<{ turns: number; model: string; rows: CacheRow[] }> {
+/** Why the naive proxy row is not much more expensive on this fixture (it is about the fixture, not a general result). */
+export const NAIVE_NOTE =
+  'The naive proxy flattens `system` into a string, which drops the cache breakpoint on the system block. This session also marks the newest user block, and that breakpoint caches the whole prefix, the flattened system text included, so through the naive proxy the session still reads almost the same prefix from cache and costs about the same; its usage still differs from the direct run (conformance test C15b fails on it).';
+
+export async function benchCache(): Promise<{ turns: number; model: string; note: string; rows: CacheRow[] }> {
   const stack = await startStack();
   const naive = await startNaiveProxy(stack.mock.url);
   try {
@@ -43,7 +47,7 @@ export async function benchCache(): Promise<{ turns: number; model: string; rows
     const direct = await runSession(stack.mock.url, 'bench-direct');
     const via = await runSession(stack.gw.url, 'bench-tokenyard');
     const naiveUsage = await runSession(naive.url, 'bench-naive');
-    return { turns: direct.length, model: MODEL, rows: [row('direct', direct), row('tokenyard', via), row('naive proxy', naiveUsage)] };
+    return { turns: direct.length, model: MODEL, note: NAIVE_NOTE, rows: [row('direct', direct), row('tokenyard', via), row('naive proxy', naiveUsage)] };
   } finally {
     await naive.close();
     await stack.close();

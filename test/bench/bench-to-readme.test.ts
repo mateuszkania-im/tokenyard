@@ -9,18 +9,19 @@ function results() {
     scenario: 'streaming-500',
     store,
     concurrency,
-    ratePerConnection: 1,
-    durationS: 5,
-    requests: { direct: 50, gateway: 50 },
+    ratePerConnection: 1.25,
+    durationS: 160,
+    intended: { direct: 2000, gateway: 2000 },
+    requests: { direct: 2000, gateway: 2000 },
+    dropped: { direct: 0, gateway: 0 },
     errors: { direct: 0, gateway: 0 },
     errorKinds: { direct: {}, gateway: {} },
-    direct: { ttfb: pct(100.1, 101, 102), total: pct(600, 601, 602) },
-    gateway: { ttfb: pct(101.3, 103, 110), total: pct(602, 604, 610) },
-    added: { ttfb: pct(1.2, 2, 8), total: pct(2, 3, 8) },
+    addedTtfb: { ...pct(1.2, 2, 8), n: 2000 },
+    direct: { ttfb: { ...pct(100.1, 101, 102), n: 2000 }, outsideProvider: { ...pct(0.5, 0.6, 0.9), n: 2000 }, total: { ...pct(600, 601, 602), n: 2000 } },
+    gateway: { ttfb: { ...pct(101.3, 103, 110), n: 2000 }, outsideProvider: { ...pct(1.7, 2.6, 9.1), n: 2000 }, total: { ...pct(602, 604, 610), n: 2000 } },
     gatewayCpuPct: 12.5,
-    cpuPctPer100Streams: 1.25,
     gatewayRssMb: 120.4,
-    rssMbPer100Streams: 3.1,
+    rssGrowthMb: 3.1,
   });
   return {
     schemaVersion: 1,
@@ -29,24 +30,25 @@ function results() {
     hardware: { cpu: 'Test CPU', cores: 8, memoryGb: 16, arch: 'arm64' },
     os: { platform: 'darwin', release: '27.0.0' },
     node: 'v22.14.0',
-    tools: { autocannon: '8.0.0', tsx: '4.0.0', redis: '7.4.0' },
+    tools: { tsx: '4.0.0', redis: '7.4.0' },
     quick: false,
     overhead: {
-      method: 'autocannon, loopback, mock provider',
-      mock: { ttftMs: 100, tokensPerSec: 1000 },
+      method: 'open-loop scheduler, loopback, mock provider',
+      mock: { ttftMs: 100, tokensPerSec: 2000 },
       redis: 'measured',
       rows: [row('memory', 10), row('memory', 100), row('redis', 10)],
+      slopes: [{ store: 'memory', scenario: 'streaming-500', from: 100, to: 500, cpuPctPer100Streams: 4.2, rssMbPer100Streams: 1.5 }],
     },
     budget: {
       runs: [
         {
-          store: 'memory', estimator: 'worst-case', limitUsd: 1, requests: 1000, admitted: 40, rejected: 960, finalSpentUsd: 0.51, maxSpentPlusReservedUsd: 0.99,
+          store: 'memory', estimator: 'worst-case', limitUsd: 1, requests: 1000, admitsBeforeFirstSettle: 1000, maxOpenReservations: 40, admitted: 40, rejected: 960, finalSpentUsd: 0.51, maxSpentPlusReservedUsd: 0.99,
           maxOverspendUsd: 0, spendDriftMicroUsd: 0, reservedLeftMicroUsd: 0, overruns: 0,
         },
       ],
       headroom: { bodyBytes: 150000, maxTokens: 32000, model: 'claude-opus-5-5', sessionBudgetUsd: 25, rows: [{ estimator: 'worst-case', reservationUsd: 2.11, inFlightAdmitted: 11, sent: 40 }], note: 'A note.' },
     },
-    cache: { turns: 40, model: 'claude-opus-5-5', rows: [{ path: 'direct', costUsd: 1.5, inputTokens: 0, cacheReadTokens: 1000, cacheWriteTokens: 10, cacheHitRatio: 0.9 }] },
+    cache: { turns: 40, model: 'claude-opus-5-5', note: 'Why the naive proxy costs the same.', rows: [{ path: 'direct', costUsd: 1.5, inputTokens: 0, cacheReadTokens: 1000, cacheWriteTokens: 10, cacheHitRatio: 0.9 }] },
     scan: { bodyMb: 4, lastTurnMbPerS: 900, fullBodyMbPerS: 80, fpCorpus: { files: 300, mb: 9.1, blockHits: 0, documentedExamples: 2 } },
     replay: { records: 1000000, seconds: 30.5, recordsPerSecond: 32787, fileMb: 100, fidelityAgreement: 1 },
     calibration: {
@@ -81,7 +83,7 @@ test('writeBenchBlock replaces only the block; checkBenchBlock fails on any drif
   drifted.replay.seconds = 30.6;
   expect(checkBenchBlock(out, drifted)).toBe(false);
   const drifted2 = results();
-  (drifted2.overhead.rows[0] as { added: { ttfb: { p99: number } } }).added.ttfb.p99 = 9;
+  (drifted2.overhead.rows[0] as { addedTtfb: { p99: number } }).addedTtfb.p99 = 9;
   expect(checkBenchBlock(out, drifted2)).toBe(false);
   // No markers, or markers out of order or repeated: write refuses, check fails.
   expect(() => writeBenchBlock('# no markers\n', r)).toThrow(/BENCH:START/);
@@ -98,6 +100,16 @@ test('the block holds no em dashes or arrow characters and says what was not mea
   expect(block).not.toMatch(/[—–←-⇿⟵-⟿]/);
   expect(block).toContain('not measured: Docker unavailable');
   // A missed target is shown as missed.
-  r.slo = [{ sli: 'Added TTFB p50 / p99, concurrency 500', target: 'under 5 ms / under 25 ms', measured: '9 ms / 80 ms', met: false }];
-  expect(renderBenchBlock(r)).toMatch(/concurrency 500 \| under 5 ms \/ under 25 ms \| 9 ms \/ 80 ms \| missed/);
+  r.slo = [{ sli: 'Added TTFB p50 / p99, concurrency 500', target: 'under 5 ms / under 25 ms', measured: '9 ms / 80 ms (n = 2,000)', met: false }];
+  expect(renderBenchBlock(r)).toMatch(/concurrency 500 \| under 5 ms \/ under 25 ms \| 9 ms \/ 80 ms \(n = 2,000\) \| missed/);
+});
+
+test('overhead tables show the gateway-measured added TTFB with n, absolute latencies side by side, slopes and the notes', () => {
+  const block = renderBenchBlock(results());
+  // Added TTFB comes with its sample count; latencies are absolute, never a difference of two runs.
+  expect(block).toContain('| Streaming, 500 tokens | 10 | 1.20 / 2.00 / 8.00 (n = 2,000) | 0.50 / 0.90 | 1.70 / 9.10 | 600.00 / 602.00 | 602.00 / 610.00 | 12.5% | 3.1 MB | 0 / 0 |');
+  expect(block).not.toMatch(/\| -\d/);
+  expect(block).toContain('| memory | Streaming, 500 tokens | 100 to 500 | 4.2% | 1.5 MB |');
+  expect(block).toContain('Why the naive proxy costs the same.');
+  expect(block).toContain('| memory | worst-case | $1.00 | 1,000 | 1,000 | 40 | 40 |');
 });

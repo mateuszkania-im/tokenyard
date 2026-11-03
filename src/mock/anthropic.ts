@@ -101,7 +101,12 @@ export async function startAnthropicMock(opts: MockOptions = {}): Promise<MockSe
     return s;
   };
 
-  async function respond(rec: ReceivedRequest, res: ServerResponse): Promise<void> {
+  /**
+   * `x-mock-wait-ms` on 200 responses: how long the mock held the request between receiving its whole body and writing
+   * the response headers (its own TTFT), so a client can subtract the provider's share from the TTFB it saw.
+   */
+  async function respond(rec: ReceivedRequest, res: ServerResponse, receivedAt: number): Promise<void> {
+    const wait = (): string => (performance.now() - receivedAt).toFixed(3);
     const path = rec.pathAndQuery.split('?')[0];
     const body = parseBody(rec.body);
     const sc = typeof scenario === 'function' ? scenario(rec) : scenario;
@@ -153,7 +158,7 @@ export async function startAnthropicMock(opts: MockOptions = {}): Promise<MockSe
         return;
       }
       if (timing.ttftMs > 0) await sleep(timing.ttftMs);
-      res.writeHead(200, { 'content-type': 'application/json', 'request-id': id });
+      res.writeHead(200, { 'content-type': 'application/json', 'request-id': id, 'x-mock-wait-ms': wait() });
       res.end(
         JSON.stringify({
           id,
@@ -180,7 +185,7 @@ export async function startAnthropicMock(opts: MockOptions = {}): Promise<MockSe
     const all = [...head, ...deltas, ...tail];
     if (timing.ttftMs > 0) await sleep(timing.ttftMs);
     if (closed) return;
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'request-id': id });
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'request-id': id, 'x-mock-wait-ms': wait() });
     let pinger: NodeJS.Timeout | undefined;
     const stopPings = (): void => {
       if (pinger) clearInterval(pinger);
@@ -215,12 +220,13 @@ export async function startAnthropicMock(opts: MockOptions = {}): Promise<MockSe
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => chunks.push(c));
     req.on('end', () => {
+      const receivedAt = performance.now();
       const headers: Record<string, string | string[]> = {};
       for (const [k, v] of Object.entries(req.headers)) if (v !== undefined) headers[k] = v;
       const rec: ReceivedRequest = { method: req.method ?? 'GET', pathAndQuery: req.url ?? '/', headers, body: Buffer.concat(chunks) };
       received.push(rec);
       requestCount++;
-      respond(rec, res).catch(() => res.destroy());
+      respond(rec, res, receivedAt).catch(() => res.destroy());
     });
   });
   await new Promise<void>((resolve) => server.listen(opts.port ?? 0, opts.host ?? '127.0.0.1', resolve));
