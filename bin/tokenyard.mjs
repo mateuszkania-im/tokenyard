@@ -31592,13 +31592,19 @@ var init_sse = __esm({
       event = null;
       data = [];
       hasData = false;
-      /** Characters in `data`: an event's data is held to the same cap as one line. */
-      dataChars = 0;
-      /** The current event lost a line to the cap; it is not dispatched. */
+      /** UTF-8 bytes in `data` (with one per line break): an event's data is held to the same cap as one line. */
+      dataBytes = 0;
+      /** The current event lost a line to the cap, or its data passed it; it is not dispatched. */
       broken = false;
+      /** Events dropped because a line or their data passed the cap. */
+      dropped = 0;
       skipLf = false;
       constructor(o = {}) {
         this.maxLineBytes = o.maxLineBytes ?? MAX_SSE_LINE_BYTES;
+      }
+      /** Events dropped so far because a line or their data passed the cap. */
+      get droppedEvents() {
+        return this.dropped;
       }
       /** Bytes held for the unfinished line (never more than the cap). */
       pendingBytes() {
@@ -31654,7 +31660,7 @@ var init_sse = __esm({
           this.parts = [];
           this.partBytes = 0;
           this.overflow = false;
-          this.broken = true;
+          this.markBroken();
           return;
         }
         let text2;
@@ -31671,8 +31677,12 @@ var init_sse = __esm({
         this.event = null;
         this.data = [];
         this.hasData = false;
-        this.dataChars = 0;
+        this.dataBytes = 0;
         this.broken = false;
+      }
+      markBroken() {
+        if (!this.broken) this.dropped++;
+        this.broken = true;
       }
       line(line, out) {
         if (line === "") {
@@ -31689,10 +31699,10 @@ var init_sse = __esm({
         else if (field === "data") {
           this.hasData = true;
           if (this.broken) return;
-          this.dataChars += value.length + 1;
-          if (this.dataChars > this.maxLineBytes) {
+          this.dataBytes += Buffer.byteLength(value, "utf8") + 1;
+          if (this.dataBytes > this.maxLineBytes) {
             this.data = [];
-            this.broken = true;
+            this.markBroken();
             return;
           }
           this.data.push(value);
@@ -59097,6 +59107,7 @@ var init_metrics = __esm({
       tokenyard_sweeper_errors_total: { kind: "counter", help: "Sweeper ticks that failed.", labels: [] },
       tokenyard_swept_total: { kind: "counter", help: "Reservations the sweeper settled at their estimate.", labels: [] },
       tokenyard_breaker_opens_total: { kind: "counter", help: "Circuit breaker openings by scope (provider or credential).", labels: ["scope"] },
+      tokenyard_sse_events_dropped_total: { kind: "counter", help: "Upstream SSE events dropped for usage parsing at the 16 MiB event cap (forwarded unchanged).", labels: [] },
       tokenyard_should_retry_refusals_total: { kind: "counter", help: "Own errors sent with x-should-retry: false, by reason.", labels: ["reason"] }
     };
     MAX_SERIES_PER_METRIC = 2e3;
@@ -59449,7 +59460,7 @@ function extractFeatures(surface, body) {
   return extractAnthropicFeatures(body);
 }
 function usageTap(surface, up, capBytes) {
-  if (surface !== "anthropic-messages" && surface !== "openai-responses") return { onChunk: () => void 0, result: () => null };
+  if (surface !== "anthropic-messages" && surface !== "openai-responses") return { onChunk: () => void 0, result: () => null, droppedEvents: () => 0 };
   const responses = surface === "openai-responses";
   const ct = String(up.headers["content-type"] ?? "");
   if (ct.startsWith("text/event-stream")) {
@@ -59459,7 +59470,8 @@ function usageTap(surface, up, capBytes) {
       onChunk: (c) => {
         for (const e2 of parser.push(c)) acc.onEvent(e2);
       },
-      result: () => acc.result()
+      result: () => acc.result(),
+      droppedEvents: () => parser.droppedEvents
     };
   }
   const chunks = [];
@@ -59469,7 +59481,8 @@ function usageTap(surface, up, capBytes) {
       size += c.length;
       if (size <= capBytes) chunks.push(c);
     },
-    result: () => size <= capBytes ? (responses ? parseResponsesJsonUsage : parseAnthropicJsonUsage)(Buffer.concat(chunks)) : null
+    result: () => size <= capBytes ? (responses ? parseResponsesJsonUsage : parseAnthropicJsonUsage)(Buffer.concat(chunks)) : null,
+    droppedEvents: () => 0
   };
 }
 function requestModifiers(policy2, x, r) {
@@ -59878,6 +59891,8 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     await pipeline(clientBody, createTee(tap.onChunk), res);
   } catch {
   }
+  const dropped = tap.droppedEvents();
+  if (dropped > 0) deps.metrics?.inc("tokenyard_sse_events_dropped_total", {}, dropped);
   await settleAndTrace(deps, runtime, policy2, held, {
     id,
     key,
@@ -59899,7 +59914,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     policyRevision: policy2.revision,
     priceTable: policy2.priceTableVersion,
     rateLimitHeaders: rateLimitHeaders(up.headers),
-    ...deadlineHit ? { errorClass: "request_deadline" } : {}
+    ...deadlineHit ? { errorClass: "request_deadline" } : dropped > 0 ? { errorClass: "sse_event_too_large" } : {}
   });
 }
 function createHandler(deps) {

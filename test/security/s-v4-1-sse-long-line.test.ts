@@ -5,8 +5,20 @@
 // answer delivered in small TCP segments was enough. Each byte is now scanned once, and a line or an event's data past
 // MAX_SSE_LINE_BYTES (16 MiB) is dropped with its event (its usage is then missing: the request settles at the
 // reservation).
-import { expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
+import type { TraceRecord } from '../../src/ledger/record.js';
+import { createMemoryStore } from '../../src/limits/memory-store.js';
 import { MAX_SSE_LINE_BYTES, SseParser, type SseEvent } from '../../src/stream/sse.js';
+import { createMetrics } from '../../src/telemetry/metrics.js';
+import { authHeaders, send, startRawUpstream } from '../helpers/conformance.js';
+import { startGateway } from '../helpers/gateway.js';
+import { PROVIDER_KEY_ENV, testPolicy } from '../helpers/policy.js';
+
+const closers: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  for (const c of closers.splice(0)) await c();
+  delete process.env[PROVIDER_KEY_ENV];
+});
 
 function parseChunks(chunks: readonly Buffer[], p = new SseParser()): SseEvent[] {
   const out: SseEvent[] = [];
@@ -54,3 +66,48 @@ test('S-V4-1 an event made of many data lines is held to the same cap and droppe
   out.push(...p.push(Buffer.from('\nevent: next\ndata: fine\n\n')));
   expect(out).toEqual([{ event: 'next', data: 'fine' }]);
 });
+
+// V4 review (R-V4-3): the cap counts UTF-8 bytes, as its name says, not UTF-16 units: an event of many data lines of
+// three-byte characters held up to three times the cap.
+test('S-V4-1 the event data cap counts bytes: multi-byte characters reach it three times sooner than ASCII', () => {
+  const p = new SseParser({ maxLineBytes: 1024 });
+  const out: SseEvent[] = [];
+  out.push(...p.push(Buffer.from('event: euro\n')));
+  // 8 lines of 60 euro signs: 480 characters, 1,440 bytes of data.
+  for (let i = 0; i < 8; i++) out.push(...p.push(Buffer.from(`data: ${'€'.repeat(60)}\n`)));
+  out.push(...p.push(Buffer.from('\nevent: next\ndata: fine\n\n')));
+  expect(out).toEqual([{ event: 'next', data: 'fine' }]);
+  expect(p.droppedEvents).toBe(1);
+  // The same character count in ASCII stays under the cap and is kept.
+  const q = new SseParser({ maxLineBytes: 1024 });
+  const kept = parseChunks([Buffer.from(`event: ascii\n${`data: ${'e'.repeat(60)}\n`.repeat(8)}\n`)], q);
+  expect(kept).toHaveLength(1);
+  expect(q.droppedEvents).toBe(0);
+});
+
+test('S-V4-1 a stream that lost an event to the cap is marked in its trace (errorClass) and counted on /metrics', async () => {
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const big = 'x'.repeat(MAX_SSE_LINE_BYTES + 1);
+  const up = await startRawUpstream((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const ev = (e: string, d: string): string => `event: ${e}\ndata: ${d}\n\n`;
+      res.write(ev('message_start', JSON.stringify({ type: 'message_start', message: { id: 'm', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [], usage: { input_tokens: 10, output_tokens: 1 } } })));
+      res.write(ev('ping', big));
+      res.end(ev('message_delta', JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 3 } })) + ev('message_stop', '{"type":"message_stop"}'));
+    });
+  });
+  closers.push(up.close);
+  const metrics = createMetrics();
+  const traces: TraceRecord[] = [];
+  const gw = await startGateway({ policy: testPolicy({ upstream: up.url }), store: createMemoryStore({ clock: Date.now }), traces: { write: (r) => (traces.push(r as TraceRecord), true) }, traceSalt: 's', metrics });
+  closers.push(gw.close);
+  const body = JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 8, stream: true, messages: [{ role: 'user', content: 'hi' }] });
+  const res = await send(gw.url, { path: '/v1/messages', headers: authHeaders, body });
+  expect(res.status).toBe(200);
+  expect(res.body.length).toBeGreaterThan(MAX_SSE_LINE_BYTES); // forwarded unchanged
+  await expect.poll(() => traces.length).toBe(1);
+  expect(traces[0]?.outcome.errorClass).toBe('sse_event_too_large');
+  expect(metrics.render()).toMatch(/^tokenyard_sse_events_dropped_total 1$/m);
+}, 30_000);

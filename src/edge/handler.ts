@@ -406,8 +406,9 @@ function extractFeatures(surface: Surface, body: Buffer): ExtractedFeatures {
 }
 
 /** Watches the response bytes for usage without delaying or changing them (spec 5.3 step 11, 5.4). */
-function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { onChunk(c: Buffer): void; result(): UsageResult | null } {
-  if (surface !== 'anthropic-messages' && surface !== 'openai-responses') return { onChunk: () => undefined, result: () => null };
+/** `droppedEvents`: SSE events dropped at the parser's cap (S-V4-1); the trace marks such a stream. */
+function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { onChunk(c: Buffer): void; result(): UsageResult | null; droppedEvents(): number } {
+  if (surface !== 'anthropic-messages' && surface !== 'openai-responses') return { onChunk: () => undefined, result: () => null, droppedEvents: () => 0 };
   const responses = surface === 'openai-responses';
   const ct = String(up.headers['content-type'] ?? '');
   if (ct.startsWith('text/event-stream')) {
@@ -418,6 +419,7 @@ function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { o
         for (const e of parser.push(c)) acc.onEvent(e);
       },
       result: () => acc.result(),
+      droppedEvents: () => parser.droppedEvents,
     };
   }
   const chunks: Buffer[] = [];
@@ -428,6 +430,7 @@ function usageTap(surface: Surface, up: UpstreamResponse, capBytes: number): { o
       if (size <= capBytes) chunks.push(c);
     },
     result: () => (size <= capBytes ? (responses ? parseResponsesJsonUsage : parseAnthropicJsonUsage)(Buffer.concat(chunks)) : null),
+    droppedEvents: () => 0,
   };
 }
 
@@ -1002,7 +1005,10 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     // Client abort or upstream drop: the client sees exactly what upstream sent, truncated; nothing is synthesised.
   }
 
-  // 12. End: settle with the computed cost, then queue the trace (both after res.end()).
+  // 12. End: settle with the computed cost, then queue the trace (both after res.end()). A stream that lost an event to
+  // the SSE cap (its bytes were forwarded, its usage may be missing) is marked, so it is not mistaken for a cut stream.
+  const dropped = tap.droppedEvents();
+  if (dropped > 0) deps.metrics?.inc('tokenyard_sse_events_dropped_total', {}, dropped);
   await settleAndTrace(deps, runtime, policy, held, {
     id,
     key,
@@ -1024,7 +1030,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     policyRevision: policy.revision,
     priceTable: policy.priceTableVersion,
     rateLimitHeaders: rateLimitHeaders(up.headers),
-    ...(deadlineHit ? { errorClass: 'request_deadline' } : {}),
+    ...(deadlineHit ? { errorClass: 'request_deadline' } : dropped > 0 ? { errorClass: 'sse_event_too_large' } : {}),
   });
 }
 

@@ -33,6 +33,7 @@ export const METRIC_DEFS = {
   tokenyard_sweeper_errors_total: { kind: 'counter', help: 'Sweeper ticks that failed.', labels: [] },
   tokenyard_swept_total: { kind: 'counter', help: 'Reservations the sweeper settled at their estimate.', labels: [] },
   tokenyard_breaker_opens_total: { kind: 'counter', help: 'Circuit breaker openings by scope (provider or credential).', labels: ['scope'] },
+  tokenyard_sse_events_dropped_total: { kind: 'counter', help: 'Upstream SSE events dropped for usage parsing at the 16 MiB event cap (forwarded unchanged).', labels: [] },
   tokenyard_should_retry_refusals_total: { kind: 'counter', help: 'Own errors sent with x-should-retry: false, by reason.', labels: ['reason'] },
 } as const satisfies Record<string, Def>;
 

@@ -4,9 +4,15 @@ export interface SseEvent {
 }
 
 /**
- * Longest line the parser holds (S-V4-1). A Responses `response.completed` event carries the whole response on one
- * `data:` line, so the cap is far above any real event; a longer line is dropped together with its event (the usage
- * it may hold is then missing, and the gateway settles at the reservation), instead of growing without bound.
+ * Longest line the parser holds, and the most data one event may hold, in UTF-8 bytes (S-V4-1). A Responses
+ * `response.completed` event carries the whole response on one `data:` line, so the cap is far above any real event;
+ * a longer line or event is dropped (the usage it may hold is then missing, and the gateway settles at the
+ * reservation), instead of growing without bound; `droppedEvents` counts them, so the trace can say so.
+ * Why 16 MiB and not the JSON body cap (`bodyCapBytes`, 32 MiB by default): the JSON cap bounds a whole answer the
+ * gateway holds once; this one bounds a single event, and while one is parsed the stream holds its pieces, their
+ * concatenation and the decoded string (up to about three times the cap), so 16 MiB keeps a stream's peak near the
+ * JSON path's while staying hundreds of times above a real event. It is fixed, not tied to `bodyCapBytes`, because a
+ * smaller body cap (for small requests) must not start dropping long answers.
  */
 export const MAX_SSE_LINE_BYTES = 16 * 1024 * 1024;
 
@@ -26,14 +32,21 @@ export class SseParser {
   private event: string | null = null;
   private data: string[] = [];
   private hasData = false;
-  /** Characters in `data`: an event's data is held to the same cap as one line. */
-  private dataChars = 0;
-  /** The current event lost a line to the cap; it is not dispatched. */
+  /** UTF-8 bytes in `data` (with one per line break): an event's data is held to the same cap as one line. */
+  private dataBytes = 0;
+  /** The current event lost a line to the cap, or its data passed it; it is not dispatched. */
   private broken = false;
+  /** Events dropped because a line or their data passed the cap. */
+  private dropped = 0;
   private skipLf = false;
 
   constructor(o: { maxLineBytes?: number } = {}) {
     this.maxLineBytes = o.maxLineBytes ?? MAX_SSE_LINE_BYTES;
+  }
+
+  /** Events dropped so far because a line or their data passed the cap. */
+  get droppedEvents(): number {
+    return this.dropped;
   }
 
   /** Bytes held for the unfinished line (never more than the cap). */
@@ -96,7 +109,7 @@ export class SseParser {
       this.parts = [];
       this.partBytes = 0;
       this.overflow = false;
-      this.broken = true;
+      this.markBroken();
       return;
     }
     let text: string;
@@ -114,8 +127,13 @@ export class SseParser {
     this.event = null;
     this.data = [];
     this.hasData = false;
-    this.dataChars = 0;
+    this.dataBytes = 0;
     this.broken = false;
+  }
+
+  private markBroken(): void {
+    if (!this.broken) this.dropped++;
+    this.broken = true;
   }
 
   private line(line: string, out: SseEvent[]): void {
@@ -133,10 +151,10 @@ export class SseParser {
     else if (field === 'data') {
       this.hasData = true;
       if (this.broken) return;
-      this.dataChars += value.length + 1;
-      if (this.dataChars > this.maxLineBytes) {
+      this.dataBytes += Buffer.byteLength(value, 'utf8') + 1;
+      if (this.dataBytes > this.maxLineBytes) {
         this.data = [];
-        this.broken = true;
+        this.markBroken();
         return;
       }
       this.data.push(value);
