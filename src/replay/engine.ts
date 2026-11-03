@@ -79,8 +79,13 @@ interface Outcome {
 const CLASSES: ReadonlySet<string> = new Set(REQUEST_CLASSES);
 const STORE_DOWN: Admission = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
 const NOTHING: Omit<Outcome, 'kind' | 'decision'> = { reason: null, name: '', scopeValue: '', provider: null, upstreamModel: null, cost: null };
-/** Gateway exits after decide that depend on body bytes the trace does not hold (or on the trace disk): carried over as recorded. */
-const BODY_EXITS: ReadonlySet<string> = new Set(['redaction-failed', 'model-rewrite-failed', 'output-cap-failed', 'write-ahead-failed']);
+/**
+ * Body-shape refusals (a BOM, duplicate keys, nesting too deep, JSON that does not parse under an enforced budget): the
+ * gateway answers them before decide, from body bytes the trace does not hold, so no route or chain was recorded.
+ */
+const SHAPE_EXITS: ReadonlySet<string> = new Set(['body-bom', 'duplicate-keys', 'too-deep', 'unparsable-body']);
+/** Gateway exits that depend on body bytes the trace does not hold (or on the trace disk): carried over as recorded. */
+const BODY_EXITS: ReadonlySet<string> = new Set(['redaction-failed', 'model-rewrite-failed', 'output-cap-failed', 'write-ahead-failed', ...SHAPE_EXITS]);
 
 /** Request features exactly as the gateway decided on them: the recorded bound and its kind are used, never re-derived (R11). */
 export function featuresOf(r: TraceRecord): RequestFeatures {
@@ -215,6 +220,8 @@ async function simulate(
   };
 
   const one = async (r: TraceRecord, admitMs: number): Promise<Outcome> => {
+    // Refused before decide: carried over as recorded whatever this policy would decide (normally marked preDecision).
+    if (r.decision.reason !== null && SHAPE_EXITS.has(r.decision.reason)) return { ...NOTHING, kind: 'exit', decision: { action: 'block', reason: r.decision.reason, route: null, chain: [] } };
     const f = featuresOf(r);
     let plan: Plan;
     try {

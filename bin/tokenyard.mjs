@@ -121530,6 +121530,7 @@ async function simulate(policy2, which, window2, warm, startMs, ratios) {
     return true;
   };
   const one = async (r, admitMs) => {
+    if (r.decision.reason !== null && SHAPE_EXITS.has(r.decision.reason)) return { ...NOTHING3, kind: "exit", decision: { action: "block", reason: r.decision.reason, route: null, chain: [] } };
     const f = featuresOf(r);
     let plan;
     try {
@@ -121718,7 +121719,7 @@ async function replay(o) {
     gates: { failed: failedGates(gate.failOn, { headCuts: head.cuts.length, baseCost: baseTotals.costMicroUsd, headCost: headTotals.costMicroUsd }), failOn: gate.failOn, headChangesFailOn: gate.changed }
   };
 }
-var RawTraceDirError, CLASSES2, STORE_DOWN, NOTHING3, BODY_EXITS, uniqSorted, recordedDecision;
+var RawTraceDirError, CLASSES2, STORE_DOWN, NOTHING3, SHAPE_EXITS, BODY_EXITS, uniqSorted, recordedDecision;
 var init_engine = __esm({
   "src/replay/engine.ts"() {
     "use strict";
@@ -121743,7 +121744,8 @@ var init_engine = __esm({
     CLASSES2 = new Set(REQUEST_CLASSES2);
     STORE_DOWN = { admitted: false, failed: null, audit: [], totals: [], storeDown: true };
     NOTHING3 = { reason: null, name: "", scopeValue: "", provider: null, upstreamModel: null, cost: null };
-    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed", "output-cap-failed", "write-ahead-failed"]);
+    SHAPE_EXITS = /* @__PURE__ */ new Set(["body-bom", "duplicate-keys", "too-deep", "unparsable-body"]);
+    BODY_EXITS = /* @__PURE__ */ new Set(["redaction-failed", "model-rewrite-failed", "output-cap-failed", "write-ahead-failed", ...SHAPE_EXITS]);
     uniqSorted = (xs) => [...new Set(xs)].sort(cmp);
     recordedDecision = (r) => ({ action: r.decision.action, reason: r.decision.reason, route: r.decision.route, chain: [...r.decision.chain] });
   }
