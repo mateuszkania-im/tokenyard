@@ -51,3 +51,11 @@ test('tokenyard serve --dev-upstream forwards to the upstream', async () => {
     await mock.close();
   }
 });
+
+test('the bundle carries the package version, not the whole package.json (scripts and dev dependencies stay out)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const bundle = readFileSync('bin/tokenyard.mjs', 'utf8');
+  expect(bundle).toContain(JSON.stringify(pkg.version));
+  expect(bundle).not.toContain('check:bundle');
+  expect(bundle).not.toContain('devDependencies: {\n    "@opentelemetry/api"');
+});

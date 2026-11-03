@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import pkg from '../package.json' with { type: 'json' };
+import { description, version } from '../package.json';
 import { exportTraces, loadTraceRecords, parseDuration, pruneTraces } from './ledger/export.js';
 import { renderReportTerminal } from './report/render-terminal.js';
 import { buildReport, REPORT_DIMENSIONS, type ReportDimension } from './report/report.js';
@@ -44,7 +44,7 @@ const hasPassword = (url: string): boolean => {
 };
 
 const program = new Command();
-program.name('tokenyard').description(pkg.description).version(pkg.version);
+program.name('tokenyard').description(description).version(version);
 program
   .command('mock')
   .description('run the deterministic mock Anthropic provider (and with --openai-port the OpenAI one)')

@@ -2665,13 +2665,13 @@ var require_directives = __commonJS({
               onError(0, "%YAML directive should contain exactly one part");
               return false;
             }
-            const [version2] = parts;
-            if (version2 === "1.1" || version2 === "1.2") {
-              this.yaml.version = version2;
+            const [version3] = parts;
+            if (version3 === "1.1" || version3 === "1.2") {
+              this.yaml.version = version3;
               return true;
             } else {
-              const isValid = /^\d+\.\d+$/.test(version2);
-              onError(6, `Unsupported YAML version ${version2}`, isValid);
+              const isValid = /^\d+\.\d+$/.test(version3);
+              onError(6, `Unsupported YAML version ${version3}`, isValid);
               return false;
             }
           }
@@ -5773,14 +5773,14 @@ var require_Document = __commonJS({
           version: "1.2"
         }, options);
         this.options = opt;
-        let { version: version2 } = opt;
+        let { version: version3 } = opt;
         if (options?._directives) {
           this.directives = options._directives.atDocument();
           if (this.directives.yaml.explicit)
-            version2 = this.directives.yaml.version;
+            version3 = this.directives.yaml.version;
         } else
-          this.directives = new directives.Directives({ version: version2 });
-        this.setSchema(version2, options);
+          this.directives = new directives.Directives({ version: version3 });
+        this.setSchema(version3, options);
         this.contents = value === void 0 ? null : this.createNode(value, _replacer, options);
       }
       /**
@@ -5960,11 +5960,11 @@ var require_Document = __commonJS({
        *
        * Overrides all previously set schema options.
        */
-      setSchema(version2, options = {}) {
-        if (typeof version2 === "number")
-          version2 = String(version2);
+      setSchema(version3, options = {}) {
+        if (typeof version3 === "number")
+          version3 = String(version3);
         let opt;
-        switch (version2) {
+        switch (version3) {
           case "1.1":
             if (this.directives)
               this.directives.yaml.version = "1.1";
@@ -5975,9 +5975,9 @@ var require_Document = __commonJS({
           case "1.2":
           case "next":
             if (this.directives)
-              this.directives.yaml.version = version2;
+              this.directives.yaml.version = version3;
             else
-              this.directives = new directives.Directives({ version: version2 });
+              this.directives = new directives.Directives({ version: version3 });
             opt = { resolveKnownTags: true, schema: "core" };
             break;
           case null:
@@ -5986,7 +5986,7 @@ var require_Document = __commonJS({
             opt = null;
             break;
           default: {
-            const sv = JSON.stringify(version2);
+            const sv = JSON.stringify(version3);
             throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
           }
         }
@@ -11236,10 +11236,10 @@ var init_regexes = __esm({
     duration = /^P(?:(\d+W)|(?!.*W)(?=\d|T\d)(\d+Y)?(\d+M)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+([.,]\d+)?S)?)?)$/;
     extendedDuration = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
     guid = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$/;
-    uuid = (version2) => {
-      if (!version2)
+    uuid = (version3) => {
+      if (!version3)
         return /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/;
-      return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version2}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
+      return new RegExp(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-${version3}[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$`);
     };
     uuid4 = /* @__PURE__ */ uuid(4);
     uuid6 = /* @__PURE__ */ uuid(6);
@@ -11833,10 +11833,10 @@ ${content.join("\n")}
 });
 
 // node_modules/zod/v4/core/versions.js
-var version;
+var version2;
 var init_versions = __esm({
   "node_modules/zod/v4/core/versions.js"() {
-    version = {
+    version2 = {
       major: 4,
       minor: 6,
       patch: 7
@@ -12539,7 +12539,7 @@ var init_schemas = __esm({
       inst ?? (inst = {});
       inst._zod.def = def;
       inst._zod.bag = inst._zod.bag || {};
-      inst._zod.version = version;
+      inst._zod.version = version2;
       const defChecks = inst._zod.def.checks;
       const checks = inst._zod.traits.has("$ZodCheck") ? [inst, ...defChecks ?? []] : defChecks?.length ? [...defChecks] : [];
       for (const ch of checks) {
@@ -25222,12 +25222,12 @@ function _check(fn, params) {
   return ch;
 }
 // @__NO_SIDE_EFFECTS__
-function describe(description) {
+function describe(description2) {
   const ch = new $ZodCheck({ check: "describe" });
   ch._zod.onattach = [
     (inst) => {
       const existing = globalRegistry.get(inst) ?? {};
-      globalRegistry.add(inst, { ...existing, description });
+      globalRegistry.add(inst, { ...existing, description: description2 });
     }
   ];
   ch._zod.check = () => {
@@ -27033,7 +27033,7 @@ __export(core_exports2, {
   validate: () => validate,
   validateAsync: () => validateAsync,
   validateURL: () => validateURL,
-  version: () => version,
+  version: () => version2,
   withParser: () => withParser
 });
 var init_core2 = __esm({
@@ -27939,9 +27939,9 @@ var init_schemas2 = __esm({
       readonly() {
         return readonly(this);
       },
-      describe(description) {
+      describe(description2) {
         const cl = this.clone();
-        globalRegistry.add(cl, { description });
+        globalRegistry.add(cl, { description: description2 });
         return cl;
       },
       meta(...args) {
@@ -29513,10 +29513,10 @@ function fromJSONSchema(schema, params) {
   } catch {
     throw new Error("fromJSONSchema input is not valid JSON (possibly cyclic); use $defs/$ref for recursive schemas");
   }
-  const version2 = detectVersion(normalized, params?.defaultTarget);
+  const version3 = detectVersion(normalized, params?.defaultTarget);
   const defs = normalized.$defs || normalized.definitions || {};
   const ctx = {
-    version: version2,
+    version: version3,
     defs,
     refs: /* @__PURE__ */ new Map(),
     processing: /* @__PURE__ */ new Set(),
@@ -34121,14 +34121,14 @@ var require_diagnostics = __commonJS({
         "undici:client:beforeConnect",
         (evt) => {
           const {
-            connectParams: { version: version2, protocol, port, host }
+            connectParams: { version: version3, protocol, port, host }
           } = evt;
           debugLog(
             "connecting to %s%s using %s%s",
             host,
             port ? `:${port}` : "",
             protocol,
-            version2
+            version3
           );
         }
       );
@@ -34136,14 +34136,14 @@ var require_diagnostics = __commonJS({
         "undici:client:connected",
         (evt) => {
           const {
-            connectParams: { version: version2, protocol, port, host }
+            connectParams: { version: version3, protocol, port, host }
           } = evt;
           debugLog(
             "connected to %s%s using %s%s",
             host,
             port ? `:${port}` : "",
             protocol,
-            version2
+            version3
           );
         }
       );
@@ -34151,7 +34151,7 @@ var require_diagnostics = __commonJS({
         "undici:client:connectError",
         (evt) => {
           const {
-            connectParams: { version: version2, protocol, port, host },
+            connectParams: { version: version3, protocol, port, host },
             error: error62
           } = evt;
           debugLog(
@@ -34159,7 +34159,7 @@ var require_diagnostics = __commonJS({
             host,
             port ? `:${port}` : "",
             protocol,
-            version2,
+            version3,
             error62.message
           );
         }
@@ -42437,10 +42437,10 @@ var require_socks5_client = __commonJS({
         if (this.buffer.length < 2) {
           return;
         }
-        const version2 = this.buffer[0];
+        const version3 = this.buffer[0];
         const method = this.buffer[1];
-        if (version2 !== SOCKS_VERSION) {
-          throw new Socks5ProxyError(`Invalid SOCKS version: ${version2}`, "UND_ERR_SOCKS5_VERSION");
+        if (version3 !== SOCKS_VERSION) {
+          throw new Socks5ProxyError(`Invalid SOCKS version: ${version3}`, "UND_ERR_SOCKS5_VERSION");
         }
         if (method === AUTH_METHODS.NO_ACCEPTABLE) {
           throw new Socks5ProxyError("No acceptable authentication method", "UND_ERR_SOCKS5_AUTH_REJECTED");
@@ -42485,10 +42485,10 @@ var require_socks5_client = __commonJS({
         if (this.buffer.length < 2) {
           return;
         }
-        const version2 = this.buffer[0];
+        const version3 = this.buffer[0];
         const status = this.buffer[1];
-        if (version2 !== 1) {
-          throw new Socks5ProxyError(`Invalid auth sub-negotiation version: ${version2}`, "UND_ERR_SOCKS5_AUTH_VERSION");
+        if (version3 !== 1) {
+          throw new Socks5ProxyError(`Invalid auth sub-negotiation version: ${version3}`, "UND_ERR_SOCKS5_AUTH_VERSION");
         }
         if (status !== 0) {
           throw new Socks5ProxyError("Authentication failed", "UND_ERR_SOCKS5_AUTH_FAILED");
@@ -42535,11 +42535,11 @@ var require_socks5_client = __commonJS({
         if (this.buffer.length < 4) {
           return;
         }
-        const version2 = this.buffer[0];
+        const version3 = this.buffer[0];
         const reply = this.buffer[1];
         const addressType = this.buffer[3];
-        if (version2 !== SOCKS_VERSION) {
-          throw new Socks5ProxyError(`Invalid SOCKS version in reply: ${version2}`, "UND_ERR_SOCKS5_REPLY_VERSION");
+        if (version3 !== SOCKS_VERSION) {
+          throw new Socks5ProxyError(`Invalid SOCKS version in reply: ${version3}`, "UND_ERR_SOCKS5_REPLY_VERSION");
         }
         let responseLength = 4;
         if (addressType === ADDRESS_TYPES.IPV4) {
@@ -59160,11 +59160,11 @@ var init_paths = __esm({
 // src/edge/trace-record.ts
 function parseClient(userAgent) {
   const ua = userAgent ?? "";
-  const version2 = (v) => v === void 0 ? null : sanitizeHeaderValue(v).value || null;
+  const version3 = (v) => v === void 0 ? null : sanitizeHeaderValue(v).value || null;
   const claude = /^claude-cli\/([^\s;()]+)/i.exec(ua);
-  if (claude) return { agent: "claude-code", version: version2(claude[1]) };
+  if (claude) return { agent: "claude-code", version: version3(claude[1]) };
   const codex = /^codex[\w-]*\/([^\s;()]+)/i.exec(ua);
-  if (codex) return { agent: "codex", version: version2(codex[1]) };
+  if (codex) return { agent: "codex", version: version3(codex[1]) };
   return { agent: "other", version: null };
 }
 function tracedModel(p, model, salt = "") {
@@ -68474,10 +68474,10 @@ var require_LOLWUT = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = {
-      parseCommand(parser, version2, ...optionalArguments) {
+      parseCommand(parser, version3, ...optionalArguments) {
         parser.push("LOLWUT");
-        if (version2) {
-          parser.push("VERSION", version2.toString());
+        if (version3) {
+          parser.push("VERSION", version3.toString());
           parser.pushVariadic(optionalArguments.map(String));
         }
       },
@@ -79305,12 +79305,12 @@ var require_enterprise_maintenance_manager = __commonJS({
     _a3 = EnterpriseMaintenanceManager;
     exports.default = EnterpriseMaintenanceManager;
     function isPrivateIP(ip) {
-      const version2 = (0, net_1.isIP)(ip);
-      if (version2 === 4) {
+      const version3 = (0, net_1.isIP)(ip);
+      if (version3 === 4) {
         const octets = ip.split(".").map(Number);
         return octets[0] === 10 || octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31 || octets[0] === 192 && octets[1] === 168;
       }
-      if (version2 === 6) {
+      if (version3 === 6) {
         return ip.startsWith("fc") || // Unique local
         ip.startsWith("fd") || // Unique local
         ip === "::1" || // Loopback
@@ -88846,8 +88846,8 @@ var require_registry = __commonJS({
       get(name2) {
         return this.#versions.get(name2);
       }
-      set(name2, version2) {
-        this.#versions.set(name2, version2);
+      set(name2, version3) {
+        this.#versions.set(name2, version3);
       }
       delete(name2) {
         return this.#versions.delete(name2);
@@ -90696,8 +90696,8 @@ var init_utils = __esm({
 });
 
 // node_modules/@opentelemetry/api/build/esm/context/context.js
-function createContextKey(description) {
-  return Symbol.for(description);
+function createContextKey(description2) {
+  return Symbol.for(description2);
 }
 var BaseContext, ROOT_CONTEXT;
 var init_context = __esm({
@@ -91319,10 +91319,10 @@ var init_ProxyTracer = __esm({
     init_NoopTracer();
     NOOP_TRACER = new NoopTracer();
     ProxyTracer = class {
-      constructor(provider2, name2, version2, options) {
+      constructor(provider2, name2, version3, options) {
         this._provider = provider2;
         this.name = name2;
-        this.version = version2;
+        this.version = version3;
         this.options = options;
       }
       startSpan(name2, options, context2) {
@@ -91375,9 +91375,9 @@ var init_ProxyTracerProvider = __esm({
       /**
        * Get a {@link ProxyTracer}
        */
-      getTracer(name2, version2, options) {
+      getTracer(name2, version3, options) {
         var _a3;
-        return (_a3 = this.getDelegateTracer(name2, version2, options)) !== null && _a3 !== void 0 ? _a3 : new ProxyTracer(this, name2, version2, options);
+        return (_a3 = this.getDelegateTracer(name2, version3, options)) !== null && _a3 !== void 0 ? _a3 : new ProxyTracer(this, name2, version3, options);
       }
       getDelegate() {
         var _a3;
@@ -91389,9 +91389,9 @@ var init_ProxyTracerProvider = __esm({
       setDelegate(delegate) {
         this._delegate = delegate;
       }
-      getDelegateTracer(name2, version2, options) {
+      getDelegateTracer(name2, version3, options) {
         var _a3;
-        return (_a3 = this._delegate) === null || _a3 === void 0 ? void 0 : _a3.getTracer(name2, version2, options);
+        return (_a3 = this._delegate) === null || _a3 === void 0 ? void 0 : _a3.getTracer(name2, version3, options);
       }
     };
   }
@@ -91601,8 +91601,8 @@ var init_metrics2 = __esm({
       /**
        * Returns a meter from the global meter provider.
        */
-      getMeter(name2, version2, options) {
-        return this.getMeterProvider().getMeter(name2, version2, options);
+      getMeter(name2, version3, options) {
+        return this.getMeterProvider().getMeter(name2, version3, options);
       }
       /** Remove the global meter provider */
       disable() {
@@ -91795,8 +91795,8 @@ var init_trace = __esm({
       /**
        * Returns a tracer from the global tracer provider.
        */
-      getTracer(name2, version2) {
-        return this.getTracerProvider().getTracer(name2, version2);
+      getTracer(name2, version3) {
+        return this.getTracerProvider().getTracer(name2, version3);
       }
       /** Remove the global tracer provider */
       disable() {
@@ -92805,9 +92805,9 @@ var require_client2 = __commonJS({
           prepared.syncedDiscardCount = countAtInjection;
           const rollback = (names) => {
             for (const name2 of names) {
-              const version2 = rollbackVersions.get(name2);
-              if (version2 !== void 0 && prepared.get(name2) === void 0) {
-                prepared.set(name2, version2);
+              const version3 = rollbackVersions.get(name2);
+              if (version3 !== void 0 && prepared.get(name2) === void 0) {
+                prepared.set(name2, version3);
               }
             }
             prepared.syncedDiscardCount = Math.min(prepared.syncedDiscardCount, countAtInjection - 1);
@@ -92828,9 +92828,9 @@ var require_client2 = __commonJS({
           const name2 = String(args[2]);
           const priorFields = registry2.get(name2)?.fields;
           registry2.set(name2, args.slice(3));
-          const version2 = registry2.get(name2).version;
-          userPrepare = { name: name2, version: version2, priorFields };
-          prepared.set(name2, version2);
+          const version3 = registry2.get(name2).version;
+          userPrepare = { name: name2, version: version3, priorFields };
+          prepared.set(name2, version3);
         } else if (command === HIMPORT_SET_1.default) {
           const name2 = String(args[3]);
           setName = name2;
@@ -92908,10 +92908,10 @@ var require_client2 = __commonJS({
           reply = await mainPromise;
         } catch (err) {
           if (command === HIMPORT_PREPARE_1.default && userPrepare !== void 0) {
-            const { name: name2, version: version2, priorFields } = userPrepare;
-            if (prepared.get(name2) === version2)
+            const { name: name2, version: version3, priorFields } = userPrepare;
+            if (prepared.get(name2) === version3)
               prepared.delete(name2);
-            if (registry2.get(name2)?.version === version2) {
+            if (registry2.get(name2)?.version === version3) {
               if (priorFields !== void 0) {
                 registry2.set(name2, priorFields);
               } else {
@@ -92928,9 +92928,9 @@ var require_client2 = __commonJS({
                   registry2.set(name2, fields);
               }
             }
-            for (const [name2, version2] of userDiscard.restore) {
+            for (const [name2, version3] of userDiscard.restore) {
               if (prepared.get(name2) === void 0)
-                prepared.set(name2, version2);
+                prepared.set(name2, version3);
             }
             prepared.syncedDiscardCount = Math.min(prepared.syncedDiscardCount, userDiscard.countAfter - 1);
           }
@@ -113367,10 +113367,10 @@ var require_TracerProvider = __commonJS({
           }
         };
       }
-      getTracer(name2, version2, options) {
-        const key = `${name2}@${version2 || ""}:${options?.schemaUrl || ""}`;
+      getTracer(name2, version3, options) {
+        const key = `${name2}@${version3 || ""}:${options?.schemaUrl || ""}`;
         if (!this._tracers.has(key)) {
-          this._tracers.set(key, new Tracer_1.Tracer({ name: name2, version: version2, schemaUrl: options?.schemaUrl }, this._tracerOptions));
+          this._tracers.set(key, new Tracer_1.Tracer({ name: name2, version: version3, schemaUrl: options?.schemaUrl }, this._tracerOptions));
         }
         return this._tracers.get(key);
       }
@@ -114816,7 +114816,7 @@ var require_global_utils = __commonJS({
     exports.GLOBAL_LOGS_API_KEY = /* @__PURE__ */ Symbol.for("io.opentelemetry.js.api.logs");
     exports._global = globalThis;
     function makeGetter(requiredVersion, instance, fallback) {
-      return (version2) => version2 === requiredVersion ? instance : fallback;
+      return (version3) => version3 === requiredVersion ? instance : fallback;
     }
     exports.makeGetter = makeGetter;
     exports.API_BACKWARDS_COMPATIBILITY_VERSION = 1;
@@ -114848,10 +114848,10 @@ var require_ProxyLogger = __commonJS({
     exports.ProxyLogger = void 0;
     var NoopLogger_1 = require_NoopLogger();
     var ProxyLogger = class {
-      constructor(provider2, name2, version2, options) {
+      constructor(provider2, name2, version3, options) {
         this._provider = provider2;
         this.name = name2;
-        this.version = version2;
+        this.version = version3;
         this.options = options;
       }
       /**
@@ -114894,9 +114894,9 @@ var require_ProxyLoggerProvider = __commonJS({
     var NoopLoggerProvider_1 = require_NoopLoggerProvider();
     var ProxyLogger_1 = require_ProxyLogger();
     var ProxyLoggerProvider = class {
-      getLogger(name2, version2, options) {
+      getLogger(name2, version3, options) {
         var _a3;
-        return (_a3 = this._getDelegateLogger(name2, version2, options)) !== null && _a3 !== void 0 ? _a3 : new ProxyLogger_1.ProxyLogger(this, name2, version2, options);
+        return (_a3 = this._getDelegateLogger(name2, version3, options)) !== null && _a3 !== void 0 ? _a3 : new ProxyLogger_1.ProxyLogger(this, name2, version3, options);
       }
       /**
        * Get the delegate logger provider.
@@ -114917,9 +114917,9 @@ var require_ProxyLoggerProvider = __commonJS({
       /**
        * @internal
        */
-      _getDelegateLogger(name2, version2, options) {
+      _getDelegateLogger(name2, version3, options) {
         var _a3;
-        return (_a3 = this._delegate) === null || _a3 === void 0 ? void 0 : _a3.getLogger(name2, version2, options);
+        return (_a3 = this._delegate) === null || _a3 === void 0 ? void 0 : _a3.getLogger(name2, version3, options);
       }
     };
     exports.ProxyLoggerProvider = ProxyLoggerProvider;
@@ -114975,8 +114975,8 @@ var require_logs2 = __commonJS({
        * @param options The options of the logger or instrumentation library.
        * @returns {@link Logger}
        */
-      getLogger(name2, version2, options) {
-        return this.getLoggerProvider().getLogger(name2, version2, options);
+      getLogger(name2, version3, options) {
+        return this.getLoggerProvider().getLogger(name2, version3, options);
       }
       /** Remove the global logger provider */
       disable() {
@@ -117984,9 +117984,9 @@ var require_MetricStorage = __commonJS({
       getInstrumentDescriptor() {
         return this._instrumentDescriptor;
       }
-      updateDescription(description) {
+      updateDescription(description2) {
         this._instrumentDescriptor = (0, InstrumentDescriptor_1.createInstrumentDescriptor)(this._instrumentDescriptor.name, this._instrumentDescriptor.type, {
-          description,
+          description: description2,
           valueType: this._instrumentDescriptor.valueType,
           unit: this._instrumentDescriptor.unit,
           advice: this._instrumentDescriptor.advice
@@ -119283,14 +119283,14 @@ var require_MeterProvider = __commonJS({
       /**
        * Get a meter with the configuration of the MeterProvider.
        */
-      getMeter(name2, version2 = "", options = {}) {
+      getMeter(name2, version3 = "", options = {}) {
         if (this._shutdown) {
           api_1.diag.warn("A shutdown MeterProvider cannot provide a Meter");
           return (0, api_1.createNoopMeter)();
         }
         return this._sharedState.getMeterSharedState({
           name: name2,
-          version: version2,
+          version: version3,
           schemaUrl: options.schemaUrl
         }).meter;
       }
@@ -123679,8 +123679,8 @@ var Argument = class {
    * @param {string} name
    * @param {string} [description]
    */
-  constructor(name2, description) {
-    this.description = description || "";
+  constructor(name2, description2) {
+    this.description = description2 || "";
     this.variadic = false;
     this.parseArg = void 0;
     this.defaultValue = void 0;
@@ -123730,9 +123730,9 @@ var Argument = class {
    * @param {string} [description]
    * @return {Argument}
    */
-  default(value, description) {
+  default(value, description2) {
     this.defaultValue = value;
-    this.defaultValueDescription = description;
+    this.defaultValueDescription = description2;
     return this;
   }
   /**
@@ -124156,8 +124156,8 @@ var Help = class {
   formatHelp(cmd, helper) {
     const termWidth = helper.padWidth(cmd, helper);
     const helpWidth = helper.helpWidth ?? 80;
-    function callFormatItem(term, description) {
-      return helper.formatItem(term, termWidth, description, helper);
+    function callFormatItem(term, description2) {
+      return helper.formatItem(term, termWidth, description2, helper);
     }
     let output2 = [
       `${helper.styleTitle("Usage:")} ${helper.styleUsage(helper.commandUsage(cmd))}`,
@@ -124328,10 +124328,10 @@ var Help = class {
    * @param {Help} helper
    * @returns {string}
    */
-  formatItem(term, termWidth, description, helper) {
+  formatItem(term, termWidth, description2, helper) {
     const itemIndent = 2;
     const itemIndentStr = " ".repeat(itemIndent);
-    if (!description) return itemIndentStr + term;
+    if (!description2) return itemIndentStr + term;
     const paddedTerm = term.padEnd(
       termWidth + term.length - helper.displayWidth(term)
     );
@@ -124339,10 +124339,10 @@ var Help = class {
     const helpWidth = this.helpWidth ?? 80;
     const remainingWidth = helpWidth - termWidth - spacerWidth - itemIndent;
     let formattedDescription;
-    if (remainingWidth < this.minWidthToWrap || helper.preformatted(description)) {
-      formattedDescription = description;
+    if (remainingWidth < this.minWidthToWrap || helper.preformatted(description2)) {
+      formattedDescription = description2;
     } else {
-      const wrappedDescription = helper.boxWrap(description, remainingWidth);
+      const wrappedDescription = helper.boxWrap(description2, remainingWidth);
       formattedDescription = wrappedDescription.replace(
         /\n/g,
         "\n" + " ".repeat(termWidth + spacerWidth)
@@ -124398,9 +124398,9 @@ var Option = class {
    * @param {string} flags
    * @param {string} [description]
    */
-  constructor(flags, description) {
+  constructor(flags, description2) {
     this.flags = flags;
-    this.description = description || "";
+    this.description = description2 || "";
     this.required = flags.includes("<");
     this.optional = flags.includes("[");
     this.variadic = /\w\.\.\.[>\]]$/.test(flags);
@@ -124430,9 +124430,9 @@ var Option = class {
    * @param {string} [description]
    * @return {Option}
    */
-  default(value, description) {
+  default(value, description2) {
     this.defaultValue = value;
-    this.defaultValueDescription = description;
+    this.defaultValueDescription = description2;
     return this;
   }
   /**
@@ -125028,8 +125028,8 @@ var Command = class _Command extends EventEmitter {
    * @param {string} [description]
    * @return {Argument} new argument
    */
-  createArgument(name2, description) {
-    return new Argument(name2, description);
+  createArgument(name2, description2) {
+    return new Argument(name2, description2);
   }
   /**
    * Define argument syntax for command.
@@ -125047,8 +125047,8 @@ var Command = class _Command extends EventEmitter {
    * @param {*} [defaultValue]
    * @return {Command} `this` command for chaining
    */
-  argument(name2, description, parseArg, defaultValue) {
-    const argument = this.createArgument(name2, description);
+  argument(name2, description2, parseArg, defaultValue) {
+    const argument = this.createArgument(name2, description2);
     if (typeof parseArg === "function") {
       argument.default(defaultValue).argParser(parseArg);
     } else {
@@ -125108,7 +125108,7 @@ var Command = class _Command extends EventEmitter {
    * @param {string} [description] - custom description
    * @return {Command} `this` command for chaining
    */
-  helpCommand(enableOrNameAndArgs, description) {
+  helpCommand(enableOrNameAndArgs, description2) {
     if (typeof enableOrNameAndArgs === "boolean") {
       this._addImplicitHelpCommand = enableOrNameAndArgs;
       if (enableOrNameAndArgs && this._defaultCommandGroup) {
@@ -125118,14 +125118,14 @@ var Command = class _Command extends EventEmitter {
     }
     const nameAndArgs = enableOrNameAndArgs ?? "help [command]";
     const [, helpName, helpArgs] = nameAndArgs.match(/([^ ]+) *(.*)/);
-    const helpDescription = description ?? "display help for command";
+    const helpDescription = description2 ?? "display help for command";
     const helpCommand = this.createCommand(helpName);
     helpCommand.helpOption(false);
     if (helpArgs) helpCommand.arguments(helpArgs);
     if (helpDescription) helpCommand.description(helpDescription);
     this._addImplicitHelpCommand = true;
     this._helpCommand = helpCommand;
-    if (enableOrNameAndArgs || description) this._initCommandGroup(helpCommand);
+    if (enableOrNameAndArgs || description2) this._initCommandGroup(helpCommand);
     return this;
   }
   /**
@@ -125254,8 +125254,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [description]
    * @return {Option} new option
    */
-  createOption(flags, description) {
-    return new Option(flags, description);
+  createOption(flags, description2) {
+    return new Option(flags, description2);
   }
   /**
    * Wrap parseArgs to catch 'commander.invalidArgument'.
@@ -125370,13 +125370,13 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @return {Command} `this` command for chaining
    * @private
    */
-  _optionEx(config2, flags, description, fn, defaultValue) {
+  _optionEx(config2, flags, description2, fn, defaultValue) {
     if (typeof flags === "object" && flags instanceof Option) {
       throw new Error(
         "To add an Option object use addOption() instead of option() or requiredOption()"
       );
     }
-    const option = this.createOption(flags, description);
+    const option = this.createOption(flags, description2);
     option.makeOptionMandatory(!!config2.mandatory);
     if (typeof fn === "function") {
       option.default(defaultValue).argParser(fn);
@@ -125413,8 +125413,8 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {*} [defaultValue]
    * @return {Command} `this` command for chaining
    */
-  option(flags, description, parseArg, defaultValue) {
-    return this._optionEx({}, flags, description, parseArg, defaultValue);
+  option(flags, description2, parseArg, defaultValue) {
+    return this._optionEx({}, flags, description2, parseArg, defaultValue);
   }
   /**
    * Add a required option which must have a value after parsing. This usually means
@@ -125428,11 +125428,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {*} [defaultValue]
    * @return {Command} `this` command for chaining
    */
-  requiredOption(flags, description, parseArg, defaultValue) {
+  requiredOption(flags, description2, parseArg, defaultValue) {
     return this._optionEx(
       { mandatory: true },
       flags,
-      description,
+      description2,
       parseArg,
       defaultValue
     );
@@ -126548,12 +126548,12 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [description]
    * @return {(this | string | undefined)} `this` command for chaining, or version string if no arguments
    */
-  version(str, flags, description) {
+  version(str, flags, description2) {
     if (str === void 0) return this._version;
     this._version = str;
     flags = flags || "-V, --version";
-    description = description || "output the version number";
-    const versionOption = this.createOption(flags, description);
+    description2 = description2 || "output the version number";
+    const versionOption = this.createOption(flags, description2);
     this._versionOptionName = versionOption.attributeName();
     this._registerOption(versionOption);
     this.on("option:" + versionOption.name(), () => {
@@ -126855,7 +126855,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
    * @param {string} [description]
    * @return {Command} `this` command for chaining
    */
-  helpOption(flags, description) {
+  helpOption(flags, description2) {
     if (typeof flags === "boolean") {
       if (flags) {
         if (this._helpOption === null) this._helpOption = void 0;
@@ -126869,9 +126869,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
     }
     this._helpOption = this.createOption(
       flags ?? "-h, --help",
-      description ?? "display help for command"
+      description2 ?? "display help for command"
     );
-    if (flags || description) this._initOptionGroup(this._helpOption);
+    if (flags || description2) this._initOptionGroup(this._helpOption);
     return this;
   }
   /**
@@ -127009,82 +127009,8 @@ function useColor() {
 var program = new Command();
 
 // package.json
-var package_default = {
-  name: "@mateuszkania-im/tokenyard",
-  version: "0.1.0",
-  description: "LLM gateway for coding-agent traffic",
-  license: "MIT",
-  repository: {
-    type: "git",
-    url: "git+https://github.com/mateuszkania-im/tokenyard.git"
-  },
-  homepage: "https://github.com/mateuszkania-im/tokenyard#readme",
-  bugs: {
-    url: "https://github.com/mateuszkania-im/tokenyard/issues"
-  },
-  keywords: [
-    "llm",
-    "gateway",
-    "proxy",
-    "claude-code",
-    "codex",
-    "budgets",
-    "policy-as-code",
-    "observability",
-    "opentelemetry"
-  ],
-  type: "module",
-  bin: {
-    tokenyard: "bin/tokenyard.mjs"
-  },
-  files: [
-    "bin",
-    "action.yml",
-    "LICENSE",
-    "README.md"
-  ],
-  engines: {
-    node: ">=20.19"
-  },
-  publishConfig: {
-    access: "public",
-    provenance: true
-  },
-  scripts: {
-    build: "node esbuild.config.mjs",
-    "check:bundle": "node scripts/check-bundle.mjs",
-    typecheck: "tsc --noEmit",
-    lint: "oxlint",
-    test: "vitest run",
-    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts test/property/store.property.test.ts test/property/admit-concurrency.property.test.ts",
-    "test:fuzz": "node scripts/local-redis.mjs env TOKENYARD_FUZZ=1 vitest run --no-file-parallelism test/fuzz test/property test/policy/decide.property.test.ts test/security/s-v4-1-sse-long-line.test.ts",
-    "test:chaos": "node scripts/local-redis.mjs env TOKENYARD_CHAOS=1 vitest run --no-file-parallelism test/chaos",
-    bench: "tsx bench/run.ts",
-    soak: "tsx bench/soak.ts",
-    "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
-    live: "node --env-file=.env bin/tokenyard.mjs live",
-    "check:secrets": "node scripts/check-no-secrets.mjs"
-  },
-  devDependencies: {
-    "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
-    "@opentelemetry/resources": "^2.12.0",
-    "@opentelemetry/sdk-trace-base": "^2.12.0",
-    "@types/node": "^22.20.5",
-    commander: "^15.0.0",
-    esbuild: "^0.28.2",
-    "fast-check": "^4.10.2",
-    oxlint: "^1.90.0",
-    picocolors: "^1.1.1",
-    redis: "^6.3.1",
-    tsx: "^4.23.15",
-    typescript: "^7.0.2",
-    undici: "^7.30.1",
-    vitest: "^5.1.0",
-    yaml: "^2.9.1",
-    zod: "^4.6.7"
-  }
-};
+var version = "0.1.0";
+var description = "LLM gateway for coding-agent traffic";
 
 // src/cli.ts
 init_export();
@@ -127181,7 +127107,7 @@ var hasPassword = (url2) => {
   }
 };
 var program2 = new Command();
-program2.name("tokenyard").description(package_default.description).version(package_default.version);
+program2.name("tokenyard").description(description).version(version);
 program2.command("mock").description("run the deterministic mock Anthropic provider (and with --openai-port the OpenAI one)").option("--port <n>", "port to listen on (0 picks a free one)", "0").option("--host <host>", "address to bind (the compose demo uses 0.0.0.0 inside its container)", "127.0.0.1").option("--openai-port <n>", "also run the mock OpenAI provider on this port").action(async (o) => {
   const { startAnthropicMock: startAnthropicMock2 } = await Promise.resolve().then(() => (init_anthropic(), anthropic_exports));
   const mock = await startAnthropicMock2({ port: Number(o.port), host: o.host, keepReceived: 0 });
