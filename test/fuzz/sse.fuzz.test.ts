@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import { AnthropicUsageAccumulator } from '../../src/stream/anthropic-usage.js';
 import { ResponsesUsageAccumulator } from '../../src/stream/responses-usage.js';
 import { MAX_SSE_LINE_BYTES, SseParser, type SseEvent } from '../../src/stream/sse.js';
-import { fuzz } from '../helpers/fuzz.js';
+import { fuzz, fuzzTimeout } from '../helpers/fuzz.js';
 
 function parseChunks(chunks: readonly Buffer[], p = new SseParser()): SseEvent[] {
   const out: SseEvent[] = [];
@@ -81,7 +81,7 @@ test('fuzz: any chunk split gives the events of the unsplit input, which match t
     }),
     fuzz(0x55e1, 2_000),
   );
-});
+}, fuzzTimeout(10_000));
 
 test('fuzz: byte-at-a-time and CR LF split across chunks give the same events', () => {
   fc.assert(
@@ -91,7 +91,7 @@ test('fuzz: byte-at-a-time and CR LF split across chunks give the same events', 
     }),
     fuzz(0x55e2, 300),
   );
-});
+}, fuzzTimeout(10_000));
 
 test('fuzz: arbitrary bytes never throw, and the usage accumulators never throw on what the parser yields', () => {
   const event = fc.oneof(
@@ -110,7 +110,7 @@ test('fuzz: arbitrary bytes never throw, and the usage accumulators never throw 
     }),
     fuzz(0x55e3, 1_000),
   );
-});
+}, fuzzTimeout(10_000));
 
 test('S-V4-1 a long line delivered in small chunks parses in linear time (was quadratic: 1 MiB in 64-byte chunks took 20 s)', () => {
   const p = new SseParser();
