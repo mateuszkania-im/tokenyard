@@ -75,7 +75,13 @@ describe.skipIf(!url || !container || !isLoopbackRedisUrl(url ?? ''))('redis dow
   test('docker pause mid-load: budgets closed (503) while it hangs, recovery after unpause, no double charge, nothing left after the sweep', async () => {
     await admin.flushDb();
     const runtime = createGatewayRuntime();
-    const opened = await openCounterStore({ kind: 'redis', redisUrl: url as string, instance: 'chaos', onSwept: (ids) => runtime.onSwept(ids) });
+    // Every reservation a sweep settled, whatever the trace line says: the store charged exactly its estimate.
+    const swept = new Set<string>();
+    const onSwept = (ids: string[]): void => {
+      for (const id of ids) swept.add(id);
+      runtime.onSwept(ids);
+    };
+    const opened = await openCounterStore({ kind: 'redis', redisUrl: url as string, instance: 'chaos', onSwept });
     closeStore = opened.close;
     h = await startHarness({ store: opened.store, runtime, admitTimeoutMs: 300 });
     h.setBehaviour(() => ({ kind: 'ok', stream: true, padEvents: 20, chunkDelayMs: 5 }));
@@ -103,17 +109,24 @@ describe.skipIf(!url || !container || !isLoopbackRedisUrl(url ?? ''))('redis dow
     // the sweeper's: after a sweep nothing is open.
     await opened.store.sweep(Date.now());
     expect(await leftovers()).toEqual([]);
-    // No double charge: the store never holds more than the trace lines charged, and at least what settled normally.
+    // No double charge, exactly: each reservation was settled once, either by its request (the store got the actual
+    // cost) or by a sweep (the store got the estimate). A sweeper-labelled line whose sweep never came was a settle that
+    // timed out while paused and landed after the unpause with the actual cost (R-V3-2: its line says the estimate).
+    // A settle and a sweep of the same reservation, or two settles, would add a second charge and break the equality.
     const charged = h.records.map((r) => r.outcome.chargedMicroUsd ?? 0);
-    const byRequest = h.records.filter((r) => r.outcome.settledBy === 'request').map((r) => r.outcome.chargedMicroUsd ?? 0);
+    const expected = h.records.reduce((t, r) => {
+      if (r.decision.reservedMicroUsd === 0) return t;
+      const late = r.outcome.settledBy === 'sweeper' && !swept.has(r.id);
+      return t + (late ? (r.outcome.costMicroUsd ?? 0) : (r.outcome.chargedMicroUsd ?? 0));
+    }, 0);
+    const lateSettles = h.records.filter((r) => r.outcome.settledBy === 'sweeper' && !swept.has(r.id)).length;
     const spent = await teamDaySpent();
-    expect(spent).toBeLessThanOrEqual(charged.reduce((a, b) => a + b, 0));
-    expect(spent).toBeGreaterThanOrEqual(byRequest.reduce((a, b) => a + b, 0));
+    expect(spent).toBe(expected);
     // State from before the outage survived it.
     expect(await admin.exists(r11LatchKey())).toBe(1);
     for (const m of markers) expect(await admin.exists(m), m).toBe(1);
     const count = (st: number): number => during.filter((r) => r.status === st).length;
-    console.log(`redis pause: ${during.length} requests, ${count(200)} x 200, ${count(503)} x 503; settledBy sweeper ${h.records.filter((r) => r.outcome.settledBy === 'sweeper').length}; spent ${spent}, trace charges ${charged.reduce((a, b) => a + b, 0)}`);
+    console.log(`redis pause: ${during.length} requests, ${count(200)} x 200, ${count(503)} x 503; settledBy sweeper ${h.records.filter((r) => r.outcome.settledBy === 'sweeper').length} (${swept.size} swept, ${lateSettles} late settles); spent ${spent} = expected ${expected}, trace charges ${charged.reduce((a, b) => a + b, 0)}`);
   }, 60_000);
 
   test('connection killed and refused for 800 ms under load: commands fail at once, budgets closed, reconnect, unsettled reservations swept at their estimate, spent equals the trace charges', async () => {
