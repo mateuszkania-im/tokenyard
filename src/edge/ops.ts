@@ -1,5 +1,6 @@
 // Operations endpoints (spec 12.2): /healthz (process up), /readyz (policy loaded, store reachable or the failure mode
-// allows traffic) and /metrics (Prometheus text). No authentication and no content: counts, names from the policy, status.
+// allows traffic) and /metrics (Prometheus text). No content: counts, names from the policy, status. Without a metrics
+// token, /metrics and /readyz answer only requests whose Host is a loopback address or localhost (DNS rebinding, B3).
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CounterStore } from '../limits/store.js';
@@ -38,6 +39,20 @@ export function matchOps(method: string, rawUrl: string, basePath: string | null
 export function isLoopbackHost(host: string): boolean {
   const h = host.replace(/^\[|\]$/g, '').toLowerCase();
   return h === 'localhost' || h === '::1' || /^127(\.\d{1,3}){3}$/.test(h);
+}
+
+/**
+ * The host name of a Host header (`name`, `name:port`, `[v6]:port`), or null when there is none. Used to refuse DNS
+ * rebinding: a page on another origin reaches a loopback listener only under its own host name.
+ */
+export function hostHeaderName(h: string | undefined): string | null {
+  if (!h) return null;
+  if (h.startsWith('[')) {
+    const end = h.indexOf(']');
+    return end < 0 ? null : h.slice(0, end + 1);
+  }
+  const colon = h.indexOf(':');
+  return colon < 0 ? h : h.slice(0, colon);
 }
 
 const digest = (s: string): Buffer => createHash('sha256').update(s).digest();
@@ -81,6 +96,9 @@ export async function serveOps(d: OpsDeps, kind: OpsKind, req: IncomingMessage, 
     res.end(req.method === 'HEAD' ? undefined : body);
   };
   if (kind === 'healthz') return send(200, 'application/json', '{"status":"ok"}');
+  // Without a token the listener is loopback only; a Host that names anything else is a rebound browser request (B3).
+  const host = hostHeaderName(req.headers.host);
+  if (d.metricsToken === undefined && (host === null || !isLoopbackHost(host))) return send(421, 'application/json', '{"error":"misdirected request: use a loopback Host or set a metrics token"}');
   if (kind === 'readyz') {
     const r = await readiness(d);
     return send(r.ok ? 200 : 503, 'application/json', JSON.stringify({ status: r.ok ? 'ready' : 'not ready', reason: r.reason }));

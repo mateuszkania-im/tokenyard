@@ -1255,6 +1255,7 @@ data: ${JSON.stringify(data)}
 // src/edge/ops.ts
 var ops_exports = {};
 __export(ops_exports, {
+  hostHeaderName: () => hostHeaderName,
   isLoopbackHost: () => isLoopbackHost,
   matchOps: () => matchOps,
   serveOps: () => serveOps
@@ -1273,6 +1274,15 @@ function matchOps(method, rawUrl, basePath) {
 function isLoopbackHost(host) {
   const h = host.replace(/^\[|\]$/g, "").toLowerCase();
   return h === "localhost" || h === "::1" || /^127(\.\d{1,3}){3}$/.test(h);
+}
+function hostHeaderName(h) {
+  if (!h) return null;
+  if (h.startsWith("[")) {
+    const end = h.indexOf("]");
+    return end < 0 ? null : h.slice(0, end + 1);
+  }
+  const colon = h.indexOf(":");
+  return colon < 0 ? h : h.slice(0, colon);
 }
 function bearerOk(req, token) {
   const m = /^Bearer (.+)$/.exec(String(req.headers.authorization ?? ""));
@@ -1310,6 +1320,8 @@ async function serveOps(d, kind, req, res) {
     res.end(req.method === "HEAD" ? void 0 : body);
   };
   if (kind === "healthz") return send(200, "application/json", '{"status":"ok"}');
+  const host = hostHeaderName(req.headers.host);
+  if (d.metricsToken === void 0 && (host === null || !isLoopbackHost(host))) return send(421, "application/json", '{"error":"misdirected request: use a loopback Host or set a metrics token"}');
   if (kind === "readyz") {
     const r = await readiness(d);
     return send(r.ok ? 200 : 503, "application/json", JSON.stringify({ status: r.ok ? "ready" : "not ready", reason: r.reason }));
