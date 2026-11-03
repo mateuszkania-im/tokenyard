@@ -15,14 +15,15 @@ function scan(content: string) {
   return { code: r.status, out: r.stdout + r.stderr, file };
 }
 
-const tail = 'abcdefghijklmnopqrstuvwx';
+const tail = 'abcdefghijklmnopqrstuvwx'.repeat(4);
 
 test('canary-prefixed value passes', () => {
   expect(scan(`key=sk-ant-test-CANARY-${tail}`).code).toBe(0);
 });
 
+// Keys as the gateway's secret rules define them (B4): real lengths and key kinds, so short look-alikes are not keys.
 test('plain keys fail, naming the file but never the value', () => {
-  for (const value of [`sk-ant-${tail}`, `sk-proj-${tail}`, `sk-ant-other-CANARY-${tail}`]) {
+  for (const value of [`sk-ant-api03-${tail}`, `sk-proj-${tail}`, `sk-ant-api03-CANARY-${tail}`]) {
     const r = scan(`key=${value}`);
     expect(r.code).toBe(1);
     expect(r.out).toContain(r.file);

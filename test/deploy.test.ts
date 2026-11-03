@@ -22,7 +22,7 @@ test('compose demo policies pass policy check and hold the public demo keys', as
 test('the docker build context is an allow-list that keeps secrets and local state out', async () => {
   const lines = (await readFile('.dockerignore', 'utf8')).split('\n').map((l) => l.trim());
   expect(lines[lines.findIndex((l) => !l.startsWith('#') && l !== '')]).toBe('*');
-  for (const p of ['.env', '.env.*', '.live', 'node_modules', '.superpowers', 'traces']) expect(lines).toContain(p);
+  for (const p of ['**/.env', '**/.env.*', '**/.live', '**/node_modules', '**/.superpowers', '**/traces']) expect(lines).toContain(p);
   expect(lines.filter((l) => l.startsWith('!'))).toEqual(['!bin/tokenyard.mjs', '!deploy/']);
 });
 
