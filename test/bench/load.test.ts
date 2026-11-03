@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { cpuRssSlopes, intendedStarts, percentiles, ttfbVerdict } from '../../bench/lib.js';
+import { cpuRssSlopes, intendedStarts, percentiles, throughput, ttfbVerdict } from '../../bench/lib.js';
+import { profileArgs } from '../../bench/overhead.js';
 
 test('intended send times are evenly spaced per connection from a phase inside the first interval, within the run', () => {
   expect(intendedStarts({ startMs: 1000, endMs: 2000, intervalMs: 250, phaseMs: 100 })).toEqual([1100, 1350, 1600, 1850]);
@@ -32,4 +33,17 @@ test('an added TTFB verdict needs both the gateway measure and the client-side b
   expect(ttfbVerdict(p(0.04, 0.09), p(4.7, 677))).toBe(false);
   expect(ttfbVerdict(p(6, 9), p(3, 9))).toBe(false);
   expect(ttfbVerdict({ p50: null, p95: null, p99: null, n: 0 }, p(1, 2))).toBe(null);
+});
+
+test('throughput is answered requests and output tokens per second of the run, from its first scheduled send to its last answer (V1)', () => {
+  expect(throughput({ answered: 500, outputTokens: 250_000, firstScheduledMs: 1_000, lastAnswerMs: 11_000 })).toEqual({ requestsPerS: 50, outputTokensPerS: 25_000, elapsedS: 10 });
+  // A saturated path drains past its window: the same answers over a longer run are a lower rate, never a negative one.
+  expect(throughput({ answered: 500, outputTokens: 250_000, firstScheduledMs: 1_000, lastAnswerMs: 21_000 })).toEqual({ requestsPerS: 25, outputTokensPerS: 12_500, elapsedS: 20 });
+  expect(throughput({ answered: 0, outputTokens: 0, firstScheduledMs: 1_000, lastAnswerMs: 0 })).toEqual({ requestsPerS: 0, outputTokensPerS: 0, elapsedS: 0 });
+});
+
+test('BENCH_CPU_PROF profiles the gateway child only, into the named directory (V1)', () => {
+  expect(profileArgs('gateway', '/tmp/prof')).toEqual(['--cpu-prof', '--cpu-prof-dir=/tmp/prof']);
+  expect(profileArgs('mock', '/tmp/prof')).toEqual([]);
+  expect(profileArgs('gateway', undefined)).toEqual([]);
 });

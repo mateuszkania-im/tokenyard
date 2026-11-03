@@ -22,16 +22,18 @@ const triple = (p) => `${ms(p.p50)} / ${ms(p.p95)} / ${ms(p.p99)}`;
 const pair = (p) => `${ms(p.p50)} / ${ms(p.p99)}`;
 const ratio = (r) => (r ? `${num(r.min, 2)} / ${num(r.median, 2)} / ${num(r.max, 2)}` : 'n/a');
 const verdict = (met) => (met === true ? 'met' : met === false ? 'missed' : 'not measured');
+/** Answered requests and output tokens per second, direct / through the gateway; n/a for results measured before V1. */
+const rate = (t) => (t ? `${num(t.direct.requestsPerS, 1)} / ${num(t.gateway.requestsPerS, 1)} req/s, ${num(t.direct.outputTokensPerS)} / ${num(t.gateway.outputTokensPerS)} tokens/s` : 'n/a');
 const SCENARIOS = { 'non-streaming': 'Non-streaming, small body', 'streaming-500': 'Streaming, 500 tokens', 'body-150kb': 'Streaming, 150 KB body' };
 
 function overheadTable(rows) {
   const out = [
-    '| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms), gateway-measured | TTFB outside the provider p50 / p99 (ms), direct | Same, through the gateway | Total time p50 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS growth | Errors (direct / gateway) |',
-    '|---|---:|---|---|---|---|---|---:|---:|---:|',
+    '| Scenario | Streams | Added TTFB p50 / p95 / p99 (ms), gateway-measured | TTFB outside the provider p50 / p99 (ms), direct | Same, through the gateway | Total time p50 / p99 (ms), direct | Same, through the gateway | Throughput, direct / gateway | Gateway CPU | Gateway RSS growth | Errors (direct / gateway) |',
+    '|---|---:|---|---|---|---|---|---|---:|---:|---:|',
   ];
   for (const r of rows) {
     out.push(
-      `| ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${triple(r.addedTtfb)} (n = ${num(r.addedTtfb.n)}) | ${pair(r.direct.outsideProvider)} | ${pair(r.gateway.outsideProvider)} | ${pair(r.direct.total)} | ${pair(r.gateway.total)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.rssGrowthMb, 1)} MB | ${num(r.errors.direct)} / ${num(r.errors.gateway)} |`,
+      `| ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${triple(r.addedTtfb)} (n = ${num(r.addedTtfb.n)}) | ${pair(r.direct.outsideProvider)} | ${pair(r.gateway.outsideProvider)} | ${pair(r.direct.total)} | ${pair(r.gateway.total)} | ${rate(r.throughput)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.rssGrowthMb, 1)} MB | ${num(r.errors.direct)} / ${num(r.errors.gateway)} |`,
     );
   }
   return out.join('\n');
@@ -65,12 +67,12 @@ function overheadSection(o) {
   if (o.rows.some((r) => !main.includes(r.concurrency))) {
     lines.push('<details><summary>Every concurrency level, with client-side TTFB from the scheduled send time</summary>', '');
     lines.push(
-      '| Store | Scenario | Streams | Rate per stream (req/s) | Seconds | Answered (direct / gateway) | Added TTFB p50 / p95 / p99 (ms) | TTFB p50 / p95 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS |',
-      '|---|---|---:|---:|---:|---:|---|---|---|---:|---:|',
+      '| Store | Scenario | Streams | Rate per stream (req/s) | Seconds | Answered (direct / gateway) | Answered req/s (direct / gateway) | Output tokens/s (direct / gateway) | Added TTFB p50 / p95 / p99 (ms) | TTFB outside the provider p50 / p99 (ms), direct / gateway | TTFB p50 / p95 / p99 (ms), direct | Same, through the gateway | Gateway CPU | Gateway RSS | Added TTFB target (both measures) |',
+      '|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---:|---:|---|',
     );
     for (const r of o.rows) {
       lines.push(
-        `| ${r.store} | ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${num(r.ratePerConnection, 2)} | ${num(r.durationS)} | ${num(r.requests.direct)} / ${num(r.requests.gateway)} | ${triple(r.addedTtfb)} | ${triple(r.direct.ttfb)} | ${triple(r.gateway.ttfb)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.gatewayRssMb, 1)} MB |`,
+        `| ${r.store} | ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${num(r.ratePerConnection, 2)} | ${num(r.durationS)} | ${num(r.requests.direct)} / ${num(r.requests.gateway)} | ${r.throughput ? `${num(r.throughput.direct.requestsPerS, 1)} / ${num(r.throughput.gateway.requestsPerS, 1)}` : 'n/a'} | ${r.throughput ? `${num(r.throughput.direct.outputTokensPerS)} / ${num(r.throughput.gateway.outputTokensPerS)}` : 'n/a'} | ${triple(r.addedTtfb)} | ${pair(r.direct.outsideProvider)} / ${pair(r.gateway.outsideProvider)} | ${triple(r.direct.ttfb)} | ${triple(r.gateway.ttfb)} | ${num(r.gatewayCpuPct, 1)}% | ${num(r.gatewayRssMb, 1)} MB | ${verdict(r.addedTtfbMet)} |`,
       );
     }
     lines.push('', '</details>', '');

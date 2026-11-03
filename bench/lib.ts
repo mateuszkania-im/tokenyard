@@ -51,6 +51,20 @@ export function intendedStarts(o: { startMs: number; endMs: number; intervalMs: 
   return out;
 }
 
+export interface Throughput {
+  requestsPerS: number;
+  outputTokensPerS: number;
+  /** From the run's first scheduled send to its last answer: longer than the window when a saturated path drains. */
+  elapsedS: number;
+}
+
+/** Answered (2xx) requests and output tokens per second of one run, over the time it actually took. */
+export function throughput(o: { answered: number; outputTokens: number; firstScheduledMs: number; lastAnswerMs: number }): Throughput {
+  const elapsedMs = o.answered > 0 ? Math.max(0, o.lastAnswerMs - o.firstScheduledMs) : 0;
+  if (elapsedMs === 0) return { requestsPerS: 0, outputTokensPerS: 0, elapsedS: 0 };
+  return { requestsPerS: round((o.answered * 1000) / elapsedMs, 1), outputTokensPerS: round((o.outputTokens * 1000) / elapsedMs, 0), elapsedS: round(elapsedMs / 1000, 2) };
+}
+
 /**
  * Gateway CPU and RSS growth per 100 streams as the slope between two concurrency levels of the same store and
  * scenario, so the fixed cost of an idle process does not scale with the stream count.

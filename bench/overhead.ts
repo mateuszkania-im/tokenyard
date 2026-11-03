@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { mulberry32 } from '../src/mock/scenarios.js';
 import { PROVIDER_KEY_ENV, TEST_KEY } from '../test/helpers/policy.js';
-import { BENCH_PROVIDER_KEY, benchPolicy, intendedStarts, type Percentiles, percentiles, preconnect, round } from './lib.js';
+import { BENCH_PROVIDER_KEY, benchPolicy, intendedStarts, type Percentiles, percentiles, preconnect, round, type Throughput, throughput, ttfbVerdict } from './lib.js';
 
 export type Scenario = 'non-streaming' | 'streaming-500' | 'body-150kb';
 export const SCENARIOS: readonly Scenario[] = ['non-streaming', 'streaming-500', 'body-150kb'];
@@ -85,6 +85,13 @@ export interface OverheadRow {
    */
   direct: { ttfb: Percentiles; outsideProvider: Percentiles; total: Percentiles };
   gateway: { ttfb: Percentiles; outsideProvider: Percentiles; total: Percentiles };
+  /**
+   * Answered requests and output tokens per second, over each run's first scheduled send to its last answer. Direct:
+   * every 2xx answer carries the mock's fixed output; through the gateway: the output tokens its traces settled.
+   */
+  throughput: { direct: Throughput; gateway: Throughput };
+  /** The spec 12.1 added TTFB targets, met on both the gateway measure and the client-side bound (ttfbVerdict). */
+  addedTtfbMet: boolean | null;
   gatewayCpuPct: number;
   gatewayRssMb: number;
   /** Peak RSS during the run minus RSS just before it. */
@@ -100,6 +107,9 @@ interface Load {
   ok: number;
   dropped: number;
   errorKinds: Record<string, number>;
+  /** First scheduled send and last 2xx answer, performance.now() values. */
+  firstScheduledMs: number;
+  lastAnswerMs: number;
 }
 
 /** One request on a connection; times are performance.now() values. */
@@ -137,11 +147,12 @@ async function drive(base: string, s: Scenario, connections: number, durationS: 
   const rng = mulberry32(seed);
   const startMs = performance.now() + 50;
   const endMs = startMs + durationS * 1000;
-  const load: Load = { intended: 0, ttfb: [], outside: [], total: [], ok: 0, dropped: 0, errorKinds: {} };
+  const load: Load = { intended: 0, ttfb: [], outside: [], total: [], ok: 0, dropped: 0, errorKinds: {}, firstScheduledMs: Number.POSITIVE_INFINITY, lastAnswerMs: 0 };
   await Promise.all(
     agents.map(async (agent) => {
       const times = intendedStarts({ startMs, endMs, intervalMs: interval, phaseMs: rng() * interval });
       load.intended += times.length;
+      if (times[0] !== undefined) load.firstScheduledMs = Math.min(load.firstScheduledMs, times[0]);
       for (const [i, t] of times.entries()) {
         if (performance.now() > endMs + DRAIN_MS) {
           load.dropped += times.length - i;
@@ -156,6 +167,7 @@ async function drive(base: string, s: Scenario, connections: number, durationS: 
           load.ttfb.push(r.headersAt - t);
           if (Number.isFinite(r.mockWaitMs)) load.outside.push(r.headersAt - t - r.mockWaitMs);
           load.total.push(r.endAt - t);
+          load.lastAnswerMs = Math.max(load.lastAnswerMs, r.endAt);
         }
       }
     }),
@@ -169,6 +181,8 @@ interface Stats {
   peakRssMb: number;
   startRssMb: number;
   addedTtfbMs: number[];
+  /** Output tokens of the 2xx trace records of the window (gateway only). */
+  outputTokens: number;
 }
 
 interface Child {
@@ -177,8 +191,14 @@ interface Child {
   close(): Promise<void>;
 }
 
+/** `--cpu-prof` flags for a gateway child when BENCH_CPU_PROF names a directory (profiling runs, not for committing). */
+export function profileArgs(role: string, dir: string | undefined): string[] {
+  return role === 'gateway' && dir ? ['--cpu-prof', `--cpu-prof-dir=${dir}`] : [];
+}
+
 function spawn(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<Child> {
-  const child: ChildProcess = fork(join(import.meta.dirname, 'overhead.ts'), args, { execArgv: ['--import', 'tsx'], env, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
+  const execArgv = ['--import', 'tsx', ...profileArgs(args[0] ?? '', process.env.BENCH_CPU_PROF)];
+  const child: ChildProcess = fork(join(import.meta.dirname, 'overhead.ts'), args, { execArgv, env, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
   return new Promise((resolve, reject) => {
     child.once('error', reject);
     child.once('exit', (code) => reject(new Error(`bench child ${args[0]} exited with ${code}`)));
@@ -202,7 +222,7 @@ function spawn(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<Ch
 }
 
 /** Child side: CPU and peak RSS over a measured window, and the added TTFB of every 2xx trace record in it. */
-function serveStats(url: string, added: number[]): void {
+function serveStats(url: string, added: number[], tokens: { output: number } = { output: 0 }): void {
   let startRssMb = 0;
   let cpu0 = process.cpuUsage();
   let t0 = process.hrtime.bigint();
@@ -211,6 +231,7 @@ function serveStats(url: string, added: number[]): void {
   process.on('message', (cmd: string) => {
     if (cmd === 'start') {
       added.length = 0;
+      tokens.output = 0;
       cpu0 = process.cpuUsage();
       t0 = process.hrtime.bigint();
       peak = process.memoryUsage.rss();
@@ -221,9 +242,9 @@ function serveStats(url: string, added: number[]): void {
       clearInterval(sampler);
       const c = process.cpuUsage(cpu0);
       const wallUs = Number(process.hrtime.bigint() - t0) / 1e3;
-      const stats: Stats = { cpuPct: ((c.user + c.system) / wallUs) * 100, peakRssMb: Math.max(peak, process.memoryUsage.rss()) / 1024 / 1024, startRssMb, addedTtfbMs: [...added] };
+      const stats: Stats = { cpuPct: ((c.user + c.system) / wallUs) * 100, peakRssMb: Math.max(peak, process.memoryUsage.rss()) / 1024 / 1024, startRssMb, addedTtfbMs: [...added], outputTokens: tokens.output };
       // Trace records are queued after settlement, just after the response ended: give the last ones a moment.
-      setTimeout(() => process.send?.({ ...stats, addedTtfbMs: [...added] }), 300);
+      setTimeout(() => process.send?.({ ...stats, addedTtfbMs: [...added], outputTokens: tokens.output }), 300);
     }
   });
   process.send?.({ url });
@@ -253,6 +274,7 @@ async function childMain(role: string, args: string[]): Promise<void> {
   const traceDir = mkdtempSync(join(tmpdir(), 'tokenyard-bench-traces-'));
   const writer = new TraceWriter({ dir: traceDir, instanceId: 'bench0001', queueMax: 100_000, clock: Date.now });
   const added: number[] = [];
+  const tokens = { output: 0 };
   const policy = benchPolicy(mockUrl);
   // As `tokenyard serve` builds it (traces written, metrics kept, a counter store round trip per request), with one
   // change: a sub-millisecond clock, so the gateway's own timings (addedTtfbMs) are not whole milliseconds.
@@ -262,7 +284,10 @@ async function childMain(role: string, args: string[]): Promise<void> {
     runtime,
     traces: {
       write: (r) => {
-        if (r.outcome.status >= 200 && r.outcome.status < 300 && r.outcome.addedTtfbMs !== null) added.push(r.outcome.addedTtfbMs);
+        if (r.outcome.status >= 200 && r.outcome.status < 300) {
+          if (r.outcome.addedTtfbMs !== null) added.push(r.outcome.addedTtfbMs);
+          tokens.output += r.outcome.usage?.output ?? 0;
+        }
         return writer.write(r);
       },
     },
@@ -284,7 +309,7 @@ async function childMain(role: string, args: string[]): Promise<void> {
       process.exit(0);
     })();
   });
-  serveStats(url, added);
+  serveStats(url, added, tokens);
 }
 
 /** Seconds per run: about 2,200 scheduled requests on the SLO levels (10 s to 180 s), about 300 elsewhere (5 s to 20 s). */
@@ -334,15 +359,21 @@ export async function benchOverhead(o: {
             errors: { direct: sum(direct.errorKinds), gateway: sum(via.errorKinds) },
             errorKinds: { direct: direct.errorKinds, gateway: via.errorKinds },
             addedTtfb: percentiles(st.addedTtfbMs),
+            throughput: {
+              direct: throughput({ answered: direct.ok, outputTokens: direct.ok * MOCK.outputTokens, firstScheduledMs: direct.firstScheduledMs, lastAnswerMs: direct.lastAnswerMs }),
+              gateway: throughput({ answered: via.ok, outputTokens: st.outputTokens, firstScheduledMs: via.firstScheduledMs, lastAnswerMs: via.lastAnswerMs }),
+            },
             direct: dp,
             gateway: { ttfb: percentiles(via.ttfb), outsideProvider: percentiles(via.outside), total: percentiles(via.total) },
+            addedTtfbMet: null,
             gatewayCpuPct: round(st.cpuPct, 1),
             gatewayRssMb: round(st.peakRssMb, 1),
             rssGrowthMb: round(Math.max(0, st.peakRssMb - st.startRssMb), 1),
           };
+          row.addedTtfbMet = ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider);
           rows.push(row);
           o.log(
-            `overhead ${s} ${g.store} c=${c} ${d}s: added TTFB p50 ${row.addedTtfb.p50} p99 ${row.addedTtfb.p99} ms (n ${row.addedTtfb.n}), outside provider p50/p99 direct ${dp.outsideProvider.p50}/${dp.outsideProvider.p99} gateway ${row.gateway.outsideProvider.p50}/${row.gateway.outsideProvider.p99} ms, cpu ${row.gatewayCpuPct}%, errors ${JSON.stringify(direct.errorKinds)} / ${JSON.stringify(via.errorKinds)}, dropped ${direct.dropped} / ${via.dropped}`,
+            `overhead ${s} ${g.store} c=${c} ${d}s: added TTFB p50 ${row.addedTtfb.p50} p99 ${row.addedTtfb.p99} ms (n ${row.addedTtfb.n}), outside provider p50/p99 direct ${dp.outsideProvider.p50}/${dp.outsideProvider.p99} gateway ${row.gateway.outsideProvider.p50}/${row.gateway.outsideProvider.p99} ms, throughput ${row.throughput.direct.requestsPerS}/${row.throughput.gateway.requestsPerS} req/s ${row.throughput.direct.outputTokensPerS}/${row.throughput.gateway.outputTokensPerS} tok/s, cpu ${row.gatewayCpuPct}%, errors ${JSON.stringify(direct.errorKinds)} / ${JSON.stringify(via.errorKinds)}, dropped ${direct.dropped} / ${via.dropped}`,
           );
         }
       }

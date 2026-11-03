@@ -13,7 +13,7 @@ import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
 import { cpuRssSlopes, environment, type Percentiles, ROOT, ttfbVerdict } from './lib.js';
-import { benchOverhead, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
+import { benchOverhead, CONCURRENCY, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
 import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
 
@@ -112,6 +112,8 @@ function overheadMethod(): string {
           'Added TTFB is the gateway\'s own per-request measure from its traces (`addedTtfbMs`: from the start of request handling to forwarding upstream, with a sub-millisecond clock in the benchmark), so it is paired per request; it does not include time a request waits before the gateway starts handling it, nor the response path.',
           'The client-side columns are absolute percentiles of each path, never subtracted from each other; "outside the provider" is each request\'s TTFB minus the mock\'s own wait for that request (the `x-mock-wait-ms` header), paired per request, so the mock\'s timer jitter drops out.',
           'An added TTFB SLO row is met only when both the gateway-measured value and the client-side TTFB outside the provider through the gateway (an upper bound on what the gateway adds, which includes queueing before handling) are under target.',
+          `Each scenario runs at ${CONCURRENCY.join(', ')} streams; ${SLO_LEVELS.join(', ')} back the SLO rows (about 2,200 scheduled requests each), the other levels about 300.`,
+          'Throughput is answered (2xx) requests and output tokens per second of each run, from its first scheduled send to its last answer (direct: the mock\'s fixed output per answer; through the gateway: the output tokens its traces settled); at a fixed open-loop rate it follows the offered load until a path saturates, then falls below it.',
           'n is the number of samples behind each percentile. CPU is the gateway process\'s user plus system time over the run\'s wall time (100% is one core); RSS growth is its peak during the run above its size just before it; per 100 streams is the slope between 100 and 500 streams.',
           'The gateway runs examples/policy with every budget level enforced at a limit the load never reaches, no rate limits, guardrails on, traces written and metrics kept.',
         ].join(' ');
@@ -132,6 +134,7 @@ function recomputeSlo(): void {
     sloDerivedAt?: string;
   };
   r.overhead.method = overheadMethod();
+  for (const row of r.overhead.rows) row.addedTtfbMet = ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider);
   r.overhead.slopes = cpuRssSlopes(r.overhead.rows, 100, 500);
   r.slo = slos({ overhead: r.overhead.rows, budget: r.budget.runs, cache: r.cache.rows, replay: r.replay, redis: r.overhead.redis });
   writeFileSync(file, `${JSON.stringify(r, null, 2)}\n`);

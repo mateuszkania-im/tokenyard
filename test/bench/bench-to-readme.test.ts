@@ -17,8 +17,10 @@ function results() {
     errors: { direct: 0, gateway: 0 },
     errorKinds: { direct: {}, gateway: {} },
     addedTtfb: { ...pct(1.2, 2, 8), n: 2000 },
+    throughput: { direct: { requestsPerS: 12.5, outputTokensPerS: 6250, elapsedS: 160 }, gateway: { requestsPerS: 12.4, outputTokensPerS: 6200, elapsedS: 161.3 } },
     direct: { ttfb: { ...pct(100.1, 101, 102), n: 2000 }, outsideProvider: { ...pct(0.5, 0.6, 0.9), n: 2000 }, total: { ...pct(600, 601, 602), n: 2000 } },
     gateway: { ttfb: { ...pct(101.3, 103, 110), n: 2000 }, outsideProvider: { ...pct(1.7, 2.6, 9.1), n: 2000 }, total: { ...pct(602, 604, 610), n: 2000 } },
+    addedTtfbMet: true,
     gatewayCpuPct: 12.5,
     gatewayRssMb: 120.4,
     rssGrowthMb: 3.1,
@@ -36,7 +38,7 @@ function results() {
       method: 'open-loop scheduler, loopback, mock provider',
       mock: { ttftMs: 100, tokensPerSec: 2000 },
       redis: 'measured',
-      rows: [row('memory', 10), row('memory', 100), row('redis', 10)],
+      rows: [row('memory', 10), row('memory', 100), row('memory', 64), row('redis', 10)],
       slopes: [{ store: 'memory', scenario: 'streaming-500', from: 100, to: 500, cpuPctPer100Streams: 4.2, rssMbPer100Streams: 1.5 }],
     },
     budget: {
@@ -107,7 +109,10 @@ test('the block holds no em dashes or arrow characters and says what was not mea
 test('overhead tables show the gateway-measured added TTFB with n, absolute latencies side by side, slopes and the notes', () => {
   const block = renderBenchBlock(results());
   // Added TTFB comes with its sample count; latencies are absolute, never a difference of two runs.
-  expect(block).toContain('| Streaming, 500 tokens | 10 | 1.20 / 2.00 / 8.00 (n = 2,000) | 0.50 / 0.90 | 1.70 / 9.10 | 600.00 / 602.00 | 602.00 / 610.00 | 12.5% | 3.1 MB | 0 / 0 |');
+  expect(block).toContain('| Streaming, 500 tokens | 10 | 1.20 / 2.00 / 8.00 (n = 2,000) | 0.50 / 0.90 | 1.70 / 9.10 | 600.00 / 602.00 | 602.00 / 610.00 | 12.5 / 12.4 req/s, 6,250 / 6,200 tokens/s | 12.5% | 3.1 MB | 0 / 0 |');
+  // Throughput and the added TTFB verdict (both measures, as the SLO rows) are in the table of every level too (V1).
+  expect(block).toMatch(/\| 12\.5% \| 120\.4 MB \| met \|/);
+  expect(block).toMatch(/\| memory \| Streaming, 500 tokens \| 100 \| 1\.25 \| 160 \| 2,000 \/ 2,000 \| 12\.5 \/ 12\.4 \| 6,250 \/ 6,200 \|/);
   expect(block).not.toMatch(/\| -\d/);
   expect(block).toContain('| memory | Streaming, 500 tokens | 100 to 500 | 4.2% | 1.5 MB |');
   expect(block).toContain('Why the naive proxy costs the same.');
