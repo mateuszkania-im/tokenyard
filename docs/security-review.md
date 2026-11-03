@@ -154,7 +154,11 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   table cannot say which models a provider serves fast); a response that reports fast mode for such a model settles at
   the reservation, which is priced at the standard rates, so a provider that bills fast mode for a model the table
   lists without fast prices is under-charged whenever that bill is above the reservation
-  (`test/security/t9-fast-mode-unpriced.test.ts`, T9-e).
+  (`test/security/t9-fast-mode-unpriced.test.ts`, T9-e). Accepted by ruling (progress.md:607, "Ruling: CL-t9e"): the
+  price table carries no list of fast-capable models, so anything further is guesswork; the cost is an
+  under-reservation bounded by the fast to standard rate ratio, and only for a price table that omits a model's fast
+  prices. Such a request is forwarded, not refused (T9-e); a model listed with fast prices is reserved and settled at
+  them (T9-d).
 - **Policy files caught mid-write (task 11, S-V3-2).** A changed policy directory activates only when two reads one
   settle interval (250 ms by default) apart agree (`test/policy-loader/loader-settle.test.ts`). A writer slower than
   that interval can still be caught with a prefix that validates, and a `--policy-url` source is not re-read. Operators
@@ -271,21 +275,21 @@ of the tables above. The checklist items and the minors marked for Task 25:
 |---|---|---|---|---|
 | CL-prototype | Prototype keys on any user-keyed table (prices, keys, server tools, service tiers, geo, attribution) and non-finite costs failing open | see S6 | `test/security/s6-prototype-key-lookup.test.ts`, `s6-2-prototype-keys-other-tables.test.ts` | fixed (S6); other tables held: keys are looked up by hash, `Object.hasOwn` on tiers, tools, modifiers |
 | CL-anonymize | Anonymize deny by default; attribution bounded at ingest and escaped in every renderer | see S7a, S7b, B1, S-V4-2 to S-V4-4 | `s7a-anonymize-attribution.test.ts`, `s7b-renderer-injection.test.ts`, `b1-client-text-in-traces.test.ts`, `b1r-model-pseudonym.test.ts`, `s-v4-*.test.ts` | fixed |
-| CL-trace-names | `safeTenantDir` not injective, `--instance-id` unsanitised in a file name | none | none | accepted: operator-set values (residual risks, "Trace layout names") |
+| CL-trace-names | `safeTenantDir` not injective, `--instance-id` unsanitised in a file name | none | none | accepted by ruling (progress.md:611 (the Task 25.4 residual-risk entries, progress.md:487-488); residual risks, "Trace layout names"): operator-set values |
 | CL-t9a | Parse error, missing or unpriced model priced with `reservationPrice(t, null)` | see A2 | `a2-unpriced-model.test.ts`, `s6-prototype-key-lookup.test.ts` | fixed |
 | CL-t9b | R11 bytes-bound switch after a violation | see A9 | `a9-r11-latch-scope.test.ts` | fixed |
 | CL-t9c | Estimator throw must fail closed | Task 14 | `test/edge/admission.test.ts` ("a reservation that cannot be priced fails closed") | fixed |
 | CL-t9d | Settlement prices `usage.speed` fast | Task 14 | `t9-fast-mode-unpriced.test.ts` (T9-d), `test/edge/admission.test.ts` | fixed |
-| CL-t9e | Fast-capable model without a `fast` block | none | `t9-fast-mode-unpriced.test.ts` (T9-e: settles at the reservation) | known limit (residual risks, "Fast mode price sets") |
-| CL-fast-max | Under fast mode only the fast rate set counts | none | none | known limit (residual risks, "Fast mode price sets") |
-| CL-client-tool | Client-tool classification by bare prefix | none | none | known limit (residual risks, "Provider billing assumptions") |
+| CL-t9e | Fast-capable model without a `fast` block | none | `t9-fast-mode-unpriced.test.ts` (T9-d: fast prices used when listed; T9-e: settles at the reservation) | accepted by ruling (progress.md:607, "Ruling: CL-t9e"; residual risks, "Fast mode price sets"): the price table carries no list of fast-capable models; cost: under-reservation bounded by the fast to standard rate ratio when the price table omits a model's fast prices. A request asking fast mode on such a model is forwarded, not refused (T9-e); the provider rejects fast mode for a model that does not offer it |
+| CL-fast-max | Under fast mode only the fast rate set counts | none | none | accepted by ruling (progress.md:611 (the Task 25.4 residual-risk entries, progress.md:487-488); residual risks, "Fast mode price sets") |
+| CL-client-tool | Client-tool classification by bare prefix | none | none | accepted by ruling (progress.md:611 (the Task 25.4 residual-risk entries, progress.md:487-488); residual risks, "Provider billing assumptions") |
 | CL-route | Rewrite priced at the served model, header predicates granting access, server tools not allowed, scope dodge by omitted headers | see S10-1 to S10-4 | `s10-1-*`, `s10-2-*`, `s10-3-*`, `s10-4-*.test.ts` | fixed |
 | CL-taint-ns | Session and key taint sets in one namespace | see S10-taint | `s10-taint-namespace.test.ts` | held by construction |
 | CL-rewrite-authz | Rewritten model checked against the authorising route | see S10-5 | `s10-5-rewrite-authz.test.ts` | fixed |
 | CL-rate-scope | Rate and stream limits scoped to a header skip when it is missing | none needed | `t10-rate-scope-headers.test.ts` | held: the schema allows tenant, team and key only; header-selected chains by design (S10-2) |
 | CL-partial-write | Policy file caught mid-write activates a weakened policy | see S-V3-2 | `test/policy-loader/loader-settle.test.ts`, `test/chaos/reload.test.ts` | fixed; slow writers residual |
 | CL-cross-tenant | Breaker and retry budget interference across tenants | see S12-1 | `s12-1-per-credential-breaker.test.ts`, `t25-retry-budget-tenant.test.ts` | fixed (breaker), held (retry budget per key-record tenant) |
-| CL-redis-restart | Settle after a restart returns unknown, sweeper settles at the estimate | none | none | accepted: fails safe (residual risks, "Counter store restart") |
+| CL-redis-restart | Settle after a restart returns unknown, sweeper settles at the estimate | none | none | accepted by ruling (progress.md:611 (the Task 25.4 residual-risk entries, progress.md:487-488); residual risks, "Counter store restart"): fails safe |
 | CL-live-crash | Live cap under-count on a crash; stale-lock takeover race | see A11 | `a11-live-cap.test.ts` | fixed; date guard and salt residual |
 | CL-parser | Scanner and upstream parser differential (malformed JSON, duplicate keys, non-string tokens, encodings) | see A5, S25-2, S16-1 | `a5-parser-differential.test.ts`, `s25-2-nested-duplicate-keys.test.ts`, `s16-1-scanner-differential.test.ts` | fixed |
 | CL-raw-fallback | Malformed body raw fallback and encoded secrets | see S16-2 | `s16-2-malformed-body-escapes.test.ts` | fixed |
