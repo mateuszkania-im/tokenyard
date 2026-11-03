@@ -32,7 +32,7 @@ afterEach(async () => {
 });
 
 const REPO = join(import.meta.dirname, '..', '..');
-const env = { ANTHROPIC_API_KEY: 'sk-ant-fake-probe-not-a-key', TOKENYARD_LIVE_BUDGET_USD: '5' };
+const env = { ANTHROPIC_API_KEY: 'test-provider-key-not-real', TOKENYARD_LIVE_BUDGET_USD: '5' };
 function tmp(): string {
   const d = mkdtempSync(join(tmpdir(), 'ty-sec-a-'));
   closers.push(async () => rmSync(d, { recursive: true, force: true }));
