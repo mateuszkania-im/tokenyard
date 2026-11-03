@@ -531,6 +531,10 @@ npm test                 # unit, conformance, budget proof (memory store), docs 
 npm run test:redis       # Redis store, G4 on Redis and taint (starts a throwaway local Redis in Docker)
 npm run test:chaos       # chaos and failure scenarios, long runs and Redis outages included (docs/chaos.md)
 npm run test:fuzz        # property tests and fuzzers with 20 times the runs, Redis included (docs/testing.md)
+npm run test:coverage    # the suite with V8 coverage and per-module thresholds (docs/quality-gates.md)
+npm run test:mutation    # Stryker on decide, the budget accounting, the estimator and the scanner (docs/quality-gates.md)
+npm run test:pack        # pack the tarball, install it into an empty project, run the command
+npm run check            # typecheck, lint, check:bundle, check:secrets and bench:check in one command
 npm run typecheck && npm run lint
 npm run build            # rebuild bin/tokenyard.mjs; commit it with any change under src/
 npm run check:bundle     # fails when the committed bundle is stale
@@ -540,7 +544,7 @@ npm run bench            # writes bench/results.json; then node scripts/bench-to
 npm run bench:check      # fails when the README block differs from bench/results.json
 ```
 
-TypeScript strict, ESM, Vitest, raw `node:http`, `undici` upstream, Node 20.19 or later (CI: Node 20.19, 22 and 24 on Linux, Node 22 on Windows). The design is in [docs/superpowers/specs/2026-11-02-gateway-design.md](docs/superpowers/specs/2026-11-02-gateway-design.md); designed but not built: [quality evaluation](docs/future-quality.md). Changes: [CHANGELOG.md](CHANGELOG.md).
+TypeScript strict, ESM, Vitest, raw `node:http`, `undici` upstream, Node 20.19 or later (CI on Linux and Windows: the suite on Node 22 and 24, the packed bundle on Node 20.19; quality gates in [docs/quality-gates.md](docs/quality-gates.md)). The design is in [docs/superpowers/specs/2026-11-02-gateway-design.md](docs/superpowers/specs/2026-11-02-gateway-design.md); designed but not built: [quality evaluation](docs/future-quality.md). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Publishing
 
