@@ -60995,12 +60995,16 @@ var init_loader = __esm({
               this.report(e2);
               throw e2;
             }
+            await sleep3(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
           }
         });
         this.queue = run2.catch(() => void 0);
         return run2;
       }
-      /** One load: 'unstable' when two reads of a changed directory differed (nothing activated, nothing counted). */
+      /**
+       * One load: 'unstable' when two reads of a changed directory differed, or the second one failed after the first
+       * passed (a file caught mid-write, M4); nothing is activated or counted.
+       */
       async loadOnce(trigger, throwOnError) {
         try {
           const got = await this.fetch();
@@ -61012,7 +61016,12 @@ var init_loader = __esm({
           if (this.o.dir) {
             await sleep3(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
             if (this.stopped) return "done";
-            const again = await this.fetch();
+            let again;
+            try {
+              again = await this.fetch();
+            } catch {
+              return "unstable";
+            }
             if (again?.bundle.manifest.sha256 !== got.bundle.manifest.sha256) return "unstable";
           }
           const bundle = got.bundle;

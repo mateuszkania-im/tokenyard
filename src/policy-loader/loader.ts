@@ -155,13 +155,18 @@ export class PolicyLoader extends EventEmitter {
           this.report(e);
           throw e;
         }
+        // Give a writer caught mid-write one settle interval before the next first read (M4).
+        await sleep(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
       }
     });
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  /** One load: 'unstable' when two reads of a changed directory differed (nothing activated, nothing counted). */
+  /**
+   * One load: 'unstable' when two reads of a changed directory differed, or the second one failed after the first
+   * passed (a file caught mid-write, M4); nothing is activated or counted.
+   */
   private async loadOnce(trigger: Trigger, throwOnError: boolean): Promise<'done' | 'unstable'> {
     try {
       const got = await this.fetch();
@@ -173,7 +178,12 @@ export class PolicyLoader extends EventEmitter {
       if (this.o.dir) {
         await sleep(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
         if (this.stopped) return 'done';
-        const again = await this.fetch();
+        let again: Awaited<ReturnType<PolicyLoader['fetch']>>;
+        try {
+          again = await this.fetch();
+        } catch {
+          return 'unstable';
+        }
         if (again?.bundle.manifest.sha256 !== got.bundle.manifest.sha256) return 'unstable';
       }
       const bundle = got.bundle;
