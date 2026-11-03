@@ -151,3 +151,20 @@ test('a soak section (V2) renders one row per store with memory trends, idle fds
   expect(block).toContain('- redis: stream slots after the load (319 of 320 admitted; threshold t)');
   expect(block).not.toMatch(/[—–←-⇿⟵-⟿]/);
 });
+
+test('soak rows judged with the V2 follow-up criteria render the RSS beyond the control process and heap plus external', () => {
+  const gw = { instance: 'g', cpuPct: 30, idleBefore: { fds: 10, series: 3 }, idleAfter: { fds: 10, series: 67 }, traceHours: 2, traceMbPerHourOfLoad: 450 };
+  const soak = {
+    method: 'm',
+    runs: [
+      {
+        mode: 'memory', gateways: 1, minutes: 45, requests: 1, answeredPerS: 1, perGateway: [gw], redis: null,
+        verdicts: [
+          { check: 'g: heap after GC plus external memory growth', threshold: 't', measured: '40.5 to 41 MB; trend 1.2% (0.5 MB/h), windows 1.2% (n = 80)', ok: true },
+          { check: 'g: RSS growth beyond the control process', threshold: 't', measured: 'gateway minus control 14.2 to -3.1 MB; trend -2.5%, windows -12% of 120 MB (n = 80)', ok: true },
+        ],
+      },
+    ],
+  };
+  expect(renderBenchBlock({ ...results(), soak })).toContain('| memory | 1 | 45 | 1 (1.0) | 30.0% | 14.2 to -3.1, -2.5% | 40.5 to 41, 1.2% |');
+});

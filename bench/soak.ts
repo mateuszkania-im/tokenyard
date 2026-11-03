@@ -910,6 +910,7 @@ async function main(mode: Mode): Promise<void> {
       latency: windows.filter((w) => w.auxP50Ms !== null).map((w) => ({ t: w.t, v: w.auxP50Ms as number })),
       slotCheck: { keys: setup.devs.length, admitted, expectedAdmitted: setup.devs.length * STREAMS_PER_KEY, refusedExtra, expectedRefused: setup.devs.length },
       redis: redisCheck,
+      control: mockRss,
       taint,
       failedRequests: { socket: socketErrors },
     });
@@ -990,7 +991,7 @@ async function main(mode: Mode): Promise<void> {
 const SOAK_METHOD = [
   'The shipped bundle (bin/tokenyard.mjs serve, policy from a directory, traces written, ops listener on) runs under an open-loop load with Poisson arrivals against the mock providers on loopback: Claude Code main turns (streaming, growing cached context), subagents, auxiliary and compaction calls, Codex Responses (streaming and not), product traffic with PII, client aborts mid-stream, secret blocks with session taint, refused models, hostile attribution headers (up to 900 characters of quotes, braces, percent signs and Latin-1 on every attribution header, new on every request; session ids from a fixed set of 300 such values), upstream 500, 529, mid-stream errors and dropped connections, a noisy key over its rate and stream limits every minute and 24 requests with max_tokens 128,000 and a 1.1 MB body at once on one session every two minutes, over the enforced 200 USD session budget. New sessions cycle through a fixed set of ids per key, because each distinct session id holds counter state until it has been idle for 24 hours; that cost is measured on its own (Redis keys and bytes per key).',
   'A preloaded probe (bench/soak-probe.mjs; the bundle is unchanged) reports every 30 s the event loop delay since the previous sample, then RSS and heap used right after a full GC (--expose-gc), and active handles; lsof gives open descriptors and TCP sockets; /metrics gives the series count and open reservations; the trace directory gives files and bytes; Redis gives keys by class and used memory.',
-  'Memory is judged after a 5 minute warm-up: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.',
+  'Memory is judged after a 5 minute warm-up on heap used after a full GC plus external memory: the least-squares trend over the rest of the run, projected over it, and the last 5 minutes against the first 5 must each stay under 10%; RSS is judged the same way on the gateway minus the mock provider sampled at the same moments (a control process), against 10% of the gateway RSS. Descriptors, sockets and handles are compared idle before and after the load. After the load every key must admit its full concurrent stream limit at once with one more refused, no reservation may be open or left to the sweeper, and in Redis no reservation, deadline or stream count may remain.',
 ].join(' ');
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

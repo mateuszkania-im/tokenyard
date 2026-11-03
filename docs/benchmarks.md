@@ -145,7 +145,9 @@ A leak hunt rather than a latency benchmark: the shipped bundle (`bin/tokenyard.
 
 | Check | Passes when |
 |---|---|
-| RSS, and heap used after a full GC | after a 5 minute warm-up, both the least-squares trend over the rest of the run (projected over it) and the last 5 minutes against the first 5 stay under 10% |
+| RSS, and heap used after a full GC (the committed runs) | after a 5 minute warm-up, both the least-squares trend over the rest of the run (projected over it) and the last 5 minutes against the first 5 stay under 10% |
+| From the next run: heap used after a full GC plus external memory (the primary memory check) | the same trend and window rule, under 10% (`memoryGrowthPct`) |
+| From the next run: RSS beyond a control process | the gateway's RSS minus the mock provider's RSS at the same samples: trend and last 5 minutes against first 5, each under 10% of the gateway's mean RSS (`rssBeyondControlPct`); no control samples is a failure |
 | Open descriptors during the load | trend over the measured span under 16 |
 | Open descriptors, TCP sockets, active handles | idle after the run at most 16, 8 and 16 above idle before it |
 | Metric series | at most 10 new after warm-up, under 1,000 in all |
@@ -157,6 +159,8 @@ A leak hunt rather than a latency benchmark: the shipped bundle (`bin/tokenyard.
 | Process health | no crash, exit 0 on SIGTERM, no uncaught exception, no stderr line besides the startup notices |
 | Traces | no record dropped |
 | Client socket errors | none outside the deliberate aborts and upstream faults |
+
+**Memory criteria changed for the next run (V2 follow-up).** The Redis rerun after S-V2-1 failed RSS on both gateways while heap and external memory were flat, because RSS on this macOS laptop moved with system memory pressure for every process at once (the mock provider stepped at the same sample). From the next run the primary memory check is heap used after a full GC plus external memory, and RSS is judged against the mock provider as a control process sampled at the same moments. Both are in `SOAK_THRESHOLDS` and `judge()` now, with failing-signal tests (`test/bench/soak.test.ts`: a heap leak and a Buffer leak fail the primary check; an RSS step in the gateway alone fails, the same step in the control does not; no control samples fails). The committed rows were judged with the earlier criteria and are not re-judged; the memory-store run with the new criteria is scheduled for V5 or later.
 
 **Results.** The README's Soak table renders `soak` in `bench/results.json`; every check, its threshold and its measured value are in `soak.runs[].verdicts`, and a sample every 5 minutes in `perGateway[].every5min`.
 

@@ -11,8 +11,17 @@ export const SOAK_THRESHOLDS = {
   warmupS: 300,
   /** Length of the first and last comparison windows, seconds. */
   windowS: 300,
-  /** RSS and heap used after a full GC: growth over the measured span, percent of its mean. */
+  /**
+   * The primary memory measure (V2 follow-up): heap used after a full GC plus external memory (Buffers), growth over
+   * the measured span, percent of its mean.
+   */
   memoryGrowthPct: 10,
+  /**
+   * RSS growth beyond a control process sampled at the same moments (the mock provider, whose code and load do not
+   * change): the gateway's RSS minus the control's, trend and window growth, percent of the gateway's mean RSS. On macOS
+   * RSS moves with system memory pressure for every process at once (the V2 Redis rerun), so it is judged relative.
+   */
+  rssBeyondControlPct: 10,
   /** Open file descriptors, TCP sockets and active handles: idle after the run against idle before it. */
   fdSlack: 16,
   socketSlack: 8,
@@ -196,6 +205,8 @@ export interface SoakJudgeInput {
   gateways: GatewayRun[];
   /** Client-side 2xx total time p50 per 30 s window. */
   latency: Point[];
+  /** RSS of the control process (the mock provider) at each sample, MB. */
+  control: Point[];
   /** Stream slot check after the load: each key's limit admitted at once, and one more refused. */
   slotCheck: { keys: number; admitted: number; expectedAdmitted: number; refusedExtra: number; expectedRefused: number };
   /** Redis only: keys left after the load that must be gone, and budget reservations left. */
@@ -215,6 +226,30 @@ export interface SoakJudgeInput {
   failedRequests: { socket: number };
 }
 
+/**
+ * RSS growth of a gateway beyond a control process: the difference series (gateway minus control, paired by sample
+ * time) after warm-up, its trend over the span and its last window against its first, as percent of the gateway's mean
+ * RSS. No control samples (or too short a run) is not a pass.
+ */
+export function rssBeyondControl(rss: readonly Point[], control: readonly Point[], th: typeof SOAK_THRESHOLDS = SOAK_THRESHOLDS): { ok: boolean; measured: string } {
+  const ctl = new Map(control.map((p) => [p.t, p.v]));
+  const paired = rss.filter((p) => p.t >= th.warmupS && ctl.has(p.t));
+  const diff = paired.map((p) => ({ t: p.t, v: p.v - (ctl.get(p.t) as number) }));
+  if (diff.length === 0) return { ok: false, measured: 'no control samples' };
+  const t0 = (diff[0] as Point).t;
+  const t1 = (diff.at(-1) as Point).t;
+  const gwMean = mean(paired.map((p) => p.v));
+  const trendPct = round(((linearFit(diff).slope * (t1 - t0)) / gwMean) * 100);
+  const first = mean(diff.filter((p) => p.t < t0 + th.windowS).map((p) => p.v));
+  const last = mean(diff.filter((p) => p.t > t1 - th.windowS).map((p) => p.v));
+  const windowPct = round(((last - first) / gwMean) * 100);
+  const enough = t1 - t0 >= 2 * th.windowS;
+  return {
+    ok: enough && trendPct < th.rssBeyondControlPct && windowPct < th.rssBeyondControlPct,
+    measured: `gateway minus control ${round(first)} to ${round(last)} MB; trend ${trendPct}%, windows ${windowPct}% of ${round(gwMean)} MB (n = ${diff.length})`,
+  };
+}
+
 /** Every threshold of SOAK_THRESHOLDS applied to a finished run. */
 export function judge(r: SoakJudgeInput, th: typeof SOAK_THRESHOLDS = SOAK_THRESHOLDS): Verdict[] {
   const out: Verdict[] = [];
@@ -222,13 +257,10 @@ export function judge(r: SoakJudgeInput, th: typeof SOAK_THRESHOLDS = SOAK_THRES
   for (const gw of r.gateways) {
     const at = (f: (s: GatewaySample) => number): Point[] => gw.samples.map((s) => ({ t: s.t, v: f(s) }));
     const name = (s: string): string => `${gw.instance}: ${s}`;
-    for (const [label, f] of [
-      ['RSS', (s: GatewaySample) => s.rssMb],
-      ['heap used after GC', (s: GatewaySample) => s.heapMb],
-    ] as const) {
-      const x = growth(at(f), g);
-      out.push({ check: name(`${label} growth`), threshold: `trend and last ${th.windowS / 60} min against first, each under ${th.memoryGrowthPct}%`, measured: `${x.first} to ${x.last} MB; trend ${x.trendPct}% (${x.slopePerHour} MB/h), windows ${x.windowPct}% (n = ${x.n})`, ok: x.ok });
-    }
+    const mem = growth(at((s) => s.heapMb + s.externalMb), g);
+    out.push({ check: name('heap after GC plus external memory growth'), threshold: `trend and last ${th.windowS / 60} min against first, each under ${th.memoryGrowthPct}%`, measured: `${mem.first} to ${mem.last} MB; trend ${mem.trendPct}% (${mem.slopePerHour} MB/h), windows ${mem.windowPct}% (n = ${mem.n})`, ok: mem.ok });
+    const rss = rssBeyondControl(at((s) => s.rssMb), r.control, th);
+    out.push({ check: name('RSS growth beyond the control process'), threshold: `gateway RSS minus the control's: trend and last ${th.windowS / 60} min against first, each under ${th.rssBeyondControlPct}% of the gateway's RSS`, measured: rss.measured, ok: rss.ok });
     const fdTrend = linearFit(at((s) => s.fds).filter((p) => p.t >= th.warmupS));
     const post = gw.samples.filter((s) => s.t >= th.warmupS);
     const span = (post.at(-1)?.t ?? 0) - (post[0]?.t ?? 0);

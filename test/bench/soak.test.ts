@@ -91,6 +91,7 @@ function healthyRun(): SoakJudgeInput {
   return {
     gateways: [gw],
     latency: every30s(45, () => 110),
+    control: every30s(45, () => 100),
     slotCheck: { keys: 2, admitted: 16, expectedAdmitted: 16, refusedExtra: 2, expectedRefused: 2 },
     redis: { reservationKeys: 0, deadlineKeys: 0, streamKeys: 0, reservedMicroUsd: 0, budgetKeys: 60, overLimit: [], keysByClass: { 'budget-session': 10 }, bounds: { 'budget-session': 12 } },
     taint: { gateways: 2, refused: true },
@@ -113,7 +114,20 @@ test('each leak signal fails its own check', () => {
       .map((x) => x.check);
   };
   const gw = (r: SoakJudgeInput): GatewayRun => r.gateways[0] as GatewayRun;
-  expect(failing((r) => (gw(r).samples = gw(r).samples.map((s) => ({ ...s, heapMb: 40 + s.t / 100 }))))).toEqual(['a: heap used after GC growth']);
+  expect(failing((r) => (gw(r).samples = gw(r).samples.map((s) => ({ ...s, heapMb: 40 + s.t / 100 }))))).toEqual(['a: heap after GC plus external memory growth']);
+  // External memory (Buffers) counts with the heap: a Buffer leak fails the primary memory check.
+  expect(failing((r) => (gw(r).samples = gw(r).samples.map((s) => ({ ...s, externalMb: 5 + s.t / 60 }))))).toEqual(['a: heap after GC plus external memory growth']);
+  // RSS is judged against the control process: growth in the gateway alone fails...
+  expect(failing((r) => (gw(r).samples = gw(r).samples.map((s) => ({ ...s, rssMb: s.t > 1500 ? 150 : 120 }))))).toEqual(['a: RSS growth beyond the control process']);
+  // ...the same step in the control process at the same time does not (the V2 macOS run).
+  expect(
+    failing((r) => {
+      gw(r).samples = gw(r).samples.map((s) => ({ ...s, rssMb: s.t > 1500 ? 150 : 120 }));
+      r.control = every30s(45, (t) => (t > 1500 ? 140 : 100));
+    }),
+  ).toEqual([]);
+  // Without a control series RSS cannot be judged, which is not a pass.
+  expect(failing((r) => (r.control = []))).toEqual(['a: RSS growth beyond the control process']);
   expect(failing((r) => (gw(r).idleAfter.fds = 80))).toEqual(['a: open fds idle after vs before']);
   expect(failing((r) => (gw(r).idleAfter.reservationsOpen = 1))).toEqual(['a: open reservations after the load']);
   expect(failing((r) => (gw(r).sweptTotal = 3))).toEqual(['a: open reservations after the load']);
