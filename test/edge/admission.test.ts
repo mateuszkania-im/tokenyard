@@ -209,6 +209,46 @@ test('count_tokens passes the key\'s rate checks only: no reservation and no str
   expect(spy.admits[0]?.plan).toMatchObject({ reservations: [], streamSlots: [], rateChecks: [{ limit: 'dev-rpm' }] });
   await expect.poll(() => spy.settles.length).toBe(1);
   expect(g.traces.at(-1)?.outcome.costMicroUsd).toBe(0);
+  // Nothing was reserved, so nothing was settled at an estimate: the flag would make replay and readers treat the
+  // answer as unpriced (final fix re-review residual).
+  expect(g.traces.at(-1)?.outcome.settledAtEstimate).toBeUndefined();
+});
+
+test('a fault after admit on count_tokens traces charge 0 without the settled-at-estimate flag', async () => {
+  let n = 0;
+  let faults = 0;
+  const up = await raw((req, res) => {
+    req.resume();
+    if (n === 1) faults = 2;
+    res.writeHead(200, { 'content-type': 'application/json' }).end('{"input_tokens":12}');
+  });
+  process.env[PROVIDER_KEY_ENV] = 'k';
+  const traces: Rec[] = [];
+  const policy = testPolicy({ upstream: up.url });
+  const gw = createGateway({
+    policy: () => policy,
+    store: createMemoryStore({ clock: Date.now }),
+    traces: { write: (r) => (traces.push(r), true) },
+    traceSalt: 's',
+    clock: () => {
+      if (faults > 0) {
+        faults--;
+        throw new Error('injected fault');
+      }
+      return Date.now();
+    },
+    newId: () => `req_${++n}`,
+    basePath: null,
+    bodyCapBytes: 1 << 20,
+  });
+  const url = await gw.listen(0);
+  closers.push(gw.close);
+  await sendTolerant(url, '/v1/messages/count_tokens', authHeaders, msgBody({ model: 'claude-haiku-5-5' }));
+  await expect.poll(() => traces.length).toBe(1);
+  const t = traces[0] as Rec;
+  expect(t.outcome.errorClass).toBe('internal_error');
+  expect(t.outcome.costMicroUsd).toBe(0);
+  expect(t.outcome.settledAtEstimate).toBeUndefined();
 });
 
 test('a key over its request rate gets 429 on count_tokens, nothing sent (ledger 183)', async () => {

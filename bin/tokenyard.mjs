@@ -31263,6 +31263,9 @@ function isAdmitted(plan, admission) {
 function atEstimateCharge(plan, est) {
   return (plan?.reservations.length ?? 0) > 0 ? Math.max(est, plan?.worstCaseMicroUsd ?? 0) : est;
 }
+function hasEstimate(plan, est) {
+  return (plan?.reservations.length ?? 0) > 0 || est > 0;
+}
 var init_admission = __esm({
   "src/policy/admission.ts"() {
     "use strict";
@@ -59579,7 +59582,7 @@ async function settleAndTrace(deps, runtime, policy2, held, outcome) {
     let actual = cost ?? 0;
     if (costFailed) {
       actual = atEstimateCharge(held.plan, held.est);
-      o.settledAtEstimate = true;
+      if (hasEstimate(held.plan, held.est)) o.settledAtEstimate = true;
     }
     o.costMicroUsd = actual;
     o.overrun = (held.plan?.reservations.length ?? 0) > 0 && actual > held.est;
@@ -60017,7 +60020,7 @@ function createHandler(deps) {
               costMicroUsd: charge,
               addedTtfbMs: null,
               errorClass: "internal_error",
-              settledAtEstimate: true,
+              ...hasEstimate(held.plan, held.est) ? { settledAtEstimate: true } : {},
               settledBy: swept ? "sweeper" : "request",
               settleSeq,
               seqEpoch: runtime.epoch,

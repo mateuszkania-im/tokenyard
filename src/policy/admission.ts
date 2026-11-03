@@ -33,3 +33,11 @@ export function isAdmitted(plan: Plan, admission: Admission | null): boolean {
 export function atEstimateCharge(plan: Plan | null, est: number): number {
   return (plan?.reservations.length ?? 0) > 0 ? Math.max(est, plan?.worstCaseMicroUsd ?? 0) : est;
 }
+
+/**
+ * Whether settling `atEstimateCharge` means settling at an estimate: false when nothing was reserved and the estimate is
+ * 0 (count_tokens, ledger 183: rate checks only), so its trace carries no `settledAtEstimate` for a charge of 0.
+ */
+export function hasEstimate(plan: Plan | null, est: number): boolean {
+  return (plan?.reservations.length ?? 0) > 0 || est > 0;
+}

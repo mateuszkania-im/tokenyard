@@ -14,7 +14,7 @@ import { buildFeatures, decide, enforcedLevelApplies } from '../policy/decide.js
 import { bodyShapeRefusal } from '../surfaces/body-shape.js';
 import { BODY_VALUE_BUDGET, countJsonValuesUpTo } from '../surfaces/json-ranges.js';
 import { modelsForKey } from '../policy/match.js';
-import { atEstimateCharge, isAdmitted, planAdmission } from '../policy/admission.js';
+import { atEstimateCharge, hasEstimate, isAdmitted, planAdmission } from '../policy/admission.js';
 import { resolve } from '../policy/resolve.js';
 import type { Admission, CompiledPolicy, Decision, GuardrailHit, KeyRecord, Plan, ProviderSpec, RequestFeatures, Surface } from '../policy/types.js';
 import { billedServiceTier, costMicroUsd } from '../pricing/cost.js';
@@ -552,7 +552,7 @@ async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy
     let actual = cost ?? 0;
     if (costFailed) {
       actual = atEstimateCharge(held.plan, held.est);
-      o.settledAtEstimate = true;
+      if (hasEstimate(held.plan, held.est)) o.settledAtEstimate = true;
     }
     o.costMicroUsd = actual;
     o.overrun = (held.plan?.reservations.length ?? 0) > 0 && actual > held.est;
@@ -1116,7 +1116,7 @@ export function createHandler(deps: GatewayDeps): GatewayHandler {
                 costMicroUsd: charge,
                 addedTtfbMs: null,
                 errorClass: 'internal_error',
-                settledAtEstimate: true,
+                ...(hasEstimate(held.plan, held.est) ? { settledAtEstimate: true } : {}),
                 settledBy: swept ? 'sweeper' : 'request',
                 settleSeq,
                 seqEpoch: runtime.epoch,
