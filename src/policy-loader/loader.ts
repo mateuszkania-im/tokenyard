@@ -23,8 +23,12 @@ export interface PolicyLoaderOptions {
 
 export const DEFAULT_POLL_MS = 15_000;
 export const DEFAULT_DEBOUNCE_MS = 250;
-/** Reads of a changing policy directory at start before `start` gives up. */
-const MAX_START_READS = 20;
+/**
+ * Unstable read pairs of a changing policy directory (two reads a settle interval apart that differ) before it is
+ * counted as a load error: at start, `start` then gives up; later, the old revision keeps serving, the error is
+ * counted and reported, and reading goes on (one error per this many unstable pairs, about 5 s at the default settle).
+ */
+export const MAX_UNSTABLE_READS = 20;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -43,6 +47,8 @@ export class PolicyLoader extends EventEmitter {
   private debounceTimer: NodeJS.Timeout | null = null;
   private stopped = false;
   private candidate: PolicyLoader | null = null;
+  /** Unstable read pairs since the directory last settled (M3: counted and reported, never silent). */
+  private unstable = 0;
 
   constructor(private readonly o: PolicyLoaderOptions) {
     super();
@@ -141,20 +147,26 @@ export class PolicyLoader extends EventEmitter {
    * A directory is read file by file and may be caught mid-write: a prefix of policy.yaml can still validate (budgets
    * not written yet), or keys.yaml can be newer than policy.yaml. A changed directory therefore activates only when a
    * second read one settle interval (`debounceMs`) later finds the same bundle; otherwise another read follows (V3,
-   * Task 11). At start that repeats up to MAX_START_READS times.
+   * Task 11). At start that repeats up to MAX_UNSTABLE_READS times; later, every MAX_UNSTABLE_READS unstable pairs in a
+   * row count one load error (the old revision keeps serving).
    */
   private reload(trigger: Trigger, throwOnError: boolean): Promise<void> {
     const run = this.queue.then(async () => {
       for (let n = 1; ; n++) {
         if (this.stopped) return;
-        if ((await this.loadOnce(trigger, throwOnError)) === 'done') return;
-        if (trigger !== 'start') return this.scheduleReload();
-        if (n >= MAX_START_READS) {
-          const e = new Error(`the policy directory kept changing over ${MAX_START_READS} reads`);
-          this.errors++;
-          this.report(e);
-          throw e;
+        if ((await this.loadOnce(trigger, throwOnError)) === 'done') {
+          this.unstable = 0;
+          return;
         }
+        this.unstable++;
+        if (trigger === 'start' ? n >= MAX_UNSTABLE_READS : this.unstable % MAX_UNSTABLE_READS === 0) {
+          const e = new Error(`the policy directory kept changing over ${MAX_UNSTABLE_READS} reads${trigger === 'start' ? '' : `; revision ${this.base?.revision ?? 'none'} keeps serving`}`);
+          this.errors++;
+          this.lastError = e.message;
+          this.report(e);
+          if (trigger === 'start') throw e;
+        }
+        if (trigger !== 'start') return this.scheduleReload();
         // Give a writer caught mid-write one settle interval before the next first read (M4).
         await sleep(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
       }
@@ -165,7 +177,7 @@ export class PolicyLoader extends EventEmitter {
 
   /**
    * One load: 'unstable' when two reads of a changed directory differed, or the second one failed after the first
-   * passed (a file caught mid-write, M4); nothing is activated or counted.
+   * passed (a file caught mid-write, M4); nothing is activated and the caller counts it.
    */
   private async loadOnce(trigger: Trigger, throwOnError: boolean): Promise<'done' | 'unstable'> {
     try {

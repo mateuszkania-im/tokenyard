@@ -1,10 +1,11 @@
 // The two-read settle of a changing policy directory (S-V3-2) with scripted reads, so the order of what the loader
 // sees is exact: M4 (V3 review) a second read that fails at start, because a file was caught mid-write after the
-// first read passed, is one more unstable pair and is read again, not a failed start.
+// first read passed, is one more unstable pair and is read again, not a failed start; M3 a directory that never
+// settles keeps the old revision serving and is counted and reported every MAX_UNSTABLE_READS reads, not silent.
 import { afterEach, expect, test, vi } from 'vitest';
 import { parsePolicyFiles, PolicyLoadError, type PolicySource } from '../../src/policy/load-dir.js';
 import { EXAMPLE_PRICES } from '../policy/helpers.js';
-import { keysYaml, policyYaml, tempDir } from '../helpers/policy-dir.js';
+import { keysYaml, policyYaml, sleep, tempDir } from '../helpers/policy-dir.js';
 
 /** What each read of the directory returns, in order; the last entry repeats. */
 const script: { reads: Array<() => PolicySource>; n: number } = { reads: [], n: 0 };
@@ -16,7 +17,7 @@ vi.mock('../../src/policy-loader/load-dir.js', () => ({
     return read();
   },
 }));
-const { PolicyLoader } = await import('../../src/policy-loader/loader.js');
+const { MAX_UNSTABLE_READS, PolicyLoader } = await import('../../src/policy-loader/loader.js');
 
 const source = (name: string) => (): PolicySource => parsePolicyFiles('t', { 'policy.yaml': policyYaml('http://127.0.0.1:1', name), 'prices.yaml': EXAMPLE_PRICES, 'keys.yaml': keysYaml() });
 const midWrite = (): PolicySource => {
@@ -52,3 +53,24 @@ test('M4 a broken file on the first read at start still fails the start (nothing
   const { l } = loader();
   await expect(l.start()).rejects.toThrow(/cannot start/);
 });
+
+test('M3 a directory that never settles keeps the old revision, and is counted and reported every MAX_UNSTABLE_READS reads', async () => {
+  script.reads = [source('one')];
+  const { l, errors } = loader({ pollMs: 10 });
+  await l.start();
+  const rev = l.active().revision;
+  // From now on every read differs from the one before it.
+  let flip = 0;
+  script.reads = [() => source(flip++ % 2 === 0 ? 'two' : 'three')()];
+  script.n = 0;
+  await expect.poll(() => l.loadErrors, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
+  expect(errors.some((m) => m.includes(`kept changing over ${MAX_UNSTABLE_READS} reads`))).toBe(true);
+  expect(script.n).toBeGreaterThanOrEqual(MAX_UNSTABLE_READS);
+  expect(l.active().revision).toBe(rev);
+  // Once it settles, the new revision activates and the count stops growing.
+  script.reads = [source('three')];
+  await expect.poll(() => l.active().revision, { timeout: 10_000 }).not.toBe(rev);
+  const settled = l.loadErrors;
+  await sleep(200);
+  expect(l.loadErrors).toBe(settled);
+}, 30_000);

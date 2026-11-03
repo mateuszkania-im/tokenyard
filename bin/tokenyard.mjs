@@ -60858,12 +60858,13 @@ var loader_exports = {};
 __export(loader_exports, {
   DEFAULT_DEBOUNCE_MS: () => DEFAULT_DEBOUNCE_MS,
   DEFAULT_POLL_MS: () => DEFAULT_POLL_MS,
+  MAX_UNSTABLE_READS: () => MAX_UNSTABLE_READS,
   PolicyLoader: () => PolicyLoader
 });
 import { EventEmitter as EventEmitter2 } from "node:events";
 import { watch } from "node:fs";
 import { join as join6 } from "node:path";
-var DEFAULT_POLL_MS, DEFAULT_DEBOUNCE_MS, MAX_START_READS, sleep3, PolicyLoader, msgOf;
+var DEFAULT_POLL_MS, DEFAULT_DEBOUNCE_MS, MAX_UNSTABLE_READS, sleep3, PolicyLoader, msgOf;
 var init_loader = __esm({
   "src/policy-loader/loader.ts"() {
     "use strict";
@@ -60874,7 +60875,7 @@ var init_loader = __esm({
     init_lkg();
     DEFAULT_POLL_MS = 15e3;
     DEFAULT_DEBOUNCE_MS = 250;
-    MAX_START_READS = 20;
+    MAX_UNSTABLE_READS = 20;
     sleep3 = (ms) => new Promise((r) => setTimeout(r, ms));
     PolicyLoader = class _PolicyLoader extends EventEmitter2 {
       constructor(o) {
@@ -60895,6 +60896,8 @@ var init_loader = __esm({
       debounceTimer = null;
       stopped = false;
       candidate = null;
+      /** Unstable read pairs since the directory last settled (M3: counted and reported, never silent). */
+      unstable = 0;
       /** Count of bundles that failed to load (this source and the candidate), for tokenyard_policy_load_errors_total. */
       get loadErrors() {
         return this.errors + (this.candidate?.loadErrors ?? 0);
@@ -60981,20 +60984,26 @@ var init_loader = __esm({
        * A directory is read file by file and may be caught mid-write: a prefix of policy.yaml can still validate (budgets
        * not written yet), or keys.yaml can be newer than policy.yaml. A changed directory therefore activates only when a
        * second read one settle interval (`debounceMs`) later finds the same bundle; otherwise another read follows (V3,
-       * Task 11). At start that repeats up to MAX_START_READS times.
+       * Task 11). At start that repeats up to MAX_UNSTABLE_READS times; later, every MAX_UNSTABLE_READS unstable pairs in a
+       * row count one load error (the old revision keeps serving).
        */
       reload(trigger, throwOnError) {
         const run2 = this.queue.then(async () => {
           for (let n2 = 1; ; n2++) {
             if (this.stopped) return;
-            if (await this.loadOnce(trigger, throwOnError) === "done") return;
-            if (trigger !== "start") return this.scheduleReload();
-            if (n2 >= MAX_START_READS) {
-              const e2 = new Error(`the policy directory kept changing over ${MAX_START_READS} reads`);
-              this.errors++;
-              this.report(e2);
-              throw e2;
+            if (await this.loadOnce(trigger, throwOnError) === "done") {
+              this.unstable = 0;
+              return;
             }
+            this.unstable++;
+            if (trigger === "start" ? n2 >= MAX_UNSTABLE_READS : this.unstable % MAX_UNSTABLE_READS === 0) {
+              const e2 = new Error(`the policy directory kept changing over ${MAX_UNSTABLE_READS} reads${trigger === "start" ? "" : `; revision ${this.base?.revision ?? "none"} keeps serving`}`);
+              this.errors++;
+              this.lastError = e2.message;
+              this.report(e2);
+              if (trigger === "start") throw e2;
+            }
+            if (trigger !== "start") return this.scheduleReload();
             await sleep3(this.o.debounceMs ?? DEFAULT_DEBOUNCE_MS);
           }
         });
@@ -61003,7 +61012,7 @@ var init_loader = __esm({
       }
       /**
        * One load: 'unstable' when two reads of a changed directory differed, or the second one failed after the first
-       * passed (a file caught mid-write, M4); nothing is activated or counted.
+       * passed (a file caught mid-write, M4); nothing is activated and the caller counts it.
        */
       async loadOnce(trigger, throwOnError) {
         try {
