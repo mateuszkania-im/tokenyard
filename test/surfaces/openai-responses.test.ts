@@ -109,8 +109,9 @@ test('guardrails on Responses: escaped secrets in a tool output, duplicate keys 
   expect(stack.mock.received).toHaveLength(0);
 });
 
-test('service_tier: absent, null and default are standard; a known tier is carried; any other value is "other" (B1)', () => {
-  for (const v of [undefined, null, 'default']) expect(extractResponsesFeatures(respBody(v === undefined ? {} : { service_tier: v })).serviceTier).toBeUndefined();
+test('service_tier: default is standard; absent and null are auto (FR-M2); a known tier is carried; any other value is "other" (B1)', () => {
+  expect(extractResponsesFeatures(respBody({ service_tier: 'default' })).serviceTier).toBeUndefined();
+  for (const v of [undefined, null]) expect(extractResponsesFeatures(respBody(v === undefined ? {} : { service_tier: v })).serviceTier).toBe('auto');
   for (const v of ['auto', 'priority', 'flex', 'scale']) expect(extractResponsesFeatures(respBody({ service_tier: v })).serviceTier).toBe(v);
   for (const v of ['x', 7]) expect(extractResponsesFeatures(respBody({ service_tier: v })).serviceTier).toBe('other');
   expect(extractResponsesFeatures(respBody({ service_tier: 'priority' })).fastMode).toBe(false);

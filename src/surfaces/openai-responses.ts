@@ -180,7 +180,9 @@ export function extractResponsesFeatures(body: Buffer): ExtractedFeatures {
     blockTypes: [...types],
     expandsServerSide: seen.openaiClient || hasExpandingField(parsed),
     fastMode: false,
-    ...(parsed.service_tier === undefined || parsed.service_tier === null || parsed.service_tier === 'default' ? {} : { serviceTier: typeof parsed.service_tier === 'string' ? serviceTierLabel(parsed.service_tier) : 'other' }),
+    // An absent (or null) service_tier is OpenAI's `auto`: the project's default tier, which may be priority, so it is
+    // reserved as an explicit `auto` is (FR-M2). `default` is standard pricing (no tier).
+    ...(parsed.service_tier === 'default' ? {} : { serviceTier: parsed.service_tier === undefined || parsed.service_tier === null ? 'auto' : typeof parsed.service_tier === 'string' ? serviceTierLabel(parsed.service_tier) : 'other' }),
     parseError: false,
     ...turnRanges(body, parsed.input),
     ...(hasAmbiguousKeys(body) ? { ambiguousKeys: true as const } : {}),

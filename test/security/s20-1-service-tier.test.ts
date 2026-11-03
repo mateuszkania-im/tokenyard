@@ -52,3 +52,26 @@ test('S20-1 a priced tier reserves at its own price and auto reserves at the hig
   expect(auto).toBe(priority);
   expect(priority).toBeGreaterThan(standard);
 });
+
+test('FR-M2 an absent service_tier is reserved as auto (OpenAI serves it on the project default tier); default stays standard', async () => {
+  const spy = spyStore(createMemoryStore({ clock: Date.now }));
+  const settled: RequestOutcome[] = [];
+  stack = await startOpenAIStack({ policy: { editPrices: withTiers }, gw: { store: spy.store, onSettled: (o) => settled.push(o) } });
+  const est = async (body: Buffer): Promise<number> => {
+    const res = await send(stack!.gw.url, { path: '/v1/responses', headers: codexHeaders, body });
+    expect(res.status).toBe(200);
+    await expect.poll(() => settled.length).toBe(spy.admits.length);
+    return spy.admits.at(-1)?.plan.reservations[0]?.estMicroUsd ?? -1;
+  };
+  // Padded to one byte count, so the input bound is the same for the three.
+  const sized = (extra: Record<string, unknown>, n: number): Buffer => respBody({ ...extra, user: 'u'.repeat(n - respBody({ ...extra, user: '' }).length) });
+  const n = respBody({ service_tier: 'default', user: '' }).length + 8;
+  const auto = sized({ service_tier: 'auto' }, n);
+  const absent = sized({}, n);
+  const deflt = sized({ service_tier: 'default' }, n);
+  expect(absent.length).toBe(auto.length);
+  expect(deflt.length).toBe(auto.length);
+  const autoEst = await est(auto);
+  expect(await est(absent)).toBe(autoEst);
+  expect(await est(deflt)).toBeLessThan(autoEst);
+});

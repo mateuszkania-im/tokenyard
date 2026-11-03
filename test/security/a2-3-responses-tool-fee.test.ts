@@ -46,8 +46,9 @@ it('A2-3 a streamed response is charged every web_search_call it reports (output
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     res.write(sse('response.created', { type: 'response.created', response: { id: 'resp_1', model: 'gpt-5.4-mini' } }));
     for (let i = 0; i < 3; i++) res.write(sse('response.output_item.done', { type: 'response.output_item.done', item: call(i) }));
-    // The terminal output lists four calls: one more than the done events (never undercounted).
-    res.end(sse('response.completed', { type: 'response.completed', response: { id: 'resp_1', model: 'gpt-5.4-mini', status: 'completed', output: [0, 1, 2, 3].map(call), usage } }));
+    // The terminal output lists four calls: one more than the done events (never undercounted). It names the tier
+    // served, as OpenAI does: the request has no service_tier, which is `auto` (FR-M2), settled at the tier served.
+    res.end(sse('response.completed', { type: 'response.completed', response: { id: 'resp_1', model: 'gpt-5.4-mini', status: 'completed', service_tier: 'default', output: [0, 1, 2, 3].map(call), usage } }));
   });
   const policy = testPolicy({ upstream: up.url, editRoutes: (rs) => void (rs.find((r) => r.name === 'codex')!.serverTools = ['web_search']) });
   const { url, outcomes } = await gw(policy);

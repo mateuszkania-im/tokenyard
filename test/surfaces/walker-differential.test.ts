@@ -12,6 +12,17 @@ import * as refJ from './reference/json-ranges.js';
 import * as refO from './reference/openai-responses.js';
 import { fuzz } from '../helpers/fuzz.js';
 
+/**
+ * The frozen reference with the one deliberate change since: an absent or null `service_tier` on a parsed body reads
+ * as `auto` (FR-M2, final review ruling), where the reference leaves the tier out.
+ */
+function refResponses(b: Buffer): ReturnType<typeof refO.extractResponsesFeatures> {
+  const r = refO.extractResponsesFeatures(b);
+  if (r.parseError) return r;
+  const parsed = JSON.parse(b.toString('utf8')) as { service_tier?: unknown };
+  return parsed.service_tier === undefined || parsed.service_tier === null ? { ...r, serviceTier: 'auto' } : r;
+}
+
 /** The result or the error name, so a walker that throws on a broken body is compared too. */
 const outcome = (f: () => unknown): unknown => {
   try {
@@ -57,7 +68,7 @@ test('feature extraction, rewrites and body-shape refusals are unchanged (Anthro
   fc.assert(
     fc.property(body, (b) => {
       expect(extractAnthropicFeatures(b)).toEqual(refA.extractAnthropicFeatures(b));
-      expect(extractResponsesFeatures(b)).toEqual(refO.extractResponsesFeatures(b));
+      expect(extractResponsesFeatures(b)).toEqual(refResponses(b));
       expect(rewriteTopLevelModel(b, 'm2')).toEqual(refA.rewriteTopLevelModel(b, 'm2'));
       expect(capTopLevelInteger(b, 'max_tokens', 5)).toEqual(refA.capTopLevelInteger(b, 'max_tokens', 5));
       for (const parsed of [true, false]) expect(bodyShapeRefusal(b, parsed)).toBe(refShape.bodyShapeRefusal(b, parsed));
@@ -72,7 +83,7 @@ test('realistic message bodies: features and shape unchanged', () => {
     fc.property(fc.array(msg, { maxLength: 6 }), fc.option(fc.string(), { nil: undefined }), (messages, system) => {
       const b = Buffer.from(JSON.stringify({ model: 'claude-x', max_tokens: 9, ...(system === undefined ? {} : { system }), messages, input: messages }));
       expect(extractAnthropicFeatures(b)).toEqual(refA.extractAnthropicFeatures(b));
-      expect(extractResponsesFeatures(b)).toEqual(refO.extractResponsesFeatures(b));
+      expect(extractResponsesFeatures(b)).toEqual(refResponses(b));
       expect(bodyShapeRefusal(b, true)).toBe(refShape.bodyShapeRefusal(b, true));
     }),
     fuzz(5153, 1_000),

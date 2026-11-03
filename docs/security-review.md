@@ -97,7 +97,7 @@ Each has a dedicated test file added in Task 25.4 that asserts the specific atta
 | S19-4 | 19 | CI | Medium | Base-side path taken from the realpath of a PR-controlled directory | `test/security/s19-action-base-policy.test.ts` | fixed: configured path normalised, symlinks refused | d7f2a17 |
 | S-FS-1 | 19 | filesystem | Medium | Policy directory or its ancestors could be symbolic links | `test/security/s-fs-1-safe-path.test.ts` | fixed: one safe-path helper for every user-controlled path; FIFOs refused | 9a3857d, 812c025 |
 | S-FS-2 | 19 | filesystem | Medium | Root-owned link exception trusted link ownership alone | `test/security/s-fs-2-system-links.test.ts` | fixed: full OpenSSH `safe_path` rule | 99cc0e4 |
-| S20-1 | 20 | budget | Medium | Non-standard `service_tier` priced as standard | `test/security/s20-1-service-tier.test.ts` | fixed: refused unless the model has tier prices; `auto` reserves at the highest tier | dbac3f6 |
+| S20-1 | 20 | budget | Medium | Non-standard `service_tier` priced as standard | `test/security/s20-1-service-tier.test.ts` | fixed: refused unless the model has tier prices; `auto` reserves at the highest tier; `default` is standard pricing (ledger 369); an absent or null `service_tier`, which OpenAI serves on the project's default tier, is reserved as `auto` (FR-M2, final review) | dbac3f6, `git log --grep FR-M2` |
 | S20-2 | 20 | budget | Medium | Responses settlement without terminal usage under-charged | `test/security/s20-2-responses-settle-without-usage.test.ts` | fixed: settles at the reservation | dbac3f6 |
 | S21-1 | 21 | leak | Medium | `/metrics` unauthenticated on the API port | `test/security/s21-1-metrics-exposure.test.ts` | fixed: separate ops listener, token off loopback | b3820c1 |
 | S21-2 | 21 | leak | Medium | Metric labels from client-controlled values (cardinality, poisoning) | `test/security/s21-2-metric-label-cardinality.test.ts` | fixed: bounded label sets, series cap | b3820c1 |
@@ -154,6 +154,13 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   (CL-t9e, T9-e); what is left is a provider that bills fast mode without the request asking for it: such a response
   settles at the reservation, which is priced at the standard rates, so the charge is below the bill whenever the fast
   bill is above that reservation (`test/security/t9-fast-mode-unpriced.test.ts`, T9-residual; ruling progress.md:614).
+- **OpenAI service tier served (FR-M2).** An absent `service_tier` is OpenAI's `auto` and is reserved as an explicit
+  `auto` is: at the highest tier the model has prices for, standard when it lists none; explicit `default` is
+  standard (`test/security/s20-1-service-tier.test.ts`, FR-M2). Settlement uses the tier the response reports, and a
+  response that reports none is charged its reservation. What is left: a project whose default tier is priority, on a
+  model without `serviceTiers` prices, gets responses reporting `priority`; those cannot be priced and settle at the
+  reservation, which was priced at the standard rates, so the charge is below the bill whenever the priority bill is
+  above that reservation (the same shape as the fast mode residual above).
 - **Policy files caught mid-write (task 11, S-V3-2).** A changed policy directory activates only when two reads one
   settle interval (250 ms by default) apart agree (`test/policy-loader/loader-settle.test.ts`). A writer slower than
   that interval can still be caught with a prefix that validates, and a `--policy-url` source is not re-read. Operators
