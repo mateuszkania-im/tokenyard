@@ -62,15 +62,38 @@ __export(safe_path_exports, {
   listDirUnder: () => listDirUnder,
   readFileUnder: () => readFileUnder,
   readFileUnderSync: () => readFileUnderSync,
+  trustedSystemLink: () => trustedSystemLink,
   writeFileUnder: () => writeFileUnder
 });
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 function cliRoot(target, cwd = process.cwd()) {
   const abs = resolve(cwd, target);
   if (process.platform !== "win32") return parse(abs).root;
   return inside(resolve(cwd), abs) ? resolve(cwd) : dirname(abs);
+}
+function rootOwnedChain(dir, fs2, lenientFirst) {
+  let cur = dir;
+  for (let first2 = true; ; first2 = false) {
+    const st = fs2.stat(cur);
+    if (st.uid !== 0) return false;
+    if ((st.mode & GROUP_OR_WORLD_WRITABLE) !== 0 && !(first2 && lenientFirst && (st.mode & STICKY) !== 0)) return false;
+    const up = dirname(cur);
+    if (up === cur) return true;
+    cur = up;
+  }
+}
+function trustedSystemLink(link, fs2 = realProbe) {
+  try {
+    if (fs2.lstat(link).uid !== 0) return false;
+    if (!rootOwnedChain(fs2.realpath(dirname(link)), fs2, false)) return false;
+    const target = fs2.realpath(link);
+    const targetDir = fs2.stat(target).isDirectory() ? target : dirname(target);
+    return rootOwnedChain(targetDir, fs2, true);
+  } catch {
+    return false;
+  }
 }
 function isUnder(root, target) {
   return inside(resolve(root), resolve(target));
@@ -87,7 +110,7 @@ function components(root, abs, label) {
   return out;
 }
 function refuseLink(path2, label) {
-  throw new UnsafePathError(`${label} passes through a symbolic link (${path2}), which is refused`);
+  throw new UnsafePathError(`${label} passes through a symbolic link (${path2}), which is refused; pass the real path instead`);
 }
 function underRealRoot(realRoot, realTarget, label) {
   if (!inside(realRoot, realTarget)) throw new UnsafePathError(`${label} resolves outside ${realRoot}`);
@@ -103,7 +126,7 @@ async function checkPath(root, target, o = {}) {
       if (o.allowMissing && missing(e2)) return abs;
       throw e2;
     }
-    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, c, st)) refuseLink(c, target);
   }
   underRealRoot(await realpath(absRoot), await realpath(abs), target);
   return abs;
@@ -119,7 +142,7 @@ function checkPathSync(root, target, o = {}) {
       if (o.allowMissing && missing(e2)) return abs;
       throw e2;
     }
-    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, c, st)) refuseLink(c, target);
   }
   underRealRoot(realpathSync(absRoot), realpathSync(abs), target);
   return abs;
@@ -212,7 +235,7 @@ async function ensureDirUnder(root, dir) {
       st = await lstat(c);
     }
     if (st.isSymbolicLink()) {
-      if (!allowedLink(absRoot, st)) refuseLink(c, dir);
+      if (!allowedLink(absRoot, c, st)) refuseLink(c, dir);
       st = await stat(c);
     }
     if (!st.isDirectory()) throw new UnsafePathError(`${c} is not a directory`);
@@ -255,7 +278,7 @@ async function listDirUnder(root, dir) {
   await checkPath(root, dir);
   return (await readdir(resolve(dir), { withFileTypes: true })).filter((e2) => e2.isFile() || e2.isDirectory());
 }
-var UnsafePathError, NOFOLLOW, NONBLOCK, systemLinksAllowed, allowedLink, missing, tooLarge;
+var UnsafePathError, NOFOLLOW, NONBLOCK, realProbe, GROUP_OR_WORLD_WRITABLE, STICKY, systemLinksAllowed, allowedLink, missing, tooLarge;
 var init_safe_path = __esm({
   "src/fsutil/safe-path.ts"() {
     "use strict";
@@ -264,8 +287,11 @@ var init_safe_path = __esm({
     };
     NOFOLLOW = constants.O_NOFOLLOW ?? 0;
     NONBLOCK = constants.O_NONBLOCK ?? 0;
+    realProbe = { lstat: (p) => lstatSync(p), stat: (p) => statSync(p), realpath: (p) => realpathSync(p) };
+    GROUP_OR_WORLD_WRITABLE = 18;
+    STICKY = 512;
     systemLinksAllowed = (absRoot) => process.platform !== "win32" && parse(absRoot).root === absRoot;
-    allowedLink = (absRoot, st) => st.isSymbolicLink() && systemLinksAllowed(absRoot) && st.uid === 0;
+    allowedLink = (absRoot, path2, st) => st.isSymbolicLink() && systemLinksAllowed(absRoot) && trustedSystemLink(path2);
     missing = (e2) => e2.code === "ENOENT" || e2.code === "ENOTDIR";
     tooLarge = (target, cap2) => new UnsafePathError(`${target} is larger than ${cap2} bytes`);
   }
@@ -109219,6 +109245,7 @@ var policy = program2.command("policy").description("policy files");
 policy.command("check").description("validate a policy directory: schema, then the semantic rules; exits 1 on errors").argument("[dir]", "policy directory (policy.yaml, prices.yaml, keys.yaml)", "policy").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
   const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
+  const { UnsafePathError: UnsafePathError2 } = await Promise.resolve().then(() => (init_safe_path(), safe_path_exports));
   const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
   let errors;
   let warnings = [];
@@ -109226,7 +109253,7 @@ policy.command("check").description("validate a policy directory: schema, then t
     const r = validatePolicy2(await loadPolicyDir2(dir), { experimentalSubscription: o.experimentalSubscription === true });
     ({ errors, warnings } = r);
   } catch (e2) {
-    if (e2 instanceof Error && e2.name === "UnsafePathError") return void (console.error(`tokenyard policy check: ${e2.message}`), process.exit(1));
+    if (e2 instanceof UnsafePathError2) return void (console.error(`tokenyard policy check: ${e2.message}`), process.exit(1));
     if (!(e2 instanceof PolicyLoadError2)) throw e2;
     errors = e2.issues;
   }
@@ -109236,7 +109263,7 @@ policy.command("check").description("validate a policy directory: schema, then t
   if (errors.length > 0) process.exit(1);
 });
 policy.command("build").description("write one bundle file (manifest, policy, prices, keys) from a policy directory; revision is GITHUB_SHA in CI, else the first 12 hex of the content sha256").argument("[dir]", "policy directory", "policy").option("--out <file>", "output file", "dist/policy-bundle.json").option("--experimental-subscription", "allow the subscription passthrough items (docs/experimental-subscription.md)").action(async (dir, o) => {
-  const { cliRoot: cliRoot2, writeFileUnder: writeFileUnder2 } = await Promise.resolve().then(() => (init_safe_path(), safe_path_exports));
+  const { cliRoot: cliRoot2, UnsafePathError: UnsafePathError2, writeFileUnder: writeFileUnder2 } = await Promise.resolve().then(() => (init_safe_path(), safe_path_exports));
   const { loadPolicyDir: loadPolicyDir2 } = await Promise.resolve().then(() => (init_load_dir2(), load_dir_exports2));
   const { PolicyLoadError: PolicyLoadError2 } = await Promise.resolve().then(() => (init_load_dir(), load_dir_exports));
   const { validatePolicy: validatePolicy2 } = await Promise.resolve().then(() => (init_validate(), validate_exports));
@@ -109252,7 +109279,7 @@ policy.command("build").description("write one bundle file (manifest, policy, pr
     await writeFileUnder2(cliRoot2(o.out), o.out, serializeBundle2(bundle));
     console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
   } catch (e2) {
-    if (e2 instanceof Error && e2.name === "UnsafePathError") return void (console.error(`tokenyard policy build: ${e2.message}`), process.exit(1));
+    if (e2 instanceof UnsafePathError2) return void (console.error(`tokenyard policy build: ${e2.message}`), process.exit(1));
     if (!(e2 instanceof PolicyLoadError2)) throw e2;
     for (const i of e2.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
     process.exit(1);

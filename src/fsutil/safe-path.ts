@@ -7,7 +7,7 @@
 // the last component, the file itself. Files are opened with O_NOFOLLOW and O_NONBLOCK (a FIFO is refused, never waited
 // on) and must be regular files, reads are bounded, and directories are created one component at a time below the
 // root, never through a link.
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, type Dirent } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, realpathSync, statSync, type Dirent } from 'node:fs';
 import { lstat, mkdir, open, readdir, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 
@@ -29,9 +29,52 @@ export function cliRoot(target: string, cwd: string = process.cwd()): string {
   return inside(resolve(cwd), abs) ? resolve(cwd) : dirname(abs);
 }
 
-/** Below the filesystem root (POSIX) a link owned by root is a system link and is allowed; any other link is refused. */
+/** What `trustedSystemLink` reads; tests inject a fake tree. */
+export interface LinkProbe {
+  lstat(p: string): { uid: number; mode: number; isSymbolicLink(): boolean };
+  stat(p: string): { uid: number; mode: number; isDirectory(): boolean };
+  realpath(p: string): string;
+}
+const realProbe: LinkProbe = { lstat: (p) => lstatSync(p), stat: (p) => statSync(p), realpath: (p) => realpathSync(p) };
+
+const GROUP_OR_WORLD_WRITABLE = 0o022;
+const STICKY = 0o1000;
+
+/** `dir` and every ancestor up to `/` are root-owned and not group- or world-writable (`lenientFirst`: `dir` itself may be writable when sticky). */
+function rootOwnedChain(dir: string, fs: LinkProbe, lenientFirst: boolean): boolean {
+  let cur = dir;
+  for (let first = true; ; first = false) {
+    const st = fs.stat(cur);
+    if (st.uid !== 0) return false;
+    if ((st.mode & GROUP_OR_WORLD_WRITABLE) !== 0 && !(first && lenientFirst && (st.mode & STICKY) !== 0)) return false;
+    const up = dirname(cur);
+    if (up === cur) return true;
+    cur = up;
+  }
+}
+
+/**
+ * The OpenSSH safe_path rule for a symbolic link in a CLI or configuration path (S-FS-2): the link is root-owned, the
+ * directory holding it and every ancestor up to `/` are root-owned and not group- or world-writable, and so are the
+ * link's resolved target directory and its ancestors. The target directory itself may be world-writable when it has the
+ * sticky bit (macOS /tmp is a root link to the root-owned, sticky /private/tmp); everything below it is still walked
+ * component by component. Any error (a missing component, a loop) is a refusal.
+ */
+export function trustedSystemLink(link: string, fs: LinkProbe = realProbe): boolean {
+  try {
+    if (fs.lstat(link).uid !== 0) return false;
+    if (!rootOwnedChain(fs.realpath(dirname(link)), fs, false)) return false;
+    const target = fs.realpath(link);
+    const targetDir = fs.stat(target).isDirectory() ? target : dirname(target);
+    return rootOwnedChain(targetDir, fs, true);
+  } catch {
+    return false;
+  }
+}
+
+/** Below the filesystem root (POSIX) a system link that passes `trustedSystemLink` is allowed; any other link is refused. */
 const systemLinksAllowed = (absRoot: string): boolean => process.platform !== 'win32' && parse(absRoot).root === absRoot;
-const allowedLink = (absRoot: string, st: { isSymbolicLink(): boolean; uid: number }): boolean => st.isSymbolicLink() && systemLinksAllowed(absRoot) && st.uid === 0;
+const allowedLink = (absRoot: string, path: string, st: { isSymbolicLink(): boolean }): boolean => st.isSymbolicLink() && systemLinksAllowed(absRoot) && trustedSystemLink(path);
 
 /** Whether `target` (resolved against the working directory) lies at or below `root`. */
 export function isUnder(root: string, target: string): boolean {
@@ -55,7 +98,7 @@ function components(root: string, abs: string, label: string): string[] {
 const missing = (e: unknown): boolean => (e as NodeJS.ErrnoException).code === 'ENOENT' || (e as NodeJS.ErrnoException).code === 'ENOTDIR';
 
 function refuseLink(path: string, label: string): never {
-  throw new UnsafePathError(`${label} passes through a symbolic link (${path}), which is refused`);
+  throw new UnsafePathError(`${label} passes through a symbolic link (${path}), which is refused; pass the real path instead`);
 }
 
 function underRealRoot(realRoot: string, realTarget: string, label: string): void {
@@ -78,7 +121,7 @@ export async function checkPath(root: string, target: string, o: { allowMissing?
       if (o.allowMissing && missing(e)) return abs;
       throw e;
     }
-    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, c, st)) refuseLink(c, target);
   }
   underRealRoot(await realpath(absRoot), await realpath(abs), target);
   return abs;
@@ -96,7 +139,7 @@ export function checkPathSync(root: string, target: string, o: { allowMissing?: 
       if (o.allowMissing && missing(e)) return abs;
       throw e;
     }
-    if (st.isSymbolicLink() && !allowedLink(absRoot, st)) refuseLink(c, target);
+    if (st.isSymbolicLink() && !allowedLink(absRoot, c, st)) refuseLink(c, target);
   }
   underRealRoot(realpathSync(absRoot), realpathSync(abs), target);
   return abs;
@@ -208,7 +251,7 @@ export async function ensureDirUnder(root: string, dir: string): Promise<string>
       st = await lstat(c);
     }
     if (st.isSymbolicLink()) {
-      if (!allowedLink(absRoot, st)) refuseLink(c, dir);
+      if (!allowedLink(absRoot, c, st)) refuseLink(c, dir);
       st = await stat(c);
     }
     if (!st.isDirectory()) throw new UnsafePathError(`${c} is not a directory`);

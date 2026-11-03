@@ -242,6 +242,7 @@ policy
   .action(async (dir: string, o: { experimentalSubscription?: boolean }) => {
     const { loadPolicyDir } = await import('./policy-loader/load-dir.js');
     const { PolicyLoadError } = await import('./policy/load-dir.js');
+    const { UnsafePathError } = await import('./fsutil/safe-path.js');
     const { validatePolicy } = await import('./policy/validate.js');
     let errors: Array<{ code: string; path: string; message: string }>;
     let warnings: Array<{ code: string; path: string; message: string }> = [];
@@ -249,7 +250,7 @@ policy
       const r = validatePolicy(await loadPolicyDir(dir), { experimentalSubscription: o.experimentalSubscription === true });
       ({ errors, warnings } = r);
     } catch (e) {
-      if (e instanceof Error && e.name === 'UnsafePathError') return void (console.error(`tokenyard policy check: ${e.message}`), process.exit(1));
+      if (e instanceof UnsafePathError) return void (console.error(`tokenyard policy check: ${e.message}`), process.exit(1));
       if (!(e instanceof PolicyLoadError)) throw e;
       errors = e.issues;
     }
@@ -265,7 +266,7 @@ policy
   .option('--out <file>', 'output file', 'dist/policy-bundle.json')
   .option('--experimental-subscription', 'allow the subscription passthrough items (docs/experimental-subscription.md)')
   .action(async (dir: string, o: { out: string; experimentalSubscription?: boolean }) => {
-    const { cliRoot, writeFileUnder } = await import('./fsutil/safe-path.js');
+    const { cliRoot, UnsafePathError, writeFileUnder } = await import('./fsutil/safe-path.js');
     const { loadPolicyDir } = await import('./policy-loader/load-dir.js');
     const { PolicyLoadError } = await import('./policy/load-dir.js');
     const { validatePolicy } = await import('./policy/validate.js');
@@ -281,7 +282,7 @@ policy
       await writeFileUnder(cliRoot(o.out), o.out, serializeBundle(bundle));
       console.error(`wrote ${o.out}: revision ${bundle.manifest.revision}, sha256 ${bundle.manifest.sha256}`);
     } catch (e) {
-      if (e instanceof Error && e.name === 'UnsafePathError') return void (console.error(`tokenyard policy build: ${e.message}`), process.exit(1));
+      if (e instanceof UnsafePathError) return void (console.error(`tokenyard policy build: ${e.message}`), process.exit(1));
       if (!(e instanceof PolicyLoadError)) throw e;
       for (const i of e.issues) console.error(`error ${i.code} ${i.path}: ${i.message}`);
       process.exit(1);

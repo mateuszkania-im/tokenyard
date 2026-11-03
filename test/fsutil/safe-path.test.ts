@@ -5,8 +5,8 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { cp, lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
-import { checkPath, cliRoot, createWriteStreamUnder, ensureDirUnder, readFileUnder, readFileUnderSync, UnsafePathError, writeFileUnder } from '../../src/fsutil/safe-path.js';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { checkPath, cliRoot, createWriteStreamUnder, ensureDirUnder, readFileUnder, readFileUnderSync, trustedSystemLink, UnsafePathError, writeFileUnder } from '../../src/fsutil/safe-path.js';
 import { readLedger } from '../../src/ledger/reader.js';
 import { validatePolicy } from '../../src/policy/validate.js';
 import { exportTraces, listLedgerFiles, loadTraceRecords } from '../../src/ledger/export.js';
@@ -184,4 +184,66 @@ test('keys create refuses a keys file that is a symbolic link', async () => {
   expect(await readFile(join(outside, 'secret.txt'), 'utf8')).toBe('outside the root');
   await appendKey(join(root, 'plain-keys.yaml'), rec);
   expect(await readFile(join(root, 'plain-keys.yaml'), 'utf8')).toContain('"keyId":"k"');
+});
+
+// S-FS-2: the full OpenSSH safe_path rule for system links, with an injected file system.
+describe('S-FS-2 trustedSystemLink', () => {
+  type Node = { uid: number; mode: number; link?: string };
+  const DIR = 0o040000;
+  /** A fake tree: paths to owner, mode (with the directory type bits) and, for a link, its target. */
+  const fakeFs = (tree: Record<string, Node>) => {
+    const get = (p: string): Node => {
+      const n = tree[p];
+      if (!n) throw Object.assign(new Error(`ENOENT ${p}`), { code: 'ENOENT' });
+      return n;
+    };
+    const real = (p: string): string => {
+      const parts = p.split('/').filter(Boolean);
+      let cur = '/';
+      for (const part of parts) {
+        const next = cur === '/' ? `/${part}` : `${cur}/${part}`;
+        const n = get(next);
+        cur = n.link ? real(n.link) : next;
+      }
+      return cur;
+    };
+    const st = (n: Node) => ({ uid: n.uid, mode: n.mode, isSymbolicLink: () => n.link !== undefined, isDirectory: () => n.link === undefined && (n.mode & DIR) !== 0 });
+    return { lstat: (p: string) => st(get(p)), stat: (p: string) => st(get(real(p))), realpath: real };
+  };
+  const rootDir = (mode = 0o755): Node => ({ uid: 0, mode: DIR | mode });
+  const base = { '/': rootDir(), '/private': rootDir(), '/private/tmp': rootDir(0o1777), '/private/var': rootDir() };
+
+  test('macOS style /tmp and /var (root links under a root 0755 /, sticky world-writable /private/tmp) are accepted', () => {
+    const fs = fakeFs({ ...base, '/tmp': { uid: 0, mode: 0o755, link: '/private/tmp' }, '/var': { uid: 0, mode: 0o755, link: '/private/var' } });
+    expect(trustedSystemLink('/tmp', fs)).toBe(true);
+    expect(trustedSystemLink('/var', fs)).toBe(true);
+  });
+
+  test('a link not owned by root is refused', () => {
+    expect(trustedSystemLink('/tmp', fakeFs({ ...base, '/tmp': { uid: 501, mode: 0o755, link: '/private/tmp' } }))).toBe(false);
+  });
+
+  test('a root-owned link inside a user-owned directory is refused', () => {
+    const fs = fakeFs({ ...base, '/home': rootDir(), '/home/u': { uid: 501, mode: DIR | 0o755 }, '/home/u/l': { uid: 0, mode: 0o755, link: '/private/var' } });
+    expect(trustedSystemLink('/home/u/l', fs)).toBe(false);
+  });
+
+  test('a root-owned link inside a world- or group-writable directory is refused', () => {
+    for (const mode of [0o777, 0o775, 0o1777]) {
+      const fs = fakeFs({ ...base, '/shared': rootDir(mode), '/shared/l': { uid: 0, mode: 0o755, link: '/private/var' } });
+      expect(trustedSystemLink('/shared/l', fs), mode.toString(8)).toBe(false);
+    }
+  });
+
+  test('a root-owned link pointing into a user-owned tree, or below a writable ancestor, is refused', () => {
+    const user = fakeFs({ ...base, '/home': rootDir(), '/home/u': { uid: 501, mode: DIR | 0o755 }, '/home/u/p': { uid: 501, mode: DIR | 0o755 }, '/l': { uid: 0, mode: 0o755, link: '/home/u/p' } });
+    expect(trustedSystemLink('/l', user)).toBe(false);
+    const writable = fakeFs({ ...base, '/w': rootDir(0o777), '/w/p': rootDir(), '/l': { uid: 0, mode: 0o755, link: '/w/p' } });
+    expect(trustedSystemLink('/l', writable)).toBe(false);
+  });
+
+  test('the refusal tells the user to pass the real path', async () => {
+    await symlink(outside, join(root, 'l'));
+    await expect(checkPath(root, join(root, 'l'))).rejects.toThrow(/pass the real path/);
+  });
 });
