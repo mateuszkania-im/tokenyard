@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { compilePolicy } from '../../src/policy/compile.js';
 import { decide } from '../../src/policy/decide.js';
 import { resolve } from '../../src/policy/resolve.js';
 import type { Admission, GuardrailHit, RequestFeatures } from '../../src/policy/types.js';
+import { fuzz, fuzzTimeout } from '../helpers/fuzz.js';
 import { HEAD, source } from './helpers.js';
 
 const policy = compilePolicy(
@@ -121,3 +123,67 @@ test('property: decide reads no clock (same features at different wall times giv
     { numRuns: 100 },
   );
 });
+
+// V4: purity against a frozen snapshot. The compiled policy is frozen all the way down; decide and resolve run on
+// deeply frozen inputs (a write would throw in strict mode), give what they give on unfrozen copies, and return
+// results that share nothing mutable with the policy or with each other.
+function deepFreeze<T>(v: T): T {
+  if (typeof v === 'object' && v !== null && !Object.isFrozen(v)) {
+    Object.freeze(v);
+    for (const c of Object.values(v)) deepFreeze(c);
+  }
+  return v;
+}
+
+/** Every object reachable from `v` (Map keys and values included) is frozen, and every Map refuses writes. */
+function expectDeepFrozen(v: unknown, path = 'policy', seen = new Set<unknown>()): void {
+  if (typeof v !== 'object' || v === null || seen.has(v)) return;
+  seen.add(v);
+  expect(Object.isFrozen(v), path).toBe(true);
+  if (v instanceof Map) {
+    expect(() => (v as Map<unknown, unknown>).set('x', 1), `${path}.set`).toThrow();
+    for (const [k, x] of v) {
+      expectDeepFrozen(k, `${path} key`, seen);
+      expectDeepFrozen(x, `${path}[${String(k)}]`, seen);
+    }
+    return;
+  }
+  for (const [k, x] of Object.entries(v)) expectDeepFrozen(x, `${path}.${k}`, seen);
+}
+
+/** Walks every mutable object in `v`, overwriting its fields and emptying arrays, to show nothing it shares changes. */
+function vandalise(v: unknown, seen = new Set<unknown>()): void {
+  if (typeof v !== 'object' || v === null || Object.isFrozen(v) || seen.has(v)) return;
+  seen.add(v);
+  for (const [k, x] of Object.entries(v)) {
+    vandalise(x, seen);
+    (v as Record<string, unknown>)[k] = Array.isArray(x) ? [] : '__vandalised__';
+  }
+  if (Array.isArray(v)) v.length = 0;
+}
+
+test('property: the compiled policy is frozen all the way down (examples and the property policy)', () => {
+  expectDeepFrozen(policy);
+  expectDeepFrozen(compilePolicy(source(readFileSync(new URL('../../examples/policy/policy.yaml', import.meta.url), 'utf8')), 'ex', { experimentalSubscription: false }));
+});
+
+test('property: decide and resolve on deeply frozen inputs equal the unfrozen run, and their results alias nothing', () => {
+  fc.assert(
+    fc.property(featuresArb, admissionArb, (f, a) => {
+      const plain = resolve(policy, decide(policy, structuredClone(f)), structuredClone(a));
+      const frozenF = deepFreeze(structuredClone(f));
+      const frozenA = deepFreeze(structuredClone(a));
+      const p = decide(policy, frozenF);
+      const d = resolve(policy, p, frozenA);
+      expect(d).toEqual(plain);
+      // A second run after vandalising the first results gives the same answer: no shared mutable state.
+      const keep = structuredClone(d);
+      vandalise(d);
+      vandalise(p);
+      expect(resolve(policy, decide(policy, frozenF), frozenA)).toEqual(keep);
+      // A frozen plan is fine as resolve input too.
+      expect(resolve(policy, deepFreeze(decide(policy, frozenF)), frozenA)).toEqual(keep);
+    }),
+    fuzz(0xdec1, 400),
+  );
+}, fuzzTimeout(10_000));
