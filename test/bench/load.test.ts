@@ -1,5 +1,9 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { expect, test } from 'vitest';
-import { BENCH_INPUTS, cpuRssSlopes, intendedStarts, percentiles, rowSaturated, throughput, ttfbVerdict } from '../../bench/lib.js';
+import { BENCH_INPUTS, cpuRssSlopes, gitState, intendedStarts, percentiles, rowSaturated, runGit, throughput, ttfbVerdict } from '../../bench/lib.js';
 import { profileArgs } from '../../bench/overhead.js';
 
 test('intended send times are evenly spaced per connection from a phase inside the first interval, within the run', () => {
@@ -80,6 +84,48 @@ test('a row is saturated at a full core, or when the gateway answered clearly le
   expect(cpuRssSlopes([lo, hi], 100, 500)[0]?.saturated).toBe(true);
 });
 
-test('a run is dirty when the bundle or the scripts it runs have uncommitted changes, not only src and bench (Task 23 minor)', () => {
+/** A throwaway git repository with one committed file under each benchmark input and a results file and README. */
+function fixtureRepo(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'ty-bench-git-'));
+  const git = (...args: string[]): void => void execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore' });
+  git('init', '-q');
+  for (const f of ['src/a.ts', 'bin/tokenyard.mjs', 'scripts/s.mjs', 'bench/results.json', 'README.md']) {
+    mkdirSync(join(dir, dirname(f)), { recursive: true });
+    writeFileSync(join(dir, f), 'one\n');
+  }
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'one');
+  return dir;
+}
+
+test('a run is dirty when the bundle or the scripts it runs have uncommitted changes, not when only its results or the README do (V5 review)', () => {
   expect(BENCH_INPUTS).toEqual(expect.arrayContaining(['src', 'bin', 'bench', 'scripts', 'package.json', 'package-lock.json']));
+  const dir = fixtureRepo();
+  try {
+    const head = gitState(dir);
+    expect(head.commit).toMatch(/^[0-9a-f]{7,}$/);
+    expect(head.dirty).toBe(false);
+    // The results file and README a run writes do not make it dirty.
+    writeFileSync(join(dir, 'bench/results.json'), 'two\n');
+    writeFileSync(join(dir, 'README.md'), 'two\n');
+    expect(gitState(dir)).toEqual(head);
+    for (const f of ['bin/tokenyard.mjs', 'scripts/s.mjs', 'scripts/new.mjs', 'src/a.ts']) {
+      const before = existsSync(join(dir, f)) ? readFileSync(join(dir, f), 'utf8') : null;
+      writeFileSync(join(dir, f), 'changed\n');
+      expect(gitState(dir), f).toEqual({ commit: head.commit, dirty: true });
+      if (before === null) rmSync(join(dir, f));
+      else writeFileSync(join(dir, f), before);
+      expect(gitState(dir), f).toEqual(head);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a run records the commit it started on, and is dirty when the tree was dirty at either end or HEAD moved during it (V5 review)', () => {
+  const clean = { commit: 'aaaaaaa', dirty: false };
+  expect(runGit(clean, clean)).toEqual(clean);
+  expect(runGit(clean, { commit: 'bbbbbbb', dirty: false })).toEqual({ commit: 'aaaaaaa', dirty: true });
+  expect(runGit({ commit: 'aaaaaaa', dirty: true }, clean)).toEqual({ commit: 'aaaaaaa', dirty: true });
+  expect(runGit(clean, { commit: 'aaaaaaa', dirty: true })).toEqual({ commit: 'aaaaaaa', dirty: true });
 });

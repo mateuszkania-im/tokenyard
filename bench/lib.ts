@@ -140,22 +140,41 @@ const pkgVersion = (name: string): string => (JSON.parse(readFileSync(join(ROOT,
 /** The paths whose uncommitted changes make a benchmark run dirty: the code it runs, the bundle and the scripts. */
 export const BENCH_INPUTS = ['src', 'bin', 'bench', 'scripts', 'test/helpers', 'examples', 'package.json', 'package-lock.json'] as const;
 
+export interface GitState {
+  commit: string;
+  dirty: boolean;
+}
+
+/** HEAD of the checkout at `root` and whether the benchmark inputs (BENCH_INPUTS) have uncommitted changes. */
+export function gitState(root: string = ROOT): GitState {
+  const commit = tryRun('git', ['-C', root, 'rev-parse', '--short', 'HEAD']) ?? 'unknown';
+  // Only the files the benchmark runs count: the results file and README written by this run do not make it dirty.
+  const dirty = (tryRun('git', ['-C', root, 'status', '--porcelain', '--', ...BENCH_INPUTS]) ?? '')
+    .split('\n')
+    .filter((l) => l.trim() !== '' && !l.endsWith('bench/results.json')).length > 0;
+  return { commit, dirty };
+}
+
+/**
+ * The provenance of a run that read the checkout at its start and again at its end: the commit it started on (the code
+ * it ran), dirty when the inputs were dirty at either end or HEAD moved in between (a long run may have started
+ * processes from an older bundle than the commit at its end).
+ */
+export function runGit(start: GitState, end: GitState): GitState {
+  return { commit: start.commit, dirty: start.dirty || end.dirty || start.commit !== end.commit };
+}
+
 export function environment(redisVersion: string | null): {
   runAt: string;
-  git: { commit: string; dirty: boolean };
+  git: GitState;
   hardware: { cpu: string; cores: number; memoryGb: number; arch: string };
   os: { platform: string; release: string };
   node: string;
   tools: Record<string, string | null>;
 } {
-  const commit = tryRun('git', ['-C', ROOT, 'rev-parse', '--short', 'HEAD']) ?? 'unknown';
-  // Only the files the benchmark runs count: the results file and README written by this run do not make it dirty.
-  const dirty = (tryRun('git', ['-C', ROOT, 'status', '--porcelain', '--', ...BENCH_INPUTS]) ?? '')
-    .split('\n')
-    .filter((l) => l.trim() !== '' && !l.endsWith('bench/results.json')).length > 0;
   return {
     runAt: new Date().toISOString(),
-    git: { commit, dirty },
+    git: gitState(),
     hardware: { cpu: cpus()[0]?.model.trim() ?? 'unknown', cores: cpus().length, memoryGb: Math.round(totalmem() / 1024 ** 3), arch: arch() },
     os: { platform: process.platform, release: release() },
     node: process.version,

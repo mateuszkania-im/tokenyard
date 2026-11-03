@@ -18,7 +18,7 @@ import { parse, stringify } from 'yaml';
 import { isLoopbackRedisUrl, startLocalRedis } from '../scripts/local-redis.mjs';
 import { hashKey } from '../src/edge/auth.js';
 import { mulberry32, type ReceivedRequest, type Scenario } from '../src/mock/scenarios.js';
-import { environment, percentiles, ROOT } from './lib.js';
+import { environment, gitState, percentiles, ROOT, runGit } from './lib.js';
 import { classifyKey, type GatewayRun, type GatewaySample, judge, parseMetrics, type Point, SOAK_THRESHOLDS } from './soak-lib.js';
 
 type Mode = 'memory' | 'redis';
@@ -673,6 +673,8 @@ interface Window {
 }
 
 async function main(mode: Mode): Promise<void> {
+  // The checkout before anything starts: the bundle the gateways run is the one at this commit (see runGit).
+  const gitAtStart = gitState();
   const runDir = mkdtempSync(join(tmpdir(), `tokenyard-soak-${mode}-`));
   const traceDir = join(runDir, 'traces');
   log(`run dir ${runDir}; ${MINUTES} min at ${RATE} req/s per gateway, ${mode === 'redis' ? 'two gateways sharing Redis' : 'one gateway, memory store'}`);
@@ -965,12 +967,14 @@ async function main(mode: Mode): Promise<void> {
     const file = join(ROOT, 'bench', 'results.json');
     const all = JSON.parse(readFileSync(file, 'utf8')) as Record<string, any>;
     const env = environment(redisVersion);
+    const git = runGit(gitAtStart, env.git);
+    if (git.dirty) log(`the run is marked dirty: ${gitAtStart.commit === env.git.commit ? 'uncommitted changes to the benchmark inputs' : `HEAD moved from ${gitAtStart.commit} to ${env.git.commit} during the run`}`);
     const prev = (all.soak?.runs ?? []) as Array<{ mode: string }>;
     all.soak = {
       method: SOAK_METHOD,
       thresholds: SOAK_THRESHOLDS,
-      environment: { git: env.git, node: env.node, hardware: env.hardware, os: env.os },
-      runs: [...prev.filter((r) => r.mode !== mode), { ...run, git: env.git }].sort((x, y) => x.mode.localeCompare(y.mode)),
+      environment: { git, node: env.node, hardware: env.hardware, os: env.os },
+      runs: [...prev.filter((r) => r.mode !== mode), { ...run, git }].sort((x, y) => x.mode.localeCompare(y.mode)),
     };
     writeFileSync(file, `${JSON.stringify(all, null, 2)}\n`);
     log(`${run.passed ? 'PASSED' : 'FAILED'}; bench/results.json soak.${mode} written; raw samples in ${join(runDir, 'samples.json')}`);
