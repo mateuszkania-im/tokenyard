@@ -184,6 +184,7 @@ export interface Plan {
     messages?: Record<string, number>; // not in spec 6.5: message index of each history HMAC, for the taint error message
   } | null;
   preBlock: BlockReason | null;        // decided without counters: model not allowed, no route, last-turn secret
+  outputTokensBound?: number;          // not in spec 6.5: output tokens the reservation covers; a stream without its final output count settles at it (A3)
   warnings: Warning[];                 // guardrail warns, audit-mode notes
 }
 

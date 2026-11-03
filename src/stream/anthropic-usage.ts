@@ -15,7 +15,7 @@ export interface UsageResult {
   sawStop: boolean;
   streamedChars: number;
   responseModel: string | null;
-  /** True when source is 'final' but `usage.output` was estimated from streamed chars (no message_delta output count). */
+  /** True when no message_delta output count arrived: `usage.output` is a chars/4 placeholder, which the gateway replaces with the reservation's output bound before pricing (A3). */
   outputEstimated?: boolean;
   /** The usage reported `speed: "fast"`: priced at the model's fast rates. Absent otherwise. */
   fast?: true;

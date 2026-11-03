@@ -119,6 +119,29 @@ function outputTokenBound(f: RequestFeatures, m: ModelPrice, reserveOutputTokens
   return Math.min(asked, reserveOutputTokens ?? Number.POSITIVE_INFINITY, m.maxOutputTokens);
 }
 
+/** Sampling iterations the request may run: the highest `maxIterations` among its priced server tools, else 1. */
+function loopIterations(f: RequestFeatures, t: PriceTable): number {
+  let iterations = 1;
+  for (const tool of f.serverTools) {
+    const key = serverToolKey(tool.type);
+    const price = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : undefined;
+    if (price) iterations = Math.max(iterations, price.maxIterations);
+  }
+  return iterations;
+}
+
+/**
+ * Output tokens the worst-case reservation covers: one iteration's bound, or `maxIterations * maxOutputTokens` with
+ * server tools, plus one model-max summary per iteration under threshold compaction. A stream that ends without its
+ * final output count is settled at this many output tokens (A3).
+ */
+export function reservedOutputTokens(f: RequestFeatures, m: ModelPrice, t: PriceTable, reserveOutputTokens: number | null): number {
+  const iterations = loopIterations(f, t);
+  let out = f.serverTools.length > 0 ? iterations * m.maxOutputTokens : outputTokenBound(f, m, reserveOutputTokens);
+  if (f.compaction === true) out += iterations * m.maxOutputTokens;
+  return out;
+}
+
 /** Server tool type to its price table key: `web_search_20250305` is `web_search`. */
 export function serverToolKey(type: string): string {
   return type.replace(/_\d{8}$/, '');
@@ -151,11 +174,11 @@ export function worstCaseMicroUsd(
 ): { micro: number; boundAssumed: boolean; block: 'server-tool-no-max-uses' | 'unpriced-server-tool' | null } {
   const fast = f.fastMode && m.fast !== undefined;
   let inputTokens = f.inputTokensBound;
-  let outputTokens = outputTokenBound(f, m, o.reserveOutputTokens);
+  const outputTokens = reservedOutputTokens(f, m, t, o.reserveOutputTokens);
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
-  let iterations = 1;
+  const iterations = loopIterations(f, t);
   if (f.serverTools.length > 0) {
     for (const tool of f.serverTools) {
       const key = serverToolKey(tool.type);
@@ -164,7 +187,6 @@ export function worstCaseMicroUsd(
         unpriced = true;
         continue;
       }
-      iterations = Math.max(iterations, price.maxIterations);
       let uses = tool.maxUses;
       if (uses === null) {
         withoutMaxUses = true;
@@ -173,14 +195,10 @@ export function worstCaseMicroUsd(
       feeMicro += Math.max(0, Math.ceil(uses)) * price.perUseUsd * 1_000_000;
     }
     inputTokens = iterations * m.maxContextTokens;
-    outputTokens = iterations * m.maxOutputTokens;
   }
   // Threshold compaction: before each sampling iteration the provider may run a compaction iteration over the whole
-  // context, and its summary has no documented limit below the model's output cap (A4).
-  if (f.compaction === true) {
-    inputTokens += iterations * m.maxContextTokens;
-    outputTokens += iterations * m.maxOutputTokens;
-  }
+  // context, and its summary has no documented limit below the model's output cap (A4; output in reservedOutputTokens).
+  if (f.compaction === true) inputTokens += iterations * m.maxContextTokens;
   const tier = f.serviceTier ?? null;
   const tokenMicro = (inputTokens * inputTokenRate(f, m, fast, tier) + outputTokens * maxOutputRate(m, fast, tier)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);

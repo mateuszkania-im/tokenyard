@@ -29859,6 +29859,21 @@ function outputTokenBound(f, m, reserveOutputTokens) {
   const asked = f.maxOutputTokens !== null && Number.isFinite(f.maxOutputTokens) && f.maxOutputTokens > 0 ? Math.ceil(f.maxOutputTokens) : m.maxOutputTokens;
   return Math.min(asked, reserveOutputTokens ?? Number.POSITIVE_INFINITY, m.maxOutputTokens);
 }
+function loopIterations(f, t) {
+  let iterations = 1;
+  for (const tool of f.serverTools) {
+    const key = serverToolKey(tool.type);
+    const price2 = Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : void 0;
+    if (price2) iterations = Math.max(iterations, price2.maxIterations);
+  }
+  return iterations;
+}
+function reservedOutputTokens(f, m, t, reserveOutputTokens) {
+  const iterations = loopIterations(f, t);
+  let out = f.serverTools.length > 0 ? iterations * m.maxOutputTokens : outputTokenBound(f, m, reserveOutputTokens);
+  if (f.compaction === true) out += iterations * m.maxOutputTokens;
+  return out;
+}
 function serverToolKey(type) {
   return type.replace(/_\d{8}$/, "");
 }
@@ -29871,11 +29886,11 @@ function roundUp(micro, what) {
 function worstCaseMicroUsd(f, m, t, o) {
   const fast = f.fastMode && m.fast !== void 0;
   let inputTokens2 = f.inputTokensBound;
-  let outputTokens2 = outputTokenBound(f, m, o.reserveOutputTokens);
+  const outputTokens2 = reservedOutputTokens(f, m, t, o.reserveOutputTokens);
   let feeMicro = 0;
   let unpriced = false;
   let withoutMaxUses = false;
-  let iterations = 1;
+  const iterations = loopIterations(f, t);
   if (f.serverTools.length > 0) {
     for (const tool of f.serverTools) {
       const key = serverToolKey(tool.type);
@@ -29884,7 +29899,6 @@ function worstCaseMicroUsd(f, m, t, o) {
         unpriced = true;
         continue;
       }
-      iterations = Math.max(iterations, price2.maxIterations);
       let uses = tool.maxUses;
       if (uses === null) {
         withoutMaxUses = true;
@@ -29893,12 +29907,8 @@ function worstCaseMicroUsd(f, m, t, o) {
       feeMicro += Math.max(0, Math.ceil(uses)) * price2.perUseUsd * 1e6;
     }
     inputTokens2 = iterations * m.maxContextTokens;
-    outputTokens2 = iterations * m.maxOutputTokens;
   }
-  if (f.compaction === true) {
-    inputTokens2 += iterations * m.maxContextTokens;
-    outputTokens2 += iterations * m.maxOutputTokens;
-  }
+  if (f.compaction === true) inputTokens2 += iterations * m.maxContextTokens;
   const tier = f.serviceTier ?? null;
   const tokenMicro = (inputTokens2 * inputTokenRate(f, m, fast, tier) + outputTokens2 * maxOutputRate(m, fast, tier)) * modifierProduct(t);
   const micro = roundUp(tokenMicro + feeMicro, f.model);
@@ -30331,6 +30341,7 @@ function decide(policy2, f) {
     const r = policy2.reservation;
     const worst = worstCaseMicroUsd(uf, price2, t, { serverToolsWithoutMaxUses: r.serverToolsWithoutMaxUses, assumedMaxUses: r.assumedMaxUses, reserveOutputTokens: route2.reserveOutputTokens });
     est = r.estimator === "session-aware" ? sessionAwareMicroUsd(uf, price2, t, null, route2.reserveOutputTokens) : worst.micro;
+    plan.outputTokensBound = reservedOutputTokens(uf, price2, t, route2.reserveOutputTokens);
     const enforced = levels.some((l) => l.enforce);
     if (worst.block === "unpriced-server-tool") {
       if (enforced || policy2.failure.unpricedModel !== "allow-and-flag") return { ...plan, preBlock: "unpriced" };
@@ -58542,11 +58553,17 @@ function actualCost(policy2, model, r, x) {
 async function settleAndTrace(deps, runtime, policy2, held, outcome) {
   const o = { ...outcome };
   o.costModifiers = requestModifiers(policy2, o.features, o.usage);
-  const r = o.usage;
+  let r = o.usage;
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost = null;
   let costFailed = false;
-  if (r?.usage && model) {
+  if (r?.usage && o.surface === "anthropic-messages" && (r.source === "estimated" || r.outputEstimated === true)) {
+    const bound = held.plan?.outputTokensBound;
+    if (bound === void 0) costFailed = true;
+    else o.usage = r = { ...r, usage: { ...r.usage, output: Math.max(r.usage.output, bound) }, outputEstimated: true };
+  }
+  if (costFailed) {
+  } else if (r?.usage && model) {
     try {
       cost = actualCost(policy2, model, { ...r, usage: r.usage }, o.features);
     } catch {

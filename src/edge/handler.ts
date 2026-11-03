@@ -355,11 +355,21 @@ function actualCost(policy: CompiledPolicy, model: string, r: UsageResult & { us
 async function settleAndTrace(deps: GatewayDeps, runtime: GatewayRuntime, policy: CompiledPolicy, held: Held, outcome: RequestOutcome): Promise<void> {
   const o: RequestOutcome = { ...outcome };
   o.costModifiers = requestModifiers(policy, o.features, o.usage);
-  const r = o.usage;
+  let r = o.usage;
   const model = r?.responseModel ?? held.plan?.chain[0]?.upstreamModel ?? o.features.model;
   let cost: number | null = null;
   let costFailed = false;
-  if (r?.usage && model) {
+  // A Messages stream that ended without its final output count (no message_delta usage: aborted, cut, or a
+  // message_stop without it): streamed characters bound nothing (summarized or redacted thinking, CJK, server tool
+  // blocks), so output is settled at the reservation's output bound; the input count from message_start stands (A3).
+  if (r?.usage && o.surface === 'anthropic-messages' && (r.source === 'estimated' || r.outputEstimated === true)) {
+    const bound = held.plan?.outputTokensBound;
+    if (bound === undefined) costFailed = true;
+    else o.usage = r = { ...r, usage: { ...r.usage, output: Math.max(r.usage.output, bound) }, outputEstimated: true };
+  }
+  if (costFailed) {
+    // no output bound to settle at: the estimate stands (below)
+  } else if (r?.usage && model) {
     try {
       cost = actualCost(policy, model, { ...r, usage: r.usage }, o.features);
     } catch {
