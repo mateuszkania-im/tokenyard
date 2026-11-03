@@ -59809,9 +59809,24 @@ var init_handler = __esm({
 var server_exports = {};
 __export(server_exports, {
   DEFAULT_BODY_CAP_BYTES: () => DEFAULT_BODY_CAP_BYTES,
+  closeIdleWhenQuiet: () => closeIdleWhenQuiet,
   createGateway: () => createGateway
 });
 import { createServer as createServer3 } from "node:http";
+function closeIdleWhenQuiet(socket, now = Date.now) {
+  const read = socket.bytesRead;
+  const since = now();
+  const attempt = () => {
+    const asked = now();
+    setImmediate(() => {
+      if (socket.destroyed || socket.bytesRead !== read) return;
+      const t = now();
+      if (t - asked <= QUIET_TURN_MS || t - since >= MAX_IDLE_CLOSE_DELAY_MS) socket.destroy();
+      else setTimeout(attempt, BUSY_RETRY_MS).unref();
+    });
+  };
+  attempt();
+}
 function listenOn(server, port, host) {
   return new Promise((resolve6, reject) => {
     server.once("error", reject);
@@ -59825,6 +59840,8 @@ function listenOn(server, port, host) {
 }
 function createGateway(deps) {
   const server = createServer3(createHandler(deps));
+  if (deps.keepAliveTimeoutMs !== void 0) server.keepAliveTimeout = deps.keepAliveTimeoutMs;
+  server.on("timeout", (socket) => closeIdleWhenQuiet(socket));
   let ops = null;
   return {
     listen: (port, host = "127.0.0.1") => listenOn(server, port, host),
@@ -59849,13 +59866,16 @@ function createGateway(deps) {
     }
   };
 }
-var DEFAULT_BODY_CAP_BYTES;
+var DEFAULT_BODY_CAP_BYTES, QUIET_TURN_MS, BUSY_RETRY_MS, MAX_IDLE_CLOSE_DELAY_MS;
 var init_server = __esm({
   "src/edge/server.ts"() {
     "use strict";
     init_handler();
     init_ops();
     DEFAULT_BODY_CAP_BYTES = 32 * 1024 * 1024;
+    QUIET_TURN_MS = 5;
+    BUSY_RETRY_MS = 20;
+    MAX_IDLE_CLOSE_DELAY_MS = 2e3;
   }
 });
 
@@ -126699,6 +126719,7 @@ var package_default = {
     lint: "oxlint",
     test: "vitest run",
     "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts",
+    "test:chaos": "node scripts/local-redis.mjs env TOKENYARD_CHAOS=1 vitest run --no-file-parallelism test/chaos",
     bench: "tsx bench/run.ts",
     soak: "tsx bench/soak.ts",
     "bench:check": "node scripts/bench-to-readme.mjs --check README.md",

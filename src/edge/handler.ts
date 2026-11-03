@@ -95,6 +95,8 @@ export interface GatewayDeps {
   requestDeadlineMs?: number;
   /** Bearer token for /metrics on the ops listener (`createGateway().listenOps`). /metrics is never served on this API port. */
   metricsToken?: string;
+  /** Idle time before the API listener closes a keep-alive connection (default Node's 5 s; Node adds 1 s before it acts). */
+  keepAliveTimeoutMs?: number;
 }
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;

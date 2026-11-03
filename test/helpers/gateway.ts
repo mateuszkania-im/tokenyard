@@ -29,6 +29,9 @@ export async function startGateway(o: {
   /** Defaults to `Date.now` as it is now; pass `() => Date.now()` to follow fake timers installed later. */
   clock?: () => number;
   requestDeadlineMs?: number;
+  keepAliveTimeoutMs?: number;
+  /** Called with each request id the gateway hands out (one per request that reached the handler). */
+  onId?: (id: string) => void;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
@@ -38,7 +41,12 @@ export async function startGateway(o: {
     traceSalt: o.traceSalt,
     clock: o.clock ?? Date.now,
     ...(o.requestDeadlineMs !== undefined ? { requestDeadlineMs: o.requestDeadlineMs } : {}),
-    newId: () => `req_${String(++n).padStart(6, '0')}`,
+    ...(o.keepAliveTimeoutMs !== undefined ? { keepAliveTimeoutMs: o.keepAliveTimeoutMs } : {}),
+    newId: () => {
+      const id = `req_${String(++n).padStart(6, '0')}`;
+      o.onId?.(id);
+      return id;
+    },
     basePath: o.basePath ?? null,
     bodyCapBytes: o.bodyCapBytes ?? 32 * 1024 * 1024,
     experimentalSubscription: o.experimentalSubscription ?? false,
