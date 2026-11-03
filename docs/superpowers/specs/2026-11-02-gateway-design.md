@@ -504,7 +504,7 @@ if redis.call('EXISTS', resKey) == 1 then return {2} end      -- duplicate admit
 return {1, auditResults}
 ```
 
-`settle.lua`: if the reservation record is gone, return `unknown` (idempotent); otherwise for each level `HINCRBY r -est` and `HINCRBY s actual`, `DECR` the record's stream keys, delete the record, `ZREM` the deadline. `sweep.lua`: for ids past their deadline (default 2 times the request timeout), settle at the reserved estimate and mark the trace `settledBy: sweeper`. Any instance runs the sweeper every 30 s under a short `SET NX` lock.
+`settle.lua`: if the reservation record is gone, return `unknown` (idempotent); otherwise for each level `HINCRBY r -est` and `HINCRBY s actual`, `DECR` the record's stream keys, delete the record, `ZREM` the deadline. `sweep.lua`: for ids past their deadline (default 2 times the request timeout), settle at the reserved estimate and mark the trace `settledBy: sweeper`. Any instance runs the sweeper every 30 s under a short `SET NX` lock. **(updated 2026-11-03 during the build)** The upstream client's timeouts bound only idle gaps, so a stream that keeps sending could outlive its 20 minute reservation and lose its stream slot to the sweeper while it still runs. Every request therefore has a total deadline of 18 minutes (above Claude Code's 10 minute request timeout, below the reservation deadline): when it fires the upstream request is aborted and the request settles at its reservation (trace `errorClass: request_deadline`).
 
 ### 7.3 The estimate
 

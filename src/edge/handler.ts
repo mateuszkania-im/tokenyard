@@ -79,11 +79,21 @@ export interface GatewayDeps {
   metrics?: Metrics;
   /** OTel span sink (spec 12.2); like traces it needs a `traceSalt`, since spans carry the pseudonyms. */
   spans?: SpanSink;
+  /**
+   * Total time one request may take, from arrival to its last byte (default DEFAULT_REQUEST_DEADLINE_MS). It must stay
+   * below the store's reservation deadline, so the sweeper never frees the slot of a request that is still running.
+   */
+  requestDeadlineMs?: number;
   /** Bearer token for /metrics on the ops listener (`createGateway().listenOps`). /metrics is never served on this API port. */
   metricsToken?: string;
 }
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
+/**
+ * 18 minutes: above Claude Code's 10 minute request timeout, below the 20 minute reservation deadline (spec 7.2), with
+ * time left to settle. undici's own timeouts only bound idle gaps, so a stream that keeps sending needs this (A8).
+ */
+export const DEFAULT_REQUEST_DEADLINE_MS = 18 * 60_000;
 
 class StoreTimeoutError extends Error {}
 
@@ -474,7 +484,17 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   const policy = deps.policy();
   // A cancelled client turn must stop upstream generation: abort as soon as the client goes away.
   const ac = new AbortController();
+  // A8: a request that outlives this deadline is aborted upstream and settles at its reservation, before the sweeper
+  // could free its slot while it still runs.
+  let deadlineHit = false;
+  const deadline = setTimeout(() => {
+    deadlineHit = true;
+    held.chargeReservation = true;
+    ac.abort();
+  }, deps.requestDeadlineMs ?? DEFAULT_REQUEST_DEADLINE_MS);
+  deadline.unref?.();
   res.on('close', () => {
+    clearTimeout(deadline);
     if (!res.writableFinished) ac.abort();
   });
 
@@ -797,6 +817,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
     policyRevision: policy.revision,
     priceTable: policy.priceTableVersion,
     rateLimitHeaders: rateLimitHeaders(up.headers),
+    ...(deadlineHit ? { errorClass: 'request_deadline' } : {}),
   });
 }
 

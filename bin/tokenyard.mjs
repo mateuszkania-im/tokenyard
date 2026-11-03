@@ -58580,6 +58580,7 @@ var init_trace_record = __esm({
 var handler_exports = {};
 __export(handler_exports, {
   DEFAULT_ADMIT_TIMEOUT_MS: () => DEFAULT_ADMIT_TIMEOUT_MS,
+  DEFAULT_REQUEST_DEADLINE_MS: () => DEFAULT_REQUEST_DEADLINE_MS,
   createGatewayRuntime: () => createGatewayRuntime,
   createHandler: () => createHandler
 });
@@ -58780,7 +58781,15 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   const startedAt = deps.clock();
   const policy2 = deps.policy();
   const ac = new AbortController();
+  let deadlineHit = false;
+  const deadline = setTimeout(() => {
+    deadlineHit = true;
+    held.chargeReservation = true;
+    ac.abort();
+  }, deps.requestDeadlineMs ?? DEFAULT_REQUEST_DEADLINE_MS);
+  deadline.unref?.();
   res.on("close", () => {
+    clearTimeout(deadline);
     if (!res.writableFinished) ac.abort();
   });
   const method = req.method ?? "GET";
@@ -59043,7 +59052,8 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
     client: parseClient(typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : void 0),
     policyRevision: policy2.revision,
     priceTable: policy2.priceTableVersion,
-    rateLimitHeaders: rateLimitHeaders(up.headers)
+    rateLimitHeaders: rateLimitHeaders(up.headers),
+    ...deadlineHit ? { errorClass: "request_deadline" } : {}
   });
 }
 function createHandler(deps) {
@@ -59112,7 +59122,7 @@ function createHandler(deps) {
     });
   };
 }
-var DEFAULT_ADMIT_TIMEOUT_MS, StoreTimeoutError, recorders, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
+var DEFAULT_ADMIT_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, SWEPT_MAX, summary, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
   "src/edge/handler.ts"() {
     "use strict";
@@ -59148,6 +59158,7 @@ var init_handler = __esm({
     init_paths();
     init_trace_record();
     DEFAULT_ADMIT_TIMEOUT_MS = 1e3;
+    DEFAULT_REQUEST_DEADLINE_MS = 18 * 6e4;
     StoreTimeoutError = class extends Error {
     };
     recorders = /* @__PURE__ */ new WeakMap();

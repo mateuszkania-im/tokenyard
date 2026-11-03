@@ -26,6 +26,9 @@ export async function startGateway(o: {
   /** Serve /metrics on a second listener only. */
   opsListener?: boolean;
   metricsToken?: string;
+  /** Defaults to `Date.now` as it is now; pass `() => Date.now()` to follow fake timers installed later. */
+  clock?: () => number;
+  requestDeadlineMs?: number;
 }): Promise<TestGateway> {
   let n = 0;
   const gw = createGateway({
@@ -33,7 +36,8 @@ export async function startGateway(o: {
     store: o.store ?? null,
     traces: o.traces ?? null,
     traceSalt: o.traceSalt,
-    clock: Date.now,
+    clock: o.clock ?? Date.now,
+    ...(o.requestDeadlineMs !== undefined ? { requestDeadlineMs: o.requestDeadlineMs } : {}),
     newId: () => `req_${String(++n).padStart(6, '0')}`,
     basePath: o.basePath ?? null,
     bodyCapBytes: o.bodyCapBytes ?? 32 * 1024 * 1024,
