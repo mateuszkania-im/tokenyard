@@ -19,7 +19,7 @@ test('S-V3-3 32 MiB hostile bodies, both routes, last turn and history: 413 scan
   expect(r.status, r.stderr).toBe(0);
   const rows = JSON.parse(r.stdout.trim().split('\n').at(-1) ?? '[]') as Array<{
     shape: string; place: string; route: string; status: number; upstream: number; shouldRetry: string; errorType: string;
-    decision: unknown; reserved: number; outcomes: number; peakRssMb: number; heapLeftMb: number; lagMs: number;
+    decision: unknown; reserved: number; outcomes: number; peakRssMb: number; heapLeftMb: number; lagMs: number; cpuMs: number;
   }>;
   expect(rows).toHaveLength(12);
   for (const row of rows) {
@@ -34,7 +34,10 @@ test('S-V3-3 32 MiB hostile bodies, both routes, last turn and history: 413 scan
     // over the level before the request (pages freed by an earlier request are reused, so this is a high-water mark).
     expect(row.peakRssMb, what).toBeLessThan(400);
     expect(row.heapLeftMb, what).toBeLessThan(32);
-    // Measured: at most about 0.2 s (dense matches: the scan stops at its match budget). Slack for loaded CI machines.
-    expect(row.lagMs, what).toBeLessThan(1_000);
+    // The work bound is CPU time, which competing processes do not inflate (the stall did, past 1 s on a loaded machine).
+    // Measured: at most about 0.2 s of stall and of CPU (dense matches: the scan stops at its match budget); the CPU
+    // time includes the RSS sampler thread and parallel GC. The stall keeps a ceiling that only a hang would reach.
+    expect(row.cpuMs, what).toBeLessThan(1_500);
+    expect(row.lagMs, what).toBeLessThan(10_000);
   }
 }, 150_000);

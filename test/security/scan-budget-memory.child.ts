@@ -1,8 +1,9 @@
 // Child process of s-v3-3-scan-memory.test.ts (run with --expose-gc): one gateway, the hostile 32 MiB bodies sent to
 // it one by one, and per request the answer (status, x-should-retry, error type), the settled outcome (decision,
 // reservation), the upstream calls, the peak RSS above the level just before it (sampled every 2 ms by a worker
-// thread, which keeps sampling while the gateway's thread is busy), the heap left after a full GC and the longest
-// event loop stall. Prints one JSON array.
+// thread, which keeps sampling while the gateway's thread is busy), the heap left after a full GC, the longest event
+// loop stall and the process CPU time the request took (unlike the stall, it does not grow when other processes compete
+// for the cores). Prints one JSON array.
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { Worker } from 'node:worker_threads';
 import { authHeaders, send } from '../helpers/conformance.js';
@@ -40,8 +41,10 @@ for (const shape of SHAPES) {
       lag.enable();
       await sleep(20);
       const before = upstream;
+      const cpu0 = process.cpuUsage();
       const r = await send(g.url, { path: '/v1/messages', headers: route === 'product' ? { ...authHeaders, 'x-api-key': SERVICE_KEY } : authHeaders, body });
       for (let i = 0; i < 100 && g.outcomes.length < out.length + 1; i++) await sleep(10);
+      const cpu = process.cpuUsage(cpu0);
       lag.disable();
       gc();
       const outcome = g.outcomes.at(-1);
@@ -49,6 +52,7 @@ for (const shape of SHAPES) {
         shape, place, route, status: r.status, upstream: upstream - before, shouldRetry: r.headers['x-should-retry'], errorType: (JSON.parse(r.body.toString()) as { error?: { type?: string } }).error?.type,
         decision: outcome?.decision, reserved: outcome?.reservedMicroUsd ?? 0, outcomes: g.outcomes.length,
         peakRssMb: (Number(peak[0]) - rss0) / 1048576, heapLeftMb: (process.memoryUsage().heapUsed - heap0) / 1048576, lagMs: lag.max / 1e6,
+        cpuMs: (cpu.user + cpu.system) / 1000,
       });
     }
   }

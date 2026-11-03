@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { MAX_YAML_NODES, parseYamlSafe, YamlError } from '../../src/policy/safe-yaml.js';
+import { minCpuMs } from '../helpers/timing.js';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 
@@ -54,15 +55,14 @@ test('C8b: keys that are one key in the resulting object are duplicates, in ever
 test('C8c: the duplicate-key check is linear: three times the keys cost less than six times as much', () => {
   const time = (n: number): number => {
     const text = Array.from({ length: n }, (_, i) => `k${i}: 1`).join('\n');
-    const t0 = performance.now();
-    expect(Object.keys(parseYamlSafe(text) as object)).toHaveLength(n);
-    return performance.now() - t0;
+    // CPU time, least of three: other processes on a loaded machine (V5 flake list) inflate neither
+    return minCpuMs(() => expect(Object.keys(parseYamlSafe(text) as object)).toHaveLength(n));
   };
   time(5_000); // warm-up
   const small = time(20_000);
   const big = time(60_000);
-  // A ceiling a slow or loaded runner stays under (a quadratic check took far longer); the ratio is the real test:
-  // quadratic growth would make three times the keys cost about nine times as much
+  // A ceiling no linear check reaches (a quadratic check took far longer); the ratio is the real test: quadratic growth
+  // would make three times the keys cost about nine times as much
   expect(Math.round(big)).toBeLessThan(5_000);
   expect(big / small).toBeLessThan(6);
 });
