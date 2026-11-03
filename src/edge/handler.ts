@@ -98,7 +98,12 @@ export interface GatewayDeps {
   metricsToken?: string;
   /** Idle time before the API listener closes a keep-alive connection (default Node's 5 s; Node adds 1 s before it acts). */
   keepAliveTimeoutMs?: number;
+  /** Whether a graceful shutdown is draining the gateway (set by `createGateway`): /readyz then answers 503 (FR-I1). */
+  draining?: () => boolean;
 }
+
+/** The request listener, and a way to wait until every request it took has settled and queued its trace line. */
+export type GatewayHandler = ((req: IncomingMessage, res: ServerResponse) => void) & { idle(): Promise<void> };
 
 export const DEFAULT_ADMIT_TIMEOUT_MS = 1_000;
 /** How long a write-ahead trace line may take to reach disk before the request is refused (A11, live harness). */
@@ -1043,7 +1048,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   });
 }
 
-export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: ServerResponse) => void {
+export function createHandler(deps: GatewayDeps): GatewayHandler {
   if ((deps.traces || deps.spans) && !deps.traceSalt) throw new Error('traces and spans need a traceSalt: session and agent ids are HMAC pseudonyms (spec 9.1)');
   if (!deps.guardrailSalt) deps = { ...deps, guardrailSalt: deps.traceSalt ? guardrailKey(deps.traceSalt) : randomBytes(16).toString('hex') };
   const runtime = deps.runtime ?? createGatewayRuntime();
@@ -1058,7 +1063,13 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
     }
     return state.failure;
   };
-  return (req, res) => {
+  // Requests whose handle() has not returned: a graceful shutdown waits for them to settle before the trace sink closes.
+  let running = 0;
+  const waiters: Array<() => void> = [];
+  const finished = (): void => {
+    if (--running === 0) for (const w of waiters.splice(0)) w();
+  };
+  const listener = (req: IncomingMessage, res: ServerResponse): void => {
     // Health endpoints come first and need no policy: /readyz must answer (503) before one has loaded.
     const ops = matchOps(req.method ?? 'GET', req.url ?? '/', deps.basePath);
     if (ops !== null && ops !== 'metrics') {
@@ -1067,6 +1078,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
     }
     const id = deps.newId();
     const held: Held = { plan: null, features: null, admitted: false, est: 0, settled: false, chargeReservation: false, envelope: 'anthropic', known: null };
+    running++;
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       // A fault after admit must not hold the reservation and the stream slot until the sweep: settle at the estimate
       // (whether upstream billed is unknown, so fail closed), and queue the trace line with that charge so warm-up
@@ -1123,6 +1135,7 @@ export function createHandler(deps: GatewayDeps): (req: IncomingMessage, res: Se
       } catch {
         res.destroy();
       }
-    });
+    }).finally(finished);
   };
+  return Object.assign(listener, { idle: (): Promise<void> => (running === 0 ? Promise.resolve() : new Promise<void>((r) => waiters.push(r))) });
 }

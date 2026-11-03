@@ -1,5 +1,5 @@
-// Operations endpoints (spec 12.2): /healthz (process up), /readyz (policy loaded, store reachable or the failure mode
-// allows traffic) and /metrics (Prometheus text). No content: counts, names from the policy, status. Without a metrics
+// Operations endpoints (spec 12.2): /healthz (process up), /readyz (not draining, policy loaded, store reachable or the
+// failure mode allows traffic) and /metrics (Prometheus text). No content: counts, names from the policy, status. Without a metrics
 // token, /metrics and /readyz answer only requests whose Host is a loopback address or localhost (DNS rebinding, B3).
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -18,6 +18,8 @@ export interface OpsDeps {
   basePath: string | null;
   /** How long the store probe may take (default 1 s). */
   admitTimeoutMs?: number;
+  /** True while a graceful shutdown drains the gateway: /readyz answers 503 so load balancers stop sending (FR-I1). */
+  draining?: () => boolean;
 }
 
 /** A counter key no request uses; reading it is the cheapest round trip to the store. */
@@ -67,6 +69,7 @@ function bearerOk(req: IncomingMessage, token: string): boolean {
 }
 
 async function readiness(d: OpsDeps): Promise<{ ok: boolean; reason: string }> {
+  if (d.draining?.() === true) return { ok: false, reason: 'draining' };
   let policy: CompiledPolicy;
   try {
     policy = d.policy();

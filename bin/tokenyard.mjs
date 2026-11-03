@@ -1392,6 +1392,7 @@ function bearerOk(req, token) {
   return timingSafeEqual(digest(m?.[1] ?? ""), digest(token)) && m !== null;
 }
 async function readiness(d) {
+  if (d.draining?.() === true) return { ok: false, reason: "draining" };
   let policy2;
   try {
     policy2 = d.policy();
@@ -59974,7 +59975,12 @@ function createHandler(deps) {
     }
     return state.failure;
   };
-  return (req, res) => {
+  let running = 0;
+  const waiters = [];
+  const finished = () => {
+    if (--running === 0) for (const w of waiters.splice(0)) w();
+  };
+  const listener = (req, res) => {
     const ops = matchOps(req.method ?? "GET", req.url ?? "/", deps.basePath);
     if (ops !== null && ops !== "metrics") {
       serveOps({ ...deps, admitTimeoutMs }, ops, req, res).catch(() => res.destroy());
@@ -59982,6 +59988,7 @@ function createHandler(deps) {
     }
     const id = deps.newId();
     const held = { plan: null, features: null, admitted: false, est: 0, settled: false, chargeReservation: false, envelope: "anthropic", known: null };
+    running++;
     handle(deps, failureState(deps.policy()), runtime, held, id, req, res).catch(() => {
       if (held.admitted && !held.settled && deps.store) {
         held.settled = true;
@@ -60029,8 +60036,9 @@ function createHandler(deps) {
       } catch {
         res.destroy();
       }
-    });
+    }).finally(finished);
   };
+  return Object.assign(listener, { idle: () => running === 0 ? Promise.resolve() : new Promise((r) => waiters.push(r)) });
 }
 var DEFAULT_ADMIT_TIMEOUT_MS, WRITE_AHEAD_TIMEOUT_MS, DEFAULT_REQUEST_DEADLINE_MS, StoreTimeoutError, recorders, LATCH_REFRESH_MS, SWEPT_MAX, summary, ERROR_BODY_CAP_BYTES, TRUNCATED_MARKER, totalInput, isJson, NO_FEATURES;
 var init_handler = __esm({
@@ -60148,10 +60156,45 @@ function listenOn(server, port, host) {
   });
 }
 function createGateway(deps) {
-  const server = createServer3(createHandler(deps));
+  let draining = false;
+  const handler = createHandler({ ...deps, draining: () => draining });
+  const active = /* @__PURE__ */ new Set();
+  const leaveAfter = (res) => {
+    if (!res.headersSent) res.shouldKeepAlive = false;
+    res.once("finish", () => setImmediate(() => server.closeIdleConnections()));
+  };
+  const server = createServer3((req, res) => {
+    active.add(res);
+    res.once("close", () => active.delete(res));
+    if (draining) leaveAfter(res);
+    handler(req, res);
+  });
   if (deps.keepAliveTimeoutMs !== void 0) server.keepAliveTimeout = deps.keepAliveTimeoutMs;
   server.on("timeout", (socket) => closeIdleWhenQuiet(socket));
   let ops = null;
+  const closed = (s2) => new Promise((resolve6) => s2.close(() => resolve6()));
+  let closing = null;
+  const shutdown = (graceMs) => {
+    if (closing === null) {
+      draining = true;
+      for (const res of active) leaveAfter(res);
+      const done = closed(server);
+      const timer = graceMs > 0 ? setTimeout(() => server.closeAllConnections(), graceMs) : null;
+      closing = done.then(async () => {
+        if (timer) clearTimeout(timer);
+        let wait;
+        await Promise.race([handler.idle(), new Promise((r) => wait = setTimeout(r, SETTLE_WAIT_MS))]);
+        clearTimeout(wait);
+        if (ops) {
+          const o = closed(ops);
+          ops.closeAllConnections();
+          await o;
+        }
+      });
+    }
+    if (graceMs <= 0) server.closeAllConnections();
+    return closing;
+  };
   return {
     listen: (port, host = "127.0.0.1") => listenOn(server, port, host),
     listenOps(port, host = "127.0.0.1") {
@@ -60162,20 +60205,15 @@ function createGateway(deps) {
           res.writeHead(404, { "content-type": "application/json" }).end('{"error":"not found"}');
           return;
         }
-        serveOps(deps, kind, req, res).catch(() => res.destroy());
+        serveOps({ ...deps, draining: () => draining }, kind, req, res).catch(() => res.destroy());
       });
       return listenOn(ops, port, host);
     },
-    close() {
-      const closing = (s2) => new Promise((resolve6) => {
-        s2.close(() => resolve6());
-        s2.closeAllConnections();
-      });
-      return Promise.all([closing(server), ops ? closing(ops) : Promise.resolve()]).then(() => void 0);
-    }
+    shutdown,
+    close: () => shutdown(0)
   };
 }
-var DEFAULT_BODY_CAP_BYTES, QUIET_TURN_MS, BUSY_RETRY_MS, MAX_IDLE_CLOSE_DELAY_MS;
+var DEFAULT_BODY_CAP_BYTES, QUIET_TURN_MS, BUSY_RETRY_MS, MAX_IDLE_CLOSE_DELAY_MS, SETTLE_WAIT_MS;
 var init_server = __esm({
   "src/edge/server.ts"() {
     "use strict";
@@ -60185,6 +60223,7 @@ var init_server = __esm({
     QUIET_TURN_MS = 5;
     BUSY_RETRY_MS = 20;
     MAX_IDLE_CLOSE_DELAY_MS = 2e3;
+    SETTLE_WAIT_MS = 1e4;
   }
 });
 
@@ -127186,7 +127225,7 @@ program2.command("mock").description("run the deterministic mock Anthropic provi
 program2.command("serve").description("run the gateway").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--host <host>", "address to bind", "127.0.0.1").option("--base-path <path>", "mount prefix stripped before path matching").option(
   "--dev-upstream <url>",
   "development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)"
-).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt-file <path>", "file holding the HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--trace-salt <salt>", "refused: a salt on the command line is visible to every local user; use TOKENYARD_TRACE_SALT or --trace-salt-file").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs a trace salt").option("--metrics-port <n>", "ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it", "9464").option("--metrics-host <host>", "address the ops listener binds; a non-loopback address needs a metrics token", "127.0.0.1").option("--metrics-token-file <path>", "file holding the bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback").option("--metrics-token <token>", "refused: a token on the command line is visible to every local user; use TOKENYARD_METRICS_TOKEN or --metrics-token-file").option("--no-metrics", "do not start the ops listener").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file").option("--redis-url-file <path>", "file holding the Redis URL (with its password)").action(async (o) => {
+).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt-file <path>", "file holding the HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--trace-salt <salt>", "refused: a salt on the command line is visible to every local user; use TOKENYARD_TRACE_SALT or --trace-salt-file").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs a trace salt").option("--metrics-port <n>", "ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it", "9464").option("--metrics-host <host>", "address the ops listener binds; a non-loopback address needs a metrics token", "127.0.0.1").option("--metrics-token-file <path>", "file holding the bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback").option("--metrics-token <token>", "refused: a token on the command line is visible to every local user; use TOKENYARD_METRICS_TOKEN or --metrics-token-file").option("--no-metrics", "do not start the ops listener").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file").option("--redis-url-file <path>", "file holding the Redis URL (with its password)").option("--shutdown-grace-ms <n>", "on SIGTERM or SIGINT, how long requests and streams in flight may finish before their connections are closed (/readyz answers 503 meanwhile); 0 closes at once, a second signal too", "30000").action(async (o) => {
   if (!o.devUpstream && !o.policy && !o.policyUrl) {
     console.error("tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)");
     process.exit(1);
@@ -127231,6 +127270,11 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     console.error("tokenyard serve: --otlp-endpoint needs TOKENYARD_TRACE_SALT or --trace-salt-file (session and agent ids on spans are HMAC pseudonyms)");
     process.exit(1);
   }
+  if (!/^\d+$/.test(o.shutdownGraceMs)) {
+    console.error("tokenyard serve: --shutdown-grace-ms must be a whole number of milliseconds");
+    process.exit(1);
+  }
+  const graceMs = Number(o.shutdownGraceMs);
   if (!/^\d+$/.test(o.metricsPort)) {
     console.error("tokenyard serve: --metrics-port must be a port number");
     process.exit(1);
@@ -127343,9 +127387,16 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     }
   }
   console.log(apiUrl);
+  let stopping = false;
   const stop = () => {
-    stopSweeper();
-    void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => void 0)).then(() => counters.close()).then(() => process.exit(0));
+    if (stopping) {
+      console.error("tokenyard: second signal, closing every connection now");
+      void gw.close();
+      return;
+    }
+    stopping = true;
+    if (graceMs > 0) console.error(`tokenyard: draining, up to ${graceMs} ms for requests in flight (signal again to stop at once)`);
+    void gw.shutdown(graceMs).then(() => stopSweeper()).then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => void 0)).then(() => counters.close()).then(() => process.exit(0));
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);

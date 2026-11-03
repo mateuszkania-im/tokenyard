@@ -90,7 +90,8 @@ program
   .option('--store <kind>', 'counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis', 'memory')
   .option('--redis-url <url>', 'Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file')
   .option('--redis-url-file <path>', 'file holding the Redis URL (with its password)')
-  .action(async (o: { port: string; host: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; traceSaltFile?: string; store: string; redisUrl?: string; redisUrlFile?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metricsTokenFile?: string; metrics: boolean }) => {
+  .option('--shutdown-grace-ms <n>', 'on SIGTERM or SIGINT, how long requests and streams in flight may finish before their connections are closed (/readyz answers 503 meanwhile); 0 closes at once, a second signal too', '30000')
+  .action(async (o: { port: string; host: string; shutdownGraceMs: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; traceSaltFile?: string; store: string; redisUrl?: string; redisUrlFile?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metricsTokenFile?: string; metrics: boolean }) => {
     if (!o.devUpstream && !o.policy && !o.policyUrl) {
       console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
       process.exit(1);
@@ -136,6 +137,11 @@ program
       console.error('tokenyard serve: --otlp-endpoint needs TOKENYARD_TRACE_SALT or --trace-salt-file (session and agent ids on spans are HMAC pseudonyms)');
       process.exit(1);
     }
+    if (!/^\d+$/.test(o.shutdownGraceMs)) {
+      console.error('tokenyard serve: --shutdown-grace-ms must be a whole number of milliseconds');
+      process.exit(1);
+    }
+    const graceMs = Number(o.shutdownGraceMs);
     if (!/^\d+$/.test(o.metricsPort)) {
       console.error('tokenyard serve: --metrics-port must be a port number');
       process.exit(1);
@@ -252,9 +258,25 @@ program
       }
     }
     console.log(apiUrl); // printed last: by then both listeners are up
+    // First signal: drain for up to --shutdown-grace-ms (FR-I1); a second one closes every connection at once. The
+    // sweeper and the trace writer keep running until the requests in flight have settled.
+    let stopping = false;
     const stop = (): void => {
-      stopSweeper();
-      void gw.close().then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => undefined)).then(() => counters.close()).then(() => process.exit(0));
+      if (stopping) {
+        console.error('tokenyard: second signal, closing every connection now');
+        void gw.close();
+        return;
+      }
+      stopping = true;
+      if (graceMs > 0) console.error(`tokenyard: draining, up to ${graceMs} ms for requests in flight (signal again to stop at once)`);
+      void gw
+        .shutdown(graceMs)
+        .then(() => stopSweeper())
+        .then(() => loader?.stop())
+        .then(() => writer?.close())
+        .then(() => spans.shutdown().catch(() => undefined))
+        .then(() => counters.close())
+        .then(() => process.exit(0));
     };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);

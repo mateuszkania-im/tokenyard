@@ -7,6 +7,8 @@ export interface TestGateway {
   /** The ops listener (`opsListener: true`): /metrics, /healthz, /readyz only. */
   opsUrl?: string;
   close(): Promise<void>;
+  /** Graceful shutdown (FR-I1): stop accepting, drain for up to `graceMs`, then close what is left. */
+  shutdown(graceMs: number): Promise<void>;
 }
 
 /** Start a gateway on an ephemeral port with deterministic ids; no traces unless `traces` is given (with a `traceSalt`). */
@@ -61,5 +63,5 @@ export async function startGateway(o: {
   });
   const url = await gw.listen(0, '127.0.0.1');
   const opsUrl = o.opsListener ? await gw.listenOps(0, '127.0.0.1') : undefined;
-  return { url, ...(opsUrl ? { opsUrl } : {}), close: () => gw.close() };
+  return { url, ...(opsUrl ? { opsUrl } : {}), close: () => gw.close(), shutdown: (graceMs) => gw.shutdown(graceMs) };
 }

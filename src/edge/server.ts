@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
 import { createHandler, type GatewayDeps } from './handler.js';
 import { matchOps, serveOps } from './ops.js';
@@ -53,17 +53,68 @@ function listenOn(server: Server, port: number, host: string): Promise<string> {
   });
 }
 
+/** After the connections are closed, how long close waits for the requests they carried to settle and queue traces. */
+const SETTLE_WAIT_MS = 10_000;
+
 export function createGateway(deps: GatewayDeps): {
   listen(port: number, host?: string): Promise<string>;
   /** A second listener with only /metrics, /healthz and /readyz (the only place /metrics is served). */
   listenOps(port: number, host?: string): Promise<string>;
+  /**
+   * Graceful shutdown (FR-I1): stops accepting connections, answers /readyz with 503, lets requests and streams in
+   * flight finish for up to `graceMs`, then closes the connections left (those settle as a cut stream does). Idle
+   * keep-alive connections close at once, and a connection whose answer ends during the drain closes after it.
+   * Resolves once every connection is closed and their requests have settled (bounded by SETTLE_WAIT_MS). 0 closes
+   * at once; a later call with 0 (or close()) cuts a drain short.
+   */
+  shutdown(graceMs: number): Promise<void>;
+  /** shutdown(0): every connection closed at once. */
   close(): Promise<void>;
 } {
-  const server = createServer(createHandler(deps));
+  let draining = false;
+  const handler = createHandler({ ...deps, draining: () => draining });
+  /** Answers in flight on the API listener, so a drain can mark those that started before it. */
+  const active = new Set<ServerResponse>();
+  // During a drain no connection is kept for another request: an answer not started yet says `connection: close`, and
+  // once an answer ends its connection is closed if Node counts it idle (a pipelined request keeps it busy).
+  const leaveAfter = (res: ServerResponse): void => {
+    if (!res.headersSent) res.shouldKeepAlive = false;
+    res.once('finish', () => setImmediate(() => server.closeIdleConnections()));
+  };
+  const server = createServer((req, res) => {
+    active.add(res);
+    res.once('close', () => active.delete(res));
+    if (draining) leaveAfter(res);
+    handler(req, res);
+  });
   if (deps.keepAliveTimeoutMs !== undefined) server.keepAliveTimeout = deps.keepAliveTimeoutMs;
   // A server 'timeout' listener replaces Node's own destroy (server.timeout is 0, so only keep-alive idle timers fire).
   server.on('timeout', (socket: Socket) => closeIdleWhenQuiet(socket));
   let ops: Server | null = null;
+  const closed = (s: Server): Promise<void> => new Promise((resolve) => s.close(() => resolve()));
+  let closing: Promise<void> | null = null;
+  const shutdown = (graceMs: number): Promise<void> => {
+    if (closing === null) {
+      draining = true;
+      for (const res of active) leaveAfter(res);
+      // server.close stops accepting and closes the idle keep-alive connections; it calls back once all are closed.
+      const done = closed(server);
+      const timer = graceMs > 0 ? setTimeout(() => server.closeAllConnections(), graceMs) : null;
+      closing = done.then(async () => {
+        if (timer) clearTimeout(timer);
+        let wait: NodeJS.Timeout | undefined;
+        await Promise.race([handler.idle(), new Promise<void>((r) => (wait = setTimeout(r, SETTLE_WAIT_MS)))]);
+        clearTimeout(wait);
+        if (ops) {
+          const o = closed(ops);
+          ops.closeAllConnections();
+          await o;
+        }
+      });
+    }
+    if (graceMs <= 0) server.closeAllConnections();
+    return closing;
+  };
   return {
     listen: (port, host = '127.0.0.1') => listenOn(server, port, host),
     listenOps(port, host = '127.0.0.1') {
@@ -74,17 +125,11 @@ export function createGateway(deps: GatewayDeps): {
           res.writeHead(404, { 'content-type': 'application/json' }).end('{"error":"not found"}');
           return;
         }
-        serveOps(deps, kind, req, res).catch(() => res.destroy());
+        serveOps({ ...deps, draining: () => draining }, kind, req, res).catch(() => res.destroy());
       });
       return listenOn(ops, port, host);
     },
-    close() {
-      const closing = (s: Server): Promise<void> =>
-        new Promise((resolve) => {
-          s.close(() => resolve());
-          s.closeAllConnections();
-        });
-      return Promise.all([closing(server), ops ? closing(ops) : Promise.resolve()]).then(() => undefined);
-    },
+    shutdown,
+    close: () => shutdown(0),
   };
 }
