@@ -32137,10 +32137,11 @@ var init_openai_responses = __esm({
 });
 
 // src/upstream/breaker.ts
-var Breaker, emptyWindow;
+var MAX_CREDENTIAL_ENTRIES, Breaker, emptyWindow;
 var init_breaker = __esm({
   "src/upstream/breaker.ts"() {
     "use strict";
+    MAX_CREDENTIAL_ENTRIES = 1e4;
     Breaker = class {
       constructor(o, clock, onOpen) {
         this.o = o;
@@ -32151,6 +32152,11 @@ var init_breaker = __esm({
       clock;
       onOpen;
       states = /* @__PURE__ */ new Map();
+      /**
+       * Credential-scoped entries (a spend-cap 429 on one credential, S12-1): open until the time stored, in the order they
+       * were opened. No outcome is recorded for them, so an entry whose period ended is deleted instead of half opened.
+       */
+      credentials = /* @__PURE__ */ new Map();
       state(provider2) {
         let s2 = this.states.get(provider2);
         if (!s2) this.states.set(provider2, s2 = { ...emptyWindow(), openUntil: 0, halfOpen: false });
@@ -32188,7 +32194,17 @@ var init_breaker = __esm({
         }
         Object.assign(s2, { ats, oks, head: 0, failures, sorted });
       }
+      /** How many credential-scoped entries are held (tests). */
+      credentialEntries() {
+        return this.credentials.size;
+      }
       allow(provider2) {
+        const until = this.credentials.get(provider2);
+        if (until !== void 0) {
+          if (this.clock() < until) return false;
+          this.credentials.delete(provider2);
+          return true;
+        }
         const s2 = this.states.get(provider2);
         if (!s2 || s2.openUntil === 0) return true;
         if (this.clock() < s2.openUntil) return false;
@@ -32218,14 +32234,32 @@ var init_breaker = __esm({
       }
       /** Opens the breaker until `untilMs` (a spend-cap 429 does this for `openSeconds`). */
       open(provider2, untilMs, scope = "provider") {
-        const s2 = this.state(provider2);
         try {
           this.onOpen?.(scope);
         } catch {
         }
+        if (scope === "credential") return this.openCredential(provider2, untilMs);
+        const s2 = this.state(provider2);
         s2.openUntil = untilMs;
         s2.halfOpen = false;
         Object.assign(s2, emptyWindow());
+      }
+      /**
+       * Re-inserted, so the map stays in opening order. Expired entries at the old end go first (one open period for all,
+       * so that end holds the earliest ends), then the oldest while over the cap.
+       */
+      openCredential(key, untilMs) {
+        this.credentials.delete(key);
+        this.credentials.set(key, untilMs);
+        const now = this.clock();
+        for (const [k, until] of this.credentials) {
+          if (until > now) break;
+          this.credentials.delete(k);
+        }
+        for (const k of this.credentials.keys()) {
+          if (this.credentials.size <= MAX_CREDENTIAL_ENTRIES) break;
+          this.credentials.delete(k);
+        }
       }
     };
     emptyWindow = () => ({ ats: [], oks: [], head: 0, failures: 0, sorted: true });

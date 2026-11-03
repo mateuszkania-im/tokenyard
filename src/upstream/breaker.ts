@@ -20,11 +20,22 @@ interface State {
 }
 
 /**
+ * Most credential-scoped entries the breaker keeps (FR-M1). Each is one open spend-capped credential (about 100 bytes);
+ * past the cap the oldest opened goes first, which at worst lets that credential reach the provider once more.
+ */
+export const MAX_CREDENTIAL_ENTRIES = 10_000;
+
+/**
  * Circuit breaker per provider, process-local (spec 8). It opens when, inside the trailing window, at least
  * `minRequests` outcomes were recorded and the failure ratio reached `failureRatio`.
  */
 export class Breaker {
   private readonly states = new Map<string, State>();
+  /**
+   * Credential-scoped entries (a spend-cap 429 on one credential, S12-1): open until the time stored, in the order they
+   * were opened. No outcome is recorded for them, so an entry whose period ended is deleted instead of half opened.
+   */
+  private readonly credentials = new Map<string, number>();
 
   constructor(
     private readonly o: BreakerOptions,
@@ -72,7 +83,18 @@ export class Breaker {
     Object.assign(s, { ats, oks, head: 0, failures, sorted });
   }
 
+  /** How many credential-scoped entries are held (tests). */
+  credentialEntries(): number {
+    return this.credentials.size;
+  }
+
   allow(provider: string): boolean {
+    const until = this.credentials.get(provider);
+    if (until !== undefined) {
+      if (this.clock() < until) return false;
+      this.credentials.delete(provider);
+      return true;
+    }
     const s = this.states.get(provider);
     if (!s || s.openUntil === 0) return true;
     if (this.clock() < s.openUntil) return false;
@@ -104,15 +126,34 @@ export class Breaker {
 
   /** Opens the breaker until `untilMs` (a spend-cap 429 does this for `openSeconds`). */
   open(provider: string, untilMs: number, scope: 'provider' | 'credential' = 'provider'): void {
-    const s = this.state(provider);
     try {
       this.onOpen?.(scope);
     } catch {
       // a metrics hook must not break the breaker
     }
+    if (scope === 'credential') return this.openCredential(provider, untilMs);
+    const s = this.state(provider);
     s.openUntil = untilMs;
     s.halfOpen = false;
     Object.assign(s, emptyWindow());
+  }
+
+  /**
+   * Re-inserted, so the map stays in opening order. Expired entries at the old end go first (one open period for all,
+   * so that end holds the earliest ends), then the oldest while over the cap.
+   */
+  private openCredential(key: string, untilMs: number): void {
+    this.credentials.delete(key);
+    this.credentials.set(key, untilMs);
+    const now = this.clock();
+    for (const [k, until] of this.credentials) {
+      if (until > now) break;
+      this.credentials.delete(k);
+    }
+    for (const k of this.credentials.keys()) {
+      if (this.credentials.size <= MAX_CREDENTIAL_ENTRIES) break;
+      this.credentials.delete(k);
+    }
   }
 }
 

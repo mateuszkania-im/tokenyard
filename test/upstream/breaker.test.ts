@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import fc from 'fast-check';
-import { Breaker } from '../../src/upstream/breaker.js';
+import { Breaker, MAX_CREDENTIAL_ENTRIES } from '../../src/upstream/breaker.js';
 import { RetryBudget } from '../../src/upstream/retry-budget.js';
 import { cpuBoundMs, cpuMs } from '../helpers/timing.js';
 import { fuzz } from '../helpers/fuzz.js';
@@ -174,4 +174,35 @@ test('long outcome sequences that compact the window (more than 1,024 expired ou
     }),
     fuzz(5142, 20),
   );
+});
+
+test('FR-M1 a credential entry is deleted once its open period ended, at the next allow or open', () => {
+  let t = 0;
+  const b = new Breaker(opts, () => t);
+  b.open('p#cred-1', t + 10_000, 'credential');
+  b.open('p#cred-2', t + 10_000, 'credential');
+  expect(b.credentialEntries()).toBe(2);
+  expect(b.allow('p#cred-1')).toBe(false);
+  t += 10_000;
+  expect(b.allow('p#cred-1')).toBe(true); // expired: removed, not kept half open
+  expect(b.credentialEntries()).toBe(1);
+  b.open('p#cred-3', t + 10_000, 'credential'); // cred-2 expired too: swept on this open
+  expect(b.credentialEntries()).toBe(1);
+  expect(b.allow('p#cred-3')).toBe(false);
+  expect(b.allow('p#cred-2')).toBe(true);
+});
+
+test('FR-M1 credential entries are capped at MAX_CREDENTIAL_ENTRIES, the oldest evicted first', () => {
+  const t = 0;
+  const b = new Breaker(opts, () => t);
+  for (let i = 0; i < MAX_CREDENTIAL_ENTRIES; i++) b.open(`p#c${i}`, t + 10_000, 'credential');
+  expect(b.credentialEntries()).toBe(MAX_CREDENTIAL_ENTRIES);
+  expect(b.allow('p#c0')).toBe(false);
+  b.open('p#c0', t + 10_000, 'credential'); // opened again: now the newest
+  b.open('p#new', t + 10_000, 'credential'); // one over the cap: the oldest (c1) goes
+  expect(b.credentialEntries()).toBe(MAX_CREDENTIAL_ENTRIES);
+  expect(b.allow('p#c1')).toBe(true);
+  expect(b.allow('p#c0')).toBe(false);
+  expect(b.allow('p#c2')).toBe(false);
+  expect(b.allow('p#new')).toBe(false);
 });
