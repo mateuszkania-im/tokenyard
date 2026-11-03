@@ -46,6 +46,10 @@ export interface UpstreamAttempt {
   bytesWritten: number;
   /** The gateway closed the connection before the attempt finished writing. */
   closedEarly: boolean;
+  /** Writes waiting for 'drain' so far: the gateway pushed back (backpressure reached the upstream). */
+  drainWaits: number;
+  /** Waiting for 'drain' right now. */
+  waitingDrain: boolean;
 }
 
 export interface ChaosUpstream {
@@ -166,7 +170,7 @@ export async function startHarness(o: {
     const n = (perId.get(chaosId) ?? 0) + 1;
     perId.set(chaosId, n);
     const b = behaviour({ chaosId, provider, n });
-    const a: UpstreamAttempt = { chaosId, provider, n, behaviour: b.kind, status: null, billedMicroUsd: 0, bytesWritten: 0, closedEarly: false };
+    const a: UpstreamAttempt = { chaosId, provider, n, behaviour: b.kind, status: null, billedMicroUsd: 0, bytesWritten: 0, closedEarly: false, drainWaits: 0, waitingDrain: false };
     attempts.push(a);
     let finished = false;
     res.on('close', () => {
@@ -223,7 +227,12 @@ export async function startHarness(o: {
         if (res.destroyed) return;
         const piece = a.bytesWritten + ev.length > stop ? ev.slice(0, stop - a.bytesWritten) : ev;
         a.bytesWritten += piece.length;
-        if (piece.length > 0 && !res.write(piece)) await drained(res);
+        if (piece.length > 0 && !res.write(piece)) {
+          a.drainWaits++;
+          a.waitingDrain = true;
+          await drained(res);
+          a.waitingDrain = false;
+        }
         if (a.bytesWritten >= stop) {
           setTimeout(() => req.socket.destroy(), 5);
           return;

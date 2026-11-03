@@ -92,10 +92,24 @@ test('slow consumer: the upstream is paused by backpressure, gateway memory stay
   h.setBehaviour(() => BIG);
   const heapBefore = process.memoryUsage().heapUsed + process.memoryUsage().arrayBuffers;
   const r = await pausedReader(h.url, 'slow1');
-  await new Promise((x) => setTimeout(x, 500));
-  const written = (h.attempts[0]?.bytesWritten ?? 0);
+  // Backpressure reached the upstream through every buffer: its write waits for 'drain' and nothing more was written
+  // for 300 ms. Polled up to 10 s instead of read once after a fixed 500 ms, which a loaded machine could miss (M7).
+  let written = -1;
+  await expect
+    .poll(
+      async () => {
+        const before = h?.attempts[0]?.bytesWritten ?? 0;
+        await new Promise((x) => setTimeout(x, 300));
+        const a = h?.attempts[0];
+        written = a?.bytesWritten ?? 0;
+        return a?.waitingDrain === true && written === before && written > 0;
+      },
+      { timeout: 10_000, interval: 10 },
+    )
+    .toBe(true);
   await new Promise((x) => setTimeout(x, 300));
   // Paused: no progress while the reader does not read, and far less than the answer was written.
+  expect(h.attempts[0]?.waitingDrain).toBe(true);
   expect(h.attempts[0]?.bytesWritten).toBe(written);
   expect(written).toBeLessThan(16 * 1024 * 1024);
   const grown = process.memoryUsage().heapUsed + process.memoryUsage().arrayBuffers - heapBefore;
