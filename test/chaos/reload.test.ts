@@ -24,7 +24,9 @@ afterEach(async () => {
 });
 
 async function loader(o: Partial<PolicyLoaderOptions>): Promise<{ l: PolicyLoader; activated: CompiledPolicy[] }> {
-  const l = new PolicyLoader({ stateDir: tempDir('ty-state-'), pollMs: 60_000, debounceMs: 100, experimentalSubscription: false, ...o });
+  // The poll (every second) backs up the watcher: a loaded machine can deliver a watcher event late or not at all, and
+  // with a 60 s poll the empty-file case then saw no reload within 10 s (V5).
+  const l = new PolicyLoader({ stateDir: tempDir('ty-state-'), pollMs: 1_000, debounceMs: 100, experimentalSubscription: false, ...o });
   const activated: CompiledPolicy[] = [];
   l.on('loaded', (p: CompiledPolicy) => activated.push(p));
   l.on('error', () => undefined);
@@ -69,8 +71,8 @@ test('an empty policy file keeps the old revision serving and counts one load er
   const { l } = await loader({ dir });
   const rev = l.active().revision;
   writeFileSync(join(dir, 'policy.yaml'), '');
-  // 10 s, not 3: the load error needs the poll, the debounce and the two-read settle, and the full suite runs files in
-  // parallel (one miss in four full runs during V4).
+  // 10 s, not 3: the load error needs the watcher or the poll, the debounce and the two-read settle, and the full
+  // suite runs files in parallel (one miss in four full runs during V4).
   await expect.poll(() => l.loadErrors, { timeout: 10_000 }).toBeGreaterThanOrEqual(1);
   expect(l.active().revision).toBe(rev);
 }, 15_000);
