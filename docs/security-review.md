@@ -1,7 +1,7 @@
 # Security review (Task 25)
 
 Record of the adversarial review of tokenyard at the end of the build, the findings it produced, the tests that pin
-each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branch `mvp` at 9752407.
+each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branch `mvp` at 9752407; this record is current at fc8926f plus the commit that adds this line.
 
 ## Method
 
@@ -19,7 +19,7 @@ each fix and what is knowingly left open. Date: 2026-11-03. Reviewed tree: branc
    duplicates (C4 is A1, C5 is B3, C7 overlaps A5) and kept a failing test for every accepted finding.
 3. **Test-first fixes.** Each fix is its own commit, preceded by a failing regression test under `test/security/`
    (RED run recorded in the batch reports), and `bin/tokenyard.mjs` is rebuilt in every commit that changes `src/`.
-   Three fix rounds followed independent review of the batches; they found four more issues (S25-1 to S25-5), listed
+   Three fix rounds followed independent review of the batches; they found five more issues (S25-1 to S25-5), listed
    below.
 4. **Forwarded findings.** Every finding raised by the coordinator during the build (tasks 6 to 23) and every ruling
    attached to it got a dedicated test in `test/security/` in this batch (second table). Eleven of the new tests were
@@ -70,7 +70,7 @@ has a second layer; Low means hardening or a latent flaw with no current path.
 | S25-2 | budget | High | Duplicate keys below the top level (message content, `cache_control`, `tool_choice`, Responses input items) were a parser differential | `test/security/s25-2-nested-duplicate-keys.test.ts` | fixed: linear any-depth scan, depth limit 128 | eb90f2f |
 | S25-3 | leak | Medium | Unredacted tail of an upstream error body after the 64 KiB scan window | `test/security/s25-3-error-body-cap.test.ts` | fixed: body capped and fully redacted | ae18942 |
 | S25-4 | leak | Medium | Unbounded regex over upstream bytes (ReDoS) | `test/security/s25-3-error-body-cap.test.ts` (S25-4) | fixed: linear masked-key scan | ae18942 |
-| S25-5 | policy | Medium | The YAML node cap did not count mappings | `test/security/s25-5-yaml-node-cap-maps.test.ts` | fixed | f2b52d5 |
+| S25-5 | policy | Medium | The YAML node cap did not count mappings | `test/security/s25-5-yaml-node-cap-maps.test.ts` | fixed: every node counted (maps, sequences, pairs, scalars, aliases) | f2b52d5 |
 
 ## Findings forwarded by the coordinator during the build
 
@@ -144,6 +144,21 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   no stability re-read. Operators should replace policy files atomically (write to a temporary name, then rename).
 - **Last-known-good is not authenticated (C10).** Its sha256 detects corruption; anyone who can write the state
   directory can plant a policy. The loader requires gateway-user ownership and mode 0600, nothing more.
+- **Error text from the upstream (B2 caveats).** A provider key echoed inside a 2xx SSE `error` event is not redacted
+  (only non-2xx bodies are). Account ids inside an upstream error message text are not removed; the account headers
+  are. A client abort during the bounded read of an error body is traced with the upstream status.
+- **Credentials on argv (B5 caveat).** `--policy-url` and `--otlp-endpoint` may carry credentials in their URL and so
+  appear on the command line. Secret-valued flags were removed; these two take URLs the operator may have signed.
+- **Existing directories keep their mode (B6 caveat).** Trace, export and report directories created before the fix
+  keep their old mode; only new ones are 0700. `chmod 700` them once.
+- **The pre-commit hook is opt-in (B4 caveat).** `.githooks/pre-commit` runs only after
+  `git config core.hooksPath .githooks`; CI scans the working tree and the packed tarball regardless.
+- **Timing bounds in tests.** The S25-4 test bound is 100 ms for 1 MB and the C8 bound is 1000 ms; both could be tight
+  on a slow Windows runner. `test/policy-loader/loader.test.ts` ("broken file keeps the old revision") flaked once in a
+  parallel run.
+- **Action leftovers (C2).** When the Action fails midway, a partly written base-traces file can stay in `RUNNER_TEMP`
+  (a runner-local temp directory). `Policy check failed: 0 errors` can print when the failure is a load error, not a
+  validation error (cosmetic).
 - **Base-side git keeps PATH (C9).** git for the base side runs with an environment built from scratch, but PATH is
   kept so git can be found. An earlier workflow step that can write `GITHUB_PATH` can put another `git` first; a step
   that can write `GITHUB_ENV` can already set `NODE_OPTIONS`, which wins over anything the Action does.

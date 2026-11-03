@@ -1,7 +1,7 @@
 // S23-1 (coordinator finding, MEDIUM): the bench Redis container was published on all interfaces without a password
 // (-p 6379:6379). Every test or bench Redis container is published on loopback with a random host port (read back
 // with docker port), started with --requirepass, and shared through one helper; nothing in the repo publishes 6379.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { hostPort, isLoopbackRedisUrl, localRedisUrl, redisRunArgs } from '../../scripts/local-redis.mjs';
@@ -37,4 +37,37 @@ test('S23-1 no script, workflow or compose file publishes Redis on a wildcard in
     expect(t, f).not.toMatch(/(?:^|\s)-p\s+\d+:6379/m);
   }
   expect(text('compose.yaml')).not.toMatch(/image:\s*redis[\s\S]{0,200}ports:/);
+});
+
+test('S23-1 the wiring: test:redis and the benchmark start Redis only through scripts/local-redis.mjs', () => {
+  const pkg = JSON.parse(text('package.json')) as { scripts: Record<string, string> };
+  expect(pkg.scripts['test:redis']).toMatch(/^node scripts\/local-redis\.mjs /);
+  const bench = text('bench/run.ts');
+  expect(bench).toMatch(/from '\.\.\/scripts\/local-redis\.mjs'/);
+  expect(bench).toContain('startLocalRedis');
+  expect(bench).not.toMatch(/docker['"`,\s]+run|execFileSync\(\s*'docker'/);
+});
+
+test('S23-1 no repo file starts a Redis container with a publish other than 127.0.0.1::6379 or without --requirepass', () => {
+  const skip = new Set(['node_modules', '.git', '.superpowers', 'dist']);
+  const files: string[] = [];
+  const walk = (d: string): void => {
+    for (const e of readdirSync(join(ROOT, d))) {
+      const rel = d === '' ? e : `${d}/${e}`;
+      if (skip.has(e)) continue;
+      if (statSync(join(ROOT, rel)).isDirectory()) walk(rel);
+      else if (/\.(mjs|ts|sh|ya?ml|json|md)$/.test(e) && !rel.startsWith('test/security/') && rel !== 'bin/tokenyard.mjs' && !rel.startsWith('docs/superpowers/')) files.push(rel);
+    }
+  };
+  walk('');
+  for (const f of files) {
+    const t = text(f);
+    // a docker run of a redis image (arguments built in code or written on a command line)
+    if (/redis:7|redis:\d|image:\s*redis/.test(t) && /docker|run|-p/.test(t)) {
+      for (const m of t.matchAll(/(?:^|[\s'",])-p['",\s]+['"]?([^\s'",]+)/gm)) {
+        if (/6379/.test(m[1] ?? '')) expect(m[1], `${f}: publish`).toBe('127.0.0.1::6379');
+      }
+      if (/redisRunArgs|'run'/.test(t)) expect(t, `${f}: password`).toMatch(/--requirepass/);
+    }
+  }
 });
