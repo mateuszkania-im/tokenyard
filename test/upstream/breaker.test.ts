@@ -153,3 +153,21 @@ test('recording an outcome does not scan the whole window: 30,000 outcomes insid
   expect(performance.now() - t0).toBeLessThan(250);
   expect(b.allow('p')).toBe(true);
 });
+
+test('long outcome sequences that compact the window (more than 1,024 expired outcomes) match the reference (V1 fix round)', () => {
+  fc.assert(
+    fc.property(fc.array(fc.tuple(fc.boolean(), fc.integer({ min: 0, max: 40 })), { minLength: 3_000, maxLength: 5_000 }), fc.integer({ min: -5_000, max: 0 }), (outcomes, backstep) => {
+      const o = { minRequests: 50, failureRatio: 0.9, windowSeconds: 10, openSeconds: 5 };
+      let t = 0;
+      const b = new Breaker(o, () => t);
+      const ref = new ReferenceBreaker(o, () => t);
+      for (const [i, [ok, dt]] of outcomes.entries()) {
+        t += dt + (i === 2_500 ? backstep : 0);
+        b.record('p', ok);
+        ref.record('p', ok);
+        expect(b.allow('p')).toBe(ref.allow('p'));
+      }
+    }),
+    { numRuns: 20 },
+  );
+});
