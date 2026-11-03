@@ -26,12 +26,16 @@ describe.skipIf(!url || !container || !isLoopbackRedisUrl(url ?? ''))('redis dow
   beforeAll(async () => {
     await admin.connect();
   });
+  /** The container's password: the kill case changes it for 800 ms, and afterEach puts it back whatever happened. */
+  const password = decodeURIComponent(new URL(url ?? 'redis://x').password);
   afterEach(async () => {
     try {
       docker('unpause', container as string);
     } catch {
       // not paused
     }
+    // M6: a kill case that failed between its two CONFIG SETs must not leave the next test without a password match.
+    await admin.sendCommand(['CONFIG', 'SET', 'requirepass', password]);
     await h?.close();
     await closeStore?.();
     h = null;
@@ -143,7 +147,6 @@ describe.skipIf(!url || !container || !isLoopbackRedisUrl(url ?? ''))('redis dow
     h.setBehaviour(() => ({ kind: 'ok', stream: true, padEvents: 20, chunkDelayMs: 10 }));
     const load = stream('kill', 4_000, 15);
     // Down for 800 ms: connections killed and reconnects refused (another password) until it is restored.
-    const password = decodeURIComponent(new URL(url as string).password);
     await sleep(700);
     await admin.sendCommand(['CONFIG', 'SET', 'requirepass', `${password}-down`]);
     await admin.sendCommand(['CLIENT', 'KILL', 'TYPE', 'normal', 'SKIPME', 'yes']);
