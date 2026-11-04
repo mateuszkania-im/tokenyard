@@ -94,7 +94,8 @@ program
   .option('--redis-url <url>', 'Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file')
   .option('--redis-url-file <path>', 'file holding the Redis URL (with its password)')
   .option('--shutdown-grace-ms <n>', 'on SIGTERM or SIGINT, how long requests and streams in flight may finish before their connections are closed (/readyz answers 503 meanwhile); 0 closes at once, a second signal too', '30000')
-  .action(async (o: { port: string; host: string; shutdownGraceMs: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; traceSaltFile?: string; store: string; redisUrl?: string; redisUrlFile?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metricsTokenFile?: string; metrics: boolean }) => {
+  .option('--workers <n>', 'gateway processes sharing --port (node:cluster; the primary serves no traffic, restarts a crashed worker); more than 1 needs --store redis, and worker k serves ops on --metrics-port + k - 1', '1')
+  .action(async (o: { port: string; host: string; shutdownGraceMs: string; workers: string; basePath?: string; devUpstream?: string; policy?: string; policyUrl?: string; stateDir: string; candidatePolicy?: string; experimentalSubscription?: boolean; traceDir?: string; instanceId?: string; traceSalt?: string; traceSaltFile?: string; store: string; redisUrl?: string; redisUrlFile?: string; otlpEndpoint?: string; metricsPort: string; metricsHost: string; metricsToken?: string; metricsTokenFile?: string; metrics: boolean }) => {
     if (!o.devUpstream && !o.policy && !o.policyUrl) {
       console.error('tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)');
       process.exit(1);
@@ -113,6 +114,17 @@ program
     }
     if (o.store !== 'memory' && o.store !== 'redis') {
       console.error('tokenyard serve: --store must be memory or redis');
+      process.exit(1);
+    }
+    const { availableParallelism } = await import('node:os');
+    const { parseWorkers } = await import('./edge/cluster.js');
+    const workers = parseWorkers(o.workers, availableParallelism());
+    if (typeof workers === 'string') {
+      console.error(`tokenyard serve: ${workers}`);
+      process.exit(1);
+    }
+    if (workers > 1 && o.store !== 'redis') {
+      console.error(`tokenyard serve: --workers ${workers} needs --store redis: the memory store keeps budgets, rate limits, stream slots and taint in each process, so every worker would enforce its own copy`);
       process.exit(1);
     }
     const cmd = 'tokenyard serve';
@@ -155,6 +167,11 @@ program
       process.exit(1);
     }
     const opsOn = o.metrics && Number(o.metricsPort) !== 0;
+    // One ops listener per worker, on consecutive ports: /metrics of one process each, scraped as separate targets.
+    if (opsOn && Number(o.metricsPort) + workers - 1 > 65535) {
+      console.error(`tokenyard serve: --metrics-port ${o.metricsPort} with --workers ${workers} needs ports up to ${Number(o.metricsPort) + workers - 1} (one ops listener per worker); use a lower --metrics-port`);
+      process.exit(1);
+    }
     const metricsToken = await secretInput(cmd, { flag: 'metrics-token', value: o.metricsToken, file: o.metricsTokenFile, env: 'TOKENYARD_METRICS_TOKEN' });
     const { isLoopbackHost } = await import('./edge/ops.js');
     if (opsOn && !isLoopbackHost(o.metricsHost) && !metricsToken) {
@@ -164,7 +181,25 @@ program
     const { hostname } = await import('node:os');
     const { ulid } = await import('./edge/ulid.js');
     const { defaultInstanceId, TraceWriter } = await import('./ledger/writer.js');
-    const instanceId = o.instanceId ?? defaultInstanceId(hostname(), Date.now());
+    const { default: cluster } = await import('node:cluster');
+    if (workers > 1 && cluster.isPrimary) {
+      // The primary only supervises: every worker runs this same command line and builds its own gateway below.
+      const { superviseWorkers } = await import('./edge/cluster.js');
+      superviseWorkers({
+        n: workers,
+        baseInstance: o.instanceId ?? defaultInstanceId(hostname(), Date.now()),
+        graceMs,
+        log: (s) => console.error(s),
+        onReady: (ready) => {
+          if (opsOn) console.error(`tokenyard: ops listeners ${ready.map((r) => r.ops).join(', ')} (one per worker; /metrics${metricsToken ? ', bearer token required' : ''}, /healthz, /readyz)`);
+          console.log(ready[0]?.url); // printed last: by then every worker listens
+        },
+      });
+      return;
+    }
+    const { notifyReady, onPrimaryCommand, workerContext } = await import('./edge/cluster.js');
+    const worker = workers > 1 ? workerContext() : null;
+    const instanceId = worker?.instance ?? o.instanceId ?? defaultInstanceId(hostname(), Date.now());
     const writer = o.traceDir ? new TraceWriter({ dir: o.traceDir, instanceId, queueMax: 10_000, clock: Date.now }) : null;
     const { createGateway, DEFAULT_BODY_CAP_BYTES } = await import('./edge/server.js');
     let loader: import('./policy-loader/loader.js').PolicyLoader | null = null;
@@ -227,7 +262,8 @@ program
       // Restart loses memory-store spend without warm-up; an unset provider key is a 401 per request (FR-I2, FR-M7).
       // The development upstream key is optional, so --dev-upstream gets neither.
       const { startupWarnings } = await import('./edge/startup-warnings.js');
-      for (const w of startupWarnings(activePolicy(), { store: o.store, traceDir: o.traceDir !== undefined, env: process.env })) console.error(w);
+      // Once per start, not once per worker.
+      if (worker === null || worker.slot === 1) for (const w of startupWarnings(activePolicy(), { store: o.store, traceDir: o.traceDir !== undefined, env: process.env })) console.error(w);
     }
     let ticks = 0;
     const stopSweeper = startSweeper(counters.store, {
@@ -257,26 +293,26 @@ program
       ...(metricsToken ? { metricsToken } : {}),
     });
     const apiUrl = await gw.listen(Number(o.port), o.host);
+    let opsUrl: string | null = null;
     if (opsOn) {
+      const port = Number(o.metricsPort) + (worker ? worker.slot - 1 : 0);
       try {
-        console.error(`tokenyard: ops listener ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)} (/metrics${metricsToken ? ', bearer token required' : ''}, /healthz, /readyz)`);
+        opsUrl = await gw.listenOps(port, o.metricsHost);
+        if (!worker) console.error(`tokenyard: ops listener ${opsUrl} (/metrics${metricsToken ? ', bearer token required' : ''}, /healthz, /readyz)`);
       } catch (e) {
-        console.error(`tokenyard serve: ops listener on ${o.metricsHost}:${o.metricsPort}: ${e instanceof Error ? e.message : String(e)} (use --metrics-port or --no-metrics)`);
+        console.error(`tokenyard serve: ops listener on ${o.metricsHost}:${port}: ${e instanceof Error ? e.message : String(e)} (use --metrics-port or --no-metrics)`);
         process.exit(1);
       }
     }
-    console.log(apiUrl); // printed last: by then both listeners are up
     // First signal: drain for up to --shutdown-grace-ms (FR-I1); a second one closes every connection at once. The
-    // sweeper and the trace writer keep running until the requests in flight have settled.
+    // sweeper and the trace writer keep running until the requests in flight have settled. A worker drains when the
+    // primary asks (an IPC message, also on Windows); a signal sent to the worker itself (Ctrl+C reaches the whole
+    // process group) starts the same drain, and the primary's request then changes nothing.
     let stopping = false;
-    const stop = (): void => {
-      if (stopping) {
-        console.error('tokenyard: second signal, closing every connection now');
-        void gw.close();
-        return;
-      }
+    const drain = (announce: boolean): void => {
+      if (stopping) return;
       stopping = true;
-      if (graceMs > 0) console.error(`tokenyard: draining, up to ${graceMs} ms for requests in flight (signal again to stop at once)`);
+      if (announce && graceMs > 0) console.error(`tokenyard: draining, up to ${graceMs} ms for requests in flight (signal again to stop at once)`);
       void gw
         .shutdown(graceMs)
         .then(() => stopSweeper())
@@ -286,8 +322,20 @@ program
         .then(() => counters.close())
         .then(() => process.exit(0));
     };
+    const stop = (): void => {
+      if (stopping) {
+        console.error('tokenyard: second signal, closing every connection now');
+        void gw.close();
+        return;
+      }
+      drain(worker === null);
+    };
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
+    if (worker) {
+      onPrimaryCommand({ drain: () => drain(false), now: () => void gw.close() });
+      notifyReady({ url: apiUrl, ops: opsUrl });
+    } else console.log(apiUrl); // printed last: by then both listeners are up
   });
 program
   .command('demo')

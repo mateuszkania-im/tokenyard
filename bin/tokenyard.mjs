@@ -1368,6 +1368,141 @@ data: ${JSON.stringify(data)}
   }
 });
 
+// src/edge/cluster.ts
+var cluster_exports = {};
+__export(cluster_exports, {
+  MAX_RESTARTS: () => MAX_RESTARTS,
+  WORKER_INSTANCE_ENV: () => WORKER_INSTANCE_ENV,
+  WORKER_SLOT_ENV: () => WORKER_SLOT_ENV,
+  notifyReady: () => notifyReady,
+  onPrimaryCommand: () => onPrimaryCommand,
+  parseWorkers: () => parseWorkers,
+  superviseWorkers: () => superviseWorkers,
+  workerContext: () => workerContext,
+  workerInstanceId: () => workerInstanceId
+});
+import cluster from "node:cluster";
+function parseWorkers(value, max) {
+  const n2 = /^[1-9]\d*$/.test(value) ? Number(value) : Number.NaN;
+  if (Number.isSafeInteger(n2) && n2 >= 1 && n2 <= max) return n2;
+  return `--workers must be a whole number from 1 to ${max} (the CPU count)`;
+}
+function workerContext() {
+  const slot = Number(process.env[WORKER_SLOT_ENV]);
+  const instance = process.env[WORKER_INSTANCE_ENV];
+  if (!cluster.isWorker || !Number.isInteger(slot) || slot < 1 || !instance) return null;
+  return { slot, instance };
+}
+function notifyReady(r) {
+  const m = { tokenyard: "ready", ...r };
+  process.send?.(m);
+}
+function onPrimaryCommand(h) {
+  process.on("message", (m) => {
+    const t = m?.tokenyard;
+    if (t === "drain") h.drain();
+    else if (t === "now") h.now();
+  });
+}
+function superviseWorkers(o) {
+  cluster.schedulingPolicy = cluster.SCHED_RR;
+  const slots = /* @__PURE__ */ new Map();
+  const firstReady = Array.from({ length: o.n });
+  let announced = false;
+  let forks = 0;
+  let stopping = false;
+  let failed = false;
+  const crashes = [];
+  const finish = () => {
+    if (slots.size > 0) return;
+    process.exit(failed ? 1 : 0);
+  };
+  const send = (w, m) => {
+    if (w.isConnected()) w.send(m);
+  };
+  const stopAll = (code2) => {
+    if (code2 === 1) failed = true;
+    if (stopping) return;
+    stopping = true;
+    for (const s2 of slots.values()) send(s2.worker, { tokenyard: "drain" });
+    setTimeout(() => {
+      for (const s2 of slots.values()) s2.worker.process.kill("SIGKILL");
+      failed = true;
+      o.log(`tokenyard: workers still running ${o.graceMs + EXIT_SLACK_MS} ms after the drain began; killed`);
+    }, o.graceMs + EXIT_SLACK_MS).unref();
+    finish();
+  };
+  const fork = (slot) => {
+    const instance = workerInstanceId(o.baseInstance, ++forks);
+    const worker = cluster.fork({ [WORKER_SLOT_ENV]: String(slot), [WORKER_INSTANCE_ENV]: instance });
+    const s2 = { slot, worker, instance, ready: false };
+    slots.set(slot, s2);
+    worker.on("message", (m) => {
+      const r = m;
+      if (r?.tokenyard !== "ready" || typeof r.url !== "string") return;
+      const replacement = s2.ready === false && firstReady[slot - 1] !== void 0;
+      s2.ready = true;
+      if (replacement) o.log(`tokenyard: worker ${slot} replaced (instance ${instance})`);
+      firstReady[slot - 1] ??= { url: r.url, ops: r.ops ?? null };
+      if (stopping) send(worker, { tokenyard: "drain" });
+      if (!announced && firstReady.every((x) => x !== void 0)) {
+        announced = true;
+        const ids = [...slots.values()].sort((a, b) => a.slot - b.slot).map((x) => x.instance);
+        o.log(`tokenyard: ${o.n} workers ready on ${r.url} (instances ${ids.join(", ")})`);
+        o.onReady(firstReady);
+      }
+    });
+    worker.on("exit", (code2, signal) => {
+      if (slots.get(slot)?.worker === worker) slots.delete(slot);
+      const how = signal ? `on signal ${signal}` : `with code ${code2}`;
+      const who = `worker ${slot} (pid ${worker.process.pid}, instance ${instance})`;
+      if (stopping) {
+        if (code2 !== 0) failed = true;
+        return finish();
+      }
+      if (!s2.ready) {
+        o.log(`tokenyard: ${who} exited ${how} before it was ready; stopping`);
+        return stopAll(1);
+      }
+      const now = Date.now();
+      crashes.push(now);
+      while (crashes.length > 0 && crashes[0] < now - RESTART_WINDOW_MS) crashes.shift();
+      if (crashes.length > MAX_RESTARTS) {
+        o.log(`tokenyard: ${who} exited ${how}; workers crashed ${crashes.length} times within 60 s, stopping`);
+        return stopAll(1);
+      }
+      o.log(`tokenyard: ${who} exited ${how}, starting a replacement`);
+      fork(slot);
+    });
+  };
+  for (let i = 1; i <= o.n; i++) fork(i);
+  let signalled = false;
+  const onSignal = () => {
+    if (signalled) {
+      o.log("tokenyard: second signal, closing every connection now");
+      for (const s2 of slots.values()) send(s2.worker, { tokenyard: "now" });
+      return;
+    }
+    signalled = true;
+    if (o.graceMs > 0) o.log(`tokenyard: draining ${slots.size} workers, up to ${o.graceMs} ms for requests in flight (signal again to stop at once)`);
+    stopAll(0);
+  };
+  process.on("SIGINT", onSignal);
+  process.on("SIGTERM", onSignal);
+}
+var WORKER_SLOT_ENV, WORKER_INSTANCE_ENV, MAX_RESTARTS, RESTART_WINDOW_MS, EXIT_SLACK_MS, workerInstanceId;
+var init_cluster = __esm({
+  "src/edge/cluster.ts"() {
+    "use strict";
+    WORKER_SLOT_ENV = "TOKENYARD_WORKER_SLOT";
+    WORKER_INSTANCE_ENV = "TOKENYARD_WORKER_INSTANCE";
+    MAX_RESTARTS = 5;
+    RESTART_WINDOW_MS = 6e4;
+    EXIT_SLACK_MS = 2e4;
+    workerInstanceId = (base, fork) => `${base}-w${fork}`;
+  }
+});
+
 // src/edge/ops.ts
 var ops_exports = {};
 __export(ops_exports, {
@@ -127249,7 +127384,7 @@ program2.command("mock").description("run the deterministic mock Anthropic provi
 program2.command("serve").description("run the gateway").option("--port <n>", "port to listen on (0 picks a free one)", "4000").option("--host <host>", "address to bind", "127.0.0.1").option("--base-path <path>", "mount prefix stripped before path matching").option(
   "--dev-upstream <url>",
   "development only: forward every Anthropic request to <url>, accepting the key ty_live_dev (upstream key from TOKENYARD_DEV_UPSTREAM_KEY, optional)"
-).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt-file <path>", "file holding the HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--trace-salt <salt>", "refused: a salt on the command line is visible to every local user; use TOKENYARD_TRACE_SALT or --trace-salt-file").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs a trace salt").option("--metrics-port <n>", "ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it", "9464").option("--metrics-host <host>", "address the ops listener binds; a non-loopback address needs a metrics token", "127.0.0.1").option("--metrics-token-file <path>", "file holding the bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback").option("--metrics-token <token>", "refused: a token on the command line is visible to every local user; use TOKENYARD_METRICS_TOKEN or --metrics-token-file").option("--no-metrics", "do not start the ops listener").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file").option("--redis-url-file <path>", "file holding the Redis URL (with its password)").option("--shutdown-grace-ms <n>", "on SIGTERM or SIGINT, how long requests and streams in flight may finish before their connections are closed (/readyz answers 503 meanwhile); 0 closes at once, a second signal too", "30000").action(async (o) => {
+).option("--policy <dir>", "policy directory (policy.yaml, prices.yaml, keys.yaml), watched for changes").option("--policy-url <url>", "policy bundle URL (https), polled every 15 s with If-None-Match; redirects are errors").option("--state-dir <dir>", "where the last-known-good bundle is kept", ".tokenyard-state").option("--candidate-policy <dir>", "audit mode: a second policy directory whose decisions are traced but never enforced").option("--experimental-subscription", "experimental: accept keys with billing subscription and forward the user OAuth token (docs/experimental-subscription.md)").option("--trace-dir <dir>", "write NDJSON trace files under <dir>/<tenant>/<date>/<hour>.<instance>.ndjson").option("--instance-id <id>", "instance id in trace file names (default: 8 hex characters of a hash of hostname and start time)").option("--trace-salt-file <path>", "file holding the HMAC salt for session, agent and prompt ids in traces (or TOKENYARD_TRACE_SALT); required with --trace-dir").option("--trace-salt <salt>", "refused: a salt on the command line is visible to every local user; use TOKENYARD_TRACE_SALT or --trace-salt-file").option("--otlp-endpoint <url>", "export OTel GenAI spans to this OTLP/HTTP endpoint (or OTEL_EXPORTER_OTLP_ENDPOINT); needs a trace salt").option("--metrics-port <n>", "ops listener with /metrics (never served on --port), /healthz and /readyz; 0 disables it", "9464").option("--metrics-host <host>", "address the ops listener binds; a non-loopback address needs a metrics token", "127.0.0.1").option("--metrics-token-file <path>", "file holding the bearer token /metrics requires (or TOKENYARD_METRICS_TOKEN); required when --metrics-host is not loopback").option("--metrics-token <token>", "refused: a token on the command line is visible to every local user; use TOKENYARD_METRICS_TOKEN or --metrics-token-file").option("--no-metrics", "do not start the ops listener").option("--store <kind>", "counter store for budgets, rate limits, stream slots and taint: memory (one instance) or redis", "memory").option("--redis-url <url>", "Redis URL for --store redis without credentials, for example redis://127.0.0.1:6379; a URL with a password goes in TOKENYARD_REDIS_URL or --redis-url-file").option("--redis-url-file <path>", "file holding the Redis URL (with its password)").option("--shutdown-grace-ms <n>", "on SIGTERM or SIGINT, how long requests and streams in flight may finish before their connections are closed (/readyz answers 503 meanwhile); 0 closes at once, a second signal too", "30000").option("--workers <n>", "gateway processes sharing --port (node:cluster; the primary serves no traffic, restarts a crashed worker); more than 1 needs --store redis, and worker k serves ops on --metrics-port + k - 1", "1").action(async (o) => {
   if (!o.devUpstream && !o.policy && !o.policyUrl) {
     console.error("tokenyard serve: give --policy <dir> or --policy-url <url> (or --dev-upstream <url> for development)");
     process.exit(1);
@@ -127268,6 +127403,17 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   }
   if (o.store !== "memory" && o.store !== "redis") {
     console.error("tokenyard serve: --store must be memory or redis");
+    process.exit(1);
+  }
+  const { availableParallelism } = await import("node:os");
+  const { parseWorkers: parseWorkers2 } = await Promise.resolve().then(() => (init_cluster(), cluster_exports));
+  const workers = parseWorkers2(o.workers, availableParallelism());
+  if (typeof workers === "string") {
+    console.error(`tokenyard serve: ${workers}`);
+    process.exit(1);
+  }
+  if (workers > 1 && o.store !== "redis") {
+    console.error(`tokenyard serve: --workers ${workers} needs --store redis: the memory store keeps budgets, rate limits, stream slots and taint in each process, so every worker would enforce its own copy`);
     process.exit(1);
   }
   const cmd = "tokenyard serve";
@@ -127308,6 +127454,10 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     process.exit(1);
   }
   const opsOn = o.metrics && Number(o.metricsPort) !== 0;
+  if (opsOn && Number(o.metricsPort) + workers - 1 > 65535) {
+    console.error(`tokenyard serve: --metrics-port ${o.metricsPort} with --workers ${workers} needs ports up to ${Number(o.metricsPort) + workers - 1} (one ops listener per worker); use a lower --metrics-port`);
+    process.exit(1);
+  }
   const metricsToken = await secretInput(cmd, { flag: "metrics-token", value: o.metricsToken, file: o.metricsTokenFile, env: "TOKENYARD_METRICS_TOKEN" });
   const { isLoopbackHost: isLoopbackHost2 } = await Promise.resolve().then(() => (init_ops(), ops_exports));
   if (opsOn && !isLoopbackHost2(o.metricsHost) && !metricsToken) {
@@ -127317,7 +127467,24 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   const { hostname: hostname4 } = await import("node:os");
   const { ulid: ulid4 } = await Promise.resolve().then(() => (init_ulid(), ulid_exports));
   const { defaultInstanceId: defaultInstanceId2, TraceWriter: TraceWriter2 } = await Promise.resolve().then(() => (init_writer(), writer_exports));
-  const instanceId = o.instanceId ?? defaultInstanceId2(hostname4(), Date.now());
+  const { default: cluster2 } = await import("node:cluster");
+  if (workers > 1 && cluster2.isPrimary) {
+    const { superviseWorkers: superviseWorkers2 } = await Promise.resolve().then(() => (init_cluster(), cluster_exports));
+    superviseWorkers2({
+      n: workers,
+      baseInstance: o.instanceId ?? defaultInstanceId2(hostname4(), Date.now()),
+      graceMs,
+      log: (s2) => console.error(s2),
+      onReady: (ready) => {
+        if (opsOn) console.error(`tokenyard: ops listeners ${ready.map((r) => r.ops).join(", ")} (one per worker; /metrics${metricsToken ? ", bearer token required" : ""}, /healthz, /readyz)`);
+        console.log(ready[0]?.url);
+      }
+    });
+    return;
+  }
+  const { notifyReady: notifyReady2, onPrimaryCommand: onPrimaryCommand2, workerContext: workerContext2 } = await Promise.resolve().then(() => (init_cluster(), cluster_exports));
+  const worker = workers > 1 ? workerContext2() : null;
+  const instanceId = worker?.instance ?? o.instanceId ?? defaultInstanceId2(hostname4(), Date.now());
   const writer = o.traceDir ? new TraceWriter2({ dir: o.traceDir, instanceId, queueMax: 1e4, clock: Date.now }) : null;
   const { createGateway: createGateway2, DEFAULT_BODY_CAP_BYTES: DEFAULT_BODY_CAP_BYTES2 } = await Promise.resolve().then(() => (init_server(), server_exports));
   let loader = null;
@@ -127376,7 +127543,7 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
   }
   if (!o.devUpstream) {
     const { startupWarnings: startupWarnings2 } = await Promise.resolve().then(() => (init_startup_warnings(), startup_warnings_exports));
-    for (const w of startupWarnings2(activePolicy(), { store: o.store, traceDir: o.traceDir !== void 0, env: process.env })) console.error(w);
+    if (worker === null || worker.slot === 1) for (const w of startupWarnings2(activePolicy(), { store: o.store, traceDir: o.traceDir !== void 0, env: process.env })) console.error(w);
   }
   let ticks = 0;
   const stopSweeper = startSweeper2(counters.store, {
@@ -127406,28 +127573,38 @@ program2.command("serve").description("run the gateway").option("--port <n>", "p
     ...metricsToken ? { metricsToken } : {}
   });
   const apiUrl = await gw.listen(Number(o.port), o.host);
+  let opsUrl = null;
   if (opsOn) {
+    const port = Number(o.metricsPort) + (worker ? worker.slot - 1 : 0);
     try {
-      console.error(`tokenyard: ops listener ${await gw.listenOps(Number(o.metricsPort), o.metricsHost)} (/metrics${metricsToken ? ", bearer token required" : ""}, /healthz, /readyz)`);
+      opsUrl = await gw.listenOps(port, o.metricsHost);
+      if (!worker) console.error(`tokenyard: ops listener ${opsUrl} (/metrics${metricsToken ? ", bearer token required" : ""}, /healthz, /readyz)`);
     } catch (e2) {
-      console.error(`tokenyard serve: ops listener on ${o.metricsHost}:${o.metricsPort}: ${e2 instanceof Error ? e2.message : String(e2)} (use --metrics-port or --no-metrics)`);
+      console.error(`tokenyard serve: ops listener on ${o.metricsHost}:${port}: ${e2 instanceof Error ? e2.message : String(e2)} (use --metrics-port or --no-metrics)`);
       process.exit(1);
     }
   }
-  console.log(apiUrl);
   let stopping = false;
+  const drain = (announce) => {
+    if (stopping) return;
+    stopping = true;
+    if (announce && graceMs > 0) console.error(`tokenyard: draining, up to ${graceMs} ms for requests in flight (signal again to stop at once)`);
+    void gw.shutdown(graceMs).then(() => stopSweeper()).then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => void 0)).then(() => counters.close()).then(() => process.exit(0));
+  };
   const stop = () => {
     if (stopping) {
       console.error("tokenyard: second signal, closing every connection now");
       void gw.close();
       return;
     }
-    stopping = true;
-    if (graceMs > 0) console.error(`tokenyard: draining, up to ${graceMs} ms for requests in flight (signal again to stop at once)`);
-    void gw.shutdown(graceMs).then(() => stopSweeper()).then(() => loader?.stop()).then(() => writer?.close()).then(() => spans.shutdown().catch(() => void 0)).then(() => counters.close()).then(() => process.exit(0));
+    drain(worker === null);
   };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
+  if (worker) {
+    onPrimaryCommand2({ drain: () => drain(false), now: () => void gw.close() });
+    notifyReady2({ url: apiUrl, ops: opsUrl });
+  } else console.log(apiUrl);
 });
 program2.command("demo").description("one-process demo: synthetic coding-agent traffic through the gateway, then a replay of the demo PR policy change").option("--seed <n>", "seed of the traffic generator; the same seed gives byte-identical traces", "1").option("--write-traces <file>", "also write the recorded traces as an export file (a name ending in .gz is gzipped)").action(async (o) => {
   const seed = Number(o.seed);
