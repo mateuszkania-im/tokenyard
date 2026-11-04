@@ -204,7 +204,9 @@ async function run(env: NodeJS.ProcessEnv, gh: Gh): Promise<number> {
     const baseRev = event?.baseSha?.slice(0, 7) ?? baseRef;
     const body = renderMarkdown(result, { baseRev, headRev, checkSummary: { errors: errors.length, warnings: warnings.length }, tracesSha256, ...(tracesSource === undefined ? {} : { tracesSource }) });
     await publish(env, gh, body, wantComment, fork);
-    return result.gates.failed.length > 0 ? 1 : 0;
+    if (result.gates.failed.length === 0) return 0;
+    logError(`tokenyard action: check failed: ${result.gates.failed.join(', ')}; the pull request comment and the job summary have the details`);
+    return 1;
   } catch (e) {
     logError(`tokenyard action: ${e instanceof Error ? e.message : String(e)}`);
     return 1;

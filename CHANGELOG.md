@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-04)
 
 First release.
 
@@ -20,7 +20,7 @@ First release.
 
 - YAML policy with a Zod schema, JSON Schema export (`policy schema`), semantic validation (`policy check`), bundles (`policy build`), hot swap from a directory or an https URL with last-known-good, and an audit-mode candidate policy.
 - `policy replay`: base and head policies over a merged trace export, with fidelity check, cost delta, reroutes, blocks, cut sessions and budget hits; terminal, JSON and Markdown output; CI gates.
-- GitHub Action (`action.yml`) that posts one sticky pull request comment.
+- GitHub Action (`action.yml`) that posts one sticky pull request comment; a failed gate is also named in the job log. Use it as `mateuszkania-im/tokenyard@v0.1.0`.
 
 ### Tooling and evidence
 

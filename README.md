@@ -11,17 +11,16 @@ tokenyard is an open-source LLM gateway in TypeScript for Claude Code, Codex and
   <img alt="The policy replay comment for the demo policy change: cost -5.6% (estimated), 200 requests rerouted, 5 sessions cut mid-task by a tighter team budget, check failed on purpose" src="docs/demo-comment-light.png" width="720">
 </picture>
 
-The image is a local render of the Markdown the GitHub Action posts, computed from the committed synthetic demo week (`examples/traces/demo.ndjson.gz`) for the demo policy change (`examples/policy` against `examples/policy-head`). The demo pull request on GitHub does not exist yet; once it is open, a recording of the bot comment appearing after a push replaces this picture. The traffic is synthetic; real sessions, anonymized, are in [Real sessions](#real-sessions).
+See it live: [pull request #2](https://github.com/mateuszkania-im/tokenyard/pull/2) is a standing demo, never merged. It moves compaction and auxiliary requests to Haiku and tightens the web team's daily budget; the `policy replay` workflow replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,649 requests from 8 developers in 3 teams) through both policies and posts the comment above. Its check is red on purpose: five sessions would be cut mid-task, and the policy says `ci.failOn.cutSessions: 0`. The traffic is synthetic; real sessions, anonymized, are in [Real sessions](#real-sessions).
 
 ## Quick start
 
 No API key is needed: both paths run against deterministic mock providers.
 
 ```sh
-# One process, no Docker: 7 days of synthetic traffic from 8 developers in 3 teams through the gateway,
-# then a replay of the demo policy change.
-npx @mateuszkania-im/tokenyard demo
-# or from a clone
+# One process, no Docker, Node 20.19 or later: 7 days of synthetic traffic from 8 developers in 3 teams
+# through the gateway, then a replay of the demo policy change. bin/tokenyard.mjs is the committed bundle.
+git clone https://github.com/mateuszkania-im/tokenyard && cd tokenyard
 node bin/tokenyard.mjs demo
 
 # Docker Compose 2.20 or later: mock providers, the gateway, the traffic generator, then the replay report.

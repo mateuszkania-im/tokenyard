@@ -148,6 +148,8 @@ test('exit 1 when a ci.failOn gate fails; replay.json written for upload', async
   expect(replayJson().gates.failed.length).toBeGreaterThan(0);
   expect(readFileSync(join(tmp, 'output.txt'), 'utf8')).toContain(`replay-json=${join(tmp, 'replay.json')}`);
   expect(f.calls.create[0]).toContain('Check: **failed**');
+  // The job log says why the job is red, for someone who opens the failed check instead of the comment.
+  expect((console.error as ReturnType<typeof vi.fn>).mock.calls.flat().join('\n')).toMatch(/check failed: ci\.failOn\.\w+/);
   // head equal to base: nothing fails
   git('checkout', '-q', '--', 'policy/policy.yaml');
   expect(await runAction(envFor(), fakeGh().gh)).toBe(0);
