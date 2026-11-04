@@ -48,9 +48,10 @@ jobs:
       - name: pack and scan the npm tarball
         shell: bash
         run: t=$(npm pack --silent) && test -f "$t" && npm run check:secrets -- "$t"
-      # Registry signatures and provenance of the installed (dev) dependencies.
+      # Registry signatures and provenance of the installed (dev) dependencies. On Node 24: its npm 11 knows the
+      # attestation keys that the npm 10 shipped with Node 22 lacks (EMISSINGSIGNATUREKEY).
       - name: verify registry signatures
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22'
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '24'
         run: npm audit signatures
 
   # Store contract and the G4 budget proof on a real Redis. The runner has Docker, so the tests go through
