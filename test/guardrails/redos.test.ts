@@ -10,10 +10,16 @@ import { PII_RULES } from '../../src/guardrails/pii.js';
 import { DEFAULT_RULES } from '../../src/guardrails/rules.js';
 import { findSpans, ScanBudget, scanBody } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
-import { cpuBoundMs, cpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
+import { cpuBoundMs, cpuMs, minCpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
 
 const MIB = 1024 * 1024;
 const BOUND_MS = cpuBoundMs(1_000);
+/** CPU time of one scan; a run over the bound is measured twice more and the least counts. Backtracking is slow on every
+ * run, a GC pause or a busy CI host (one Windows run took 1125 ms) only on one. */
+const scanMs = (fn: () => void): number => {
+  const ms = cpuMs(fn);
+  return ms > BOUND_MS ? Math.min(ms, minCpuMs(fn, 2)) : ms;
+};
 /** No work budget (S-V3-3): a budget stop would hide a slow rule; this test is about the rules, the budget has its own. */
 const unbounded = (): ScanBudget => new ScanBudget(Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY);
 const fill = (unit: string): string => unit.repeat(Math.ceil(MIB / unit.length)).slice(0, MIB);
@@ -62,7 +68,7 @@ test.skipIf(!TIMING_BOUNDS)('every rule scans adversarial 1 MiB bodies within th
   for (const [name, text] of adversarial()) {
     const b = Buffer.from(JSON.stringify({ model: 'm', messages: [{ role: 'user', content: text }] }));
     const f = extractAnthropicFeatures(b);
-    const ms = cpuMs(() => {
+    const ms = scanMs(() => {
       scanBody(b, f.lastTurn, rules, () => 'block', 's', { messages: f.messages, budget: unbounded() });
       findSpans(b, rules, { messages: f.messages, budget: unbounded() });
     });
@@ -70,7 +76,7 @@ test.skipIf(!TIMING_BOUNDS)('every rule scans adversarial 1 MiB bodies within th
     if (ms > BOUND_MS) slow.push(`${name}: ${ms.toFixed(0)} ms`);
   }
   for (const [name, b, raw] of adversarialBodies()) {
-    const ms = cpuMs(() => scanBody(b, { start: 0, end: b.length }, rules, () => 'block', 's', { raw, budget: unbounded() }));
+    const ms = scanMs(() => scanBody(b, { start: 0, end: b.length }, rules, () => 'block', 's', { raw, budget: unbounded() }));
     worst = Math.max(worst, ms);
     if (ms > BOUND_MS) slow.push(`${name}: ${ms.toFixed(0)} ms`);
   }
