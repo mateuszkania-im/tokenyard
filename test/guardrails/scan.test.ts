@@ -6,7 +6,7 @@ import { DEFAULT_RULES, type SecretRule } from '../../src/guardrails/rules.js';
 import { findSpans, keywordsIn, scanBody, shannonEntropy } from '../../src/guardrails/scan.js';
 import { extractAnthropicFeatures } from '../../src/surfaces/anthropic-messages.js';
 import { RULE_FIXTURES } from './fixtures.js';
-import { cpuBoundMs, cpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
+import { cpuBoundMs, minCpuMs, TIMING_BOUNDS } from '../helpers/timing.js';
 import { fuzz } from '../helpers/fuzz.js';
 
 const AWS = RULE_FIXTURES['aws-access-key-id']?.positive as string;
@@ -158,8 +158,9 @@ test.skipIf(!TIMING_BOUNDS)('many messages with one hit each: linear, not hits t
   const b = Buffer.from(JSON.stringify({ model: 'm', messages }));
   const f = extractAnthropicFeatures(b);
   let hits: ReturnType<typeof scanBody> = [];
-  // CPU time: a loaded machine stretches the wall clock, not the work (V5)
-  const ms = cpuMs(() => {
+  // CPU time: a loaded machine stretches the wall clock, not the work (V5). The least of three runs: one ~1 s run on
+  // a Windows runner (750 to 1079 ms measured) is decided by a GC pause otherwise; quadratic growth fails all three.
+  const ms = minCpuMs(() => {
     hits = scanBody(b, f.lastTurn, PII_RULES, block, 's', { messages: f.messages });
   });
   expect(hits.length).toBe(messages.length - 1);
