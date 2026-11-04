@@ -45,6 +45,7 @@ function replay(base: string[]): { status: number | null; stderr: string; json: 
 
 test('C11 --base-ref reads the ref as git objects even when a directory of that name exists', () => {
   const r = replay(['--base-ref', 'main']);
+  expect(r.json, r.stderr).not.toBeNull();
   expect(r.json?.gates.failed.length).toBeGreaterThan(0);
   expect(r.json?.base.costMicroUsd).not.toBe(r.json?.head.costMicroUsd);
 });
@@ -66,7 +67,9 @@ test('C11 --base refuses a value that is both a directory and a git ref, and nam
 
 test('C11 --base still works when it is only one of the two', () => {
   rmSync(join(repo, 'main'), { recursive: true });
-  expect(replay(['--base', 'main']).json?.gates.failed.length).toBeGreaterThan(0);
+  const ref = replay(['--base', 'main']);
+  expect(ref.json, ref.stderr).not.toBeNull();
+  expect(ref.json?.gates.failed.length).toBeGreaterThan(0);
   cpSync(join(repo, 'policy'), join(repo, 'other'), { recursive: true });
   const other = replay(['--base', 'other']).json;
   expect(other).not.toBeNull();

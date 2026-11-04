@@ -31,14 +31,21 @@ test('a node child listening on every interface is recorded; a loopback listener
   expect(leftovers(dir)).toEqual([expect.stringMatching(/^child listener bound to every interface: 0\.0\.0\.0:\d+ /)]);
 });
 
-test('the final check reports leaks and children still alive, and kills them', async () => {
+// The report line for a recorded child still alive: on Windows the check reports without killing (see below).
+const aliveLine = (pid: number | undefined, cmd: string): string =>
+  process.platform === 'win32' ? `child still alive at the end of the run (not killed on Windows): pid ${pid}: ${cmd}` : `child still alive at the end of the run: pid ${pid}: ${cmd}`;
+
+// On POSIX the check kills the child itself (the exit awaited below proves it); on Windows it never kills, so the
+// test does, after the report, and the second check proves an exited child is no longer reported.
+test('the final check reports leaks and children still alive, and kills them (POSIX)', async () => {
   const dir = tempDir();
   writeFileSync(join(dir, 'leaks.txt'), 'test/x.test.ts: pid 1: node serve\n');
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
   await new Promise((r) => child.once('spawn', r));
   writeFileSync(join(dir, 'spawned-1.txt'), `${child.pid}\t${process.execPath} -e setInterval(() => {}, 1000)\n`);
   const exited = new Promise((r) => child.once('exit', r));
-  expect(leftovers(dir)).toEqual(['test/x.test.ts: pid 1: node serve', `child still alive at the end of the run: pid ${child.pid}: ${process.execPath} -e setInterval(() => {}, 1000)`]);
+  expect(leftovers(dir)).toEqual(['test/x.test.ts: pid 1: node serve', aliveLine(child.pid, `${process.execPath} -e setInterval(() => {}, 1000)`)]);
+  if (process.platform === 'win32') child.kill('SIGKILL');
   await exited;
   expect(leftovers(join(dir))).toEqual(['test/x.test.ts: pid 1: node serve']);
 });
@@ -57,7 +64,7 @@ test('a recorded child that exited is not checked again, so a process that reuse
     expect(other.exitCode).toBe(null);
     expect(other.signalCode).toBe(null);
     writeFileSync(join(dir, 'spawned-1.txt'), `${other.pid}\t${cmd}\n${other.pid}\t${cmd}\n`);
-    expect(leftovers(dir, { kill: false })).toEqual([`child still alive at the end of the run: pid ${other.pid}: ${cmd}`]);
+    expect(leftovers(dir, { kill: false })).toEqual([aliveLine(other.pid, cmd)]);
   } finally {
     other.kill('SIGKILL');
   }

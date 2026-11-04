@@ -10,6 +10,10 @@ import { PROVIDER_KEY_ENV } from '../helpers/policy.js';
 import { tempDir, writePolicyDir } from '../helpers/policy-dir.js';
 
 const MODEL = 'claude-sonnet-5-5';
+// These cases deliver SIGTERM with child.kill. On Windows there are no POSIX signals between processes: kill('SIGTERM')
+// is TerminateProcess, the process ends without running its handlers, and nothing a test can send reaches the
+// SIGTERM or SIGINT handler (Ctrl+C reaches only a console the process shares). So they run on POSIX only.
+const signals = process.platform !== 'win32';
 const sse = (event: string, data: unknown): string => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 const closers: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -85,7 +89,7 @@ function requestRecords(dir: string): RequestLine[] {
   return out;
 }
 
-test('FR-I1 serve: a stream in flight at SIGTERM finishes, settles at its actual cost, and the process exits 0', async () => {
+test.runIf(signals)('FR-I1 serve: a stream in flight at SIGTERM finishes, settles at its actual cost, and the process exits 0', async () => {
   const up = await heldStream();
   const s = await serve(up.url, ['--shutdown-grace-ms', '20000']);
   const st = startStream(s.url);
@@ -103,7 +107,7 @@ test('FR-I1 serve: a stream in flight at SIGTERM finishes, settles at its actual
   expect(recs[0]!.outcome.costMicroUsd ?? 0).toBeLessThan(recs[0]!.decision.reservedMicroUsd);
 }, 30_000);
 
-test('FR-I1 serve: a stream past --shutdown-grace-ms is cut and settles at its reservation', async () => {
+test.runIf(signals)('FR-I1 serve: a stream past --shutdown-grace-ms is cut and settles at its reservation', async () => {
   const up = await heldStream();
   const s = await serve(up.url, ['--shutdown-grace-ms', '300']);
   const st = startStream(s.url);
@@ -119,7 +123,7 @@ test('FR-I1 serve: a stream past --shutdown-grace-ms is cut and settles at its r
   expect(recs[0]!.outcome.costMicroUsd).toBe(recs[0]!.decision.reservedMicroUsd);
 }, 30_000);
 
-test('FR-I1 serve: a second signal closes at once, and a bad --shutdown-grace-ms is refused', async () => {
+test.runIf(signals)('FR-I1 serve: a second signal closes at once', async () => {
   const up = await heldStream();
   const s = await serve(up.url, []); // default grace 30 s
   const st = startStream(s.url);
@@ -133,7 +137,9 @@ test('FR-I1 serve: a second signal closes at once, and a bad --shutdown-grace-ms
   expect(s.stderr()).toContain('second signal');
   expect(await st.done).not.toContain('message_stop');
   expect(requestRecords(s.traces)[0]?.outcome.settledAtEstimate).toBe(true);
+}, 30_000);
 
+test('FR-I1 serve: a bad --shutdown-grace-ms is refused', async () => {
   const bad = spawn('node', ['bin/tokenyard.mjs', 'serve', '--port', '0', '--dev-upstream', 'http://127.0.0.1:1', '--no-metrics', '--shutdown-grace-ms', '-5']);
   let err = '';
   bad.stderr.on('data', (d: Buffer) => (err += d.toString()));

@@ -4,6 +4,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { afterEach, expect, test, vi } from 'vitest';
 import { hashKey } from '../../src/edge/auth.js';
@@ -194,8 +195,9 @@ test('live paths are anchored at the package root, never the cwd: the same from 
   expect(here).toEqual({ traceDir: join(REPO, '.live', 'traces'), policyDir: join(REPO, 'test', 'live') });
   expect(isAbsolute(here.traceDir) && isAbsolute(here.policyDir)).toBe(true);
   // A child process whose cwd is an unrelated directory resolves the same paths.
-  const script = `import(${JSON.stringify(join(REPO, 'src', 'live', 'harness.ts'))}).then((m) => process.stdout.write(JSON.stringify(m.defaultLivePaths())))`;
-  const r = spawnSync(process.execPath, ['--import', join(REPO, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs'), '--input-type=module', '-e', script], { cwd: tmp(), encoding: 'utf8' });
+  // file URLs, not paths: an ESM specifier that is a Windows path (D:\...) reads as a URL with the scheme d:
+  const script = `import(${JSON.stringify(pathToFileURL(join(REPO, 'src', 'live', 'harness.ts')).href)}).then((m) => process.stdout.write(JSON.stringify(m.defaultLivePaths())))`;
+  const r = spawnSync(process.execPath, ['--import', pathToFileURL(join(REPO, 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs')).href, '--input-type=module', '-e', script], { cwd: tmp(), encoding: 'utf8' });
   expect(r.stderr).toBe('');
   expect(JSON.parse(r.stdout)).toEqual(here);
 });

@@ -1,5 +1,5 @@
 import { Agent, createServer } from 'node:http';
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { startAnthropicMock } from '../../src/mock/anthropic.js';
@@ -11,7 +11,7 @@ import { PolicyLoader, type PolicyLoaderOptions } from '../../src/policy-loader/
 import { EXAMPLE_PRICES } from '../policy/helpers.js';
 import { startRawUpstream, authHeaders, msgBody, send } from '../helpers/conformance.js';
 import { PROVIDER_KEY_ENV } from '../helpers/policy.js';
-import { keysYaml, policyYaml, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
+import { keysYaml, policyYaml, replaceFileSync, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
 
 const UP = 'http://127.0.0.1:1';
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -77,7 +77,7 @@ test('the watcher alone reloads: with the poll a minute away, a new revision and
   const writeBroken = (): void => {
     const tmp = join(dir, '.policy.yaml.tmp');
     writeFileSync(tmp, 'apiVersion: [unclosed');
-    renameSync(tmp, join(dir, 'policy.yaml'));
+    replaceFileSync(tmp, join(dir, 'policy.yaml'));
   };
   expect(await writeUntil(writeBroken, () => l.loadErrors > errorsBefore)).toBe(true);
   expect(l.loadErrors).toBe(errorsBefore + 1); // the same broken file written again is still one failure

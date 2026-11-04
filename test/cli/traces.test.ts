@@ -48,7 +48,9 @@ test('serve writes traces with a ULID request id, then export and report read th
   const tenant = (await readdir(dir))[0]!;
   const day = (await readdir(join(dir, tenant)))[0]!;
   const text = await readFile(join(dir, tenant, day, (await readdir(join(dir, tenant, day)))[0]!), 'utf8');
-  expect(text).toContain('"kind":"shutdown"');
+  // The shutdown record is written by the SIGTERM handler. On Windows child.kill('SIGTERM') terminates the process
+  // (TerminateProcess) and no handler runs, so there it cannot be produced from a test; serve-shutdown covers it on POSIX.
+  if (process.platform !== 'win32') expect(text).toContain('"kind":"shutdown"');
   const out = join(dir, 'export.ndjson');
   await run('node', ['bin/tokenyard.mjs', 'traces', 'export', '--trace-dir', dir, '--out', out, '--since', '1d']);
   expect((await readFile(out, 'utf8')).split('\n')[0]).toContain('"kind":"manifest"');

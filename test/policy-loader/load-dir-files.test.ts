@@ -51,6 +51,8 @@ test('a dangling symlink, a symlink to /dev/zero and a FIFO are refused without 
   rmSync(join(dir, 'keys.yaml'));
   symlinkSync('/dev/zero', join(dir, 'keys.yaml'));
   expect(await message()).toContain('regular file');
+  // Windows has no FIFOs (Git for Windows ships an mkfifo whose pipe exists only inside MSYS, so Node sees no file).
+  if (process.platform === 'win32') return;
   rmSync(join(dir, 'keys.yaml'));
   execFileSync('mkfifo', [join(dir, 'keys.yaml')]);
   expect(await message()).toContain('regular file');

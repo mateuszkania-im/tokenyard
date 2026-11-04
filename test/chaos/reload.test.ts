@@ -1,7 +1,7 @@
 // V3 chaos, scenario 4: hot reload while requests run. A policy file caught mid-write that still validates (the budgets
 // section not written yet) must never become the active policy (Task 11 minor), a corrupted bundle, an empty file and a
 // flapping policy URL keep the last good policy serving, and requests in flight settle cleanly through every swap.
-import { renameSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { Agent, createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
@@ -15,7 +15,7 @@ import { PolicyLoader, type PolicyLoaderOptions } from '../../src/policy-loader/
 import { EXAMPLE_PRICES } from '../policy/helpers.js';
 import { startGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV } from '../helpers/policy.js';
-import { keysYaml, policyYaml, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
+import { keysYaml, policyYaml, replaceFileSync, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
 import { chaosRequest, chatBody, expectStoreClean, sseMessage, unhandledRejections } from './harness.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -100,7 +100,7 @@ const loadPolicyYaml = (upstream: string, name: string): string => policyYaml(up
 function writeLoadDir(dir: string, upstream: string, name: string): void {
   writePolicyDir(dir, upstream, name);
   writeFileSync(join(dir, '.policy.yaml.tmp'), loadPolicyYaml(upstream, name));
-  renameSync(join(dir, '.policy.yaml.tmp'), join(dir, 'policy.yaml'));
+  replaceFileSync(join(dir, '.policy.yaml.tmp'), join(dir, 'policy.yaml'));
 }
 
 const bundleText = (upstream: string, name: string): string =>
