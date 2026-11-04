@@ -1,0 +1,193 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`same inputs give byte-identical JSON and terminal output 1`] = `
+"{
+  "schemaVersion": 1,
+  "window": {
+    "sinceMs": 1793613600000,
+    "untilMs": 1793617200000
+  },
+  "tenant": null,
+  "requests": 8,
+  "sessions": 2,
+  "fidelity": {
+    "agreement": 1,
+    "disagreements": [],
+    "missingInstances": []
+  },
+  "base": {
+    "costMicroUsd": 5050,
+    "costBasis": "billed",
+    "estimated": false,
+    "forwarded": 6,
+    "blocked": 2
+  },
+  "head": {
+    "costMicroUsd": 4070,
+    "costBasis": "billed",
+    "estimated": true,
+    "forwarded": 5,
+    "blocked": 3
+  },
+  "rerouted": [
+    {
+      "fromRoute": "all",
+      "toRoute": "compaction",
+      "requestClass": "compaction",
+      "count": 1
+    }
+  ],
+  "blocked": [
+    {
+      "policy": "base",
+      "reason": "secret",
+      "name": "github-pat",
+      "count": 1
+    },
+    {
+      "policy": "base",
+      "reason": "taint",
+      "name": "github-pat",
+      "count": 1
+    },
+    {
+      "policy": "head",
+      "reason": "budget",
+      "name": "team-day",
+      "count": 1
+    },
+    {
+      "policy": "head",
+      "reason": "secret",
+      "name": "github-pat",
+      "count": 1
+    },
+    {
+      "policy": "head",
+      "reason": "taint",
+      "name": "github-pat",
+      "count": 1
+    }
+  ],
+  "cutSessions": [
+    {
+      "policy": "head",
+      "session": "sa",
+      "team": "web",
+      "repo": "shop\\u001b[31m",
+      "requestClass": "main",
+      "requestIndex": 4,
+      "cause": "budget team-day",
+      "droppedRequests": 0,
+      "droppedCostMicroUsd": 0
+    }
+  ],
+  "budgetHits": [
+    {
+      "policy": "head",
+      "budget": "team-day",
+      "scopeValue": "web",
+      "firstHitTs": "2026-11-02T10:03:00.000Z",
+      "days": 1
+    }
+  ],
+  "exactness": [
+    {
+      "output": "Route and provider per request, model allowlist blocks, guardrail blocks for rules that fired at record time",
+      "exactness": "exact",
+      "applied": true
+    },
+    {
+      "output": "Budget hits, rate-limit blocks, session cuts",
+      "exactness": "exact-given-assumptions",
+      "applied": true
+    },
+    {
+      "output": "Cost delta when the model does not change (price table change, budget change)",
+      "exactness": "exact",
+      "applied": true
+    },
+    {
+      "output": "Cost delta when the model changes",
+      "exactness": "estimated",
+      "applied": true
+    },
+    {
+      "output": "Cache effect of a model or provider switch within a session",
+      "exactness": "estimated",
+      "applied": false
+    },
+    {
+      "output": "A new guardrail rule",
+      "exactness": "not-computed",
+      "applied": false
+    },
+    {
+      "output": "Latency",
+      "exactness": "not-computed",
+      "applied": true
+    },
+    {
+      "output": "Answer quality",
+      "exactness": "never",
+      "applied": true
+    }
+  ],
+  "gates": {
+    "failed": [
+      "ci.failOn.cutSessions: 0"
+    ],
+    "failOn": {
+      "cutSessions": 0,
+      "costIncreasePct": 10
+    },
+    "headChangesFailOn": false
+  }
+}
+"
+`;
+
+exports[`same inputs give byte-identical JSON and terminal output 2`] = `
+"tokenyard policy replay
+Traffic: 2026-11-02T10:00:00.000Z to 2026-11-02T11:00:00.000Z, 8 requests, 2 sessions, tenant all.
+Fidelity: base replay matches recorded decisions on 100.0% of requests.
+
+                   base     head     change
+cost (billed)      $0.0051  $0.0041  -$0.0010 (-19.4%), estimated
+forwarded          6        5
+blocked            2        3
+sessions cut       0        1
+requests rerouted           1
+
+Fidelity notes
+  none
+
+Rerouted requests
+  1 x from all to compaction, request class compaction
+
+Blocked requests
+  base: 1 x secret github-pat
+  base: 1 x taint github-pat
+  head: 1 x budget team-day
+  head: 1 x secret github-pat
+  head: 1 x taint github-pat
+
+Cut sessions
+  head: session sa (team web, repo shop[31m, request class main) cut at request 4 by budget team-day; 0 later requests ($0.0000) would not have run as recorded
+
+Budget hits
+  head: team-day web, first hit 2026-11-02T10:03:00.000Z, on 1 day
+
+How exact is this
+  [x] Route and provider per request, model allowlist blocks, guardrail blocks for rules that fired at record time: exact
+  [x] Budget hits, rate-limit blocks, session cuts: exact given the simulation's assumptions
+  [x] Cost delta when the model does not change (price table change, budget change): exact
+  [x] Cost delta when the model changes: estimated
+  [ ] Cache effect of a model or provider switch within a session: estimated
+  [ ] A new guardrail rule: not computed
+  [x] Latency: not computed
+  [x] Answer quality: never
+
+Check: failed (ci.failOn.cutSessions: 0).
+"
+`;

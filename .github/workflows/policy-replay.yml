@@ -1,0 +1,68 @@
+name: policy replay
+# Stays on pull_request, never pull_request_target: a fork PR runs with a read-only token and no secrets.
+on:
+  pull_request:
+    paths:
+      - 'examples/policy/**'
+      - 'examples/traces/**'
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      # The pull request head: policy files, read as data.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # .tokenyard-trusted is reserved for the trusted code. A PR that commits it (for example as a symbolic link to
+      # the workspace) would make the next checkout land on the workspace repository itself, so the job fails instead.
+      - name: refuse a trusted path from the pull request
+        shell: bash
+        run: |
+          if [ -e .tokenyard-trusted ] || [ -L .tokenyard-trusted ]; then
+            echo "::error title=tokenyard policy replay::.tokenyard-trusted exists in the pull request checkout; the path is reserved for the trusted base code"
+            exit 1
+          fi
+      # The code that judges the PR comes from the base commit, so a PR cannot change the bundle that replays it.
+      # Other repositories pin a released tag instead (uses: mateuszkania-im/tokenyard@v0.1.0).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .tokenyard-trusted
+          persist-credentials: false
+      # The replay is never skipped silently: the trusted checkout must be a real directory with its own repository at
+      # the base commit. Only a base commit without action.yml (before the Action was merged) skips, with a notice.
+      - id: trusted
+        name: check the trusted checkout
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          t=.tokenyard-trusted
+          fail() { echo "::error title=tokenyard policy replay::$1"; exit 1; }
+          { [ ! -L "$t" ] && [ -d "$t" ]; } || fail "$t is a symbolic link or not a directory"
+          { [ ! -L "$t/.git" ] && [ -d "$t/.git" ]; } || fail "$t has no repository of its own"
+          head=$(git --git-dir="$t/.git" rev-parse --verify HEAD)
+          [ "$head" = "$BASE_SHA" ] || fail "$t is at $head, not at the base commit $BASE_SHA"
+          if git --git-dir="$t/.git" cat-file -e "$BASE_SHA:action.yml" 2>/dev/null; then
+            { [ -f "$t/action.yml" ] && [ ! -L "$t/action.yml" ]; } || fail "$t/action.yml is missing or a symbolic link, but the base commit has it"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=tokenyard policy replay::the base commit has no action.yml yet, so there is no trusted Action to run; replay skipped"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - id: replay
+        if: steps.trusted.outputs.run == 'true'
+        uses: ./.tokenyard-trusted
+        with:
+          policy-dir: examples/policy
+          traces: examples/traces/demo.ndjson.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.replay.outputs.replay-json != ''
+        with:
+          name: replay-json
+          path: ${{ steps.replay.outputs.replay-json }}

@@ -1,0 +1,7 @@
+version: 2026-11-02
+models:
+  claude-sonnet-5-5: { input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1, maxContextTokens: 1000, maxOutputTokens: 64000, source: https://example.com/pricing, retrieved: 2026-11-02 }
+  claude-haiku-5-5: { input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1, maxContextTokens: 200000, maxOutputTokens: 64000, source: https://example.com/pricing, retrieved: 2026-11-02 }
+  glm-5: { input: 2, output: 10, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.1, maxContextTokens: 200000, maxOutputTokens: 64000, source: https://example.com/pricing, retrieved: 2026-11-02 }
+modifiers: {}
+serverTools: {}

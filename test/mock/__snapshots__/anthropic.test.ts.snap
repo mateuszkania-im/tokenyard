@@ -1,0 +1,44 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`40-turn session through the mock yields a deterministic usage sequence 1`] = `
+"0 in=0 out=25 read=0 w5=2121 w1=0
+1 in=0 out=25 read=2121 w5=274 w1=0
+2 in=0 out=25 read=2395 w5=346 w1=0
+3 in=0 out=25 read=2741 w5=433 w1=0
+4 in=0 out=25 read=3174 w5=332 w1=0
+5 in=0 out=25 read=3506 w5=326 w1=0
+6 in=0 out=25 read=3832 w5=403 w1=0
+7 in=0 out=25 read=4235 w5=260 w1=0
+8 in=0 out=25 read=4495 w5=298 w1=0
+9 in=0 out=25 read=4793 w5=430 w1=0
+10 in=0 out=25 read=5223 w5=320 w1=0
+11 in=0 out=25 read=5543 w5=230 w1=0
+12 in=0 out=25 read=5773 w5=399 w1=0
+13 in=0 out=25 read=6172 w5=329 w1=0
+14 in=0 out=25 read=6501 w5=407 w1=0
+15 in=0 out=25 read=6908 w5=248 w1=0
+16 in=0 out=25 read=7156 w5=353 w1=0
+17 in=0 out=25 read=7509 w5=195 w1=0
+18 in=0 out=25 read=7704 w5=449 w1=0
+19 in=0 out=25 read=8153 w5=236 w1=0
+20 in=0 out=25 read=0 w5=8686 w1=0
+21 in=0 out=25 read=8686 w5=360 w1=0
+22 in=0 out=25 read=9046 w5=303 w1=0
+23 in=0 out=25 read=9349 w5=333 w1=0
+24 in=0 out=25 read=9682 w5=399 w1=0
+25 in=0 out=25 read=10081 w5=278 w1=0
+26 in=0 out=25 read=10359 w5=422 w1=0
+27 in=0 out=25 read=10781 w5=420 w1=0
+28 in=0 out=25 read=11201 w5=385 w1=0
+29 in=0 out=25 read=11586 w5=446 w1=0
+30 in=0 out=25 read=12032 w5=422 w1=0
+31 in=0 out=25 read=12454 w5=419 w1=0
+32 in=0 out=25 read=12873 w5=241 w1=0
+33 in=0 out=25 read=13114 w5=231 w1=0
+34 in=0 out=25 read=13345 w5=342 w1=0
+35 in=0 out=25 read=13687 w5=272 w1=0
+36 in=0 out=25 read=13959 w5=431 w1=0
+37 in=0 out=25 read=14390 w5=432 w1=0
+38 in=0 out=25 read=14822 w5=197 w1=0
+39 in=0 out=25 read=15019 w5=422 w1=0"
+`;

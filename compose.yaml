@@ -1,0 +1,117 @@
+# tokenyard demo stack. Everything runs against the mock providers: no real API key is used or needed.
+#   docker compose up --build --abort-on-container-exit --exit-code-from traffic
+#   docker compose --profile redis up ...   two gateway replicas sharing budgets through Redis
+#   docker compose --profile otel up ...    OTel collector and Jaeger (http://localhost:16686)
+# Profiles combine. `docker compose down -v` removes the containers and the data volume.
+#
+# The values marked "demo" below are public placeholders, not secrets: the stack talks to a mock and listens on
+# 127.0.0.1 only. Change them if you reuse this file for anything else.
+name: tokenyard
+
+x-tokenyard: &tokenyard
+  image: tokenyard:dev
+  build: .
+  read_only: true # the one writable place is the data volume (and a small tmpfs)
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  volumes: ["tokenyard-data:/var/lib/tokenyard"]
+
+x-gateway-env: &gateway-env
+  TOKENYARD_DEMO_UPSTREAM_KEY: demo-not-a-key # the mock accepts anything; the policy reads the "provider key" from here
+  # Demo values, not secrets. The trace salt must be stable and shared by replicas so session pseudonyms match.
+  TOKENYARD_TRACE_SALT: ${TOKENYARD_TRACE_SALT:-demo-trace-salt-not-a-secret}
+  # The ops listener binds 0.0.0.0 inside the container (so the published port and the healthcheck reach it), and a
+  # non-loopback ops listener requires a token. Only 127.0.0.1 on the host is published.
+  TOKENYARD_METRICS_TOKEN: ${TOKENYARD_METRICS_TOKEN:-demo-metrics-token-not-a-secret}
+
+services:
+  mock:
+    <<: *tokenyard
+    volumes: [] # needs no data
+    command: [mock, --host, 0.0.0.0, --port, "8080", --openai-port, "8081"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(() => process.exit(0), () => process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  tokenyard:
+    <<: *tokenyard
+    entrypoint: ["sh", "/app/deploy/gateway.sh"]
+    command: []
+    environment:
+      <<: *gateway-env
+      TOKENYARD_INSTANCE_ID: tokenyard-1
+    ports:
+      - "127.0.0.1:4000:4000" # API
+      - "127.0.0.1:9464:9464" # ops: /metrics (bearer token), /healthz, /readyz
+    depends_on:
+      mock: { condition: service_healthy }
+      redis: { condition: service_healthy, required: false }
+      otel-collector: { condition: service_started, required: false }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9464/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  traffic:
+    <<: *tokenyard
+    entrypoint: ["sh", "/app/deploy/traffic.sh"]
+    command: []
+    depends_on:
+      tokenyard: { condition: service_healthy }
+      tokenyard-2: { condition: service_healthy, required: false }
+
+  # profile redis: a second replica and the shared counter store
+  redis:
+    profiles: [redis]
+    image: redis:7.4-alpine
+    command: [redis-server, --save, "", --appendonly, "no"]
+    read_only: true
+    tmpfs: [/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  tokenyard-2:
+    <<: *tokenyard
+    profiles: [redis]
+    entrypoint: ["sh", "/app/deploy/gateway.sh"]
+    command: []
+    environment:
+      <<: *gateway-env
+      TOKENYARD_INSTANCE_ID: tokenyard-2 # distinct from tokenyard-1: trace file names and the sweeper lock use it
+    ports:
+      - "127.0.0.1:4001:4000"
+    depends_on:
+      mock: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9464/readyz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # profile otel: spans go gateway, collector, Jaeger
+  otel-collector:
+    profiles: [otel]
+    image: otel/opentelemetry-collector:0.116.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["./deploy/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
+    read_only: true
+    depends_on: [jaeger]
+
+  jaeger:
+    profiles: [otel]
+    image: jaegertracing/all-in-one:1.64.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:16686:16686" # Jaeger UI
+
+volumes:
+  tokenyard-data:

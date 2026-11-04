@@ -1,0 +1,115 @@
+import { createClient } from 'redis';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { budgetKey, gcraKey, newSessionsKey, sessionKey, taintKey } from '../../src/limits/keys.js';
+import { createRedisStore, redisSweepLock } from '../../src/limits/redis-store.js';
+import type { Plan } from '../../src/policy/types.js';
+import { runStoreContract } from './store-contract.js';
+
+const url = process.env.REDIS_URL;
+const plan = (over: Partial<Plan>): Plan => ({ id: `req_${Math.random()}`, policyRevision: 'r1', route: 'r', chain: [], reservations: [], rateChecks: [], streamSlots: [], taint: null, preBlock: null, warnings: [], ...over });
+
+// Skipped, visibly, without REDIS_URL. `npm run test:redis` runs it against REDIS_URL or a throwaway loopback-only Redis (scripts/local-redis.mjs).
+describe.skipIf(!url)('redis store (REDIS_URL)', () => {
+  const client = createClient({ url });
+  beforeAll(async () => {
+    await client.connect();
+  });
+  afterAll(async () => {
+    await client.flushDb();
+    await client.close();
+  });
+  const make = async (o: { deadlineMs?: number; onSwept?: (ids: string[]) => void } = {}) => {
+    await client.flushDb();
+    return createRedisStore(client, { deadlineMs: 600_000, ...o });
+  };
+  const keys = async () => (await client.keys('*')).sort();
+
+  // Redis sweeps on its own TIME, so the contract runs with a 300 ms deadline and waits past it to make reservations overdue.
+  runStoreContract('redis', (o) => make({ deadlineMs: 300, ...o }), {
+    listKeys: keys,
+    sweepOverdue: async (s) => {
+      await new Promise((r) => setTimeout(r, 350));
+      return s.sweep(0);
+    },
+  });
+
+  test('sweep ignores the caller clock: a fast instance clock does not sweep a live reservation or free its slot', async () => {
+    const swept: string[] = [];
+    const s = await make({ onSwept: (ids) => swept.push(...ids) });
+    const slot = { limit: 'st', key: 'ty:{acme}:st:st:k', max: 1 };
+    expect((await s.admit(plan({ id: 'live', streamSlots: [slot] }))).admitted).toBe(true);
+    expect(await s.sweep(Date.now() + 365 * 86_400_000)).toBe(0);
+    expect(swept).toEqual([]);
+    expect((await s.admit(plan({ id: 'second', streamSlots: [slot] }))).failed?.kind).toBe('streams');
+    expect(await s.settle('live', 0)).toBe('settled');
+  });
+
+  test('NOSCRIPT after SCRIPT FLUSH falls back to EVAL', async () => {
+    const s = await make();
+    const key = budgetKey('acme', 'org', 'v', null);
+    const p = plan({ reservations: [{ budget: 'org', key, limitMicroUsd: 1_000, estMicroUsd: 10, enforce: true, resetsAt: null }] });
+    expect((await s.admit(p)).admitted).toBe(true);
+    await client.scriptFlush();
+    expect((await s.admit({ ...p, id: 'other' })).admitted).toBe(true);
+    expect(await s.settle('other', 3)).toBe('settled');
+    expect((await s.snapshot([key]))[key]).toEqual({ spent: 3, reserved: 10 });
+  });
+
+  test('taint set and budget keys carry a TTL; money fields are integers', async () => {
+    const s = await make();
+    const tk = taintKey('acme', 's1');
+    await s.admit(plan({ taint: { key: tk, check: [], add: [{ rule: 'gh', valueHmac: 'h1' }], ttlMs: 60_000 } }));
+    const ttl = await client.pTTL(tk);
+    expect(ttl).toBeGreaterThan(59_000);
+    expect(ttl).toBeLessThanOrEqual(60_000);
+    const bk = budgetKey('acme', 'd', 'v', '2026-11-02');
+    const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
+    await s.admit(plan({ reservations: [{ budget: 'd', key: bk, limitMicroUsd: 10_000_000_000_000, estMicroUsd: 9_007_199_254_740, enforce: true, resetsAt }] }));
+    expect(await client.hGet(bk, 'r')).toBe('9007199254740');
+    const exp = await client.pTTL(bk);
+    expect(exp).toBeGreaterThan(3_600_000 + 86_000_000);
+    const sk = budgetKey('acme', 'seeded', 'v', null);
+    await s.seed([{ key: sk, spentMicroUsd: 5, ttlMs: 60_000 }]);
+    expect(await client.pTTL(sk)).toBeGreaterThan(59_000);
+    await s.seed([{ key: sk, spentMicroUsd: 5, ttlMs: 1_000 }]);
+    expect(await client.pTTL(sk)).toBeGreaterThan(59_000);
+  });
+
+  test('S-V2-1: session budget keys and session markers get the idle TTL from each admit (default 24 h), not 30 days', async () => {
+    const s = await make();
+    const key = budgetKey('acme', 'session', 's1', null);
+    const marker = sessionKey('acme', 's1');
+    const level = { budget: 'session', key, limitMicroUsd: 1_000_000, estMicroUsd: 10, enforce: true, resetsAt: null };
+    const ns = { limit: 'new-sessions', markerKey: marker, key: newSessionsKey('acme', 'k1'), emissionMs: 3_600, burst: 1_000, ttlMs: 3_600_000 };
+    await s.admit(plan({ sessionIdleTtlMs: 3_600_000, reservations: [level], newSession: ns }));
+    for (const k of [key, marker]) {
+      const ttl = await client.pTTL(k);
+      expect(ttl).toBeGreaterThan(3_590_000);
+      expect(ttl).toBeLessThanOrEqual(3_600_000);
+    }
+    const other = budgetKey('acme', 'session', 's2', null);
+    await s.admit(plan({ reservations: [{ ...level, key: other }] }));
+    const ttl = await client.pTTL(other);
+    expect(ttl).toBeGreaterThan(86_390_000);
+    expect(ttl).toBeLessThanOrEqual(86_400_000);
+  });
+
+  test('GCRA runs on the Redis clock, not the caller nowMs', async () => {
+    const s = await make();
+    const rate = { limit: 'rpm', key: gcraKey('acme', 'rpm', 'k'), emissionMs: 60_000, burst: 1, quantity: 1 };
+    expect((await s.admit(plan({ rateChecks: [rate] }), 0)).admitted).toBe(true);
+    expect((await s.admit(plan({ rateChecks: [rate] }), Date.now() + 3_600_000)).failed?.kind).toBe('rate');
+  });
+
+  test('sweep lock: SET NX PX, one holder at a time', async () => {
+    await make();
+    const a = redisSweepLock(client, { tenant: 'acme', instance: 'i1' });
+    const b = redisSweepLock(client, { tenant: 'acme', instance: 'i2' });
+    expect(await a.acquire()).toBe(true);
+    expect(await b.acquire()).toBe(false);
+    expect(await client.get('ty:{acme}:sweep-lock')).toBe('i1');
+    const ttl = await client.pTTL('ty:{acme}:sweep-lock');
+    expect(ttl).toBeGreaterThan(24_000);
+    expect(ttl).toBeLessThanOrEqual(25_000);
+  });
+});

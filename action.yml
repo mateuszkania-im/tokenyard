@@ -1,0 +1,39 @@
+name: tokenyard policy replay
+description: Replays recorded coding-agent traffic against a pull request's policy change and comments the cost, reroutes, blocks and cut sessions.
+author: Mateusz Kania
+branding:
+  icon: git-pull-request
+  color: blue
+inputs:
+  policy-dir:
+    description: Directory with policy.yaml, prices.yaml and keys.yaml, as it is in the pull request.
+    required: true
+  base-ref:
+    description: Git ref whose copy of policy-dir is the base policy. Default is the pull request base branch.
+    required: false
+    default: ${{ github.base_ref }}
+  traces:
+    description: Merged trace export (tokenyard traces export), a path in the checkout or an https URL.
+    required: true
+  traces-token:
+    description: Optional read-only token for the traces URL. Not read in pull requests from forks.
+    required: false
+    default: ''
+  since:
+    description: Duration such as 7d, or an ISO time. Earlier records only seed budget windows. Default is the whole export.
+    required: false
+    default: ''
+  comment:
+    description: Post or update the sticky pull request comment. Pull requests from forks only get the job summary.
+    required: false
+    default: 'true'
+  token:
+    description: GitHub token used to post the comment (the job needs pull-requests write permission).
+    required: false
+    default: ${{ github.token }}
+outputs:
+  replay-json:
+    description: Path of replay.json, for an upload-artifact step.
+runs:
+  using: node24
+  main: bin/tokenyard.mjs

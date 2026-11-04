@@ -1,0 +1,83 @@
+{
+  "name": "@mateuszkania-im/tokenyard",
+  "version": "0.1.0",
+  "description": "LLM gateway for coding-agent traffic",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mateuszkania-im/tokenyard.git"
+  },
+  "homepage": "https://github.com/mateuszkania-im/tokenyard#readme",
+  "bugs": {
+    "url": "https://github.com/mateuszkania-im/tokenyard/issues"
+  },
+  "keywords": [
+    "llm",
+    "gateway",
+    "proxy",
+    "claude-code",
+    "codex",
+    "budgets",
+    "policy-as-code",
+    "observability",
+    "opentelemetry"
+  ],
+  "type": "module",
+  "bin": {
+    "tokenyard": "bin/tokenyard.mjs"
+  },
+  "files": [
+    "bin",
+    "action.yml",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:mutation": "stryker run",
+    "test:pack": "node test/pack/pack.smoke.mjs",
+    "test:redis": "node scripts/local-redis.mjs vitest run --no-file-parallelism test/limits/redis-store.test.ts test/limits/budget-proof.test.ts test/edge/taint.test.ts test/security/a10-duplicate-admit.test.ts test/security/a9-r11-latch-scope.test.ts test/security/s-v2-1-session-churn.test.ts test/property/store.property.test.ts test/property/admit-concurrency.property.test.ts",
+    "test:fuzz": "node scripts/local-redis.mjs env TOKENYARD_FUZZ=1 vitest run --no-file-parallelism test/fuzz test/property test/policy/decide.property.test.ts test/security/s-v4-1-sse-long-line.test.ts",
+    "test:chaos": "node scripts/local-redis.mjs env TOKENYARD_CHAOS=1 vitest run --no-file-parallelism test/chaos",
+    "bench": "tsx bench/run.ts",
+    "soak": "tsx bench/soak.ts",
+    "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
+    "live": "node --env-file=.env bin/tokenyard.mjs live",
+    "check:secrets": "node scripts/check-no-secrets.mjs",
+    "check": "npm run typecheck && npm run lint && npm run check:bundle && npm run check:secrets && npm run bench:check"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
+    "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^5.1.0",
+    "commander": "^15.0.0",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.10.2",
+    "oxlint": "^1.90.0",
+    "picocolors": "^1.1.1",
+    "redis": "^6.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "undici": "^7.30.1",
+    "vitest": "^5.1.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  }
+}

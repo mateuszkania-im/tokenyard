@@ -1,0 +1,131 @@
+name: ci
+on:
+  push:
+  pull_request:
+  # Mutation testing is slow (see docs/quality-gates.md); it runs only when started by hand.
+  workflow_dispatch:
+# Least privilege: every job only reads the repository. There is deliberately no publish job; Mateusz publishes by hand.
+permissions:
+  contents: read
+# A newer push to the same ref cancels the superseded run. The group keys on the event too, so a push never cancels a
+# run started by hand (the mutation job takes up to two hours), and a run started by hand is never cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+env:
+  # Third-party actions are pinned to full commit SHAs (version in the trailing comment):
+  #   actions/checkout    3d3c42e5aac5ba805825da76410c181273ba90b1  v7.0.1
+  #   actions/setup-node  949feb2413d6458794dcd2491c4babbbce0c15c1  v7.1.0
+  CI: true
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux and Windows on the oldest supported Node (engines: >=20.19), the current LTS and the newest.
+        os: [ubuntu-latest, windows-latest]
+        node: ['20.19', '22', '24']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # typecheck, lint, check:bundle, check:secrets and bench:check (README numbers match bench/results.json)
+      - run: npm run check
+      # Vitest 5 runs on Node ^22.12 or 24 only (its engines; on 20 its reporter needs Map.groupBy), so Node 20.19,
+      # the oldest the package supports, runs the shipped bundle instead: packed, installed and run (test:pack).
+      - if: matrix.node != '20.19'
+        run: npm test
+      - if: matrix.node == '20.19'
+        run: npm run test:pack
+      # The published tarball, scanned entry by entry (the files list decides what ships, not git).
+      - name: pack and scan the npm tarball
+        shell: bash
+        run: t=$(npm pack --silent) && test -f "$t" && npm run check:secrets -- "$t"
+      # Registry signatures and provenance of the installed (dev) dependencies.
+      - name: verify registry signatures
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22'
+        run: npm audit signatures
+
+  # Store contract and the G4 budget proof on a real Redis. The runner has Docker, so the tests go through
+  # scripts/local-redis.mjs: a redis:7 container published on 127.0.0.1 only, on a random port, with a random
+  # password carried in REDIS_URL, removed afterwards. A `services:` container would publish a fixed port with
+  # whatever password the workflow file holds; this way nothing but the job can reach it and no secret sits in the YAML.
+  redis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:redis
+
+  # The installed package works: pack, install the tarball into an empty project, run the command.
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - run: npm run test:pack
+
+  # Line and branch coverage with the per-module thresholds in vitest.config.ts.
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+
+  # Stryker on decide, the budget accounting, the estimator and the scanner; fails under the break threshold.
+  mutation:
+    if: github.event_name == 'workflow_dispatch'
+    # Its own group, never cancelled: a second manual run's mutation job on the ref waits for this one.
+    concurrency:
+      group: mutation-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:mutation
+
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: sh test/compose.smoke.sh

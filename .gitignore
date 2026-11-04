@@ -5,4 +5,8 @@ node_modules/
 dist/
 coverage/
 .superpowers/
-traces/
+/traces/
+.live/
+bench/tmp/
+reports/
+.stryker-tmp/

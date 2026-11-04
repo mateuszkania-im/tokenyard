@@ -1,0 +1,15 @@
+apiVersion: tokenyard/v1
+kind: Policy
+metadata: { name: fixture }
+pricing: ./prices.yaml
+keys: ./keys.yaml
+providers:
+  anthropic: { format: anthropic, baseUrl: https://api.anthropic.com, credential: { env: "BAD-NAME" } }
+tenants:
+  acme: { teams: [web] }
+routes:
+  - { name: all, match: {}, chain: [anthropic] }
+budgets:
+  - { name: org-month, scope: tenant, window: month, usd: 100, onExceed: block }
+failure:
+  counterStoreDown: { rateLimits: open, budgets: closed }

@@ -1,0 +1,23 @@
+# Demo OpenTelemetry Collector: receives OTLP/HTTP spans from the gateway and forwards them to Jaeger over OTLP/gRPC.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true # demo network only
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]

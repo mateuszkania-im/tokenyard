@@ -1,0 +1,139 @@
+// Price table (spec 6.3): USD per million tokens, so tokens times price is micro-USD. Pure: parses text, no I/O.
+import { parseYamlSafe } from '../policy/safe-yaml.js';
+import { z } from 'zod';
+
+const rate = z.number().nonnegative();
+const tokens = z.number().int().positive();
+const provenance = { source: z.string().min(1), retrieved: z.string().min(1) };
+
+const tierSchema = z.strictObject({
+  aboveInputTokens: z.number().int().nonnegative(),
+  input: rate,
+  output: rate,
+  cacheWrite5m: rate,
+  cacheWrite1h: rate,
+  cacheRead: rate,
+});
+
+/** Fast mode (`speed: "fast"`) prices: they replace the base prices and tiers across the whole context window. */
+const fastSchema = z.strictObject({
+  input: rate,
+  output: rate,
+  cacheWrite5m: rate,
+  cacheWrite1h: rate,
+  cacheRead: rate,
+  ...provenance,
+});
+
+/**
+ * Prices of an OpenAI service tier (`service_tier` in the request, for example `priority` or `flex`), from the pricing
+ * page: they replace the base prices, with their own long-context tiers when the page lists them.
+ */
+const serviceTierSchema = z.strictObject({
+  input: rate,
+  output: rate,
+  cacheWrite5m: rate,
+  cacheWrite1h: rate,
+  cacheRead: rate,
+  tiers: z.array(tierSchema).optional(),
+  ...provenance,
+});
+
+const modelSchema = z.strictObject({
+  input: rate,
+  output: rate,
+  cacheWrite5m: rate,
+  cacheWrite1h: rate,
+  cacheRead: rate,
+  maxContextTokens: tokens,
+  maxOutputTokens: tokens,
+  tiers: z.array(tierSchema).optional(),
+  fast: fastSchema.optional(),
+  serviceTiers: z.record(z.string(), serviceTierSchema).optional(),
+  ...provenance,
+});
+
+const tableSchema = z.strictObject({
+  version: z.coerce.string().min(1),
+  models: z.record(z.string(), modelSchema),
+  modifiers: z.record(z.string(), z.number().positive()).default({}),
+  serverTools: z
+    .record(z.string(), z.strictObject({ perUseUsd: rate, maxIterations: z.number().int().positive(), ...provenance }))
+    .default({}),
+});
+
+export type ModelPrice = z.infer<typeof modelSchema>;
+export type ServiceTierPrice = z.infer<typeof serviceTierSchema>;
+export type PriceTable = z.infer<typeof tableSchema>;
+
+/** Parses and validates a price table. A model without `maxContextTokens` or `maxOutputTokens` is an error (the worst-case bound needs them). */
+export function parsePriceTable(text: string): PriceTable {
+  const raw: unknown = parseYamlSafe(text);
+  // Tables are keyed by user text; a `__proto__` key would set a prototype instead of an entry, so refuse it outright.
+  if (typeof raw === 'object' && raw !== null) {
+    for (const section of ['models', 'modifiers', 'serverTools']) {
+      const map = (raw as Record<string, unknown>)[section];
+      if (typeof map === 'object' && map !== null && Object.hasOwn(map, '__proto__')) {
+        throw new Error(`invalid price table: ${section}: key __proto__ is not allowed`);
+      }
+    }
+    const models = (raw as Record<string, unknown>).models;
+    if (typeof models === 'object' && models !== null) {
+      for (const [id, m] of Object.entries(models)) {
+        const tiers = typeof m === 'object' && m !== null ? (m as Record<string, unknown>).serviceTiers : undefined;
+        if (typeof tiers === 'object' && tiers !== null && Object.hasOwn(tiers, '__proto__')) {
+          throw new Error(`invalid price table: models.${id}.serviceTiers: key __proto__ is not allowed`);
+        }
+      }
+    }
+  }
+  const r = tableSchema.safeParse(raw);
+  if (!r.success) {
+    const issues = r.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`);
+    throw new Error(`invalid price table: ${issues.join('; ')}`);
+  }
+  return r.data;
+}
+
+/** A snapshot date after the model id: `-20261001` (Anthropic) or `-2026-03-17` (OpenAI). */
+const DATE_SUFFIX = /^-(?:\d{8}|\d{4}-\d{2}-\d{2})$/;
+
+/**
+ * Exact id, else the table id followed only by a snapshot date, so dated ids resolve. Any other suffix is another
+ * model (`gpt-5.4-pro` is not `gpt-5.4`), never priced as its base: it is unpriced.
+ */
+export function lookupModel(t: PriceTable, model: string): { id: string; price: ModelPrice } | null {
+  // Own properties only: `constructor` and friends must never resolve to a non-price object.
+  if (Object.hasOwn(t.models, model)) {
+    const exact = t.models[model];
+    if (exact) return { id: model, price: exact };
+  }
+  let best: string | null = null;
+  for (const id of Object.keys(t.models)) {
+    if (model.startsWith(`${id}-`) && DATE_SUFFIX.test(model.slice(id.length)) && (best === null || id.length > best.length)) best = id;
+  }
+  const price = best === null ? undefined : t.models[best];
+  return best !== null && price ? { id: best, price } : null;
+}
+
+/**
+ * Whose server tool a request names: the same tool name means another tool, with its own fee, on each provider (an
+ * OpenAI `web_search` is not Anthropic's). The Responses surface is OpenAI's; every other surface is Anthropic's.
+ */
+export type ServerToolFormat = 'anthropic' | 'openai';
+export const serverToolFormat = (surface: string): ServerToolFormat => (surface === 'openai-responses' ? 'openai' : 'anthropic');
+
+/** Price table key of a server tool: the name for Anthropic tools, `openai/<name>` for OpenAI tools (A2-3). */
+export const serverToolPriceKey = (format: ServerToolFormat, name: string): string => (format === 'openai' ? `openai/${name}` : name);
+
+/** The price of server tool `name` (date suffix already dropped) for `format`, own entries only; undefined when unpriced. */
+export function serverToolPrice(t: PriceTable, format: ServerToolFormat, name: string): PriceTable['serverTools'][string] | undefined {
+  const key = serverToolPriceKey(format, name);
+  return Object.hasOwn(t.serverTools, key) ? t.serverTools[key] : undefined;
+}
+
+/** The model's prices for service tier `tier`, or null when the table lists none (own entries only). */
+export function serviceTierPrice(m: ModelPrice, tier: string): ServiceTierPrice | null {
+  const tiers = m.serviceTiers;
+  return tiers !== undefined && Object.hasOwn(tiers, tier) ? (tiers[tier] ?? null) : null;
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tokenyard cost report</title>
+<style>:root{color-scheme:light dark;--bg:#fff;--fg:#1b1f24;--muted:#5b6570;--line:#d8dde3;--bar:#2f6fed;--head:#f3f5f8}
+@media (prefers-color-scheme: dark){:root{--bg:#14171b;--fg:#e6e9ed;--muted:#97a1ad;--line:#2d333b;--bar:#6c9bff;--head:#1c2026}}
+body{margin:0;padding:24px 16px;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif}
+main{max-width:1100px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+p{margin:0 0 16px;color:var(--muted)}
+.wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:var(--head);font-weight:600}
+td.n,th.n{text-align:right}
+tfoot td{font-weight:600;border-top:2px solid var(--line)}
+.bar{display:inline-block;height:8px;border-radius:4px;background:var(--bar);vertical-align:middle;margin-left:8px}</style>
+</head>
+<body>
+<main>
+<h1>tokenyard cost report</h1>
+<p>111 requests grouped by session. Costs are priced at the recorded prices; unpriced requests count as zero.</p>
+<div class="wrap">
+<table>
+<thead><tr><th>session</th><th class="n">requests</th><th class="n">cost</th><th class="n">share</th><th class="n">input</th><th class="n">output</th><th class="n">cache read</th><th class="n">cache write</th></tr></thead>
+<tbody>
+<tr><td>6f5aeb92f385d71fc8d56c60d8fe2b4c</td><td class="n">7</td><td class="n">$0.1713</td><td class="n">25.3%<span class="bar" style="width:25px"></span></td><td class="n">14</td><td class="n">1930</td><td class="n">135402</td><td class="n">55388</td></tr>
+<tr><td>1ba65ec82df7198790a3435f0b43b210</td><td class="n">2</td><td class="n">$0.1588</td><td class="n">23.4%<span class="bar" style="width:23px"></span></td><td class="n">4</td><td class="n">190</td><td class="n">29540</td><td class="n">29824</td></tr>
+<tr><td>57f3b9c33cae43ae766f2b3e3dbbff05</td><td class="n">2</td><td class="n">$0.1020</td><td class="n">15.1%<span class="bar" style="width:15px"></span></td><td class="n">4</td><td class="n">334</td><td class="n">18089</td><td class="n">18333</td></tr>
+<tr><td>848780921684784837f8bdb985341719</td><td class="n">5</td><td class="n">$0.0990</td><td class="n">14.6%<span class="bar" style="width:15px"></span></td><td class="n">10</td><td class="n">1151</td><td class="n">104325</td><td class="n">30827</td></tr>
+<tr><td>bfd7282bae6f58889d1a3bf075a27e16</td><td class="n">12</td><td class="n">$0.0746+11 unpriced</td><td class="n">11.0%<span class="bar" style="width:11px"></span></td><td class="n">2</td><td class="n">79</td><td class="n">0</td><td class="n">29529</td></tr>
+<tr><td>2a8a2620f91b72cd9f98a2e59f0744cc</td><td class="n">4</td><td class="n">$0.0165</td><td class="n">2.4%<span class="bar" style="width:2px"></span></td><td class="n">14672</td><td class="n">542</td><td class="n">40704</td><td class="n">0</td></tr>
+<tr><td>9691b54aeba2ae0cdb2b92a3704b2270</td><td class="n">3</td><td class="n">$0.0134</td><td class="n">2.0%<span class="bar" style="width:2px"></span></td><td class="n">13711</td><td class="n">259</td><td class="n">25856</td><td class="n">0</td></tr>
+<tr><td>dba270895bfcc6fdf20a4c4830e10825</td><td class="n">14</td><td class="n">$0.0124+11 unpriced</td><td class="n">1.8%<span class="bar" style="width:2px"></span></td><td class="n">8</td><td class="n">205</td><td class="n">89006</td><td class="n">564</td></tr>
+<tr><td>b860a85ceb3bda8450d10172c05e0196</td><td class="n">17</td><td class="n">$0.0122</td><td class="n">1.8%<span class="bar" style="width:2px"></span></td><td class="n">2062</td><td class="n">7397</td><td class="n">277800</td><td class="n">43981</td></tr>
+<tr><td>ea96265410b2eb37cdd9b32c0668dfee</td><td class="n">15</td><td class="n">$0.0102</td><td class="n">1.5%<span class="bar" style="width:2px"></span></td><td class="n">32</td><td class="n">6534</td><td class="n">196102</td><td class="n">39727</td></tr>
+<tr><td>6f358c7dcfd946bc90cad308f7f13c77</td><td class="n">8</td><td class="n">$0.0026+1 unpriced</td><td class="n">0.4%<span class="bar" style="width:0px"></span></td><td class="n">14</td><td class="n">871</td><td class="n">136114</td><td class="n">6331</td></tr>
+<tr><td>(none)</td><td class="n">13</td><td class="n">$0.0022+8 unpriced</td><td class="n">0.3%<span class="bar" style="width:0px"></span></td><td class="n">20</td><td class="n">0</td><td class="n">54080</td><td class="n">13550</td></tr>
+<tr><td>fa9d7f96fba2df67c476bca1e618f83c</td><td class="n">1</td><td class="n">$0.0022</td><td class="n">0.3%<span class="bar" style="width:0px"></span></td><td class="n">2</td><td class="n">4</td><td class="n">0</td><td class="n">17235</td></tr>
+<tr><td>b0f4122e61a099010f63d6814689439c</td><td class="n">6</td><td class="n">$0.0000+6 unpriced</td><td class="n">0.0%<span class="bar" style="width:0px"></span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td>76767f133e29d9814db25005dbfa2157</td><td class="n">1</td><td class="n">$0.0000+1 unpriced</td><td class="n">0.0%<span class="bar" style="width:0px"></span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td>a0503416cdb5692acccb302ff1af985c</td><td class="n">1</td><td class="n">$0.0000+1 unpriced</td><td class="n">0.0%<span class="bar" style="width:0px"></span></td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+</tbody>
+<tfoot><tr><td>total</td><td class="n">111</td><td class="n">$0.6774+39 unpriced</td><td class="n"></td><td class="n">30555</td><td class="n">19496</td><td class="n">1107018</td><td class="n">285289</td></tr></tfoot>
+</table>
+</div>
+</main>
+</body>
+</html>

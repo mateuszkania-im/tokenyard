@@ -1,0 +1,5 @@
+{"model":"claude-opus-5-5","max_tokens":512,"tools":[
+ {"name":"get_weather","description":"d","strict":true,"input_schema":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"],"additionalProperties":false}},
+ {"name":"deferred_tool","description":"loaded on demand","defer_loading":true,"input_schema":{"type":"object","properties":{}}},
+ {"type":"tool_search_tool_regex_20251119","name":"tool_search_tool_regex"}
+],"messages":[{"role":"user","content":"x"}]}

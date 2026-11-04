@@ -1,0 +1,2 @@
+- {"hash":"457c6a6848a0bbde7277ab01d5b82d9dbd88e96ca457819589954be69b69b1ad","keyId":"key_457c6a68","tenant":"acme","team":"platform","name":"alice","kind":"developer","billing":"api"}
+- {"hash":"f48b30ba31a2fa2e20af0d4ecf328e45271b675b7e4606dab8f493efa0554358","keyId":"key_f48b30ba","tenant":"acme","team":"web","name":"ci-bot","kind":"service","billing":"api"}

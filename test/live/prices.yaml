@@ -1,0 +1,168 @@
+# USD per million tokens. Every value comes from the pages named in `source`, retrieved on the date shown.
+# Pricing: https://platform.claude.com/docs/en/about-claude/pricing
+# Context window and max output: https://platform.claude.com/docs/en/about-claude/models/overview
+version: 2026-11-03
+models:
+  claude-fable-5-1:
+    input: 10
+    output: 50
+    cacheWrite5m: 12.5
+    cacheWrite1h: 20
+    cacheRead: 0.25
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  claude-opus-5-5:
+    input: 4
+    output: 20
+    cacheWrite5m: 5
+    cacheWrite1h: 8
+    cacheRead: 0.2
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    # Fast mode (request body `speed: "fast"`): $8 input and $40 output per MTok across the full context window.
+    # Cache prices are the page's prompt caching multipliers on top of the fast input price, as the page states:
+    # 5m write 1.25x, 1h write 2x, cache read 0.05x on Opus 5.5.
+    fast:
+      input: 8
+      output: 40
+      cacheWrite5m: 10
+      cacheWrite1h: 16
+      cacheRead: 0.4
+      source: https://platform.claude.com/docs/en/about-claude/pricing (Fast mode pricing, Prompt caching) and https://platform.claude.com/docs/en/build-with-claude/fast-mode
+      retrieved: 2026-11-02
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  claude-sonnet-5-5:
+    input: 2
+    output: 10
+    cacheWrite5m: 2.5
+    cacheWrite1h: 4
+    cacheRead: 0.1
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  claude-haiku-5-5:
+    input: 0.1
+    output: 0.5
+    cacheWrite5m: 0.125
+    cacheWrite1h: 0.2
+    cacheRead: 0.01
+    maxContextTokens: 1000000
+    maxOutputTokens: 128000
+    # A prompt over 100,000 tokens (input, cache reads and cache writes together) pays the higher prices.
+    tiers:
+      - aboveInputTokens: 100000
+        input: 0.5
+        output: 2.5
+        cacheWrite5m: 0.625
+        cacheWrite1h: 1
+        cacheRead: 0.05
+    source: https://platform.claude.com/docs/en/about-claude/pricing and https://platform.claude.com/docs/en/about-claude/models/overview
+    retrieved: 2026-11-02
+  # OpenAI models for Codex (Responses API). The pricing page lists no separate cache write price for these models, so
+  # cacheWrite5m and cacheWrite1h equal input; cacheRead is the page's cached input price. Models with distinct cache
+  # write prices (gpt-6.x, gpt-5.6.x) are left out until the usage fields for those writes are confirmed. Long-context
+  # rows apply above 272K input tokens, as the pricing page states. Pricing: https://developers.openai.com/api/docs/pricing
+  # Context window and max output: https://developers.openai.com/api/docs/models/<model id>
+  gpt-5.5:
+    input: 5
+    output: 30
+    cacheWrite5m: 5
+    cacheWrite1h: 5
+    cacheRead: 0.5
+    maxContextTokens: 1050000
+    maxOutputTokens: 128000
+    tiers:
+      - aboveInputTokens: 272000
+        input: 10
+        output: 45
+        cacheWrite5m: 10
+        cacheWrite1h: 10
+        cacheRead: 1
+    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.5
+    retrieved: 2026-11-03
+  gpt-5.4:
+    input: 2.5
+    output: 15
+    cacheWrite5m: 2.5
+    cacheWrite1h: 2.5
+    cacheRead: 0.25
+    maxContextTokens: 1050000
+    maxOutputTokens: 128000
+    tiers:
+      - aboveInputTokens: 272000
+        input: 5
+        output: 22.5
+        cacheWrite5m: 5
+        cacheWrite1h: 5
+        cacheRead: 0.5
+    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4
+    retrieved: 2026-11-03
+  gpt-5.4-mini:
+    input: 0.75
+    output: 4.5
+    cacheWrite5m: 0.75
+    cacheWrite1h: 0.75
+    cacheRead: 0.075
+    maxContextTokens: 400000
+    maxOutputTokens: 128000
+    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-mini
+    retrieved: 2026-11-03
+  gpt-5.4-nano:
+    input: 0.2
+    output: 1.25
+    cacheWrite5m: 0.2
+    cacheWrite1h: 0.2
+    cacheRead: 0.02
+    maxContextTokens: 400000
+    maxOutputTokens: 128000
+    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.4-nano
+    retrieved: 2026-11-03
+  gpt-5.3-codex:
+    input: 1.75
+    output: 14
+    cacheWrite5m: 1.75
+    cacheWrite1h: 1.75
+    cacheRead: 0.175
+    maxContextTokens: 400000
+    maxOutputTokens: 128000
+    source: https://developers.openai.com/api/docs/pricing and https://developers.openai.com/api/docs/models/gpt-5.3-codex
+    retrieved: 2026-11-03
+modifiers:
+  # inference_geo "us": 1.1x on every token category, tiers included (Claude 4.6 and later).
+  inferenceGeoUs: 1.1
+# Server tools, keyed by tool type without its date suffix (web_search_20250305 is web_search).
+# maxIterations is the server-side sampling loop limit before `pause_turn` ("The default limit is 10
+# iterations for each request"). Other server tools are unpriced until added here.
+# OpenAI tools (the Responses surface) are keyed openai/<type>: the same name is another tool with its own fee there.
+serverTools:
+  web_search:
+    perUseUsd: 0.01 # $10 per 1,000 searches
+    maxIterations: 10
+    source: https://platform.claude.com/docs/en/about-claude/pricing (Web search tool) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
+    retrieved: 2026-11-02
+  # Tool search runs on Anthropic's servers in the same sampling loop; "Tool search isn't metered as a separate server
+  # tool" and the definitions it loads count as input tokens, so there is no per-use fee. The loop limit is the same
+  # 10 iterations as above, so the reservation covers 10 sampling iterations.
+  tool_search_tool_regex:
+    perUseUsd: 0
+    maxIterations: 10
+    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
+    retrieved: 2026-11-02
+  tool_search_tool_bm25:
+    perUseUsd: 0
+    maxIterations: 10
+    source: https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool (Usage) and https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons (pause_turn)
+    retrieved: 2026-11-02
+  # OpenAI web search on the Responses surface: "$10.00 / 1k calls + Search content tokens billed at model rates"
+  # (the content tokens arrive in usage as input tokens). Each call is a web_search_call output item, counted at
+  # settlement. OpenAI documents no loop limit; max_tool_calls caps the calls, so the reservation covers
+  # max_tool_calls + 1 sampling iterations (maxIterations 1 is the floor).
+  openai/web_search:
+    perUseUsd: 0.01 # $10 per 1,000 calls
+    maxIterations: 1
+    source: https://developers.openai.com/api/docs/pricing (Built-in tools, Web search)
+    retrieved: 2026-11-03
