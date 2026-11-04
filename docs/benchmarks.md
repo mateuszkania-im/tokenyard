@@ -364,6 +364,17 @@ What this shows, and what it does not:
 
 So `--workers` is the right remedy and moves the 500-stream rows by one to two orders of magnitude, but this benchmark on one laptop that also runs the mock, the load generator and Redis cannot show the SLO met at 500 streams for streaming. A fair test needs the gateway on its own machine (or cores) with the load generator, the mock and Redis elsewhere; that has not been run.
 
+#### After the hot-path changes (0.2.1, measured 2026-11-04)
+
+Targeted `bench/overhead.ts` runs, 0.2.0 and 0.2.1 alternating in the same session, Redis store at 500 streams; p50 / p99 in ms, gateway-measured then client-side:
+
+| Row | 0.2.0 (2 runs) | 0.2.1 (2 runs) |
+|---|---|---|
+| Streaming 500 tokens, 3 workers | 1.94 / 25.59; 4.83 / 61.15 and 1.69 / 27.31; 3.73 / 59.09 (missed, missed) | 1.51 / 9.11; 3.01 / 20.05 (met) and 1.91 / 25.8; 4.58 / 59.53 (missed) |
+| 150 KB body, 3 workers | 5.13 / 26.41; 14.08 / 68.68 and 5.16 / 27.87; 14.16 / 60.63 (missed) | 7.31 / 85.96; 27.44 / 158.74 and 5.27 / 25.97; 14.86 / 65.53 (missed) |
+
+Where the remaining time goes: a bare undici to node:http passthrough with no policy, scan, tap or traces costs 2.1 ms of CPU per streaming request at 100 streams, the gateway about 3.9 ms, so I/O alone is over half; at 500 streams per-chunk socket writes are 28.7% of busy main-thread time and stream internals about 16%, which only batching chunks (delaying tokens) could cut. The 150 KB row needs about 3.5 cores for 3 workers beside about 2.6 for the harness on an 8-performance-core laptop with a load average of 4 to 11 during the runs. The trace writer's per-write symlink checks (security finding S-FS-1) are about 5% and stay.
+
 ### Budget correctness (`bench/budget.ts`)
 
 The G4 scenario of the design spec (section 7.4) through the whole gateway: 1,000 requests, each on its own connection opened beforehand, sent at the same moment against one enforced $1 budget, with each actual cost drawn (seeded) between 0 and that request's limits by the mock. Run on both stores and both estimators. It records how many admit calls the store decided before the first settle, the most open reservations, admitted and rejected counts, final spend, the highest spent plus reserved after any admit, the largest overspend, final spend minus the sum of settled costs (lost updates) and the reservation left at the end.

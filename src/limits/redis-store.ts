@@ -156,7 +156,7 @@ export function createRedisStore(client: Client, o: { deadlineMs: number; onSwep
       }));
     },
 
-    // No TTL: the latch stays until an operator deletes the key, once the tokenizer factor is understood (README).
+    // No TTL: the latch stays until an operator deletes the key, once the tokenizer factor is understood (docs/security.md, Limitations).
     async latchBoundOff() {
       await client.sendCommand(['SET', r11LatchKey(), '1']);
     },

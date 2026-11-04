@@ -1,7 +1,7 @@
 // Spec 9.3 and 9.4: how exact each replay output is, and what the head policy changes against the base. Pure.
 
 /**
- * The exactness table of spec 9.3, verbatim. The README carries the same text (a test compares them), and every
+ * The exactness table of spec 9.3, verbatim. docs/replay.md carries the same text (a test compares them), and every
  * replay result lists its rows with whether they applied to that run.
  */
 export const EXACTNESS_TABLE = `| Output | Exactness | Why |

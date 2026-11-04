@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 (unreleased)
+
+### Performance
+
+- About 5 to 6% less gateway CPU per request on the hot paths, measured at 100 streams on Redis (streaming about 4.22 to 3.95-4.03 ms, 150 KB body about 7.35 to 6.89-7.07 ms): the upstream body is piped straight to the client with the usage tap on a `data` listener instead of a Transform tee; the SSE parser finds line ends with `indexOf`; compact `content_block_delta` events are counted without `JSON.parse` when the text needs no unescaping; simple escapes go into the secret scan's decoded view without a string per escape (0.571 to 0.466 ms per scan of a 150 KB body). Property tests hold the parser and the usage accumulator to frozen 0.2.0 copies for any byte split; the decoded views are identical. With 3 workers on Redis at 500 streams, streaming 500 tokens met the added-TTFB target in one of two runs (0.2.0 in neither); the 150 KB body still misses on the benchmark laptop (docs/benchmarks.md).
+
 ## Unreleased
 
 ### Docs
