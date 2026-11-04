@@ -21,6 +21,9 @@ export default {
   htmlReporter: { fileName: 'reports/mutation/mutation.html' },
   jsonReporter: { fileName: 'reports/mutation/mutation.json' },
   timeoutMS: 20_000,
+  // Two test runners: with Stryker's default (one per CPU, four on a GitHub runner), each with its own Vitest workers
+  // on the 1 MiB fuzz and scan bodies, the hosted runner was shut down a minute into the run, twice.
+  concurrency: 2,
   tempDirName: '.stryker-tmp',
   // Stryker rewrites the sandbox's tsconfig through the TypeScript JS API, which TypeScript 7 (the native compiler)
   // does not ship. tsconfig.json has no extends or references, so there is nothing to rewrite: point the option at a
