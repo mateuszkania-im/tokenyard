@@ -1,5 +1,7 @@
 # tokenyard
 
+[![ci](https://github.com/mateuszkania-im/tokenyard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/mateuszkania-im/tokenyard/actions/workflows/ci.yml)
+
 Policy CI for coding-agent traffic.
 
 tokenyard is an open-source LLM gateway in TypeScript for Claude Code, Codex and product AI features. In the request path it only does mechanism: it forwards the agent's bytes unchanged, enforces budgets, rate limits, model allowlists and secret guardrails, attributes every request to a tenant, team, developer key, repo, session, subagent and request class, and writes a decision trace. Outside the request path, the policy is a YAML file in git, and every pull request that changes it gets a comment computed by replaying recorded traffic through the proposed policy: which requests would route elsewhere, which would be blocked, which budgets would be hit, the cost delta, and how many agent sessions would have been cut off mid-task.
