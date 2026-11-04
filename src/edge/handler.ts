@@ -1,7 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import type { ReservedRecord, TraceRecord } from '../ledger/record.js';
 import type { CounterStore } from '../limits/store.js';
 import { guardrailKey, pseudonym } from '../guardrails/hmac.js';
@@ -23,7 +22,7 @@ import { COUNTED_RESPONSES_CALLS, parseResponsesJsonUsage, ResponsesUsageAccumul
 import { serverToolKey } from '../limits/estimator.js';
 import { serverToolFormat, serverToolPrice } from '../pricing/prices.js';
 import { SseParser } from '../stream/sse.js';
-import { createTee } from '../stream/tee.js';
+import { pipeWithTap } from '../stream/tee.js';
 import { extractCountTokensFeatures } from '../surfaces/anthropic-count-tokens.js';
 import { capTopLevelInteger, extractAnthropicFeatures, rewriteTopLevelModel } from '../surfaces/anthropic-messages.js';
 import { modelsListBody } from '../surfaces/anthropic-models.js';
@@ -1014,7 +1013,7 @@ async function handle(deps: GatewayDeps, failure: FailureState, runtime: Gateway
   // 11. Body: every chunk goes on unchanged before it is parsed (an API-mode error body aside); backpressure through pipeline.
   const tap = usageTap(surface, up, deps.bodyCapBytes);
   try {
-    await pipeline(clientBody, createTee(tap.onChunk), res);
+    await pipeWithTap(clientBody, res, tap.onChunk);
   } catch {
     // Client abort or upstream drop: the client sees exactly what upstream sent, truncated; nothing is synthesised.
   }

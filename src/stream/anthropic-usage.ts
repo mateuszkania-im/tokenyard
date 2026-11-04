@@ -101,6 +101,46 @@ function sumIterations(u: Usage, iterations: unknown): void {
   for (const k of Object.keys(sum) as Array<keyof Usage>) u[k] = Math.max(u[k], sum[k]);
 }
 
+const DELTA_HEAD = '{"type":"content_block_delta","index":';
+/** The delta kinds whose one string field the accumulator counts, as the API writes them (compact, in this key order). */
+const DELTA_FIELDS = ['{"type":"text_delta","text":"', '{"type":"thinking_delta","thinking":"', '{"type":"input_json_delta","partial_json":"'];
+
+/**
+ * The characters a `content_block_delta` event adds when its data is exactly the compact form the API and the mock
+ * write, `{"type":"content_block_delta","index":N,"delta":{"type":"text_delta","text":"..."}}` (or the thinking and
+ * input JSON deltas), with a string holding no quote, backslash or control character: then the string's characters
+ * are the decoded text, and JSON.parse would count the same length. -1 for anything else, which JSON.parse reads as
+ * before. About 95% of a streamed answer's events take this path (0.2.1).
+ */
+function compactDeltaChars(data: string): number {
+  if (!data.startsWith(DELTA_HEAD)) return -1;
+  let i = DELTA_HEAD.length;
+  const first = data.charCodeAt(i);
+  if (first === 0x30) i++;
+  else if (first >= 0x31 && first <= 0x39) {
+    i++;
+    for (let c = data.charCodeAt(i); c >= 0x30 && c <= 0x39; c = data.charCodeAt(i)) i++;
+  } else return -1;
+  if (!data.startsWith(',"delta":', i)) return -1;
+  i += 9;
+  let head = '';
+  for (const f of DELTA_FIELDS) {
+    if (data.startsWith(f, i)) {
+      head = f;
+      break;
+    }
+  }
+  if (head === '' || !data.endsWith('"}}')) return -1;
+  const from = i + head.length;
+  const to = data.length - 3;
+  if (to < from) return -1;
+  for (let k = from; k < to; k++) {
+    const c = data.charCodeAt(k);
+    if (c < 0x20 || c === 0x22 || c === 0x5c) return -1;
+  }
+  return to - from;
+}
+
 const emptyUsage = (): Usage => ({ input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 });
 
 export class AnthropicUsageAccumulator {
@@ -113,6 +153,11 @@ export class AnthropicUsageAccumulator {
   private extras: Extras = { fast: false, web: 0, geo: null };
 
   onEvent(e: SseEvent): void {
+    const n = compactDeltaChars(e.data);
+    if (n >= 0) {
+      this.chars += n;
+      return;
+    }
     let d: unknown;
     try {
       d = JSON.parse(e.data);

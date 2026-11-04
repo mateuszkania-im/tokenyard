@@ -48,6 +48,9 @@ const MEMBER = ': ';
 /** Values of these keys are message text: inside one message they are joined without a separator. */
 const PIECE_KEYS = new Set(['text', 'content', 'thinking']);
 const SIMPLE_ESCAPES: Record<number, string> = { 0x22: '"', 0x5c: '\\', 0x2f: '/', 0x62: '\b', 0x66: '\f', 0x6e: '\n', 0x72: '\r', 0x74: '\t' };
+/** The same escapes by byte: the code of the decoded character, or 0 for a byte that is not a simple escape. */
+const SIMPLE_ESCAPE_CODE = new Uint8Array(256);
+for (const [k, v] of Object.entries(SIMPLE_ESCAPES)) SIMPLE_ESCAPE_CODE[Number(k)] = v.charCodeAt(0);
 
 // ---- Scan work budget (S-V3-3) ------------------------------------------------------------------------------------
 // The scan's time and memory grow with the number of decoded runs (each string, token and escape is one or two) and
@@ -151,6 +154,12 @@ class View {
     if (text.length === 0) return;
     const at = this.open(text.length, bStart, bEnd, kind);
     for (let k = 0; k < text.length; k++) this.buf[at + k] = text.charCodeAt(k);
+  }
+
+  /** A run of one decoded character below 0x80 (a simple escape such as `\n`), without a string for it (0.2.1). */
+  pushByte(code: number, bStart: number, bEnd: number, kind: number): void {
+    const at = this.open(1, bStart, bEnd, kind);
+    this.buf[at] = code;
   }
 
   /** A run whose text is the body's own bytes `[bStart, bEnd)`. */
@@ -340,6 +349,13 @@ function buildViews(body: Buffer, start: number, end: number, messages: readonly
       const esc = nextBs(p);
       if (esc >= 0 && esc < quote) {
         if (esc > p) all.pushBytes(body, p, esc, PLAIN);
+        // A simple escape (`\n`, `\"`, `\\`, ...), most of them in source code: as decodeEscape decodes it.
+        const simple = esc + 1 < end ? (SIMPLE_ESCAPE_CODE[body[esc + 1] as number] as number) : 0;
+        if (simple !== 0) {
+          all.pushByte(simple, esc, esc + 2, ESCAPE);
+          p = esc + 2;
+          continue;
+        }
         const d = decodeEscape(body, esc, end);
         all.push(d.text, esc, d.next, ESCAPE);
         p = d.next;

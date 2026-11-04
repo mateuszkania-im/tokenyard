@@ -62,12 +62,16 @@ export class SseParser {
       this.skipLf = false;
     }
     let start = i;
+    // Next LF and next CR at or after the cursor, each found once per occurrence with indexOf (0.2.1: a JS loop over
+    // every byte was a third of the usage tap's time).
+    let lf = -2;
+    let cr = -2;
     while (i < chunk.length) {
+      if (lf !== -1 && lf < i) lf = chunk.indexOf(0x0a, i);
+      if (cr !== -1 && cr < i) cr = chunk.indexOf(0x0d, i);
+      if (lf === -1 && cr === -1) break;
+      i = lf === -1 ? cr : cr === -1 ? lf : Math.min(lf, cr);
       const b = chunk[i];
-      if (b !== 0x0a && b !== 0x0d) {
-        i++;
-        continue;
-      }
       this.finishLine(chunk, start, i, out);
       if (b === 0x0d) {
         // CR at the end of the chunk: an LF may start the next one; it belongs to this line end.

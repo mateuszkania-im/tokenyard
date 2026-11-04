@@ -2190,6 +2190,12 @@ function buildViews(body, start, end, messages, raw, budget2) {
       const esc2 = nextBs(p);
       if (esc2 >= 0 && esc2 < quote) {
         if (esc2 > p) all.pushBytes(body, p, esc2, PLAIN);
+        const simple = esc2 + 1 < end ? SIMPLE_ESCAPE_CODE[body[esc2 + 1]] : 0;
+        if (simple !== 0) {
+          all.pushByte(simple, esc2, esc2 + 2, ESCAPE);
+          p = esc2 + 2;
+          continue;
+        }
         const d = decodeEscape(body, esc2, end);
         all.push(d.text, esc2, d.next, ESCAPE);
         p = d.next;
@@ -2370,7 +2376,7 @@ function scanBody(body, lastTurn, rules, actionFor, salt, opts = {}) {
   const order = new Map(rules.map((r, i) => [r.id, i]));
   return hits.sort((a, b) => (order.get(a.rule) ?? 0) - (order.get(b.rule) ?? 0));
 }
-var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, SCAN_RUN_BUDGET, SCAN_MATCH_BUDGET, ScanBudgetError, ScanBudget, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter, SCAN_ESCAPE_BUDGET;
+var SEP, PLAIN, ESCAPE, SEPARATOR, BARE, MEMBER, PIECE_KEYS, SIMPLE_ESCAPES, SIMPLE_ESCAPE_CODE, SCAN_RUN_BUDGET, SCAN_MATCH_BUDGET, ScanBudgetError, ScanBudget, View, isWs, isStructural, keywordRegex, globalRegex, isDelimiter, SCAN_ESCAPE_BUDGET;
 var init_scan = __esm({
   "src/guardrails/scan.ts"() {
     "use strict";
@@ -2383,6 +2389,8 @@ var init_scan = __esm({
     MEMBER = ": ";
     PIECE_KEYS = /* @__PURE__ */ new Set(["text", "content", "thinking"]);
     SIMPLE_ESCAPES = { 34: '"', 92: "\\", 47: "/", 98: "\b", 102: "\f", 110: "\n", 114: "\r", 116: "	" };
+    SIMPLE_ESCAPE_CODE = new Uint8Array(256);
+    for (const [k, v] of Object.entries(SIMPLE_ESCAPES)) SIMPLE_ESCAPE_CODE[Number(k)] = v.charCodeAt(0);
     SCAN_RUN_BUDGET = 3 * 1024 * 1024;
     SCAN_MATCH_BUDGET = 64 * 1024;
     ScanBudgetError = class extends Error {
@@ -2457,6 +2465,11 @@ var init_scan = __esm({
         if (text2.length === 0) return;
         const at = this.open(text2.length, bStart, bEnd, kind);
         for (let k = 0; k < text2.length; k++) this.buf[at + k] = text2.charCodeAt(k);
+      }
+      /** A run of one decoded character below 0x80 (a simple escape such as `\n`), without a string for it (0.2.1). */
+      pushByte(code2, bStart, bEnd, kind) {
+        const at = this.open(1, bStart, bEnd, kind);
+        this.buf[at] = code2;
       }
       /** A run whose text is the body's own bytes `[bStart, bEnd)`. */
       pushBytes(body, bStart, bEnd, kind) {
@@ -31528,6 +31541,34 @@ function sumIterations(u, iterations) {
   }
   for (const k of Object.keys(sum)) u[k] = Math.max(u[k], sum[k]);
 }
+function compactDeltaChars(data) {
+  if (!data.startsWith(DELTA_HEAD)) return -1;
+  let i = DELTA_HEAD.length;
+  const first2 = data.charCodeAt(i);
+  if (first2 === 48) i++;
+  else if (first2 >= 49 && first2 <= 57) {
+    i++;
+    for (let c = data.charCodeAt(i); c >= 48 && c <= 57; c = data.charCodeAt(i)) i++;
+  } else return -1;
+  if (!data.startsWith(',"delta":', i)) return -1;
+  i += 9;
+  let head = "";
+  for (const f of DELTA_FIELDS) {
+    if (data.startsWith(f, i)) {
+      head = f;
+      break;
+    }
+  }
+  if (head === "" || !data.endsWith('"}}')) return -1;
+  const from = i + head.length;
+  const to = data.length - 3;
+  if (to < from) return -1;
+  for (let k = from; k < to; k++) {
+    const c = data.charCodeAt(k);
+    if (c < 32 || c === 34 || c === 92) return -1;
+  }
+  return to - from;
+}
 function parseAnthropicJsonUsage(body) {
   const none = {
     usage: null,
@@ -31552,12 +31593,14 @@ function parseAnthropicJsonUsage(body) {
   applyExtras(extras, d.usage);
   return { ...none, usage, source: "final", sawStop: true, responseModel, ...extrasOf(extras) };
 }
-var isObj2, num, emptyUsage, AnthropicUsageAccumulator;
+var isObj2, num, DELTA_HEAD, DELTA_FIELDS, emptyUsage, AnthropicUsageAccumulator;
 var init_anthropic_usage = __esm({
   "src/stream/anthropic-usage.ts"() {
     "use strict";
     isObj2 = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
     num = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : void 0;
+    DELTA_HEAD = '{"type":"content_block_delta","index":';
+    DELTA_FIELDS = ['{"type":"text_delta","text":"', '{"type":"thinking_delta","thinking":"', '{"type":"input_json_delta","partial_json":"'];
     emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite5m: 0, cacheWrite1h: 0 });
     AnthropicUsageAccumulator = class {
       usage = null;
@@ -31568,6 +31611,11 @@ var init_anthropic_usage = __esm({
       model = null;
       extras = { fast: false, web: 0, geo: null };
       onEvent(e2) {
+        const n2 = compactDeltaChars(e2.data);
+        if (n2 >= 0) {
+          this.chars += n2;
+          return;
+        }
         let d;
         try {
           d = JSON.parse(e2.data);
@@ -31779,12 +31827,14 @@ var init_sse = __esm({
           this.skipLf = false;
         }
         let start = i;
+        let lf = -2;
+        let cr = -2;
         while (i < chunk.length) {
+          if (lf !== -1 && lf < i) lf = chunk.indexOf(10, i);
+          if (cr !== -1 && cr < i) cr = chunk.indexOf(13, i);
+          if (lf === -1 && cr === -1) break;
+          i = lf === -1 ? cr : cr === -1 ? lf : Math.min(lf, cr);
           const b = chunk[i];
-          if (b !== 10 && b !== 13) {
-            i++;
-            continue;
-          }
           this.finishLine(chunk, start, i, out);
           if (b === 13) {
             if (i + 1 >= chunk.length) this.skipLf = true;
@@ -31874,22 +31924,16 @@ var init_sse = __esm({
 });
 
 // src/stream/tee.ts
-import { Transform as Transform2 } from "node:stream";
-function createTee(onChunk) {
-  let errors = 0;
-  const t = new Transform2({
-    transform(chunk, _enc, cb) {
-      this.push(chunk);
-      try {
-        onChunk(chunk);
-      } catch {
-        errors++;
-      }
-      cb();
+import { pipeline } from "node:stream/promises";
+function pipeWithTap(src, dst, onChunk) {
+  const done = pipeline(src, dst);
+  src.on("data", (chunk) => {
+    try {
+      onChunk(chunk);
+    } catch {
     }
   });
-  Object.defineProperty(t, "onChunkErrors", { get: () => errors });
-  return t;
+  return done;
 }
 var init_tee = __esm({
   "src/stream/tee.ts"() {
@@ -37446,7 +37490,7 @@ var require_webidl = __commonJS({
 var require_util2 = __commonJS({
   "node_modules/undici/lib/web/fetch/util.js"(exports, module) {
     "use strict";
-    var { Transform: Transform5 } = __require("node:stream");
+    var { Transform: Transform4 } = __require("node:stream");
     var zlib2 = __require("node:zlib");
     var { redirectStatusSet, referrerPolicyTokens, badPortsSet } = require_constants3();
     var { getGlobalOrigin } = require_global();
@@ -38037,7 +38081,7 @@ var require_util2 = __commonJS({
       contentRange += isomorphicEncode(`${fullLength}`);
       return contentRange;
     }
-    var InflateStream = class extends Transform5 {
+    var InflateStream = class extends Transform4 {
       #zlibOptions;
       /** @param {zlib.ZlibOptions} [zlibOptions] */
       constructor(zlibOptions) {
@@ -46008,13 +46052,13 @@ var require_mock_pool = __commonJS({
 var require_pending_interceptors_formatter = __commonJS({
   "node_modules/undici/lib/mock/pending-interceptors-formatter.js"(exports, module) {
     "use strict";
-    var { Transform: Transform5 } = __require("node:stream");
+    var { Transform: Transform4 } = __require("node:stream");
     var { Console } = __require("node:console");
     var PERSISTENT = process.versions.icu ? "\u2705" : "Y ";
     var NOT_PERSISTENT = process.versions.icu ? "\u274C" : "N ";
     module.exports = class PendingInterceptorsFormatter {
       constructor({ disableColors } = {}) {
-        this.transform = new Transform5({
+        this.transform = new Transform4({
           transform(chunk, _enc, cb) {
             cb(null, chunk);
           }
@@ -57784,7 +57828,7 @@ var require_eventsource_stream = __commonJS({
   "node_modules/undici/lib/web/eventsource/eventsource-stream.js"(exports, module) {
     "use strict";
     var buffer = __require("node:buffer");
-    var { Transform: Transform5 } = __require("node:stream");
+    var { Transform: Transform4 } = __require("node:stream");
     var { isASCIINumber, isValidLastEventId } = require_util6();
     var BOM = [239, 187, 191];
     var LF = 10;
@@ -57834,7 +57878,7 @@ var require_eventsource_stream = __commonJS({
       error62.aborted = false;
       return error62;
     }
-    var EventSourceStream = class extends Transform5 {
+    var EventSourceStream = class extends Transform4 {
       /**
        * @type {eventSourceSettings}
        */
@@ -59521,7 +59565,6 @@ __export(handler_exports, {
 });
 import { randomBytes as randomBytes3 } from "node:crypto";
 import { Readable as Readable2 } from "node:stream";
-import { pipeline } from "node:stream/promises";
 function emitTelemetry(deps, policy2, rec, attempts) {
   try {
     if (deps.metrics) {
@@ -60090,7 +60133,7 @@ async function handle(deps, failure3, runtime, held, id, req, res) {
   res.flushHeaders();
   const tap = usageTap(surface, up, deps.bodyCapBytes);
   try {
-    await pipeline(clientBody, createTee(tap.onChunk), res);
+    await pipeWithTap(clientBody, res, tap.onChunk);
   } catch {
   }
   const dropped = tap.droppedEvents();
@@ -123267,7 +123310,7 @@ __export(replay_input_exports, {
 });
 import { execFileSync, spawn } from "node:child_process";
 import { createHash as createHash12 } from "node:crypto";
-import { Transform as Transform3 } from "node:stream";
+import { Transform as Transform2 } from "node:stream";
 import { pipeline as pipeline2 } from "node:stream/promises";
 import { lstat as lstat4, stat as stat2 } from "node:fs/promises";
 import { lstatSync as lstatSync2, mkdtempSync, realpathSync as realpathSync2, writeFileSync } from "node:fs";
@@ -123363,7 +123406,7 @@ async function copyFileAtCommit(o) {
     child.on("close", done);
   });
   let seen = 0;
-  const count = new Transform3({
+  const count = new Transform2({
     transform(chunk, _enc, cb) {
       seen += chunk.length;
       hash2.update(chunk);
@@ -123686,7 +123729,7 @@ import { createHash as createHash13, randomBytes as randomBytes6 } from "node:cr
 import { appendFile, readFile as readFile2 } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { join as join10, relative as relative3, resolve as resolve5, sep as sep3 } from "node:path";
-import { Readable as Readable4, Transform as Transform4 } from "node:stream";
+import { Readable as Readable4, Transform as Transform3 } from "node:stream";
 import { pipeline as pipeline3 } from "node:stream/promises";
 async function readEvent(env) {
   const path3 = env.GITHUB_EVENT_PATH;
@@ -123709,7 +123752,7 @@ async function download(url2, token, root, dest) {
   const res = await fetch(u, { redirect: "error", headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok || !res.body) throw new Error(`traces download failed with HTTP ${res.status}`);
   let seen = 0;
-  const cap2 = new Transform4({
+  const cap2 = new Transform3({
     transform(chunk, _enc, cb) {
       seen += chunk.length;
       cb(seen > MAX_TRACES_BYTES ? new Error("traces download is larger than 512 MiB") : null, chunk);
