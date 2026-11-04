@@ -660,8 +660,8 @@ async function redisSample(r: Redis): Promise<{ keys: number; usedMemoryMb: numb
   return { keys: keys.length, usedMemoryMb: Math.round((mem / 1048576) * 100) / 100, byClass };
 }
 
-/** stderr lines a healthy soak writes: startup notices and policy loads. Anything else is reported. */
-const EXPECTED_STDERR = [/^tokenyard: ops listener /, /^tokenyard: policy revision \S+ active$/, /^tokenyard: warm-up seeded /];
+/** stderr lines a healthy soak writes: startup notices, policy loads and the drain notice on SIGTERM. Anything else is reported. */
+const EXPECTED_STDERR = [/^tokenyard: ops listener /, /^tokenyard: policy revision \S+ active$/, /^tokenyard: warm-up seeded /, /^tokenyard: draining, up to \d+ ms for requests in flight/];
 
 // ---------------------------------------------------------------------------------------------------------------------
 
