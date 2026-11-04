@@ -192,3 +192,34 @@ test('bench:check refuses a quick run: its numbers are shortened runs, not for p
   expect(checkBenchBlock(out, r)).toBe(false);
   expect(checkBenchBlock(writeBenchBlock(README, results()), results())).toBe(true);
 });
+
+test('the multi-worker rows render as their own table with the worker count, CPU per process, harness CPU and the verdict', () => {
+  const r = results();
+  expect(renderBenchBlock(r)).not.toContain('several gateway processes');
+  const base = (r.overhead.rows as Array<Record<string, unknown>>)[3] as Record<string, unknown>;
+  const row = (workers: number, met: boolean, perProcessCpuPct?: number[]) => ({
+    ...base,
+    concurrency: 500,
+    workers,
+    mockProcesses: 3,
+    loadProcesses: 3,
+    addedTtfbMet: met,
+    gatewayCpuPct: perProcessCpuPct ? 150.2 : 99.1,
+    ...(perProcessCpuPct ? { perProcessCpuPct } : {}),
+    mockCpuPct: { direct: [30.1, 29.8, 30.4], gateway: [31, 30.2, 30.9] },
+    loadCpuPct: { direct: [20.5, 20.1, 19.9], gateway: [25.3, 25.1, 24.8] },
+  });
+  const withWorkers = {
+    ...r,
+    overhead: { ...r.overhead, workers: { method: 'Several processes method.', workers: [1, 2], mockProcesses: 3, loadProcesses: 3, rows: [row(1, false), row(2, true, [75.1, 75])] } },
+  };
+  const block = renderBenchBlock(withWorkers);
+  expect(block).toContain('#### Gateway overhead with several gateway processes (`serve --workers`, Redis store)');
+  expect(block).toContain('Several processes method.');
+  expect(block).toContain('| Streaming, 500 tokens | 500 | 1 | 1.20 / 2.00 / 8.00 (n = 2,000) | 0.50 / 0.90 | 1.70 / 9.10 |');
+  expect(block).toContain('| 99.1% | 31.0%, 30.2%, 30.9% | 25.3%, 25.1%, 24.8% | 0 / 0 | missed |');
+  expect(block).toContain('| 150.2% (75.1%, 75.0%) | 31.0%, 30.2%, 30.9% | 25.3%, 25.1%, 24.8% | 0 / 0 | met |');
+  expect(block).not.toMatch(/[—–←-⇿⟵-⟿]/);
+  const without = { ...r, overhead: { ...r.overhead, workers: { notMeasured: 'not measured: no Redis' } } };
+  expect(renderBenchBlock(without)).toContain('not measured: no Redis.');
+});

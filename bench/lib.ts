@@ -66,11 +66,13 @@ export function throughput(o: { answered: number; outputTokens: number; firstSch
 }
 
 /**
- * A run in which the gateway could not keep up: a full core (the gateway is single-threaded), or, when throughput was
- * measured, fewer than 90% of the offered requests answered per second, or a drain more than 20% past the window.
+ * A run in which the gateway could not keep up: a full core in any one gateway process (each is single-threaded;
+ * `perProcessCpuPct` lists them when several workers shared the load), or, when throughput was measured, fewer than
+ * 90% of the offered requests answered per second, or a drain more than 20% past the window.
  */
-export function rowSaturated(r: { concurrency: number; ratePerConnection?: number; durationS?: number; gatewayCpuPct: number; throughput?: { gateway: Throughput } }): boolean {
-  if (r.gatewayCpuPct >= 95) return true;
+export function rowSaturated(r: { concurrency: number; ratePerConnection?: number; durationS?: number; gatewayCpuPct: number; perProcessCpuPct?: readonly number[]; throughput?: { gateway: Throughput } }): boolean {
+  const hottest = r.perProcessCpuPct && r.perProcessCpuPct.length > 0 ? Math.max(...r.perProcessCpuPct) : r.gatewayCpuPct;
+  if (hottest >= 95) return true;
   const t = r.throughput?.gateway;
   if (!t || r.ratePerConnection === undefined || r.durationS === undefined) return false;
   return t.requestsPerS < 0.9 * r.concurrency * r.ratePerConnection || t.elapsedS > 1.2 * r.durationS;
@@ -100,6 +102,44 @@ export function cpuRssSlopes(
       // A gateway that could not keep up at the upper level cannot spend more CPU: the slope then understates the cost.
       saturated: rowSaturated(hi),
     });
+  }
+  return out;
+}
+
+/** Connections per load process: as even as possible, the larger shares first, no process without one. */
+export function splitConnections(total: number, procs: number): number[] {
+  const n = Math.max(1, Math.min(procs, total));
+  return Array.from({ length: n }, (_, i) => Math.floor(total / n) + (i < total % n ? 1 : 0));
+}
+
+/** What one open-loop run measured on one path (bench/overhead.ts); times are on one clock across processes. */
+export interface Load {
+  intended: number;
+  ttfb: number[];
+  /** TTFB minus the mock's own wait for the same request: the time outside the provider, paired per request. */
+  outside: number[];
+  total: number[];
+  ok: number;
+  dropped: number;
+  errorKinds: Record<string, number>;
+  /** First scheduled send and last 2xx answer. */
+  firstScheduledMs: number;
+  lastAnswerMs: number;
+}
+
+/** The loads of several load processes in one run, as one load: samples concatenated, counts added, the widest span. */
+export function mergeLoads(loads: readonly Load[]): Load {
+  const out: Load = { intended: 0, ttfb: [], outside: [], total: [], ok: 0, dropped: 0, errorKinds: {}, firstScheduledMs: Number.POSITIVE_INFINITY, lastAnswerMs: 0 };
+  for (const l of loads) {
+    out.intended += l.intended;
+    out.ttfb.push(...l.ttfb);
+    out.outside.push(...l.outside);
+    out.total.push(...l.total);
+    out.ok += l.ok;
+    out.dropped += l.dropped;
+    for (const [k, v] of Object.entries(l.errorKinds)) out.errorKinds[k] = (out.errorKinds[k] ?? 0) + v;
+    out.firstScheduledMs = Math.min(out.firstScheduledMs, l.firstScheduledMs);
+    out.lastAnswerMs = Math.max(out.lastAnswerMs, l.lastAnswerMs);
   }
   return out;
 }

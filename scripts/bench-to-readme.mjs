@@ -108,6 +108,31 @@ function overheadSection(o) {
   return lines.join('\n');
 }
 
+const pcts = (xs) => (xs ?? []).map((x) => `${num(x, 1)}%`).join(', ');
+
+/** The multi-worker rows (`serve --workers`, Redis store): their own table, so the single-process tables stay as they are. */
+function workersSection(w) {
+  const lines = ['#### Gateway overhead with several gateway processes (`serve --workers`, Redis store)', ''];
+  if (!w.rows) {
+    lines.push(`${w.notMeasured}.`, '');
+    return lines.join('\n');
+  }
+  lines.push(
+    `${w.method}`,
+    '',
+    '| Scenario | Streams | Gateway processes | Added TTFB p50 / p95 / p99 (ms), gateway-measured | TTFB outside the provider p50 / p99 (ms), direct | Same, through the gateway | Throughput, direct / gateway | Gateway CPU (per process) | Mock CPU per process | Load generator CPU per process | Errors (direct / gateway) | Added TTFB target (both measures) |',
+    '|---|---:|---:|---|---|---|---|---:|---|---|---:|---|',
+  );
+  for (const r of w.rows) {
+    lines.push(
+      `| ${SCENARIOS[r.scenario] ?? r.scenario} | ${num(r.concurrency)} | ${num(r.workers)} | ${triple(r.addedTtfb)} (n = ${num(r.addedTtfb.n)}) | ${pair(r.direct.outsideProvider)} | ${pair(r.gateway.outsideProvider)} | ${rate(r.throughput)} | ${num(r.gatewayCpuPct, 1)}%${r.perProcessCpuPct ? ` (${pcts(r.perProcessCpuPct)})` : ''} | ${pcts(r.mockCpuPct.gateway)} | ${pcts(r.loadCpuPct.gateway)} | ${num(r.errors.direct)} / ${num(r.errors.gateway)} | ${verdict(r.addedTtfbMet)} |`,
+    );
+  }
+  if (w.note) lines.push('', w.note);
+  lines.push('');
+  return lines.join('\n');
+}
+
 function budgetSection(b) {
   const lines = [
     '#### Budget correctness',
@@ -236,6 +261,7 @@ export function renderBenchBlock(r) {
     ...r.slo.map((s) => `| ${s.sli} | ${s.target} | ${s.measured} | ${verdict(s.met)} |`),
     '',
     overheadSection(r.overhead),
+    ...(r.overhead.workers ? [workersSection(r.overhead.workers)] : []),
     budgetSection(r.budget),
     cacheSection(r.cache),
     scanSection(r.scan),

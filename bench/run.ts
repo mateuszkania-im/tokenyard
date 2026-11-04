@@ -13,7 +13,7 @@ import { benchBudget, type BudgetRun } from './budget.js';
 import { benchCache, type CacheRow } from './cache.js';
 import { benchCalibration } from './calibration.js';
 import { cpuRssSlopes, environment, keptSoak, type Percentiles, ROOT, rowSaturated, ttfbVerdict } from './lib.js';
-import { benchOverhead, CONCURRENCY, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS } from './overhead.js';
+import { benchOverhead, benchOverheadWorkers, CONCURRENCY, MOCK, type OverheadRow, RATE, SCENARIOS, SLO_LEVELS, WORKERS_LEVELS, type WorkersRow } from './overhead.js';
 import { benchReplay } from './replay.js';
 import { benchScanAll } from './scan.js';
 
@@ -54,10 +54,26 @@ const count = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, 
 
 type Slo = { sli: string; target: string; measured: string; met: boolean | null };
 
+/**
+ * The multi-worker rows: the gateway as each of these process counts (1 is the control: the same harness, one gateway
+ * process), the mock and the load generator in their own processes. SLO_WORKERS backs the SLO rows; it was chosen from
+ * development runs on the bench machine before the committed run (with 4, the gateway competes with the mock and load
+ * processes for the performance cores and does worse), and every count is in the table.
+ */
+const WORKER_COUNTS = [1, 2, 3, 4] as const;
+const SLO_WORKERS = 3;
+const HARNESS = { mockProcesses: 3, loadProcesses: 3 } as const;
+type WorkersSection = { method: string; workers: readonly number[]; sloWorkers: number; mockProcesses: number; loadProcesses: number; rows: WorkersRow[] } | { notMeasured: string };
+
 const SCENARIO_NAMES: Record<string, string> = { 'non-streaming': 'non-streaming', 'streaming-500': 'streaming 500 tokens', 'body-150kb': 'streaming 150 KB body' };
 
-function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow[]; replay: { seconds: number; records: number }; redis: string }): Slo[] {
+function slos(o: { overhead: OverheadRow[]; workers: WorkersSection; budget: BudgetRun[]; cache: CacheRow[]; replay: { seconds: number; records: number }; redis: string }): Slo[] {
   const out: Slo[] = [];
+  const pp = (p: Percentiles): string => `${p.p50 ?? 'n/a'} / ${p.p99 ?? 'n/a'} ms`;
+  const measured = (row: OverheadRow): string => {
+    const a = row.addedTtfb;
+    return `${a.p50 ?? 'n/a'} ms / ${a.p99 ?? 'n/a'} ms (n = ${count(a.n)}); client-side TTFB outside the provider, p50 / p99: direct ${pp(row.direct.outsideProvider)}, through the gateway ${pp(row.gateway.outsideProvider)}`;
+  };
   for (const store of ['memory', 'redis'] as const) {
     for (const scenario of SCENARIOS) {
       for (const c of SLO_LEVELS) {
@@ -67,15 +83,18 @@ function slos(o: { overhead: OverheadRow[]; budget: BudgetRun[]; cache: CacheRow
           out.push({ sli, target: 'under 5 ms / under 25 ms', measured: store === 'redis' ? o.redis : 'not measured', met: null });
           continue;
         }
-        const a = row.addedTtfb;
-        const pp = (p: Percentiles): string => `${p.p50 ?? 'n/a'} / ${p.p99 ?? 'n/a'} ms`;
-        out.push({
-          sli,
-          target: 'under 5 ms / under 25 ms',
-          measured: `${a.p50 ?? 'n/a'} ms / ${a.p99 ?? 'n/a'} ms (n = ${count(a.n)}); client-side TTFB outside the provider, p50 / p99: direct ${pp(row.direct.outsideProvider)}, through the gateway ${pp(row.gateway.outsideProvider)}`,
-          met: ttfbVerdict(a, row.gateway.outsideProvider),
-        });
+        out.push({ sli, target: 'under 5 ms / under 25 ms', measured: measured(row), met: ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider) });
       }
+    }
+  }
+  // The same 500-stream rows with the gateway as several processes on one port (serve --workers), Redis store.
+  for (const scenario of SCENARIOS) {
+    for (const c of WORKERS_LEVELS) {
+      const w = 'rows' in o.workers ? o.workers.sloWorkers : SLO_WORKERS;
+      const sli = `Added TTFB p50 / p99, ${SCENARIO_NAMES[scenario]}, ${c} streams, redis store, ${w} gateway processes (serve --workers ${w})`;
+      const row = 'rows' in o.workers ? o.workers.rows.find((r) => r.scenario === scenario && r.concurrency === c && r.workers === w) : undefined;
+      if (!row) out.push({ sli, target: 'under 5 ms / under 25 ms', measured: 'rows' in o.workers ? 'not measured' : o.workers.notMeasured, met: null });
+      else out.push({ sli, target: 'under 5 ms / under 25 ms', measured: measured(row), met: ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider) });
     }
   }
   const gw = o.overhead.reduce((n, r) => n + r.requests.gateway, 0);
@@ -119,6 +138,16 @@ function overheadMethod(): string {
         ].join(' ');
 }
 
+/** How the multi-worker rows measure, for the README. */
+function workersMethod(): string {
+  return [
+    `The ${WORKERS_LEVELS.join(', ')}-stream rows again on the Redis store, with the gateway as ${WORKER_COUNTS.join(', ')} processes sharing one port through node:cluster, as \`tokenyard serve --workers <n>\` runs it (a primary that serves no traffic hands each connection to a worker in turn; every worker has its own instance id and Redis connection).`,
+    `The harness is in several processes too, so it is not the bottleneck: the mock runs as ${HARNESS.mockProcesses} processes on one port and the load generator as ${HARNESS.loadProcesses} processes that split the connections and start together (the single-process rows above saturate the mock at 150 KB and 500 streams). The direct path goes through the same mock and load processes; the mock and load CPU columns are per process over the gateway run.`,
+    'Same schedule, mock timing, policy, measures and verdict as the rows above. Gateway CPU is the sum over the workers and the primary, with each worker in brackets; a row is flagged saturated when one worker uses a full core.',
+    `The row with 1 process is the control: the same harness with one gateway process. The SLO rows use ${SLO_WORKERS} processes, chosen from development runs on this machine before this run; every count is in the table.`,
+  ].join(' ');
+}
+
 /**
  * `--recompute-slo`: re-derives the SLO rows, the CPU and RSS slopes and the method text of an existing bench/results.json from its own
  * measured rows (after a change to how verdicts are derived); measures nothing and changes no measured value.
@@ -126,7 +155,7 @@ function overheadMethod(): string {
 function recomputeSlo(): void {
   const file = join(ROOT, 'bench', 'results.json');
   const r = JSON.parse(readFileSync(file, 'utf8')) as {
-    overhead: { rows: OverheadRow[]; redis: string; slopes: unknown; method: string };
+    overhead: { rows: OverheadRow[]; redis: string; slopes: unknown; method: string; workers?: WorkersSection };
     budget: { runs: BudgetRun[] };
     cache: { rows: CacheRow[] };
     replay: { seconds: number; records: number };
@@ -139,7 +168,15 @@ function recomputeSlo(): void {
     row.saturated = rowSaturated(row);
   }
   r.overhead.slopes = cpuRssSlopes(r.overhead.rows, 100, 500);
-  r.slo = slos({ overhead: r.overhead.rows, budget: r.budget.runs, cache: r.cache.rows, replay: r.replay, redis: r.overhead.redis });
+  const workers: WorkersSection = r.overhead.workers ?? { notMeasured: 'not measured' };
+  if ('rows' in workers) {
+    workers.method = workersMethod();
+    for (const row of workers.rows) {
+      row.addedTtfbMet = ttfbVerdict(row.addedTtfb, row.gateway.outsideProvider);
+      row.saturated = rowSaturated(row);
+    }
+  }
+  r.slo = slos({ overhead: r.overhead.rows, workers, budget: r.budget.runs, cache: r.cache.rows, replay: r.replay, redis: r.overhead.redis });
   writeFileSync(file, `${JSON.stringify(r, null, 2)}\n`);
   for (const s of r.slo) log(`SLO ${s.sli}: ${s.met === true ? 'met' : s.met === false ? 'missed' : 'not measured'}`);
 }
@@ -176,6 +213,10 @@ async function main(): Promise<void> {
     log(`replay: ${replay.seconds} s`);
     log('overhead');
     const overhead = await benchOverhead({ redisUrl, quick, log });
+    log('overhead with several gateway processes');
+    const workers: WorkersSection = redisUrl
+      ? { method: workersMethod(), workers: WORKER_COUNTS, sloWorkers: SLO_WORKERS, ...HARNESS, rows: await benchOverheadWorkers({ redisUrl, quick, log, workers: WORKER_COUNTS, ...HARNESS }) }
+      : { notMeasured: `Redis store: ${redisNote}` };
     const results = {
       schemaVersion: 1,
       ...env,
@@ -186,6 +227,7 @@ async function main(): Promise<void> {
         redis: redisNote,
         rows: overhead,
         slopes: cpuRssSlopes(overhead, 100, 500),
+        workers,
       },
       budget: {
         ...budget,
@@ -201,7 +243,7 @@ async function main(): Promise<void> {
       calibration,
     };
     const file = join(ROOT, 'bench', 'results.json');
-    const full = { ...results, slo: slos({ overhead, budget: budget.runs, cache: cache.rows, replay, redis: redisNote }), ...keptSoak(file) };
+    const full = { ...results, slo: slos({ overhead, workers, budget: budget.runs, cache: cache.rows, replay, redis: redisNote }), ...keptSoak(file) };
     writeFileSync(file, `${JSON.stringify(full, null, 2)}\n`);
     log('bench/results.json written');
     for (const s of full.slo) log(`SLO ${s.sli}: ${s.measured} (${s.met === true ? 'met' : s.met === false ? 'missed' : 'not measured'})`);

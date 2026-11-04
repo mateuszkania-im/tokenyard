@@ -129,3 +129,25 @@ test('a run records the commit it started on, and is dirty when the tree was dir
   expect(runGit({ commit: 'aaaaaaa', dirty: true }, clean)).toEqual({ commit: 'aaaaaaa', dirty: true });
   expect(runGit(clean, { commit: 'aaaaaaa', dirty: true })).toEqual({ commit: 'aaaaaaa', dirty: true });
 });
+
+test('several load processes split the connections as evenly as they can and never get none', async () => {
+  const { splitConnections } = await import('../../bench/lib.js');
+  expect(splitConnections(500, 3)).toEqual([167, 167, 166]);
+  expect(splitConnections(10, 4)).toEqual([3, 3, 2, 2]);
+  expect(splitConnections(2, 4)).toEqual([1, 1]);
+  expect(splitConnections(500, 1)).toEqual([500]);
+});
+
+test('the loads of several processes merge into one: samples and counts add up, the run spans the earliest send to the latest answer', async () => {
+  const { mergeLoads } = await import('../../bench/lib.js');
+  const a = { intended: 10, ttfb: [1, 2], outside: [0.1], total: [5], ok: 2, dropped: 1, errorKinds: { ECONNRESET: 1 }, firstScheduledMs: 1_000, lastAnswerMs: 9_000 };
+  const b = { intended: 12, ttfb: [3], outside: [0.2, 0.3], total: [6, 7], ok: 3, dropped: 0, errorKinds: { ECONNRESET: 2, '500': 1 }, firstScheduledMs: 900, lastAnswerMs: 9_500 };
+  expect(mergeLoads([a, b])).toEqual({ intended: 22, ttfb: [1, 2, 3], outside: [0.1, 0.2, 0.3], total: [5, 6, 7], ok: 5, dropped: 1, errorKinds: { ECONNRESET: 3, '500': 1 }, firstScheduledMs: 900, lastAnswerMs: 9_500 });
+});
+
+test('with several gateway processes a row is saturated when any one process uses a full core, not when their sum passes one', () => {
+  const base = { concurrency: 500, ratePerConnection: 1.25, durationS: 10, throughput: { gateway: { requestsPerS: 625, outputTokensPerS: 0, elapsedS: 10 } } };
+  expect(rowSaturated({ ...base, gatewayCpuPct: 300, perProcessCpuPct: [70, 75, 80, 75] })).toBe(false);
+  expect(rowSaturated({ ...base, gatewayCpuPct: 300, perProcessCpuPct: [60, 96, 70, 74] })).toBe(true);
+  expect(rowSaturated({ ...base, gatewayCpuPct: 99 })).toBe(true); // one process, as before
+});
