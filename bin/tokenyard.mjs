@@ -156,6 +156,16 @@ function openFailed(e2, target) {
   if (code2 === "ENXIO") throw new UnsafePathError(`${target} is not a regular file`);
   throw e2;
 }
+async function refuseLinkedFile(target) {
+  let st;
+  try {
+    st = await lstat(resolve(target));
+  } catch (e2) {
+    if (missing(e2)) return;
+    throw e2;
+  }
+  if (st.isSymbolicLink()) refuseLink(target, target);
+}
 async function readFileUnder(root, target, capBytes, o = {}) {
   try {
     await checkPath(root, target);
@@ -251,6 +261,7 @@ async function ensureDirUnder(root, dir, dirMode) {
 }
 async function writeFileUnder(root, target, data, o = {}) {
   await ensureDirUnder(root, dirname(resolve(target)), o.private ? PRIVATE_DIR_MODE : void 0);
+  await refuseLinkedFile(target);
   const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | NONBLOCK | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
   let fh;
   try {
@@ -269,6 +280,7 @@ async function writeFileUnder(root, target, data, o = {}) {
 }
 async function createWriteStreamUnder(root, target) {
   await ensureDirUnder(root, dirname(resolve(target)));
+  await refuseLinkedFile(target);
   let fh;
   try {
     fh = await open(resolve(target), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | NOFOLLOW | NONBLOCK, 438);
@@ -123146,8 +123158,8 @@ function locateRepoDir(dir, workspace) {
     }
     return { top: realpathSync2(root), rel: rel.split(sep2).join("/"), label: dir };
   }
-  const top = realpathSync2(execFileSync("git", ["--no-replace-objects", "rev-parse", "--show-toplevel"], { cwd: resolve4(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv(null) }).trim());
-  return { top, rel: relative2(top, realpathSync2(resolve4(dir))).split(sep2).join("/"), label: dir };
+  const top = realpathSync2.native(execFileSync("git", ["--no-replace-objects", "rev-parse", "--show-toplevel"], { cwd: resolve4(dir), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv(null) }).trim());
+  return { top, rel: relative2(top, realpathSync2.native(resolve4(dir))).split(sep2).join("/"), label: dir };
 }
 function nullConfig() {
   if (process.platform !== "win32") return "/dev/null";

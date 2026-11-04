@@ -65,8 +65,10 @@ export function locateRepoDir(dir: string, workspace: string | null): RepoDir {
     }
     return { top: realpathSync(root), rel: rel.split(sep).join('/'), label: dir };
   }
-  const top = realpathSync(execFileSync('git', ['--no-replace-objects', 'rev-parse', '--show-toplevel'], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv(null) }).trim());
-  return { top, rel: relative(top, realpathSync(resolve(dir))).split(sep).join('/'), label: dir };
+  // Both sides through the native realpath: on Windows git prints the long form of a path, while the JavaScript
+  // realpath keeps 8.3 short names (C:\Users\RUNNER~1), so the relative path between the two left the repository.
+  const top = realpathSync.native(execFileSync('git', ['--no-replace-objects', 'rev-parse', '--show-toplevel'], { cwd: resolve(dir), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: gitEnv(null) }).trim());
+  return { top, rel: relative(top, realpathSync.native(resolve(dir))).split(sep).join('/'), label: dir };
 }
 
 let emptyConfig: string | null = null;

@@ -156,6 +156,22 @@ function openFailed(e: unknown, target: string): never {
   throw e;
 }
 
+/**
+ * Refuses a symbolic link at the file itself before it is opened for writing. Where the platform has O_NOFOLLOW the
+ * open refuses it too (ELOOP, race-free); Windows has no O_NOFOLLOW, so without this check an open, and O_TRUNC with
+ * it, would go through the link. A link swapped in between this check and the open is still followed there.
+ */
+async function refuseLinkedFile(target: string): Promise<void> {
+  let st;
+  try {
+    st = await lstat(resolve(target));
+  } catch (e) {
+    if (missing(e)) return;
+    throw e;
+  }
+  if (st.isSymbolicLink()) refuseLink(target, target);
+}
+
 const tooLarge = (target: string, cap: number): Error => new UnsafePathError(`${target} is larger than ${cap} bytes`);
 
 /**
@@ -275,6 +291,7 @@ export const PRIVATE_DIR_MODE = 0o700;
  */
 export async function writeFileUnder(root: string, target: string, data: string | Uint8Array, o: { append?: boolean; exclusive?: boolean; mode?: number; private?: boolean } = {}): Promise<void> {
   await ensureDirUnder(root, dirname(resolve(target)), o.private ? PRIVATE_DIR_MODE : undefined);
+  await refuseLinkedFile(target);
   const flags = constants.O_WRONLY | constants.O_CREAT | NOFOLLOW | NONBLOCK | (o.append ? constants.O_APPEND : constants.O_TRUNC) | (o.exclusive ? constants.O_EXCL : 0);
   let fh;
   try {
@@ -295,6 +312,7 @@ export async function writeFileUnder(root: string, target: string, data: string 
 /** A write stream to `target` below `root`, opened like `writeFileUnder` (truncating). */
 export async function createWriteStreamUnder(root: string, target: string): Promise<NodeJS.WritableStream> {
   await ensureDirUnder(root, dirname(resolve(target)));
+  await refuseLinkedFile(target);
   let fh;
   try {
     fh = await open(resolve(target), constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | NOFOLLOW | NONBLOCK, 0o666);

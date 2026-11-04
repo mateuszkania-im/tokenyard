@@ -2,7 +2,7 @@
 // Top self-time functions of a V8 .cpuprofile (from `node --cpu-prof`), for docs/benchmarks.md.
 //   node scripts/cpuprofile-top.mjs <file.cpuprofile> [count]
 import { readFileSync } from 'node:fs';
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** Self time per function (name, file and line), in ms, sorted descending, with its share of all sampled time. */
@@ -17,7 +17,8 @@ export function topSelf(profile, count = 20, root = process.cwd()) {
     if (!node) continue;
     total += dt;
     const f = node.callFrame;
-    let file = f.url.startsWith('file://') ? relative(root, fileURLToPath(f.url)) : f.url;
+    // slash-separated on every platform (relative gives backslashes on Windows)
+    let file = f.url.startsWith('file://') ? relative(root, fileURLToPath(f.url)).split(sep).join('/') : f.url;
     if (file.includes('node_modules/')) file = file.slice(file.lastIndexOf('node_modules/'));
     const key = `${f.functionName || '(anonymous)'} ${file}${file ? `:${f.lineNumber + 1}` : ''}`;
     self.set(key, (self.get(key) ?? 0) + dt);
