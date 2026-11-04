@@ -1,6 +1,6 @@
 {
   "name": "@mateuszkania-im/tokenyard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "LLM gateway for coding-agent traffic",
   "license": "MIT",
   "repository": {
