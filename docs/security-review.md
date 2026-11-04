@@ -202,7 +202,7 @@ These are not claimed to be fixed. Each was reported, judged and left, with the 
   that request's trace line carries `outcome.boundExceeded: true`. Other instances follow the latch within 30 s
   without a signal of their own, so alert on any increase of the counter summed over instances, or on that log line.
 - **Live cap per checkout (second pass).** `npm run live` keeps its spend in `.live/traces` under the package root,
-  so two checkouts or worktrees each get the full `TOKENYARD_LIVE_BUDGET_USD` cap. Documented in the README; run live
+  so two checkouts or worktrees each get the full `TOKENYARD_LIVE_BUDGET_USD` cap. Documented in docs/security.md (Limitations); run live
   tests from one checkout.
 - **Request deadline (A8).** Fixed at 18 minutes in `serve`; no flag. A stream longer than that is cut.
 - **Chain fallback (A6).** Relies on undici diagnostics channels to know the body was sent; a request not seen created
@@ -262,7 +262,7 @@ late admits, the crash path and header-chosen routes.
 Observations (no probe):
 
 - Each package checkout has its own `.live/traces`, so two worktrees each get the full $20 live cap. Documented in
-  the README Limitations and above under residual risks.
+  docs/security.md (Limitations) and above under residual risks.
 - Replay of pseudonymised models cannot be priced by a head policy that adds a price for them; this affects only the
   CI gate's cost estimate, not enforcement. Left as is.
 - The body-shape refusal reasons (`body-bom`, `duplicate-keys`, `too-deep`, `unparsable-body`) were missing from the

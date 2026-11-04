@@ -1,1 +1,6 @@
 * text=auto eol=lf
+
+# The committed bundle (npm run build) and generated reports: kept out of GitHub language statistics and collapsed in diffs.
+bin/tokenyard.mjs linguist-generated=true
+examples/live/report.html linguist-generated=true
+docs/conformance.md linguist-generated=true

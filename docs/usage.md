@@ -1,6 +1,6 @@
 # Using tokenyard
 
-A step-by-step setup for a team: from the demo to Claude Code and Codex going through the gateway, budgets and secret checks on, and every policy change replayed in CI. Each step links to the README section with the details.
+A step-by-step setup for a team: from the demo to Claude Code and Codex going through the gateway, budgets and secret checks on, and every policy change replayed in CI. Each step links to the page with the details.
 
 Requirements: Node 20.19 or later. Redis 7 only if you run more than one gateway process.
 
@@ -34,7 +34,7 @@ cd ..
 tokenyard policy check policy      # schema and semantic rules; exits 1 on errors
 ```
 
-- `policy.yaml`: providers (their keys come from environment variables, never from the file), tenants and teams, routes with allowed models, budgets, rate limits, secret rules. See [The policy file](../README.md#the-policy-file).
+- `policy.yaml`: providers (their keys come from environment variables, never from the file), tenants and teams, routes with allowed models, budgets, rate limits, secret rules. See [The policy file](policy.md) and [Budgets](budgets.md).
 - `prices.yaml`: the price table, each price with its source and date.
 - `keys.yaml`: SHA-256 hashes of tokenyard keys, never the keys themselves. Empty the example entries before you add your own.
 
@@ -64,7 +64,7 @@ tokenyard serve --policy policy --store redis --redis-url-file /run/secrets/redi
   --trace-dir traces --workers 3        # 3 processes on one port, one ops port each (9464 to 9466)
 ```
 
-See [Running several instances](../README.md#running-several-instances).
+See [Running several instances](scaling.md).
 
 ## 6. Point Claude Code and Codex at it
 
@@ -76,7 +76,7 @@ export ANTHROPIC_AUTH_TOKEN=ty_live_...  # the developer's tokenyard key
 eval "$(tokenyard env)" && claude         # optional: repo, branch and ticket attribution
 ```
 
-Fleet-wide settings (managed settings, gateway as the only allowed destination) and the Codex `config.toml` are in [Point Claude Code and Codex at it](../README.md#point-claude-code-and-codex-at-it).
+Fleet-wide settings (managed settings, gateway as the only allowed destination) and the Codex `config.toml` are in [Point Claude Code and Codex at it](clients.md).
 
 ## 7. See where the money goes
 
@@ -110,8 +110,26 @@ jobs:
           traces-token: ${{ secrets.TRACES_TOKEN }}
 ```
 
-Every pull request that changes the policy gets one comment: requests that would route differently, blocks, budget hits, cost delta and agent sessions cut mid-task, and the check fails when a `ci.failOn` gate is exceeded. The live demo is [pull request #2](https://github.com/mateuszkania-im/tokenyard/pull/2). The workflow in this repository (`.github/workflows/policy-replay.yml`) shows how to run the Action from the base commit, so a pull request cannot change the code that judges it; read [What replay can and cannot tell you](../README.md#what-replay-can-and-cannot-tell-you) before you trust a number.
+Every pull request that changes the policy gets one comment: requests that would route differently, blocks, budget hits, cost delta and agent sessions cut mid-task, and the check fails when a `ci.failOn` gate is exceeded. The live demo is [pull request #2](https://github.com/mateuszkania-im/tokenyard/pull/2). The workflow in this repository (`.github/workflows/policy-replay.yml`) shows how to run the Action from the base commit, so a pull request cannot change the code that judges it; read [What replay can and cannot tell you](replay.md) before you trust a number.
 
 ## 9. Shut down cleanly
 
 SIGTERM or SIGINT drains: `/readyz` answers 503, requests and streams in flight get `--shutdown-grace-ms` (default 30 s) to finish, a second signal stops at once.
+
+Draining in detail, with the limits: [Running several instances](scaling.md), Shutdown.
+
+## Commands at a glance
+
+```sh
+tokenyard policy check policy                                  # schema and semantic rules; exits 1 on errors
+tokenyard keys create --tenant acme --team web --name alice --file policy/keys.yaml   # prints the key once, stores its SHA-256
+export TOKENYARD_TRACE_SALT=...                                # secrets come from the environment or a --*-file, never a flag
+tokenyard serve --policy policy --trace-dir traces
+tokenyard serve --policy policy --store redis --redis-url-file /run/secrets/redis-url --trace-dir traces
+tokenyard serve --policy policy --store redis --redis-url-file /run/secrets/redis-url --trace-dir traces --workers 3   # 3 processes, one port
+tokenyard traces export --since 7d --trace-dir traces --out traces.ndjson.gz
+tokenyard policy replay --base-ref main --head policy --traces traces.ndjson.gz
+tokenyard report --traces traces.ndjson.gz --by team,repo --html report.html
+```
+
+The provider keys are read from the environment variables the policy names (`credential: { env: ANTHROPIC_API_KEY }`); developers never see them.

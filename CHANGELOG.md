@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Docs
+
+- A short README; the sections it had moved to docs/ with their text: clients.md, replay.md, policy.md, budgets.md, scaling.md, real-sessions.md, security.md (with Limitations), comparison.md and development.md. The generated benchmark block is now in docs/benchmarks.md (`npm run bench:check` checks it there).
+- `.gitattributes` marks the committed bundle `bin/tokenyard.mjs` as generated, so GitHub's language statistics count the TypeScript sources.
+
 ## 0.2.0 (2026-11-04)
 
 ### Gateway
@@ -13,7 +20,7 @@
 
 ### Benchmarks
 
-- The overhead benchmark adds 500-stream rows on the Redis store with the gateway as 1 to 4 processes on one port, the mock and the load generator in several processes each, and SLO rows for 3 gateway processes (README, Measured; docs/benchmarks.md).
+- The overhead benchmark adds 500-stream rows on the Redis store with the gateway as 1 to 4 processes on one port, the mock and the load generator in several processes each, and SLO rows for 3 gateway processes (Measured in [docs/benchmarks.md](docs/benchmarks.md)).
 
 ## 0.1.0 (2026-11-04)
 
@@ -51,4 +58,4 @@ First release.
 
 ### Not in this release
 
-`/v1/chat/completions`, quality evaluation ([docs/future-quality.md](docs/future-quality.md)), Redis Cluster, Codex WebSocket transport. See the README's Limitations.
+`/v1/chat/completions`, quality evaluation ([docs/future-quality.md](docs/future-quality.md)), Redis Cluster, Codex WebSocket transport. See Limitations in [docs/security.md](docs/security.md#limitations).

@@ -75,7 +75,7 @@ A low agreement or any missing instance means the diff should not be trusted.
   in the window; the later requests are dropped (assumption: the agent stops) and counted with their recorded cost.
 - `budgetHits`: `{ policy, budget, scopeValue, firstHitTs, days }`, sorted by policy, budget and scope value. `days`
   counts distinct UTC days with a block on that level.
-- `exactness`: `{ output, exactness, applied }` in the order of the table in the README. `exactness` is `exact`,
+- `exactness`: `{ output, exactness, applied }` in the order of the table in [replay.md](replay.md). `exactness` is `exact`,
   `exact-given-assumptions`, `estimated`, `not-computed` or `never`.
 
 ## How the simulation runs

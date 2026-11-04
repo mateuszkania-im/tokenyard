@@ -1,4 +1,4 @@
-// A9 (security review A): R11 ("one violation turns the bytes bound off ... until the factor is understood", README Limitations) is a
+// A9 (security review A): R11 ("one violation turns the bytes bound off ... until the factor is understood", docs/security.md Limitations) is a
 // per-process boolean: a second instance on the same Redis, or the same instance after a restart, keeps reserving
 // with the bytes bound that was just shown not to hold. Nothing persists the violation (the trace has boundExceeded,
 // but warm-up does not read it).

@@ -1,6 +1,6 @@
 // C10 (security review C): the last-known-good file carries its own sha256, so the check catches accidental corruption
 // only: whoever can write --state-dir can plant any policy that validates by recomputing the hash. Ruling: the sha256
-// is documented as corruption detection, not authentication (spec 6.7 and 11, README Limitations), and on read the
+// is documented as corruption detection, not authentication (spec 6.7 and 11, docs/security.md Limitations), and on read the
 // file must belong to the gateway's user with no group or other permission bits, as writeLkg creates it.
 import { chmodSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,8 +32,8 @@ test.skipIf(process.platform === 'win32')('C10 a last-known-good readable or wri
 });
 
 test('C10 the sha256 is documented as corruption detection, not authentication', () => {
-  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  const limitations = readme.slice(readme.indexOf('## Limitations'), readme.indexOf('## Development'));
+  const security = readFileSync(join(ROOT, 'docs/security.md'), 'utf8');
+  const limitations = security.slice(security.indexOf('## Limitations'));
   expect(limitations).toMatch(/last-known-good[^\n]*corruption/i);
   const spec = readFileSync(join(ROOT, 'docs/superpowers/specs/2026-11-02-gateway-design.md'), 'utf8');
   expect(spec.slice(spec.indexOf('### 6.7'), spec.indexOf('### 6.8'))).toMatch(/corruption/);

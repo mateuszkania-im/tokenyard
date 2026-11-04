@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from 'vitest';
-import { BENCH_END, BENCH_START, checkBenchBlock, renderBenchBlock, writeBenchBlock } from '../../scripts/bench-to-readme.mjs';
+import { BENCH_END, BENCH_START, DEFAULT_TARGET, checkBenchBlock, renderBenchBlock, writeBenchBlock } from '../../scripts/bench-to-readme.mjs';
 
 const pct = (p50: number, p95: number, p99: number) => ({ p50, p95, p99 });
 
@@ -222,4 +224,17 @@ test('the multi-worker rows render as their own table with the worker count, CPU
   expect(block).not.toMatch(/[—–←-⇿⟵-⟿]/);
   const without = { ...r, overhead: { ...r.overhead, workers: { notMeasured: 'not measured: no Redis' } } };
   expect(renderBenchBlock(without)).toContain('not measured: no Redis.');
+});
+
+test('the generated block lives in docs/benchmarks.md, once, and no longer in the README', () => {
+  const root = join(import.meta.dirname, '..', '..');
+  expect(DEFAULT_TARGET).toBe('docs/benchmarks.md');
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+  expect(pkg.scripts['bench:check']).toContain(`--check ${DEFAULT_TARGET}`);
+  const doc = readFileSync(join(root, DEFAULT_TARGET), 'utf8');
+  expect(doc.split(BENCH_START)).toHaveLength(2);
+  expect(doc.split(BENCH_END)).toHaveLength(2);
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  expect(readme).not.toContain(BENCH_START);
+  expect(readme).not.toContain(BENCH_END);
 });

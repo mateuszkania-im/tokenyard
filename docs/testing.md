@@ -85,5 +85,5 @@ generate the same inputs on every run and `TOKENYARD_FUZZ_SEED` replaces their s
   shape). The gateway writes a client's unpriced model name as `model-<hex>` at ingest, and error codes come from the
   upstream, so the anonymizer fuzz gives these fields only values outside those shapes.
 - Replay orders admits and settles exactly within one process epoch of an instance. Across a restart and across
-  instances sharing Redis the order is approximated from the clocks (README, Admit order); the Redis properties use one connection for the exact model and
+  instances sharing Redis the order is approximated from the clocks ([replay.md](replay.md), Admit order); the Redis properties use one connection for the exact model and
   two connections only for the bounds.

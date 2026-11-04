@@ -53,7 +53,7 @@
     "test:chaos": "node scripts/local-redis.mjs env TOKENYARD_CHAOS=1 vitest run --no-file-parallelism test/chaos",
     "bench": "tsx bench/run.ts",
     "soak": "tsx bench/soak.ts",
-    "bench:check": "node scripts/bench-to-readme.mjs --check README.md",
+    "bench:check": "node scripts/bench-to-readme.mjs --check docs/benchmarks.md",
     "live": "node --env-file=.env bin/tokenyard.mjs live",
     "check:secrets": "node scripts/check-no-secrets.mjs",
     "check": "npm run typecheck && npm run lint && npm run check:bundle && npm run check:secrets && npm run bench:check"

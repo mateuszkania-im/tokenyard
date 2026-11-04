@@ -38,10 +38,10 @@ const all = docFiles()
   .map((f) => read(f))
   .join('\n');
 
-/** A `## Heading` section of the README up to the next `## ` heading. */
+/** A `## Heading` section of a Markdown file up to the next `## ` heading. */
 function section(md: string, heading: string): string {
   const start = md.indexOf(`\n## ${heading}\n`);
-  if (start < 0) throw new Error(`README has no "## ${heading}" section`);
+  if (start < 0) throw new Error(`no "## ${heading}" section`);
   const next = md.indexOf('\n## ', start + 4);
   return md.slice(start, next < 0 ? undefined : next);
 }
@@ -91,15 +91,23 @@ function liveRecords(): Array<Record<string, unknown>> {
   return out;
 }
 
-test('README exactness table equals the replay constant verbatim', () => {
-  expect(readme).toContain(`\n${EXACTNESS_TABLE}\n`);
+test('docs/replay.md exactness table equals the replay constant verbatim', () => {
+  expect(read('docs/replay.md')).toContain(`\n${EXACTNESS_TABLE}\n`);
 });
 
 test('README has no subscription passthrough mention', () => expect(readme).not.toMatch(/experimental-subscription|subscription (mode|passthrough|login)|OAuth/i));
 
 test('README and docs contain no em dash and no arrow characters', () => expect(proseOnly(all)).not.toMatch(/[—→⇒]|->|=>/));
 
-test('every number in the README Measured and Real sessions sections appears in bench/results.json or examples/live', () => {
+// The measured text that moved out of the README in 0.2.0: the Measured section of docs/benchmarks.md (its other
+// sections describe development runs and are not generated), and the whole of docs/real-sessions.md and docs/budgets.md.
+const MEASURED_TEXT: Array<{ name: string; load: () => string }> = [
+  { name: 'docs/benchmarks.md Measured', load: () => section(read('docs/benchmarks.md'), 'Measured') },
+  { name: 'docs/real-sessions.md', load: () => read('docs/real-sessions.md') },
+  { name: 'docs/budgets.md', load: () => read('docs/budgets.md') },
+];
+
+test('every number in the Measured, Real sessions and Budgets text appears in bench/results.json or examples/live', () => {
   const sources = [read('bench/results.json'), ...liveTexts().map((t) => t.text)];
   const haystack: number[] = [];
   for (const s of sources) {
@@ -113,8 +121,8 @@ test('every number in the README Measured and Real sessions sections appears in 
   const values = [...new Set(haystack)];
   const text = sources.join('\n');
   const missing: string[] = [];
-  for (const name of ['Measured', 'Real sessions', 'Budgets']) {
-    let prose = handWritten(section(readme, name));
+  for (const { name, load } of MEASURED_TEXT) {
+    let prose = handWritten(load());
     // Dates and versions must appear as written.
     for (const re of [DATE, VERSION]) {
       for (const m of prose.match(re) ?? []) if (!text.includes(m)) missing.push(`${name}: ${m}`);

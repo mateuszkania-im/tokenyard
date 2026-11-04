@@ -1,13 +1,16 @@
 #!/usr/bin/env node
-// Copies bench/results.json into the README between the BENCH markers (spec 12.3), or checks that the block there is
-// exactly what the results render to. The check never measures anything: it only compares text.
-//   node scripts/bench-to-readme.mjs --write README.md [--results bench/results.json]
-//   node scripts/bench-to-readme.mjs --check README.md [--results bench/results.json]
+// Copies bench/results.json into docs/benchmarks.md between the BENCH markers (spec 12.3; the block lived in the README
+// until 0.2.0), or checks that the block there is exactly what the results render to. The check never measures
+// anything: it only compares text. The file argument is optional and defaults to docs/benchmarks.md.
+//   node scripts/bench-to-readme.mjs --write [docs/benchmarks.md] [--results bench/results.json]
+//   node scripts/bench-to-readme.mjs --check [docs/benchmarks.md] [--results bench/results.json]
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 export const BENCH_START = '<!-- BENCH:START -->';
 export const BENCH_END = '<!-- BENCH:END -->';
+/** The file that holds the generated block. */
+export const DEFAULT_TARGET = 'docs/benchmarks.md';
 
 /** Fixed-point with thousands separators, independent of the locale. */
 function num(n, digits = 0) {
@@ -279,14 +282,14 @@ function markers(readme) {
   return single && start < end ? { start, end } : null;
 }
 
-/** The README with only the text between the markers replaced. Throws unless both markers appear once, in order. */
+/** The file with only the text between the markers replaced. Throws unless both markers appear once, in order. */
 export function writeBenchBlock(readme, results) {
   const m = markers(readme);
-  if (!m) throw new Error(`the README needs one ${BENCH_START} followed by one ${BENCH_END}`);
+  if (!m) throw new Error(`the file needs one ${BENCH_START} followed by one ${BENCH_END}`);
   return `${readme.slice(0, m.start + BENCH_START.length)}\n${renderBenchBlock(results)}\n${readme.slice(m.end)}`;
 }
 
-/** True when the README holds exactly the block the results render to, from a full run (a quick run never passes). */
+/** True when the file holds exactly the block the results render to, from a full run (a quick run never passes). */
 export function checkBenchBlock(readme, results) {
   if (results.quick || !markers(readme)) return false;
   return writeBenchBlock(readme, results) === readme;
@@ -298,11 +301,18 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const i = args.indexOf(name);
     return i === -1 ? undefined : args[i + 1];
   };
+  // A mode flag takes the next argument as its file unless that is another flag or missing.
+  const target = (name) => {
+    const i = args.indexOf(name);
+    if (i === -1) return undefined;
+    const next = args[i + 1];
+    return next === undefined || next.startsWith('--') ? DEFAULT_TARGET : next;
+  };
   const resultsPath = opt('--results') ?? 'bench/results.json';
-  const write = opt('--write');
-  const check = opt('--check');
+  const write = target('--write');
+  const check = target('--check');
   if (!write === !check) {
-    console.error('usage: bench-to-readme.mjs (--write README.md | --check README.md) [--results bench/results.json]');
+    console.error(`usage: bench-to-readme.mjs (--write | --check) [${DEFAULT_TARGET}] [--results bench/results.json]`);
     process.exit(2);
   }
   const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
