@@ -38,15 +38,15 @@ afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 /** origin with a base commit (with or without action.yml) and a PR commit, optionally adding the symbolic link. */
 function origin(o: { link: boolean; action: boolean }): { origin: string; baseSha: string } {
   const src = join(tmp, 'src');
-  mkdirSync(join(src, 'examples/policy'), { recursive: true });
+  mkdirSync(join(src, 'examples/pr-demo/policy'), { recursive: true });
   g(src, 'init', '-q', '-b', 'main');
   if (o.action) writeFileSync(join(src, 'action.yml'), readFileSync(join(ROOT, 'action.yml')));
-  writeFileSync(join(src, 'examples/policy/policy.yaml'), 'base\n');
+  writeFileSync(join(src, 'examples/pr-demo/policy/policy.yaml'), 'base\n');
   g(src, 'add', '-A');
   g(src, 'commit', '-qm', 'base');
   const baseSha = g(src, 'rev-parse', 'HEAD');
   g(src, 'checkout', '-qb', 'pr');
-  writeFileSync(join(src, 'examples/policy/policy.yaml'), 'pr weakens the policy\n');
+  writeFileSync(join(src, 'examples/pr-demo/policy/policy.yaml'), 'pr weakens the policy\n');
   if (o.link) symlinkSync('.', join(src, TRUSTED));
   g(src, 'add', '-A');
   g(src, 'commit', '-qm', 'pr');

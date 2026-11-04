@@ -4,7 +4,7 @@ Label: `demo`
 
 ## What changes
 
-`examples/policy/policy.yaml`, two changes:
+`examples/pr-demo/policy/policy.yaml` (a copy of `examples/policy`, which the tests use as a fixture), two changes:
 
 1. Two new routes, `claude-code-compaction` and `claude-code-auxiliary`, send compaction and auxiliary requests of
    coding agents to `claude-haiku-5-5`. This rewrites the model on coding-agent traffic, so each route sets

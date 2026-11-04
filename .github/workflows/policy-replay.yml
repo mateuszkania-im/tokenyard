@@ -3,7 +3,7 @@ name: policy replay
 on:
   pull_request:
     paths:
-      - 'examples/policy/**'
+      - 'examples/pr-demo/policy/**'
       - 'examples/traces/**'
 permissions:
   contents: read
@@ -59,7 +59,7 @@ jobs:
         if: steps.trusted.outputs.run == 'true'
         uses: ./.tokenyard-trusted
         with:
-          policy-dir: examples/policy
+          policy-dir: examples/pr-demo/policy
           traces: examples/traces/demo.ndjson.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.replay.outputs.replay-json != ''
