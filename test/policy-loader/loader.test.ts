@@ -108,13 +108,21 @@ test('swap under load: 200 concurrent requests during 5 swaps, zero failed', asy
       await rewritePolicyDir(dir, mock.url, `v${i}`);
     }
   })();
-  const requests = Array.from({ length: 200 }, async (_, i) => {
-    // Spread over about 1 s, past the last swap (400 ms) and its settle reads even on a loaded runner.
-    await sleep((i % 40) * 25);
+  const one = async (): Promise<void> => {
     const r = await send(url, { path: '/v1/messages', headers: authHeaders, body: msgBody({ model: 'claude-sonnet-5-5' }), agent });
     results.push({ status: r.status, rev: String(r.headers['x-tokenyard-policy-revision']) });
+  };
+  const firstRev = l.active().revision;
+  // 160 requests spread over about 1 s, across all five swaps.
+  const during = Array.from({ length: 160 }, async (_, i) => {
+    await sleep((i % 40) * 25);
+    await one();
   });
-  await Promise.all([swapper, ...requests]);
+  await Promise.all([swapper, ...during]);
+  // A slow runner (coverage instrumentation) can see the watcher land every swap after the spread ends, so the last
+  // 40 requests wait until a new revision is active: the test then always sees more than one revision.
+  await expect.poll(() => l.active().revision, { timeout: 10_000 }).not.toBe(firstRev);
+  await Promise.all(Array.from({ length: 40 }, () => one()));
   expect(results).toHaveLength(200);
   expect(results.filter((r) => r.status !== 200)).toEqual([]);
   expect(new Set(results.map((r) => r.rev)).size).toBeGreaterThan(1);
