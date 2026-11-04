@@ -25,6 +25,23 @@ tenants:
   acme: { teams: [platform, web, data] }
 
 routes:                               # first match wins
+  # The demo PR (spec 13): compaction and auxiliary requests run on a cheaper Claude model. This rewrites the model on
+  # coding-agent traffic, so each route needs allowBodyRewrite: true and a because: line. Requests are still authorised
+  # by the claude-code route below (same allowModels), which header-selected routes cannot widen.
+  - name: claude-code-compaction
+    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: compaction }
+    chain: [anthropic, anthropic-backup]
+    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]
+    rewriteModel: claude-haiku-5-5
+    allowBodyRewrite: true
+    because: "compaction summaries do not need the main model; Haiku is priced far below Opus"
+  - name: claude-code-auxiliary
+    match: { surface: anthropic-messages, traffic: coding-agent, billing: api, requestClass: auxiliary }
+    chain: [anthropic, anthropic-backup]
+    allowModels: ["claude-opus-5-5*", "claude-sonnet-5-5*", "claude-haiku-*"]
+    rewriteModel: claude-haiku-5-5
+    allowBodyRewrite: true
+    because: "titles and command-prefix checks are small tasks; Haiku is priced far below Sonnet"
   - name: claude-code
     match: { surface: anthropic-messages, traffic: coding-agent, billing: api }
     chain: [anthropic, anthropic-backup]
