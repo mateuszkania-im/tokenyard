@@ -108,6 +108,18 @@ Before and after per overhead row: the "before" run is `node scripts/local-redis
 | body-150kb | memory | 500 | 4.28 / 6.44; 12750.03 / 22074.71 | 1.05 / 3.58; 1988.55 / 4444.03 | missed | missed | 109.4% / 110.6% |
 | body-150kb | redis | 500 | 559.92 / 1099.31; 4051.31 / 20802.69 | 223.98 / 556.88; 4106.65 / 9152.51 | missed | missed | 110.1% / 94.1% |
 
+### Why the Redis store misses the added-TTFB target at 500 streams (measured 2026-11-04)
+
+The missed rows at 500 concurrent streams are a saturated process, not extra work on the Redis path. Timings from an instrumented copy of the request path, after the soak, on the machine in the README:
+
+- At 500 streams with 150 KB bodies the gateway runs at 95 to 108% CPU and one event-loop pass takes about 65 ms, most of it other requests' body scans. Admit waits 189 ms p50 / 506 ms p99: node-redis holds every write until the end of the current pass (`setImmediate`), 67 ms p50 before the command is even sent, and the reply then waits for the next pass.
+- The memory store looks fine on this row only because its admit is synchronous, so the wait happens before the gateway starts timing the request. By the bench's own verdict (gateway and client-side measures both under target) memory misses the same rows: client-side p50 about 2 s at 150 KB / 500.
+- Ruled out by measurement: extra Redis round trips (exactly two per request, admit before and settle after the response), argument serialisation (0.07 to 0.26 ms), the scan before admit (about 1 ms; admit needs its taint hashes, so it cannot overlap), and a single shared connection (replies already pipeline; the wait is the event-loop pass).
+- A node-redis copy patched to write immediately cut added TTFB to 71 / 386 ms at 150 KB / 500, still far over target, so it was not adopted: any async store pays one event-loop pass under saturation.
+- At 10 streams the borderline 150 KB row is about 2.3 ms of scan plus about 2 ms of Docker Desktop networking waking up after idle gaps (a Redis PING is 0.26 ms back to back, 1.3 to 2.4 ms after an idle gap); the Lua script itself runs 135 to 217 microseconds inside Redis.
+
+Meeting the target at 500 streams needs less CPU per event-loop pass on the main thread: more gateway instances behind the shared Redis (see [Running several instances](../README.md#running-several-instances)), or moving the secret scan of large bodies to worker threads. The 45-minute soak with two gateways on one Redis passes every check at 80 requests per second per gateway.
+
 ### Budget correctness (`bench/budget.ts`)
 
 The G4 scenario of the design spec (section 7.4) through the whole gateway: 1,000 requests, each on its own connection opened beforehand, sent at the same moment against one enforced $1 budget, with each actual cost drawn (seeded) between 0 and that request's limits by the mock. Run on both stores and both estimators. It records how many admit calls the store decided before the first settle, the most open reservations, admitted and rejected counts, final spend, the highest spent plus reserved after any admit, the largest overspend, final spend minus the sum of settled costs (lost updates) and the reservation left at the end.
