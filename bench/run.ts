@@ -144,7 +144,7 @@ function workersMethod(): string {
     `The ${WORKERS_LEVELS.join(', ')}-stream rows again on the Redis store, with the gateway as ${WORKER_COUNTS.join(', ')} processes sharing one port through node:cluster, as \`tokenyard serve --workers <n>\` runs it (a primary that serves no traffic hands each connection to a worker in turn; every worker has its own instance id and Redis connection).`,
     `The harness is in several processes too, so it is not the bottleneck: the mock runs as ${HARNESS.mockProcesses} processes on one port and the load generator as ${HARNESS.loadProcesses} processes that split the connections and start together (the single-process rows above saturate the mock at 150 KB and 500 streams). The direct path goes through the same mock and load processes; the mock and load CPU columns are per process over the gateway run.`,
     'Same schedule, mock timing, policy, measures and verdict as the rows above. Gateway CPU is the sum over the workers and the primary, with each worker in brackets; a row is flagged saturated when one worker uses a full core.',
-    `The row with 1 process is the control: the same harness with one gateway process. The SLO rows use ${SLO_WORKERS} processes, chosen from development runs on this machine before this run; every count is in the table.`,
+    `The row with 1 process is the control: the same harness with one gateway process. The SLO rows use ${SLO_WORKERS} processes, chosen from development runs on this machine before this run; every count is in the table. These rows run before the single-process sweep above, which heats the laptop until it throttles.`,
   ].join(' ');
 }
 
@@ -211,12 +211,14 @@ async function main(): Promise<void> {
     log('replay');
     const replay = await benchReplay(1_000_000);
     log(`replay: ${replay.seconds} s`);
-    log('overhead');
-    const overhead = await benchOverhead({ redisUrl, quick, log });
+    // The multi-worker rows need the most cores at once, so they run before the 35-minute single-process sweep: at
+    // its end the laptop throttles (kernel_task at 73% CPU near the end of the first full run, 2026-11-04).
     log('overhead with several gateway processes');
     const workers: WorkersSection = redisUrl
       ? { method: workersMethod(), workers: WORKER_COUNTS, sloWorkers: SLO_WORKERS, ...HARNESS, rows: await benchOverheadWorkers({ redisUrl, quick, log, workers: WORKER_COUNTS, ...HARNESS }) }
       : { notMeasured: `Redis store: ${redisNote}` };
+    log('overhead');
+    const overhead = await benchOverhead({ redisUrl, quick, log });
     const results = {
       schemaVersion: 1,
       ...env,

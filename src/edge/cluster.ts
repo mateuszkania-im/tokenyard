@@ -74,9 +74,9 @@ interface Slot {
  * a worker that exits before it was ready (bad policy, Redis unreachable, port taken) stops every worker and exits 1,
  * as does a crash loop (more than MAX_RESTARTS unexpected exits within a minute). The primary owns the listening
  * socket while any worker listens on it; with `--port 0`, if every worker died at once, a replacement would get a new
- * port (a fixed --port does not move). On the first SIGTERM or SIGINT
- * every worker drains for up to `graceMs`; a second signal closes their connections at once. The primary exits 0
- * when every worker exited 0, 1 otherwise.
+ * port (a fixed --port does not move). On the first SIGTERM or SIGINT every worker drains for up to `graceMs`; a
+ * second signal closes their connections at once. A worker still starting gets the drain once it is ready, and any
+ * worker left EXIT_SLACK_MS past the grace is killed. The primary exits 0 when every worker exited 0, 1 otherwise.
  */
 export function superviseWorkers(o: { n: number; baseInstance: string; graceMs: number; log(s: string): void; onReady(ready: WorkerReady[]): void }): void {
   // Round robin everywhere: Windows defaults to letting the OS pick a worker, which spreads connections unevenly.
