@@ -11,7 +11,7 @@ import { PolicyLoader, type PolicyLoaderOptions } from '../../src/policy-loader/
 import { EXAMPLE_PRICES } from '../policy/helpers.js';
 import { startRawUpstream, authHeaders, msgBody, send } from '../helpers/conformance.js';
 import { PROVIDER_KEY_ENV } from '../helpers/policy.js';
-import { keysYaml, policyYaml, replaceFileSync, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
+import { keysYaml, policyYaml, replaceFile, rewritePolicyDir, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
 
 const UP = 'http://127.0.0.1:1';
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -50,10 +50,10 @@ test('file change swaps the snapshot; in-flight request keeps its revision', asy
  * watch() returns can be dropped, and a loaded machine widens that window (the flake in the final verification).
  * Writing again still needs a working watcher; the poll is a minute away.
  */
-async function writeUntil(write: () => void, seen: () => boolean, deadlineMs = 20_000, everyMs = 1_000): Promise<boolean> {
+async function writeUntil(write: () => void | Promise<void>, seen: () => boolean, deadlineMs = 20_000, everyMs = 1_000): Promise<boolean> {
   const end = Date.now() + deadlineMs;
   while (Date.now() < end) {
-    write();
+    await write();
     const next = Math.min(end, Date.now() + everyMs);
     while (Date.now() < next) {
       if (seen()) return true;
@@ -70,14 +70,14 @@ test('the watcher alone reloads: with the poll a minute away, a new revision and
   writePolicyDir(dir, UP, 'one');
   const l = await started({ dir, pollMs: 60_000 });
   const first = l.active().revision;
-  expect(await writeUntil(() => writePolicyDir(dir, UP, 'two'), () => l.active().revision !== first)).toBe(true);
+  expect(await writeUntil(() => rewritePolicyDir(dir, UP, 'two'), () => l.active().revision !== first)).toBe(true);
   const second = l.active().revision;
   const errorsBefore = l.loadErrors;
   // Atomic like writePolicyDir: a plain write can be read empty in between, a second distinct failure.
-  const writeBroken = (): void => {
+  const writeBroken = async (): Promise<void> => {
     const tmp = join(dir, '.policy.yaml.tmp');
     writeFileSync(tmp, 'apiVersion: [unclosed');
-    replaceFileSync(tmp, join(dir, 'policy.yaml'));
+    await replaceFile(tmp, join(dir, 'policy.yaml'));
   };
   expect(await writeUntil(writeBroken, () => l.loadErrors > errorsBefore)).toBe(true);
   expect(l.loadErrors).toBe(errorsBefore + 1); // the same broken file written again is still one failure
@@ -105,7 +105,7 @@ test('swap under load: 200 concurrent requests during 5 swaps, zero failed', asy
     // 80 ms apart: a revision activates once two reads a settle interval (20 ms) apart agree (V3).
     for (let i = 1; i <= 5; i++) {
       await sleep(80);
-      writePolicyDir(dir, mock.url, `v${i}`);
+      await rewritePolicyDir(dir, mock.url, `v${i}`);
     }
   })();
   const requests = Array.from({ length: 200 }, async (_, i) => {

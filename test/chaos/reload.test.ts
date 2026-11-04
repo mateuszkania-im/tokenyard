@@ -15,7 +15,7 @@ import { PolicyLoader, type PolicyLoaderOptions } from '../../src/policy-loader/
 import { EXAMPLE_PRICES } from '../policy/helpers.js';
 import { startGateway } from '../helpers/gateway.js';
 import { PROVIDER_KEY_ENV } from '../helpers/policy.js';
-import { keysYaml, policyYaml, replaceFileSync, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
+import { keysYaml, policyYaml, replaceFile, rewritePolicyDir, sleep, tempDir, writePolicyDir } from '../helpers/policy-dir.js';
 import { chaosRequest, chatBody, expectStoreClean, sseMessage, unhandledRejections } from './harness.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -97,10 +97,10 @@ async function okUpstream(): Promise<string> {
 const loadPolicyYaml = (upstream: string, name: string): string => policyYaml(upstream, name).replace('rpm: 120, burst: 30', 'rpm: 1000000, burst: 100000').replace('concurrentStreams: 8', 'concurrentStreams: 10000');
 
 /** writePolicyDir with loadPolicyYaml, policy.yaml written last and atomically. */
-function writeLoadDir(dir: string, upstream: string, name: string): void {
-  writePolicyDir(dir, upstream, name);
+async function writeLoadDir(dir: string, upstream: string, name: string): Promise<void> {
+  await rewritePolicyDir(dir, upstream, name);
   writeFileSync(join(dir, '.policy.yaml.tmp'), loadPolicyYaml(upstream, name));
-  replaceFileSync(join(dir, '.policy.yaml.tmp'), join(dir, 'policy.yaml'));
+  await replaceFile(join(dir, '.policy.yaml.tmp'), join(dir, 'policy.yaml'));
 }
 
 const bundleText = (upstream: string, name: string): string =>
@@ -136,8 +136,8 @@ async function load(url: string, n: number, prefix: string): Promise<number[]> {
 test('under load: in-place writes, an empty file and atomic swaps of the policy directory; every request answered and settled', async () => {
   const up = await okUpstream();
   const dir = tempDir();
-  const write = (name: string): void => writeLoadDir(dir, up, name);
-  write('v0');
+  const write = (name: string): Promise<void> => writeLoadDir(dir, up, name);
+  await write('v0');
   const { l } = await loader({ dir, debounceMs: 30 });
   const g = await gatewayOn(l);
   const churn = (async () => {
@@ -147,7 +147,7 @@ test('under load: in-place writes, an empty file and atomic swaps of the policy 
       if (i % 3 === 0) writeFileSync(join(dir, 'policy.yaml'), '');
       else if (i % 3 === 1) writeFileSync(join(dir, 'policy.yaml'), withoutBudgets(full));
       await sleep(20);
-      write(`v${i}`);
+      await write(`v${i}`);
     }
   })();
   const statuses = await load(g.url, 300, 'rl');
