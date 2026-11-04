@@ -107,7 +107,13 @@ describe.skipIf(!url)('S-V2-1 redis store (REDIS_URL)', () => {
   test('a new session id per request is refused past the allowance; Redis keys and memory stop growing', async () => {
     await client.flushDb();
     const store = createRedisStore(client, { deadlineMs: 600_000 });
-    const memory = async (): Promise<number> => Number(/used_memory:(\d+)/.exec(await client.info('memory'))?.[1]);
+    // Bytes held by the stored keys themselves. used_memory also counts client buffers, the script cache and the
+    // allocator, which other test files sharing this Redis move by more than the tolerance below.
+    const memory = async (): Promise<number> => {
+      let total = 0;
+      for (const k of await client.keys('*')) total += Number(await client.memoryUsage(k));
+      return total;
+    };
     const samples: number[] = [];
     await scenario(store, async () => {
       samples.push(await memory());
@@ -116,7 +122,7 @@ describe.skipIf(!url)('S-V2-1 redis store (REDIS_URL)', () => {
     const keys = (await client.keys('*')).filter((k) => k.includes(':sess:'));
     expect(keys).toHaveLength(ALLOWANCE + 3 + 5);
     for (const k of keys) expect(await client.pTTL(k)).toBeLessThanOrEqual(24 * 3_600_000);
-    // The thousand refused new sessions wrote nothing: used_memory moved by allocator noise only.
-    expect(Math.abs((samples[1] as number) - (samples[0] as number))).toBeLessThan(64 * 1024);
+    // The thousand refused new sessions wrote nothing: a key per refused session would add tens of kilobytes.
+    expect(Math.abs((samples[1] as number) - (samples[0] as number))).toBeLessThan(1024);
   }, 60_000);
 });
