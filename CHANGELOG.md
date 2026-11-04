@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+### Gateway
+
+- `tokenyard serve --workers <n>` runs n gateway processes on one port with `node:cluster` (default 1, the single process as before). The primary serves no traffic: it hands each connection to a worker in turn, replaces a worker that crashes after it was ready, and stops with exit 1 when a worker fails before it is ready or workers crash more than 5 times within a minute. Each worker has its own instance id (`<instance>-w<k>`, new for every fork, so trace files, `traces export` and replay see one instance per process), its own policy loader (a policy change reaches every worker), its own sweeper (the Redis sweep lock keeps it to one sweep per interval) and its own ops listener on `--metrics-port` plus its slot minus one. SIGTERM or SIGINT to the primary drains every worker within `--shutdown-grace-ms` and exits 0. More than one worker needs `--store redis`; `n` must be a whole number from 1 to the CPU count.
+
+### Benchmarks
+
+- The overhead benchmark adds 500-stream rows on the Redis store with the gateway as 1 to 4 processes on one port, the mock and the load generator in several processes each, and SLO rows for 3 gateway processes (README, Measured; docs/benchmarks.md).
+
 ## 0.1.0 (2026-11-04)
 
 First release.

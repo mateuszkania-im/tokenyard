@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "runAt": "2026-11-03T07:05:18.160Z",
+  "runAt": "2026-11-04T19:50:13.490Z",
   "git": {
-    "commit": "1d304f9",
+    "commit": "d45f301",
     "dirty": false
   },
   "hardware": {
@@ -57,68 +57,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.91,
-          "p95": 1.84,
-          "p99": 2.74,
+          "p50": 1.17,
+          "p95": 1.72,
+          "p99": 2.28,
           "n": 100
         },
         "throughput": {
           "direct": {
             "requestsPerS": 5,
             "outputTokensPerS": 2512,
-            "elapsedS": 19.91
+            "elapsedS": 19.9
           },
           "gateway": {
             "requestsPerS": 5,
-            "outputTokensPerS": 2511,
+            "outputTokensPerS": 2512,
             "elapsedS": 19.91
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 106.05,
-            "p95": 111.86,
-            "p99": 114.89,
+            "p50": 103.31,
+            "p95": 106.03,
+            "p99": 107.15,
             "n": 100
           },
           "outsideProvider": {
-            "p50": 3.91,
-            "p95": 8.39,
-            "p99": 11.62,
+            "p50": 2.1,
+            "p95": 4.19,
+            "p99": 5.06,
             "n": 100
           },
           "total": {
-            "p50": 106.3,
-            "p95": 112.06,
-            "p99": 117.02,
+            "p50": 103.5,
+            "p95": 106.27,
+            "p99": 108.2,
             "n": 100
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 108.55,
-            "p95": 112.52,
-            "p99": 116.99,
+            "p50": 106.81,
+            "p95": 110.77,
+            "p99": 112.37,
             "n": 100
           },
           "outsideProvider": {
-            "p50": 6.42,
-            "p95": 10.37,
-            "p99": 14.81,
+            "p50": 5.63,
+            "p95": 9.56,
+            "p99": 10.97,
             "n": 100
           },
           "total": {
-            "p50": 109.05,
-            "p95": 113.57,
-            "p99": 118.18,
+            "p50": 107.34,
+            "p95": 111.73,
+            "p99": 113.44,
             "n": 100
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 3.7,
-        "gatewayRssMb": 111.2,
-        "rssGrowthMb": 2.2,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 4.1,
+        "gatewayRssMb": 96.5,
+        "rssGrowthMb": 2.8
       },
       {
         "scenario": "non-streaming",
@@ -147,68 +147,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 3.12,
-          "p95": 4.9,
-          "p99": 5.3,
+          "p50": 3.08,
+          "p95": 4.96,
+          "p99": 5.9,
           "n": 100
         },
         "throughput": {
           "direct": {
             "requestsPerS": 5,
             "outputTokensPerS": 2512,
-            "elapsedS": 19.91
+            "elapsedS": 19.9
           },
           "gateway": {
             "requestsPerS": 5,
-            "outputTokensPerS": 2511,
+            "outputTokensPerS": 2512,
             "elapsedS": 19.91
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 106.05,
-            "p95": 111.86,
-            "p99": 114.89,
+            "p50": 103.31,
+            "p95": 106.03,
+            "p99": 107.15,
             "n": 100
           },
           "outsideProvider": {
-            "p50": 3.91,
-            "p95": 8.39,
-            "p99": 11.62,
+            "p50": 2.1,
+            "p95": 4.19,
+            "p99": 5.06,
             "n": 100
           },
           "total": {
-            "p50": 106.3,
-            "p95": 112.06,
-            "p99": 117.02,
+            "p50": 103.5,
+            "p95": 106.27,
+            "p99": 108.2,
             "n": 100
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 109.12,
-            "p95": 112.88,
-            "p99": 114.4,
+            "p50": 108,
+            "p95": 112.47,
+            "p99": 115.66,
             "n": 100
           },
           "outsideProvider": {
-            "p50": 7.15,
-            "p95": 10.86,
-            "p99": 12.4,
+            "p50": 6.73,
+            "p95": 11.32,
+            "p99": 13.54,
             "n": 100
           },
           "total": {
-            "p50": 109.48,
-            "p95": 113.33,
-            "p99": 115.67,
+            "p50": 108.47,
+            "p95": 113.48,
+            "p99": 115.77,
             "n": 100
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 4.9,
-        "gatewayRssMb": 129.2,
-        "rssGrowthMb": 3.7,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 4.3,
+        "gatewayRssMb": 99.3,
+        "rssGrowthMb": 10.3
       },
       {
         "scenario": "non-streaming",
@@ -237,68 +237,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.68,
-          "p95": 1.19,
-          "p99": 1.54,
+          "p50": 0.5,
+          "p95": 0.99,
+          "p99": 1.59,
           "n": 2200
         },
         "throughput": {
           "direct": {
             "requestsPerS": 49.9,
-            "outputTokensPerS": 24945,
+            "outputTokensPerS": 24946,
             "elapsedS": 44.1
           },
           "gateway": {
             "requestsPerS": 49.9,
-            "outputTokensPerS": 24969,
-            "elapsedS": 44.05
+            "outputTokensPerS": 24967,
+            "elapsedS": 44.06
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.01,
-            "p95": 105.69,
-            "p99": 107.23,
+            "p50": 101.73,
+            "p95": 103.7,
+            "p99": 105.23,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 1.91,
-            "p95": 3.76,
-            "p99": 4.92,
+            "p50": 1.04,
+            "p95": 2.41,
+            "p99": 3.76,
             "n": 2200
           },
           "total": {
-            "p50": 103.16,
-            "p95": 105.91,
-            "p99": 107.43,
+            "p50": 101.82,
+            "p95": 103.86,
+            "p99": 105.42,
             "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 105.77,
-            "p95": 109.37,
-            "p99": 113.94,
+            "p50": 103.37,
+            "p95": 106.49,
+            "p99": 108.99,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 4.13,
-            "p95": 7.39,
-            "p99": 11.66,
+            "p50": 2.44,
+            "p95": 5.28,
+            "p99": 7.65,
             "n": 2200
           },
           "total": {
-            "p50": 106.19,
-            "p95": 110.26,
-            "p99": 114.44,
+            "p50": 103.63,
+            "p95": 106.97,
+            "p99": 109.7,
             "n": 2200
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 25.3,
-        "gatewayRssMb": 142.6,
-        "rssGrowthMb": 31.4,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 20.6,
+        "gatewayRssMb": 109.1,
+        "rssGrowthMb": 64.8
       },
       {
         "scenario": "non-streaming",
@@ -327,68 +327,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 2.49,
-          "p95": 5.13,
-          "p99": 8.98,
+          "p50": 1.81,
+          "p95": 4.11,
+          "p99": 6.9,
           "n": 2200
         },
         "throughput": {
           "direct": {
             "requestsPerS": 49.9,
-            "outputTokensPerS": 24945,
+            "outputTokensPerS": 24946,
             "elapsedS": 44.1
           },
           "gateway": {
             "requestsPerS": 49.9,
             "outputTokensPerS": 24963,
-            "elapsedS": 44.07
+            "elapsedS": 44.06
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.01,
-            "p95": 105.69,
-            "p99": 107.23,
+            "p50": 101.73,
+            "p95": 103.7,
+            "p99": 105.23,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 1.91,
-            "p95": 3.76,
-            "p99": 4.92,
+            "p50": 1.04,
+            "p95": 2.41,
+            "p99": 3.76,
             "n": 2200
           },
           "total": {
-            "p50": 103.16,
-            "p95": 105.91,
-            "p99": 107.43,
+            "p50": 101.82,
+            "p95": 103.86,
+            "p99": 105.42,
             "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 107.01,
-            "p95": 113.12,
-            "p99": 117.87,
+            "p50": 104.27,
+            "p95": 108.83,
+            "p99": 111.7,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 5.93,
-            "p95": 11.76,
-            "p99": 16.32,
+            "p50": 3.6,
+            "p95": 8,
+            "p99": 10.84,
             "n": 2200
           },
           "total": {
-            "p50": 107.39,
-            "p95": 113.81,
-            "p99": 118.14,
+            "p50": 104.53,
+            "p95": 109.18,
+            "p99": 112.07,
             "n": 2200
           }
         },
-        "addedTtfbMet": false,
-        "gatewayCpuPct": 26.7,
-        "gatewayRssMb": 160.8,
-        "rssGrowthMb": 31.6,
-        "saturated": false
+        "addedTtfbMet": true,
+        "saturated": false,
+        "gatewayCpuPct": 20.6,
+        "gatewayRssMb": 118.5,
+        "rssGrowthMb": 73.8
       },
       {
         "scenario": "non-streaming",
@@ -417,68 +417,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.53,
-          "p95": 0.97,
-          "p99": 1.51,
+          "p50": 0.33,
+          "p95": 0.8,
+          "p99": 1.07,
           "n": 400
         },
         "throughput": {
           "direct": {
             "requestsPerS": 78.5,
-            "outputTokensPerS": 39269,
+            "outputTokensPerS": 39257,
             "elapsedS": 5.09
           },
           "gateway": {
-            "requestsPerS": 79,
-            "outputTokensPerS": 39522,
+            "requestsPerS": 79.1,
+            "outputTokensPerS": 39558,
             "elapsedS": 5.06
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 102.84,
-            "p95": 105.81,
-            "p99": 114.63,
+            "p50": 101.46,
+            "p95": 103.42,
+            "p99": 103.98,
             "n": 400
           },
           "outsideProvider": {
-            "p50": 1.48,
-            "p95": 3.44,
-            "p99": 14.23,
+            "p50": 0.79,
+            "p95": 2.16,
+            "p99": 2.82,
             "n": 400
           },
           "total": {
-            "p50": 102.94,
-            "p95": 106.02,
-            "p99": 114.68,
+            "p50": 101.51,
+            "p95": 103.54,
+            "p99": 104.16,
             "n": 400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 104.92,
-            "p95": 109.31,
-            "p99": 111.03,
+            "p50": 102.41,
+            "p95": 105.53,
+            "p99": 108.44,
             "n": 400
           },
           "outsideProvider": {
-            "p50": 3.95,
-            "p95": 7.35,
-            "p99": 8.96,
+            "p50": 1.83,
+            "p95": 4.39,
+            "p99": 7.72,
             "n": 400
           },
           "total": {
-            "p50": 105.27,
-            "p95": 109.71,
-            "p99": 111.9,
+            "p50": 102.53,
+            "p95": 105.78,
+            "p99": 108.59,
             "n": 400
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 27.6,
-        "gatewayRssMb": 142.8,
-        "rssGrowthMb": 0.2,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 22.1,
+        "gatewayRssMb": 100.6,
+        "rssGrowthMb": 39
       },
       {
         "scenario": "non-streaming",
@@ -507,68 +507,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 2.02,
-          "p95": 4.59,
-          "p99": 5.96,
+          "p50": 1.67,
+          "p95": 3.68,
+          "p99": 5,
           "n": 400
         },
         "throughput": {
           "direct": {
             "requestsPerS": 78.5,
-            "outputTokensPerS": 39269,
+            "outputTokensPerS": 39257,
             "elapsedS": 5.09
           },
           "gateway": {
-            "requestsPerS": 78.5,
-            "outputTokensPerS": 39239,
-            "elapsedS": 5.1
+            "requestsPerS": 78.6,
+            "outputTokensPerS": 39296,
+            "elapsedS": 5.09
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 102.84,
-            "p95": 105.81,
-            "p99": 114.63,
+            "p50": 101.46,
+            "p95": 103.42,
+            "p99": 103.98,
             "n": 400
           },
           "outsideProvider": {
-            "p50": 1.48,
-            "p95": 3.44,
-            "p99": 14.23,
+            "p50": 0.79,
+            "p95": 2.16,
+            "p99": 2.82,
             "n": 400
           },
           "total": {
-            "p50": 102.94,
-            "p95": 106.02,
-            "p99": 114.68,
+            "p50": 101.51,
+            "p95": 103.54,
+            "p99": 104.16,
             "n": 400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 105.84,
-            "p95": 111.67,
-            "p99": 114.25,
+            "p50": 103.99,
+            "p95": 107.71,
+            "p99": 110.42,
             "n": 400
           },
           "outsideProvider": {
-            "p50": 4.74,
-            "p95": 10.19,
-            "p99": 12.97,
+            "p50": 3.26,
+            "p95": 6.85,
+            "p99": 9.29,
             "n": 400
           },
           "total": {
-            "p50": 106.17,
-            "p95": 112.33,
-            "p99": 114.59,
+            "p50": 104.25,
+            "p95": 108.16,
+            "p99": 110.88,
             "n": 400
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 31.6,
-        "gatewayRssMb": 162.1,
-        "rssGrowthMb": 1.3,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 26.8,
+        "gatewayRssMb": 118.7,
+        "rssGrowthMb": 0.9
       },
       {
         "scenario": "non-streaming",
@@ -583,186 +583,6 @@
         "requests": {
           "direct": 1600,
           "gateway": 1600
-        },
-        "dropped": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "addedTtfb": {
-          "p50": 0.18,
-          "p95": 0.54,
-          "p99": 0.82,
-          "n": 1600
-        },
-        "throughput": {
-          "direct": {
-            "requestsPerS": 313.6,
-            "outputTokensPerS": 156810,
-            "elapsedS": 5.1
-          },
-          "gateway": {
-            "requestsPerS": 314.1,
-            "outputTokensPerS": 157046,
-            "elapsedS": 5.09
-          }
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 101,
-            "p95": 103.92,
-            "p99": 108.24,
-            "n": 1600
-          },
-          "outsideProvider": {
-            "p50": 0.5,
-            "p95": 2.4,
-            "p99": 5.4,
-            "n": 1600
-          },
-          "total": {
-            "p50": 101.07,
-            "p95": 104.01,
-            "p99": 108.31,
-            "n": 1600
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 101.82,
-            "p95": 105.43,
-            "p99": 108.64,
-            "n": 1600
-          },
-          "outsideProvider": {
-            "p50": 1.35,
-            "p95": 4.97,
-            "p99": 7.82,
-            "n": 1600
-          },
-          "total": {
-            "p50": 101.97,
-            "p95": 105.6,
-            "p99": 108.71,
-            "n": 1600
-          }
-        },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 60.2,
-        "gatewayRssMb": 151.7,
-        "rssGrowthMb": 9,
-        "saturated": false
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "redis",
-        "concurrency": 64,
-        "ratePerConnection": 5,
-        "durationS": 5,
-        "intended": {
-          "direct": 1600,
-          "gateway": 1600
-        },
-        "requests": {
-          "direct": 1600,
-          "gateway": 1600
-        },
-        "dropped": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errors": {
-          "direct": 0,
-          "gateway": 0
-        },
-        "errorKinds": {
-          "direct": {},
-          "gateway": {}
-        },
-        "addedTtfb": {
-          "p50": 1.3,
-          "p95": 3.4,
-          "p99": 6.36,
-          "n": 1600
-        },
-        "throughput": {
-          "direct": {
-            "requestsPerS": 313.6,
-            "outputTokensPerS": 156810,
-            "elapsedS": 5.1
-          },
-          "gateway": {
-            "requestsPerS": 314,
-            "outputTokensPerS": 157013,
-            "elapsedS": 5.1
-          }
-        },
-        "direct": {
-          "ttfb": {
-            "p50": 101,
-            "p95": 103.92,
-            "p99": 108.24,
-            "n": 1600
-          },
-          "outsideProvider": {
-            "p50": 0.5,
-            "p95": 2.4,
-            "p99": 5.4,
-            "n": 1600
-          },
-          "total": {
-            "p50": 101.07,
-            "p95": 104.01,
-            "p99": 108.31,
-            "n": 1600
-          }
-        },
-        "gateway": {
-          "ttfb": {
-            "p50": 103.07,
-            "p95": 108.88,
-            "p99": 113.04,
-            "n": 1600
-          },
-          "outsideProvider": {
-            "p50": 2.56,
-            "p95": 7.9,
-            "p99": 12.02,
-            "n": 1600
-          },
-          "total": {
-            "p50": 103.21,
-            "p95": 109.01,
-            "p99": 113.32,
-            "n": 1600
-          }
-        },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 59,
-        "gatewayRssMb": 167.2,
-        "rssGrowthMb": 5.5,
-        "saturated": false
-      },
-      {
-        "scenario": "non-streaming",
-        "store": "memory",
-        "concurrency": 100,
-        "ratePerConnection": 5,
-        "durationS": 10,
-        "intended": {
-          "direct": 5000,
-          "gateway": 5000
-        },
-        "requests": {
-          "direct": 5000,
-          "gateway": 5000
         },
         "dropped": {
           "direct": 0,
@@ -778,67 +598,247 @@
         },
         "addedTtfb": {
           "p50": 0.14,
-          "p95": 0.32,
-          "p99": 0.63,
+          "p95": 0.28,
+          "p99": 0.51,
+          "n": 1600
+        },
+        "throughput": {
+          "direct": {
+            "requestsPerS": 313.7,
+            "outputTokensPerS": 156853,
+            "elapsedS": 5.1
+          },
+          "gateway": {
+            "requestsPerS": 314.3,
+            "outputTokensPerS": 157154,
+            "elapsedS": 5.09
+          }
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.69,
+            "p95": 102.65,
+            "p99": 108.36,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 0.33,
+            "p95": 1.84,
+            "p99": 6.92,
+            "n": 1600
+          },
+          "total": {
+            "p50": 100.73,
+            "p95": 102.78,
+            "p99": 108.4,
+            "n": 1600
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 100.89,
+            "p95": 102.75,
+            "p99": 104.16,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 0.62,
+            "p95": 2.24,
+            "p99": 3.81,
+            "n": 1600
+          },
+          "total": {
+            "p50": 100.99,
+            "p95": 102.86,
+            "p99": 104.26,
+            "n": 1600
+          }
+        },
+        "addedTtfbMet": true,
+        "saturated": false,
+        "gatewayCpuPct": 47.9,
+        "gatewayRssMb": 123,
+        "rssGrowthMb": 27.6
+      },
+      {
+        "scenario": "non-streaming",
+        "store": "redis",
+        "concurrency": 64,
+        "ratePerConnection": 5,
+        "durationS": 5,
+        "intended": {
+          "direct": 1600,
+          "gateway": 1600
+        },
+        "requests": {
+          "direct": 1600,
+          "gateway": 1600
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.99,
+          "p95": 2.6,
+          "p99": 5.26,
+          "n": 1600
+        },
+        "throughput": {
+          "direct": {
+            "requestsPerS": 313.7,
+            "outputTokensPerS": 156853,
+            "elapsedS": 5.1
+          },
+          "gateway": {
+            "requestsPerS": 314,
+            "outputTokensPerS": 156987,
+            "elapsedS": 5.1
+          }
+        },
+        "direct": {
+          "ttfb": {
+            "p50": 100.69,
+            "p95": 102.65,
+            "p99": 108.36,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 0.33,
+            "p95": 1.84,
+            "p99": 6.92,
+            "n": 1600
+          },
+          "total": {
+            "p50": 100.73,
+            "p95": 102.78,
+            "p99": 108.4,
+            "n": 1600
+          }
+        },
+        "gateway": {
+          "ttfb": {
+            "p50": 101.85,
+            "p95": 104.66,
+            "p99": 108.4,
+            "n": 1600
+          },
+          "outsideProvider": {
+            "p50": 1.52,
+            "p95": 4.11,
+            "p99": 7.15,
+            "n": 1600
+          },
+          "total": {
+            "p50": 101.94,
+            "p95": 104.77,
+            "p99": 108.54,
+            "n": 1600
+          }
+        },
+        "addedTtfbMet": true,
+        "saturated": false,
+        "gatewayCpuPct": 46.5,
+        "gatewayRssMb": 131,
+        "rssGrowthMb": 32.3
+      },
+      {
+        "scenario": "non-streaming",
+        "store": "memory",
+        "concurrency": 100,
+        "ratePerConnection": 5,
+        "durationS": 10,
+        "intended": {
+          "direct": 5000,
+          "gateway": 5000
+        },
+        "requests": {
+          "direct": 5000,
+          "gateway": 5000
+        },
+        "dropped": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errors": {
+          "direct": 0,
+          "gateway": 0
+        },
+        "errorKinds": {
+          "direct": {},
+          "gateway": {}
+        },
+        "addedTtfb": {
+          "p50": 0.09,
+          "p95": 0.23,
+          "p99": 0.51,
           "n": 5000
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 495.1,
-            "outputTokensPerS": 247561,
+            "requestsPerS": 495.2,
+            "outputTokensPerS": 247581,
             "elapsedS": 10.1
           },
           "gateway": {
-            "requestsPerS": 495.5,
-            "outputTokensPerS": 247754,
+            "requestsPerS": 495.7,
+            "outputTokensPerS": 247839,
             "elapsedS": 10.09
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 100.82,
-            "p95": 103.35,
-            "p99": 108.56,
+            "p50": 100.35,
+            "p95": 101.86,
+            "p99": 103.41,
             "n": 5000
           },
           "outsideProvider": {
-            "p50": 0.41,
-            "p95": 2.2,
-            "p99": 5.94,
+            "p50": 0.15,
+            "p95": 1.27,
+            "p99": 2.42,
             "n": 5000
           },
           "total": {
-            "p50": 100.87,
-            "p95": 103.46,
-            "p99": 108.99,
+            "p50": 100.39,
+            "p95": 101.93,
+            "p99": 103.58,
             "n": 5000
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 101.23,
-            "p95": 104.9,
-            "p99": 109.19,
+            "p50": 100.54,
+            "p95": 102.21,
+            "p99": 103.33,
             "n": 5000
           },
           "outsideProvider": {
-            "p50": 0.93,
-            "p95": 4.47,
-            "p99": 8.28,
+            "p50": 0.38,
+            "p95": 1.84,
+            "p99": 3.1,
             "n": 5000
           },
           "total": {
-            "p50": 101.34,
-            "p95": 105.07,
-            "p99": 109.33,
+            "p50": 100.62,
+            "p95": 102.32,
+            "p99": 103.55,
             "n": 5000
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 61.5,
-        "gatewayRssMb": 155.7,
-        "rssGrowthMb": 5.7,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 46.8,
+        "gatewayRssMb": 127.9,
+        "rssGrowthMb": 12.9
       },
       {
         "scenario": "non-streaming",
@@ -867,68 +867,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.07,
-          "p95": 2.94,
-          "p99": 4.87,
+          "p50": 0.9,
+          "p95": 2.37,
+          "p99": 4,
           "n": 5000
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 495.1,
-            "outputTokensPerS": 247561,
+            "requestsPerS": 495.2,
+            "outputTokensPerS": 247581,
             "elapsedS": 10.1
           },
           "gateway": {
-            "requestsPerS": 495.3,
-            "outputTokensPerS": 247652,
+            "requestsPerS": 495.4,
+            "outputTokensPerS": 247683,
             "elapsedS": 10.09
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 100.82,
-            "p95": 103.35,
-            "p99": 108.56,
+            "p50": 100.35,
+            "p95": 101.86,
+            "p99": 103.41,
             "n": 5000
           },
           "outsideProvider": {
-            "p50": 0.41,
-            "p95": 2.2,
-            "p99": 5.94,
+            "p50": 0.15,
+            "p95": 1.27,
+            "p99": 2.42,
             "n": 5000
           },
           "total": {
-            "p50": 100.87,
-            "p95": 103.46,
-            "p99": 108.99,
+            "p50": 100.39,
+            "p95": 101.93,
+            "p99": 103.58,
             "n": 5000
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 102.25,
-            "p95": 106.46,
-            "p99": 110.18,
+            "p50": 101.42,
+            "p95": 103.99,
+            "p99": 107.27,
             "n": 5000
           },
           "outsideProvider": {
-            "p50": 1.96,
-            "p95": 5.88,
-            "p99": 9.69,
+            "p50": 1.3,
+            "p95": 3.71,
+            "p99": 6.5,
             "n": 5000
           },
           "total": {
-            "p50": 102.36,
-            "p95": 106.59,
-            "p99": 110.38,
+            "p50": 101.5,
+            "p95": 104.1,
+            "p99": 107.33,
             "n": 5000
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 63.6,
-        "gatewayRssMb": 171.2,
-        "rssGrowthMb": 16.9,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 50.5,
+        "gatewayRssMb": 134.8,
+        "rssGrowthMb": 11
       },
       {
         "scenario": "non-streaming",
@@ -957,68 +957,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.08,
+          "p50": 0.06,
           "p95": 0.12,
-          "p99": 0.16,
+          "p99": 0.23,
           "n": 6400
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 1255.2,
-            "outputTokensPerS": 627582,
+            "requestsPerS": 1255,
+            "outputTokensPerS": 627516,
             "elapsedS": 5.1
           },
           "gateway": {
-            "requestsPerS": 1255.3,
-            "outputTokensPerS": 627666,
+            "requestsPerS": 1255.5,
+            "outputTokensPerS": 627745,
             "elapsedS": 5.1
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 100.71,
-            "p95": 103.2,
-            "p99": 107.56,
+            "p50": 100.37,
+            "p95": 102.26,
+            "p99": 105.75,
             "n": 6400
           },
           "outsideProvider": {
-            "p50": 0.37,
-            "p95": 2.24,
-            "p99": 5.73,
+            "p50": 0.17,
+            "p95": 1.59,
+            "p99": 3.98,
             "n": 6400
           },
           "total": {
-            "p50": 100.74,
-            "p95": 103.26,
-            "p99": 107.58,
+            "p50": 100.41,
+            "p95": 102.31,
+            "p99": 105.8,
             "n": 6400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 100.83,
-            "p95": 102.78,
-            "p99": 105.46,
+            "p50": 100.46,
+            "p95": 105.33,
+            "p99": 116.58,
             "n": 6400
           },
           "outsideProvider": {
-            "p50": 0.68,
-            "p95": 2.52,
-            "p99": 5.27,
+            "p50": 0.4,
+            "p95": 5.23,
+            "p99": 16.52,
             "n": 6400
           },
           "total": {
-            "p50": 100.89,
-            "p95": 102.86,
-            "p99": 105.6,
+            "p50": 100.51,
+            "p95": 105.37,
+            "p99": 116.7,
             "n": 6400
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 80.7,
-        "gatewayRssMb": 228,
-        "rssGrowthMb": 74,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 83,
+        "gatewayRssMb": 199.8,
+        "rssGrowthMb": 130.7
       },
       {
         "scenario": "non-streaming",
@@ -1047,68 +1047,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.58,
-          "p95": 1.85,
-          "p99": 2.68,
+          "p50": 0.67,
+          "p95": 1.64,
+          "p99": 2.56,
           "n": 6400
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 1255.2,
-            "outputTokensPerS": 627582,
+            "requestsPerS": 1255,
+            "outputTokensPerS": 627516,
             "elapsedS": 5.1
           },
           "gateway": {
-            "requestsPerS": 1255.6,
-            "outputTokensPerS": 627823,
+            "requestsPerS": 1254.9,
+            "outputTokensPerS": 627428,
             "elapsedS": 5.1
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 100.71,
-            "p95": 103.2,
-            "p99": 107.56,
+            "p50": 100.37,
+            "p95": 102.26,
+            "p99": 105.75,
             "n": 6400
           },
           "outsideProvider": {
-            "p50": 0.37,
-            "p95": 2.24,
-            "p99": 5.73,
+            "p50": 0.17,
+            "p95": 1.59,
+            "p99": 3.98,
             "n": 6400
           },
           "total": {
-            "p50": 100.74,
-            "p95": 103.26,
-            "p99": 107.58,
+            "p50": 100.41,
+            "p95": 102.31,
+            "p99": 105.8,
             "n": 6400
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 100.96,
-            "p95": 103.15,
-            "p99": 105.24,
+            "p50": 100.89,
+            "p95": 102.79,
+            "p99": 105.15,
             "n": 6400
           },
           "outsideProvider": {
-            "p50": 0.9,
-            "p95": 2.81,
-            "p99": 4.99,
+            "p50": 0.86,
+            "p95": 2.62,
+            "p99": 4.93,
             "n": 6400
           },
           "total": {
-            "p50": 101.01,
-            "p95": 103.21,
-            "p99": 105.38,
+            "p50": 100.94,
+            "p95": 102.85,
+            "p99": 105.19,
             "n": 6400
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 78.3,
-        "gatewayRssMb": 280.9,
-        "rssGrowthMb": 109.7,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 90,
+        "gatewayRssMb": 240,
+        "rssGrowthMb": 156.8
       },
       {
         "scenario": "non-streaming",
@@ -1138,67 +1138,67 @@
         },
         "addedTtfb": {
           "p50": 0.05,
-          "p95": 0.07,
-          "p99": 0.1,
+          "p95": 0.08,
+          "p99": 0.12,
           "n": 25000
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 2475.3,
-            "outputTokensPerS": 1237631,
+            "requestsPerS": 2475.4,
+            "outputTokensPerS": 1237685,
             "elapsedS": 10.1
           },
           "gateway": {
             "requestsPerS": 2475.3,
-            "outputTokensPerS": 1237646,
+            "outputTokensPerS": 1237672,
             "elapsedS": 10.1
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.05,
-            "p95": 105.22,
-            "p99": 110.33,
+            "p50": 100.38,
+            "p95": 102.74,
+            "p99": 109.95,
             "n": 25000
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 3.83,
-            "p99": 7.94,
+            "p50": 0.19,
+            "p95": 1.99,
+            "p99": 7.33,
             "n": 25000
           },
           "total": {
-            "p50": 101.09,
-            "p95": 105.26,
-            "p99": 110.38,
+            "p50": 100.4,
+            "p95": 102.77,
+            "p99": 109.96,
             "n": 25000
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 100.74,
-            "p95": 102.72,
-            "p99": 107.97,
+            "p50": 100.66,
+            "p95": 103.34,
+            "p99": 115.62,
             "n": 25000
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 2.55,
-            "p99": 7.58,
+            "p50": 0.63,
+            "p95": 3.13,
+            "p99": 14.99,
             "n": 25000
           },
           "total": {
-            "p50": 100.78,
-            "p95": 102.78,
-            "p99": 108.01,
+            "p50": 100.71,
+            "p95": 103.39,
+            "p99": 115.69,
             "n": 25000
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 94,
-        "gatewayRssMb": 254.3,
-        "rssGrowthMb": 125.6,
-        "saturated": false
+        "saturated": true,
+        "gatewayCpuPct": 100.3,
+        "gatewayRssMb": 228.3,
+        "rssGrowthMb": 153.4
       },
       {
         "scenario": "non-streaming",
@@ -1227,68 +1227,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.7,
-          "p95": 2.08,
-          "p99": 4.34,
+          "p50": 0.73,
+          "p95": 3.46,
+          "p99": 12.81,
           "n": 25000
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 2475.3,
-            "outputTokensPerS": 1237631,
+            "requestsPerS": 2475.4,
+            "outputTokensPerS": 1237685,
             "elapsedS": 10.1
           },
           "gateway": {
-            "requestsPerS": 2475.1,
-            "outputTokensPerS": 1237561,
+            "requestsPerS": 2475,
+            "outputTokensPerS": 1237492,
             "elapsedS": 10.1
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.05,
-            "p95": 105.22,
-            "p99": 110.33,
+            "p50": 100.38,
+            "p95": 102.74,
+            "p99": 109.95,
             "n": 25000
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 3.83,
-            "p99": 7.94,
+            "p50": 0.19,
+            "p95": 1.99,
+            "p99": 7.33,
             "n": 25000
           },
           "total": {
-            "p50": 101.09,
-            "p95": 105.26,
-            "p99": 110.38,
+            "p50": 100.4,
+            "p95": 102.77,
+            "p99": 109.96,
             "n": 25000
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 101.23,
-            "p95": 104.31,
-            "p99": 109.38,
+            "p50": 101.38,
+            "p95": 108.62,
+            "p99": 139.58,
             "n": 25000
           },
           "outsideProvider": {
-            "p50": 1.24,
-            "p95": 4.08,
-            "p99": 9.26,
+            "p50": 1.38,
+            "p95": 8.38,
+            "p99": 38.77,
             "n": 25000
           },
           "total": {
-            "p50": 101.28,
-            "p95": 104.36,
-            "p99": 109.41,
+            "p50": 101.43,
+            "p95": 108.66,
+            "p99": 139.61,
             "n": 25000
           }
         },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 106.9,
-        "gatewayRssMb": 316.3,
-        "rssGrowthMb": 166.6,
-        "saturated": true
+        "addedTtfbMet": false,
+        "saturated": true,
+        "gatewayCpuPct": 112.4,
+        "gatewayRssMb": 278.6,
+        "rssGrowthMb": 177.3
       },
       {
         "scenario": "streaming-500",
@@ -1317,68 +1317,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.72,
-          "p95": 1.09,
-          "p99": 1.25,
+          "p50": 1.1,
+          "p95": 1.41,
+          "p99": 2.25,
           "n": 25
         },
         "throughput": {
           "direct": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 639,
-            "elapsedS": 19.57
+            "outputTokensPerS": 640,
+            "elapsedS": 19.55
           },
           "gateway": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 638,
-            "elapsedS": 19.6
+            "outputTokensPerS": 640,
+            "elapsedS": 19.53
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 106.03,
-            "p95": 107.75,
-            "p99": 108.07,
+            "p50": 103.46,
+            "p95": 104.72,
+            "p99": 104.75,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 4.04,
-            "p95": 4.71,
-            "p99": 5.11,
+            "p50": 2.04,
+            "p95": 3.4,
+            "p99": 3.83,
             "n": 25
           },
           "total": {
-            "p50": 368.11,
-            "p95": 377.79,
-            "p99": 379.74,
+            "p50": 341.42,
+            "p95": 356.67,
+            "p99": 357.11,
             "n": 25
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 107.89,
-            "p95": 132.29,
-            "p99": 157.56,
+            "p50": 106.54,
+            "p95": 123.24,
+            "p99": 142.32,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 6.33,
-            "p95": 30.01,
-            "p99": 55.39,
+            "p50": 5.75,
+            "p95": 22.05,
+            "p99": 41.22,
             "n": 25
           },
           "total": {
-            "p50": 372.49,
-            "p95": 421.09,
-            "p99": 425.08,
+            "p50": 344.71,
+            "p95": 363.88,
+            "p99": 378.87,
             "n": 25
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 4.6,
-        "gatewayRssMb": 138.2,
-        "rssGrowthMb": 0.1,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 3.9,
+        "gatewayRssMb": 69.3,
+        "rssGrowthMb": 5.3
       },
       {
         "scenario": "streaming-500",
@@ -1407,68 +1407,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 4.27,
-          "p95": 6.03,
-          "p99": 7.79,
+          "p50": 3.45,
+          "p95": 7.67,
+          "p99": 12,
           "n": 25
         },
         "throughput": {
           "direct": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 639,
-            "elapsedS": 19.57
+            "outputTokensPerS": 640,
+            "elapsedS": 19.55
           },
           "gateway": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 638,
-            "elapsedS": 19.58
+            "outputTokensPerS": 639,
+            "elapsedS": 19.56
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 106.03,
-            "p95": 107.75,
-            "p99": 108.07,
+            "p50": 103.46,
+            "p95": 104.72,
+            "p99": 104.75,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 4.04,
-            "p95": 4.71,
-            "p99": 5.11,
+            "p50": 2.04,
+            "p95": 3.4,
+            "p99": 3.83,
             "n": 25
           },
           "total": {
-            "p50": 368.11,
-            "p95": 377.79,
-            "p99": 379.74,
+            "p50": 341.42,
+            "p95": 356.67,
+            "p99": 357.11,
             "n": 25
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 112.92,
-            "p95": 135.68,
-            "p99": 192.52,
+            "p50": 111.75,
+            "p95": 128.36,
+            "p99": 179.92,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 10.56,
-            "p95": 33.22,
-            "p99": 90.29,
+            "p50": 10.14,
+            "p95": 27.05,
+            "p99": 79.63,
             "n": 25
           },
           "total": {
-            "p50": 376.37,
-            "p95": 396.31,
-            "p99": 446.94,
+            "p50": 355.71,
+            "p95": 414.22,
+            "p99": 430.39,
             "n": 25
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 5.4,
-        "gatewayRssMb": 122.3,
-        "rssGrowthMb": 1.8,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 5.1,
+        "gatewayRssMb": 72.9,
+        "rssGrowthMb": 18.2
       },
       {
         "scenario": "streaming-500",
@@ -1497,68 +1497,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.52,
-          "p95": 1.03,
-          "p99": 1.82,
+          "p50": 0.53,
+          "p95": 1.17,
+          "p99": 1.77,
           "n": 2200
         },
         "throughput": {
           "direct": {
             "requestsPerS": 12.5,
             "outputTokensPerS": 6241,
-            "elapsedS": 176.27
+            "elapsedS": 176.24
           },
           "gateway": {
             "requestsPerS": 12.5,
-            "outputTokensPerS": 6241,
-            "elapsedS": 176.25
+            "outputTokensPerS": 6242,
+            "elapsedS": 176.21
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.23,
-            "p95": 103.1,
-            "p99": 105.24,
+            "p50": 100.71,
+            "p95": 102.38,
+            "p99": 105.01,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 2.02,
-            "p99": 4.18,
+            "p50": 0.33,
+            "p95": 1.62,
+            "p99": 3.57,
             "n": 2200
           },
           "total": {
-            "p50": 359.89,
-            "p95": 371.04,
-            "p99": 383.5,
+            "p50": 335.56,
+            "p95": 351.95,
+            "p99": 366.41,
             "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 102.55,
-            "p95": 105.06,
-            "p99": 109.52,
+            "p50": 102.07,
+            "p95": 105.08,
+            "p99": 110.39,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 2.05,
-            "p95": 4.3,
-            "p99": 7.71,
+            "p50": 1.78,
+            "p95": 4.35,
+            "p99": 7.96,
             "n": 2200
           },
           "total": {
-            "p50": 360.75,
-            "p95": 372.65,
-            "p99": 386.31,
+            "p50": 338.06,
+            "p95": 352.5,
+            "p99": 370.12,
             "n": 2200
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 15.9,
-        "gatewayRssMb": 117,
-        "rssGrowthMb": 47.8,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 15.2,
+        "gatewayRssMb": 114.2,
+        "rssGrowthMb": 72.9
       },
       {
         "scenario": "streaming-500",
@@ -1587,68 +1587,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 2.5,
-          "p95": 4.38,
-          "p99": 6.91,
+          "p50": 2.3,
+          "p95": 4.42,
+          "p99": 8.02,
           "n": 2200
         },
         "throughput": {
           "direct": {
             "requestsPerS": 12.5,
             "outputTokensPerS": 6241,
-            "elapsedS": 176.27
+            "elapsedS": 176.24
           },
           "gateway": {
             "requestsPerS": 12.5,
             "outputTokensPerS": 6239,
-            "elapsedS": 176.32
+            "elapsedS": 176.31
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.23,
-            "p95": 103.1,
-            "p99": 105.24,
+            "p50": 100.71,
+            "p95": 102.38,
+            "p99": 105.01,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 2.02,
-            "p99": 4.18,
+            "p50": 0.33,
+            "p95": 1.62,
+            "p99": 3.57,
             "n": 2200
           },
           "total": {
-            "p50": 359.89,
-            "p95": 371.04,
-            "p99": 383.5,
+            "p50": 335.56,
+            "p95": 351.95,
+            "p99": 366.41,
             "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 104.54,
-            "p95": 107.91,
-            "p99": 111.33,
+            "p50": 103.75,
+            "p95": 107.32,
+            "p99": 113.68,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 4.07,
-            "p95": 7.18,
-            "p99": 10.31,
+            "p50": 3.42,
+            "p95": 6.62,
+            "p99": 12.55,
             "n": 2200
           },
           "total": {
-            "p50": 362.18,
-            "p95": 373.46,
-            "p99": 382.92,
+            "p50": 338.88,
+            "p95": 355.57,
+            "p99": 381.14,
             "n": 2200
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 17.5,
-        "gatewayRssMb": 119.5,
-        "rssGrowthMb": 74.4,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 14.9,
+        "gatewayRssMb": 110.4,
+        "rssGrowthMb": 78.9
       },
       {
         "scenario": "streaming-500",
@@ -1677,68 +1677,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.49,
-          "p95": 0.96,
-          "p99": 1.44,
+          "p50": 0.33,
+          "p95": 0.95,
+          "p99": 1.28,
           "n": 301
         },
         "throughput": {
           "direct": {
             "requestsPerS": 19.7,
-            "outputTokensPerS": 9847,
-            "elapsedS": 15.23
+            "outputTokensPerS": 9861,
+            "elapsedS": 15.21
           },
           "gateway": {
             "requestsPerS": 19.6,
-            "outputTokensPerS": 9802,
-            "elapsedS": 15.35
+            "outputTokensPerS": 9821,
+            "elapsedS": 15.32
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 100.92,
-            "p95": 102.35,
-            "p99": 103.61,
+            "p50": 100.67,
+            "p95": 102.61,
+            "p99": 105.41,
             "n": 300
           },
           "outsideProvider": {
-            "p50": 0.42,
-            "p95": 1.51,
-            "p99": 2.25,
+            "p50": 0.3,
+            "p95": 1.56,
+            "p99": 3.19,
             "n": 300
           },
           "total": {
-            "p50": 358.7,
-            "p95": 368.5,
-            "p99": 370.2,
+            "p50": 340.11,
+            "p95": 350.05,
+            "p99": 354.07,
             "n": 300
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 102.3,
-            "p95": 105.32,
-            "p99": 108.18,
+            "p50": 101.32,
+            "p95": 103.84,
+            "p99": 106.43,
             "n": 301
           },
           "outsideProvider": {
-            "p50": 1.78,
-            "p95": 4.09,
-            "p99": 6.37,
+            "p50": 1.08,
+            "p95": 3.29,
+            "p99": 5.31,
             "n": 301
           },
           "total": {
-            "p50": 359.68,
-            "p95": 372.77,
-            "p99": 388.07,
+            "p50": 333.41,
+            "p95": 350.05,
+            "p99": 353.8,
             "n": 301
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 21.9,
-        "gatewayRssMb": 111.4,
-        "rssGrowthMb": 11.9,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 17.4,
+        "gatewayRssMb": 82.3,
+        "rssGrowthMb": 56.4
       },
       {
         "scenario": "streaming-500",
@@ -1767,68 +1767,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 2.24,
-          "p95": 4.43,
-          "p99": 8.26,
+          "p50": 2.36,
+          "p95": 4.53,
+          "p99": 7.39,
           "n": 296
         },
         "throughput": {
           "direct": {
             "requestsPerS": 19.7,
-            "outputTokensPerS": 9847,
-            "elapsedS": 15.23
+            "outputTokensPerS": 9861,
+            "elapsedS": 15.21
           },
           "gateway": {
             "requestsPerS": 19.5,
-            "outputTokensPerS": 9751,
-            "elapsedS": 15.18
+            "outputTokensPerS": 9770,
+            "elapsedS": 15.15
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 100.92,
-            "p95": 102.35,
-            "p99": 103.61,
+            "p50": 100.67,
+            "p95": 102.61,
+            "p99": 105.41,
             "n": 300
           },
           "outsideProvider": {
-            "p50": 0.42,
-            "p95": 1.51,
-            "p99": 2.25,
+            "p50": 0.3,
+            "p95": 1.56,
+            "p99": 3.19,
             "n": 300
           },
           "total": {
-            "p50": 358.7,
-            "p95": 368.5,
-            "p99": 370.2,
+            "p50": 340.11,
+            "p95": 350.05,
+            "p99": 354.07,
             "n": 300
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 104.16,
-            "p95": 108.2,
-            "p99": 110.7,
+            "p50": 103.98,
+            "p95": 108.95,
+            "p99": 112.23,
             "n": 296
           },
           "outsideProvider": {
-            "p50": 3.68,
-            "p95": 7.54,
-            "p99": 10.69,
+            "p50": 3.69,
+            "p95": 8.05,
+            "p99": 11.14,
             "n": 296
           },
           "total": {
-            "p50": 363.15,
-            "p95": 375.51,
-            "p99": 394.71,
+            "p50": 342.12,
+            "p95": 358.4,
+            "p99": 366.54,
             "n": 296
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 23.4,
-        "gatewayRssMb": 119.2,
-        "rssGrowthMb": 0.7,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 24.8,
+        "gatewayRssMb": 95.1,
+        "rssGrowthMb": 59.9
       },
       {
         "scenario": "streaming-500",
@@ -1857,68 +1857,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.26,
-          "p95": 0.67,
-          "p99": 0.92,
+          "p50": 0.19,
+          "p95": 0.45,
+          "p99": 0.82,
           "n": 394
         },
         "throughput": {
           "direct": {
             "requestsPerS": 74.7,
-            "outputTokensPerS": 37350,
+            "outputTokensPerS": 37353,
             "elapsedS": 5.33
           },
           "gateway": {
-            "requestsPerS": 73.9,
-            "outputTokensPerS": 36950,
-            "elapsedS": 5.33
+            "requestsPerS": 74.3,
+            "outputTokensPerS": 37134,
+            "elapsedS": 5.31
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.12,
-            "p95": 102.97,
-            "p99": 105.67,
+            "p50": 100.5,
+            "p95": 103.85,
+            "p99": 120.65,
             "n": 398
           },
           "outsideProvider": {
-            "p50": 0.32,
-            "p95": 1.82,
-            "p99": 2.51,
+            "p50": 0.1,
+            "p95": 1.93,
+            "p99": 18.61,
             "n": 398
           },
           "total": {
-            "p50": 369.37,
-            "p95": 380.59,
-            "p99": 386.55,
+            "p50": 346.14,
+            "p95": 385.26,
+            "p99": 399.11,
             "n": 398
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 101.83,
-            "p95": 105.98,
-            "p99": 108.71,
+            "p50": 100.89,
+            "p95": 103.38,
+            "p99": 105.28,
             "n": 394
           },
           "outsideProvider": {
-            "p50": 1.3,
-            "p95": 5.16,
-            "p99": 8.28,
+            "p50": 0.57,
+            "p95": 3.01,
+            "p99": 4.79,
             "n": 394
           },
           "total": {
-            "p50": 369.06,
-            "p95": 376.73,
-            "p99": 383.2,
+            "p50": 335.54,
+            "p95": 342.18,
+            "p99": 343.67,
             "n": 394
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 52.4,
-        "gatewayRssMb": 115.7,
-        "rssGrowthMb": 4.7,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 41.9,
+        "gatewayRssMb": 98.7,
+        "rssGrowthMb": 54.6
       },
       {
         "scenario": "streaming-500",
@@ -1947,68 +1947,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.71,
-          "p95": 3.77,
-          "p99": 5.61,
+          "p50": 1.39,
+          "p95": 3.04,
+          "p99": 9.37,
           "n": 398
         },
         "throughput": {
           "direct": {
             "requestsPerS": 74.7,
-            "outputTokensPerS": 37350,
+            "outputTokensPerS": 37353,
             "elapsedS": 5.33
           },
           "gateway": {
-            "requestsPerS": 75.3,
-            "outputTokensPerS": 37628,
-            "elapsedS": 5.29
+            "requestsPerS": 75.6,
+            "outputTokensPerS": 37823,
+            "elapsedS": 5.26
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.12,
-            "p95": 102.97,
-            "p99": 105.67,
+            "p50": 100.5,
+            "p95": 103.85,
+            "p99": 120.65,
             "n": 398
           },
           "outsideProvider": {
-            "p50": 0.32,
-            "p95": 1.82,
-            "p99": 2.51,
+            "p50": 0.1,
+            "p95": 1.93,
+            "p99": 18.61,
             "n": 398
           },
           "total": {
-            "p50": 369.37,
-            "p95": 380.59,
-            "p99": 386.55,
+            "p50": 346.14,
+            "p95": 385.26,
+            "p99": 399.11,
             "n": 398
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 103.43,
-            "p95": 107.7,
-            "p99": 112.04,
+            "p50": 102.24,
+            "p95": 106.46,
+            "p99": 114.98,
             "n": 398
           },
           "outsideProvider": {
-            "p50": 2.87,
-            "p95": 7.1,
-            "p99": 11.75,
+            "p50": 1.92,
+            "p95": 5.77,
+            "p99": 14.2,
             "n": 398
           },
           "total": {
-            "p50": 370.35,
-            "p95": 380.13,
-            "p99": 383.77,
+            "p50": 337.94,
+            "p95": 350.58,
+            "p99": 353.69,
             "n": 398
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 57.6,
-        "gatewayRssMb": 122.6,
-        "rssGrowthMb": 3.4,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 43.7,
+        "gatewayRssMb": 107.5,
+        "rssGrowthMb": 70.8
       },
       {
         "scenario": "streaming-500",
@@ -2037,68 +2037,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.17,
-          "p95": 0.3,
-          "p99": 0.44,
+          "p50": 0.14,
+          "p95": 0.26,
+          "p99": 0.51,
           "n": 2252
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 122.5,
-            "outputTokensPerS": 61271,
-            "elapsedS": 18.37
+            "requestsPerS": 122.6,
+            "outputTokensPerS": 61309,
+            "elapsedS": 18.36
           },
           "gateway": {
-            "requestsPerS": 122.6,
-            "outputTokensPerS": 61311,
-            "elapsedS": 18.37
+            "requestsPerS": 122.8,
+            "outputTokensPerS": 61416,
+            "elapsedS": 18.33
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.41,
-            "p95": 103.74,
-            "p99": 106.09,
+            "p50": 101.01,
+            "p95": 104.03,
+            "p99": 118.69,
             "n": 2251
           },
           "outsideProvider": {
-            "p50": 0.36,
-            "p95": 2.05,
-            "p99": 3.6,
+            "p50": 0.18,
+            "p95": 2.1,
+            "p99": 7.78,
             "n": 2251
           },
           "total": {
-            "p50": 394.22,
-            "p95": 413.74,
-            "p99": 423.61,
+            "p50": 375.71,
+            "p95": 415.84,
+            "p99": 455.28,
             "n": 2251
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 101.45,
-            "p95": 103.52,
-            "p99": 106.06,
+            "p50": 100.77,
+            "p95": 102.53,
+            "p99": 106.91,
             "n": 2252
           },
           "outsideProvider": {
-            "p50": 0.95,
-            "p95": 2.81,
-            "p99": 5.46,
+            "p50": 0.43,
+            "p95": 2.04,
+            "p99": 6.55,
             "n": 2252
           },
           "total": {
-            "p50": 364.81,
-            "p95": 373.82,
-            "p99": 379.64,
+            "p50": 339.88,
+            "p95": 348.97,
+            "p99": 354.38,
             "n": 2252
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 64.2,
-        "gatewayRssMb": 120,
-        "rssGrowthMb": 4.3,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 52.2,
+        "gatewayRssMb": 92.9,
+        "rssGrowthMb": 71.5
       },
       {
         "scenario": "streaming-500",
@@ -2127,68 +2127,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.45,
-          "p95": 3.17,
-          "p99": 5.36,
+          "p50": 1.13,
+          "p95": 2.78,
+          "p99": 5.04,
           "n": 2250
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 122.5,
-            "outputTokensPerS": 61271,
-            "elapsedS": 18.37
+            "requestsPerS": 122.6,
+            "outputTokensPerS": 61309,
+            "elapsedS": 18.36
           },
           "gateway": {
-            "requestsPerS": 122.5,
-            "outputTokensPerS": 61232,
-            "elapsedS": 18.37
+            "requestsPerS": 122.8,
+            "outputTokensPerS": 61399,
+            "elapsedS": 18.32
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.41,
-            "p95": 103.74,
-            "p99": 106.09,
+            "p50": 101.01,
+            "p95": 104.03,
+            "p99": 118.69,
             "n": 2251
           },
           "outsideProvider": {
-            "p50": 0.36,
-            "p95": 2.05,
-            "p99": 3.6,
+            "p50": 0.18,
+            "p95": 2.1,
+            "p99": 7.78,
             "n": 2251
           },
           "total": {
-            "p50": 394.22,
-            "p95": 413.74,
-            "p99": 423.61,
+            "p50": 375.71,
+            "p95": 415.84,
+            "p99": 455.28,
             "n": 2251
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 102.56,
-            "p95": 106.08,
-            "p99": 112.02,
+            "p50": 101.72,
+            "p95": 104.43,
+            "p99": 108.42,
             "n": 2250
           },
           "outsideProvider": {
-            "p50": 2.08,
-            "p95": 5.37,
-            "p99": 10.15,
+            "p50": 1.41,
+            "p95": 3.84,
+            "p99": 8.32,
             "n": 2250
           },
           "total": {
-            "p50": 362.54,
-            "p95": 378.92,
-            "p99": 388.34,
+            "p50": 338.49,
+            "p95": 349.23,
+            "p99": 363.15,
             "n": 2250
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 63.6,
-        "gatewayRssMb": 139.3,
-        "rssGrowthMb": 17,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 51.5,
+        "gatewayRssMb": 102.3,
+        "rssGrowthMb": 82.4
       },
       {
         "scenario": "streaming-500",
@@ -2217,68 +2217,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 0.07,
+          "p50": 0.08,
           "p95": 0.17,
-          "p99": 0.35,
+          "p99": 0.31,
           "n": 1602
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 293.7,
-            "outputTokensPerS": 146872,
-            "elapsedS": 5.44
+            "requestsPerS": 297.7,
+            "outputTokensPerS": 148854,
+            "elapsedS": 5.37
           },
           "gateway": {
-            "requestsPerS": 298.9,
-            "outputTokensPerS": 149444,
-            "elapsedS": 5.36
+            "requestsPerS": 300.4,
+            "outputTokensPerS": 150188,
+            "elapsedS": 5.33
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.02,
-            "p95": 105.96,
-            "p99": 108.28,
+            "p50": 101.11,
+            "p95": 103.29,
+            "p99": 106.56,
             "n": 1598
           },
           "outsideProvider": {
-            "p50": 0.77,
-            "p95": 3.08,
-            "p99": 4.19,
+            "p50": 0.07,
+            "p95": 1.56,
+            "p99": 3.81,
             "n": 1598
           },
           "total": {
-            "p50": 468.81,
-            "p95": 507.84,
-            "p99": 512.89,
+            "p50": 373,
+            "p95": 422.26,
+            "p99": 425.37,
             "n": 1598
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 101,
-            "p95": 103.26,
-            "p99": 106.71,
+            "p50": 101.39,
+            "p95": 107.56,
+            "p99": 124.76,
             "n": 1602
           },
           "outsideProvider": {
-            "p50": 0.5,
-            "p95": 2.54,
-            "p99": 6.96,
+            "p50": 0.86,
+            "p95": 7.03,
+            "p99": 23.38,
             "n": 1602
           },
           "total": {
-            "p50": 352.51,
-            "p95": 363.53,
-            "p99": 375.91,
+            "p50": 349.8,
+            "p95": 386.42,
+            "p99": 399.34,
             "n": 1602
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 77.1,
-        "gatewayRssMb": 134.6,
-        "rssGrowthMb": 17.4,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 84.8,
+        "gatewayRssMb": 104.7,
+        "rssGrowthMb": 72.3
       },
       {
         "scenario": "streaming-500",
@@ -2307,68 +2307,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.34,
-          "p95": 2.98,
-          "p99": 4.82,
+          "p50": 1.58,
+          "p95": 6.2,
+          "p99": 49.4,
           "n": 1599
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 293.7,
-            "outputTokensPerS": 146872,
-            "elapsedS": 5.44
+            "requestsPerS": 297.7,
+            "outputTokensPerS": 148854,
+            "elapsedS": 5.37
           },
           "gateway": {
-            "requestsPerS": 298.7,
-            "outputTokensPerS": 149374,
-            "elapsedS": 5.35
+            "requestsPerS": 300,
+            "outputTokensPerS": 149980,
+            "elapsedS": 5.33
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.02,
-            "p95": 105.96,
-            "p99": 108.28,
+            "p50": 101.11,
+            "p95": 103.29,
+            "p99": 106.56,
             "n": 1598
           },
           "outsideProvider": {
-            "p50": 0.77,
-            "p95": 3.08,
-            "p99": 4.19,
+            "p50": 0.07,
+            "p95": 1.56,
+            "p99": 3.81,
             "n": 1598
           },
           "total": {
-            "p50": 468.81,
-            "p95": 507.84,
-            "p99": 512.89,
+            "p50": 373,
+            "p95": 422.26,
+            "p99": 425.37,
             "n": 1598
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 102.32,
-            "p95": 106.85,
-            "p99": 111.59,
+            "p50": 102.81,
+            "p95": 163.27,
+            "p99": 224.82,
             "n": 1599
           },
           "outsideProvider": {
-            "p50": 1.86,
-            "p95": 6.18,
-            "p99": 11.28,
+            "p50": 2.32,
+            "p95": 55.13,
+            "p99": 123.35,
             "n": 1599
           },
           "total": {
-            "p50": 347.28,
-            "p95": 362.16,
-            "p99": 368.86,
+            "p50": 350.1,
+            "p95": 480.32,
+            "p99": 509.78,
             "n": 1599
           }
         },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 80,
-        "gatewayRssMb": 153.3,
-        "rssGrowthMb": 13.9,
-        "saturated": false
+        "addedTtfbMet": false,
+        "saturated": false,
+        "gatewayCpuPct": 82,
+        "gatewayRssMb": 117,
+        "rssGrowthMb": 65.4
       },
       {
         "scenario": "streaming-500",
@@ -2398,67 +2398,67 @@
         },
         "addedTtfb": {
           "p50": 0.06,
-          "p95": 0.15,
-          "p99": 0.2,
+          "p95": 0.2,
+          "p99": 0.39,
           "n": 6261
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 599.5,
-            "outputTokensPerS": 299749,
-            "elapsedS": 10.42
+            "requestsPerS": 601.5,
+            "outputTokensPerS": 300734,
+            "elapsedS": 10.38
           },
           "gateway": {
-            "requestsPerS": 602.7,
-            "outputTokensPerS": 301347,
-            "elapsedS": 10.39
+            "requestsPerS": 603.1,
+            "outputTokensPerS": 301572,
+            "elapsedS": 10.38
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.18,
-            "p95": 107.41,
-            "p99": 109.78,
+            "p50": 103.7,
+            "p95": 109.38,
+            "p99": 115.34,
             "n": 6245
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 3.01,
-            "p99": 4.51,
+            "p50": 0.8,
+            "p95": 3.53,
+            "p99": 6.95,
             "n": 6245
           },
           "total": {
-            "p50": 475.09,
-            "p95": 546.16,
-            "p99": 564.12,
+            "p50": 505.74,
+            "p95": 638.69,
+            "p99": 654.88,
             "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 114.88,
-            "p95": 120.31,
-            "p99": 124.88,
+            "p50": 144.78,
+            "p95": 284.7,
+            "p99": 338.95,
             "n": 6261
           },
           "outsideProvider": {
-            "p50": 12.99,
-            "p95": 18.11,
-            "p99": 22.47,
+            "p50": 39.7,
+            "p95": 178.57,
+            "p99": 234.32,
             "n": 6261
           },
           "total": {
-            "p50": 449.42,
-            "p95": 478.07,
-            "p99": 487.08,
+            "p50": 700.21,
+            "p95": 933.09,
+            "p99": 969.34,
             "n": 6261
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 109.3,
-        "gatewayRssMb": 238.5,
-        "rssGrowthMb": 160,
-        "saturated": true
+        "saturated": true,
+        "gatewayCpuPct": 103.5,
+        "gatewayRssMb": 216.8,
+        "rssGrowthMb": 173.7
       },
       {
         "scenario": "streaming-500",
@@ -2487,68 +2487,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 6.5,
-          "p95": 11.73,
-          "p99": 14,
+          "p50": 7.39,
+          "p95": 23.9,
+          "p99": 55.12,
           "n": 6240
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 599.5,
-            "outputTokensPerS": 299749,
-            "elapsedS": 10.42
+            "requestsPerS": 601.5,
+            "outputTokensPerS": 300734,
+            "elapsedS": 10.38
           },
           "gateway": {
-            "requestsPerS": 600.9,
-            "outputTokensPerS": 300443,
-            "elapsedS": 10.38
+            "requestsPerS": 602.3,
+            "outputTokensPerS": 301134,
+            "elapsedS": 10.36
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.18,
-            "p95": 107.41,
-            "p99": 109.78,
+            "p50": 103.7,
+            "p95": 109.38,
+            "p99": 115.34,
             "n": 6245
           },
           "outsideProvider": {
-            "p50": 0.66,
-            "p95": 3.01,
-            "p99": 4.51,
+            "p50": 0.8,
+            "p95": 3.53,
+            "p99": 6.95,
             "n": 6245
           },
           "total": {
-            "p50": 475.09,
-            "p95": 546.16,
-            "p99": 564.12,
+            "p50": 505.74,
+            "p95": 638.69,
+            "p99": 654.88,
             "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 123.55,
-            "p95": 131.26,
-            "p99": 135.59,
+            "p50": 122.78,
+            "p95": 194.21,
+            "p99": 357.73,
             "n": 6240
           },
           "outsideProvider": {
-            "p50": 21.54,
-            "p95": 29.09,
-            "p99": 33.62,
+            "p50": 21.2,
+            "p95": 90.19,
+            "p99": 255.67,
             "n": 6240
           },
           "total": {
-            "p50": 465.13,
-            "p95": 494.34,
-            "p99": 502.14,
+            "p50": 447.54,
+            "p95": 727.38,
+            "p99": 821.61,
             "n": 6240
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 109.7,
-        "gatewayRssMb": 236.6,
-        "rssGrowthMb": 145.2,
-        "saturated": true
+        "saturated": true,
+        "gatewayCpuPct": 106.6,
+        "gatewayRssMb": 250.8,
+        "rssGrowthMb": 201.5
       },
       {
         "scenario": "body-150kb",
@@ -2577,68 +2577,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 4.11,
-          "p95": 7.32,
-          "p99": 7.44,
+          "p50": 3.12,
+          "p95": 6.19,
+          "p99": 11.86,
           "n": 25
         },
         "throughput": {
           "direct": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 639,
-            "elapsedS": 19.56
+            "outputTokensPerS": 640,
+            "elapsedS": 19.54
           },
           "gateway": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 639,
-            "elapsedS": 19.56
+            "outputTokensPerS": 640,
+            "elapsedS": 19.54
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 106.02,
-            "p95": 107.77,
-            "p99": 108.22,
+            "p50": 105.63,
+            "p95": 108.12,
+            "p99": 109.95,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 2.66,
-            "p95": 3.76,
-            "p99": 4.21,
+            "p50": 2.41,
+            "p95": 3.22,
+            "p99": 4.05,
             "n": 25
           },
           "total": {
-            "p50": 364.9,
-            "p95": 371.09,
-            "p99": 371.61,
+            "p50": 341.07,
+            "p95": 350.07,
+            "p99": 351.64,
             "n": 25
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 113.16,
-            "p95": 116.33,
-            "p99": 118.81,
+            "p50": 109.35,
+            "p95": 113.41,
+            "p99": 125.01,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 9.37,
-            "p95": 12.18,
-            "p99": 15.09,
+            "p50": 6.64,
+            "p95": 9.98,
+            "p99": 22.19,
             "n": 25
           },
           "total": {
-            "p50": 373.2,
-            "p95": 378.9,
-            "p99": 379.93,
+            "p50": 344.22,
+            "p95": 357.47,
+            "p99": 358.59,
             "n": 25
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 5,
-        "gatewayRssMb": 106.3,
-        "rssGrowthMb": 13,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 3.9,
+        "gatewayRssMb": 73.5,
+        "rssGrowthMb": 14.9
       },
       {
         "scenario": "body-150kb",
@@ -2667,68 +2667,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 6.22,
-          "p95": 8.9,
-          "p99": 10.4,
+          "p50": 5.6,
+          "p95": 7.94,
+          "p99": 9.29,
           "n": 25
         },
         "throughput": {
           "direct": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 639,
-            "elapsedS": 19.56
+            "outputTokensPerS": 640,
+            "elapsedS": 19.54
           },
           "gateway": {
             "requestsPerS": 1.3,
-            "outputTokensPerS": 639,
-            "elapsedS": 19.57
+            "outputTokensPerS": 640,
+            "elapsedS": 19.53
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 106.02,
-            "p95": 107.77,
-            "p99": 108.22,
+            "p50": 105.63,
+            "p95": 108.12,
+            "p99": 109.95,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 2.66,
-            "p95": 3.76,
-            "p99": 4.21,
+            "p50": 2.41,
+            "p95": 3.22,
+            "p99": 4.05,
             "n": 25
           },
           "total": {
-            "p50": 364.9,
-            "p95": 371.09,
-            "p99": 371.61,
+            "p50": 341.07,
+            "p95": 350.07,
+            "p99": 351.64,
             "n": 25
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 113.65,
-            "p95": 117.16,
-            "p99": 129.61,
+            "p50": 110.61,
+            "p95": 116.47,
+            "p99": 116.62,
             "n": 25
           },
           "outsideProvider": {
-            "p50": 10.48,
-            "p95": 14.7,
-            "p99": 24.97,
+            "p50": 8.67,
+            "p95": 13.23,
+            "p99": 14.15,
             "n": 25
           },
           "total": {
-            "p50": 372.42,
-            "p95": 383.43,
-            "p99": 391.84,
+            "p50": 341.28,
+            "p95": 349.47,
+            "p99": 352.28,
             "n": 25
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 5,
-        "gatewayRssMb": 114.7,
-        "rssGrowthMb": 13,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 3.2,
+        "gatewayRssMb": 71.7,
+        "rssGrowthMb": 9.8
       },
       {
         "scenario": "body-150kb",
@@ -2757,68 +2757,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 3.57,
-          "p95": 6.25,
-          "p99": 8.83,
+          "p50": 2.83,
+          "p95": 5.38,
+          "p99": 8.5,
           "n": 2200
         },
         "throughput": {
           "direct": {
             "requestsPerS": 12.5,
-            "outputTokensPerS": 6242,
-            "elapsedS": 176.22
+            "outputTokensPerS": 6243,
+            "elapsedS": 176.2
           },
           "gateway": {
             "requestsPerS": 12.5,
             "outputTokensPerS": 6245,
-            "elapsedS": 176.15
+            "elapsedS": 176.14
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.45,
-            "p95": 105.72,
-            "p99": 109.53,
+            "p50": 102.9,
+            "p95": 108.61,
+            "p99": 128.01,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 0.9,
-            "p95": 2.12,
-            "p99": 3.19,
+            "p50": 0.66,
+            "p95": 3.4,
+            "p99": 13.98,
             "n": 2200
           },
           "total": {
-            "p50": 361.94,
-            "p95": 372.88,
-            "p99": 378.89,
+            "p50": 346.99,
+            "p95": 386.6,
+            "p99": 491.05,
             "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 108.21,
-            "p95": 114.93,
-            "p99": 119.35,
+            "p50": 106.61,
+            "p95": 113.53,
+            "p99": 120.16,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 5.9,
-            "p95": 12.06,
-            "p99": 16.41,
+            "p50": 4.64,
+            "p95": 10.32,
+            "p99": 17.49,
             "n": 2200
           },
           "total": {
-            "p50": 367.48,
-            "p95": 382.96,
-            "p99": 402.72,
+            "p50": 345.1,
+            "p95": 367.25,
+            "p99": 387.31,
             "n": 2200
           }
         },
-        "addedTtfbMet": false,
-        "gatewayCpuPct": 20.2,
-        "gatewayRssMb": 139.4,
-        "rssGrowthMb": 61,
-        "saturated": false
+        "addedTtfbMet": true,
+        "saturated": false,
+        "gatewayCpuPct": 20.1,
+        "gatewayRssMb": 118.5,
+        "rssGrowthMb": 105.3
       },
       {
         "scenario": "body-150kb",
@@ -2847,68 +2847,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 5.62,
-          "p95": 8.66,
-          "p99": 11.71,
+          "p50": 5,
+          "p95": 9.49,
+          "p99": 15.19,
           "n": 2200
         },
         "throughput": {
           "direct": {
             "requestsPerS": 12.5,
-            "outputTokensPerS": 6242,
-            "elapsedS": 176.22
+            "outputTokensPerS": 6243,
+            "elapsedS": 176.2
           },
           "gateway": {
             "requestsPerS": 12.5,
-            "outputTokensPerS": 6248,
+            "outputTokensPerS": 6249,
             "elapsedS": 176.04
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.45,
-            "p95": 105.72,
-            "p99": 109.53,
+            "p50": 102.9,
+            "p95": 108.61,
+            "p99": 128.01,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 0.9,
-            "p95": 2.12,
-            "p99": 3.19,
+            "p50": 0.66,
+            "p95": 3.4,
+            "p99": 13.98,
             "n": 2200
           },
           "total": {
-            "p50": 361.94,
-            "p95": 372.88,
-            "p99": 378.89,
+            "p50": 346.99,
+            "p95": 386.6,
+            "p99": 491.05,
             "n": 2200
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 110.43,
-            "p95": 114.86,
-            "p99": 119.57,
+            "p50": 108.97,
+            "p95": 116.26,
+            "p99": 123.32,
             "n": 2200
           },
           "outsideProvider": {
-            "p50": 8.16,
-            "p95": 11.76,
-            "p99": 16.74,
+            "p50": 7.04,
+            "p95": 13.43,
+            "p99": 20.25,
             "n": 2200
           },
           "total": {
-            "p50": 368.18,
-            "p95": 382.7,
-            "p99": 402.06,
+            "p50": 347.7,
+            "p95": 368.11,
+            "p99": 380.57,
             "n": 2200
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 21.4,
-        "gatewayRssMb": 149,
-        "rssGrowthMb": 104.1,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 22.7,
+        "gatewayRssMb": 118.5,
+        "rssGrowthMb": 105.8
       },
       {
         "scenario": "body-150kb",
@@ -2937,68 +2937,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 3.46,
-          "p95": 5.76,
-          "p99": 7.98,
+          "p50": 2.34,
+          "p95": 5.56,
+          "p99": 8.12,
           "n": 303
         },
         "throughput": {
           "direct": {
             "requestsPerS": 19.6,
-            "outputTokensPerS": 9790,
-            "elapsedS": 15.32
+            "outputTokensPerS": 9803,
+            "elapsedS": 15.3
           },
           "gateway": {
             "requestsPerS": 19.8,
-            "outputTokensPerS": 9889,
+            "outputTokensPerS": 9891,
             "elapsedS": 15.32
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 102.98,
-            "p95": 105.42,
-            "p99": 109.56,
+            "p50": 102.79,
+            "p95": 105.35,
+            "p99": 109.67,
             "n": 300
           },
           "outsideProvider": {
-            "p50": 0.79,
-            "p95": 2.08,
-            "p99": 6.35,
+            "p50": 0.55,
+            "p95": 1.88,
+            "p99": 4.33,
             "n": 300
           },
           "total": {
-            "p50": 358.81,
-            "p95": 371.01,
-            "p99": 426.66,
+            "p50": 345.55,
+            "p95": 362.03,
+            "p99": 390.31,
             "n": 300
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 108.11,
-            "p95": 113.87,
-            "p99": 117.16,
+            "p50": 105.25,
+            "p95": 112.44,
+            "p99": 117.62,
             "n": 303
           },
           "outsideProvider": {
-            "p50": 5.75,
-            "p95": 12.58,
-            "p99": 15.51,
+            "p50": 3.67,
+            "p95": 9.96,
+            "p99": 14.76,
             "n": 303
           },
           "total": {
-            "p50": 367.55,
-            "p95": 381.38,
-            "p99": 385.51,
+            "p50": 342.75,
+            "p95": 362.49,
+            "p99": 372.19,
             "n": 303
           }
         },
-        "addedTtfbMet": false,
-        "gatewayCpuPct": 29.4,
-        "gatewayRssMb": 113.8,
-        "rssGrowthMb": 89.8,
-        "saturated": false
+        "addedTtfbMet": true,
+        "saturated": false,
+        "gatewayCpuPct": 23.8,
+        "gatewayRssMb": 103.8,
+        "rssGrowthMb": 88.1
       },
       {
         "scenario": "body-150kb",
@@ -3027,68 +3027,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 6.45,
-          "p95": 12.24,
-          "p99": 19.05,
+          "p50": 4.2,
+          "p95": 10.78,
+          "p99": 15.91,
           "n": 297
         },
         "throughput": {
           "direct": {
             "requestsPerS": 19.6,
-            "outputTokensPerS": 9790,
-            "elapsedS": 15.32
+            "outputTokensPerS": 9803,
+            "elapsedS": 15.3
           },
           "gateway": {
             "requestsPerS": 19.5,
-            "outputTokensPerS": 9766,
-            "elapsedS": 15.21
+            "outputTokensPerS": 9771,
+            "elapsedS": 15.2
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 102.98,
-            "p95": 105.42,
-            "p99": 109.56,
+            "p50": 102.79,
+            "p95": 105.35,
+            "p99": 109.67,
             "n": 300
           },
           "outsideProvider": {
-            "p50": 0.79,
-            "p95": 2.08,
-            "p99": 6.35,
+            "p50": 0.55,
+            "p95": 1.88,
+            "p99": 4.33,
             "n": 300
           },
           "total": {
-            "p50": 358.81,
-            "p95": 371.01,
-            "p99": 426.66,
+            "p50": 345.55,
+            "p95": 362.03,
+            "p99": 390.31,
             "n": 300
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 112.56,
-            "p95": 121.67,
-            "p99": 148.15,
+            "p50": 107.32,
+            "p95": 118.55,
+            "p99": 124.07,
             "n": 297
           },
           "outsideProvider": {
-            "p50": 10.45,
-            "p95": 19.04,
-            "p99": 48.05,
+            "p50": 5.59,
+            "p95": 16.51,
+            "p99": 22.27,
             "n": 297
           },
           "total": {
-            "p50": 376.99,
-            "p95": 400.67,
-            "p99": 435.71,
+            "p50": 342.62,
+            "p95": 368.5,
+            "p99": 378.11,
             "n": 297
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 30.2,
-        "gatewayRssMb": 123.9,
-        "rssGrowthMb": 43.4,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 26.1,
+        "gatewayRssMb": 115.7,
+        "rssGrowthMb": 96.8
       },
       {
         "scenario": "body-150kb",
@@ -3117,68 +3117,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.71,
-          "p95": 2.88,
-          "p99": 4.01,
+          "p50": 1.35,
+          "p95": 1.98,
+          "p99": 3.9,
           "n": 405
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 74.6,
-            "outputTokensPerS": 37303,
-            "elapsedS": 5.33
+            "requestsPerS": 74.9,
+            "outputTokensPerS": 37427,
+            "elapsedS": 5.32
           },
           "gateway": {
-            "requestsPerS": 75.5,
-            "outputTokensPerS": 37753,
-            "elapsedS": 5.36
+            "requestsPerS": 76,
+            "outputTokensPerS": 38018,
+            "elapsedS": 5.33
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.57,
-            "p95": 108.59,
-            "p99": 114.26,
+            "p50": 101.9,
+            "p95": 107.29,
+            "p99": 117.35,
             "n": 398
           },
           "outsideProvider": {
-            "p50": 0.82,
-            "p95": 4.87,
-            "p99": 9.66,
+            "p50": 0.34,
+            "p95": 3.23,
+            "p99": 11.98,
             "n": 398
           },
           "total": {
-            "p50": 387.48,
-            "p95": 401.87,
-            "p99": 407.49,
+            "p50": 349.91,
+            "p95": 404.92,
+            "p99": 418.24,
             "n": 398
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 104.3,
-            "p95": 110.19,
-            "p99": 113.9,
+            "p50": 103.34,
+            "p95": 109.48,
+            "p99": 116.98,
             "n": 405
           },
           "outsideProvider": {
-            "p50": 2.81,
-            "p95": 8.7,
-            "p99": 12.4,
+            "p50": 2.26,
+            "p95": 8.44,
+            "p99": 16.44,
             "n": 405
           },
           "total": {
-            "p50": 351.15,
-            "p95": 366.15,
-            "p99": 372.28,
+            "p50": 333.89,
+            "p95": 342.42,
+            "p99": 347.05,
             "n": 405
           }
         },
         "addedTtfbMet": true,
-        "gatewayCpuPct": 57,
-        "gatewayRssMb": 141.6,
-        "rssGrowthMb": 43.8,
-        "saturated": false
+        "saturated": false,
+        "gatewayCpuPct": 54.4,
+        "gatewayRssMb": 123.7,
+        "rssGrowthMb": 103.8
       },
       {
         "scenario": "body-150kb",
@@ -3207,68 +3207,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 2.99,
-          "p95": 7.37,
-          "p99": 10.85,
+          "p50": 2.85,
+          "p95": 7.51,
+          "p99": 12.62,
           "n": 403
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 74.6,
-            "outputTokensPerS": 37303,
-            "elapsedS": 5.33
+            "requestsPerS": 74.9,
+            "outputTokensPerS": 37427,
+            "elapsedS": 5.32
           },
           "gateway": {
-            "requestsPerS": 75.3,
-            "outputTokensPerS": 37643,
-            "elapsedS": 5.35
+            "requestsPerS": 75.6,
+            "outputTokensPerS": 37780,
+            "elapsedS": 5.33
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 103.57,
-            "p95": 108.59,
-            "p99": 114.26,
+            "p50": 101.9,
+            "p95": 107.29,
+            "p99": 117.35,
             "n": 398
           },
           "outsideProvider": {
-            "p50": 0.82,
-            "p95": 4.87,
-            "p99": 9.66,
+            "p50": 0.34,
+            "p95": 3.23,
+            "p99": 11.98,
             "n": 398
           },
           "total": {
-            "p50": 387.48,
-            "p95": 401.87,
-            "p99": 407.49,
+            "p50": 349.91,
+            "p95": 404.92,
+            "p99": 418.24,
             "n": 398
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 105.94,
-            "p95": 113.42,
-            "p99": 125.65,
+            "p50": 105.36,
+            "p95": 112.72,
+            "p99": 136.58,
             "n": 403
           },
           "outsideProvider": {
-            "p50": 4.64,
-            "p95": 11.89,
-            "p99": 24.62,
+            "p50": 4.23,
+            "p95": 11.44,
+            "p99": 33.14,
             "n": 403
           },
           "total": {
-            "p50": 350.79,
-            "p95": 369.63,
-            "p99": 378.89,
+            "p50": 333.62,
+            "p95": 363.37,
+            "p99": 373.11,
             "n": 403
           }
         },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 54,
-        "gatewayRssMb": 145.3,
-        "rssGrowthMb": 36.3,
-        "saturated": false
+        "addedTtfbMet": false,
+        "saturated": false,
+        "gatewayCpuPct": 59.7,
+        "gatewayRssMb": 133.8,
+        "rssGrowthMb": 111
       },
       {
         "scenario": "body-150kb",
@@ -3297,68 +3297,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.21,
-          "p95": 1.52,
-          "p99": 2.26,
+          "p50": 1.15,
+          "p95": 1.51,
+          "p99": 2.81,
           "n": 2251
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 122.6,
-            "outputTokensPerS": 61284,
-            "elapsedS": 18.38
+            "requestsPerS": 122.7,
+            "outputTokensPerS": 61369,
+            "elapsedS": 18.36
           },
           "gateway": {
-            "requestsPerS": 122.7,
-            "outputTokensPerS": 61327,
-            "elapsedS": 18.35
+            "requestsPerS": 122.8,
+            "outputTokensPerS": 61419,
+            "elapsedS": 18.32
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 102.66,
-            "p95": 106.74,
-            "p99": 112.28,
+            "p50": 101.79,
+            "p95": 104.03,
+            "p99": 107.57,
             "n": 2253
           },
           "outsideProvider": {
-            "p50": 0.57,
-            "p95": 3.32,
-            "p99": 6.58,
+            "p50": 0.27,
+            "p95": 1.82,
+            "p99": 3.46,
             "n": 2253
           },
           "total": {
-            "p50": 383.55,
-            "p95": 405.76,
-            "p99": 428.1,
+            "p50": 350.26,
+            "p95": 363.66,
+            "p99": 400.42,
             "n": 2253
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 103.14,
-            "p95": 106.79,
-            "p99": 110.32,
+            "p50": 103.05,
+            "p95": 108.47,
+            "p99": 137.52,
             "n": 2251
           },
           "outsideProvider": {
-            "p50": 2.03,
-            "p95": 5.47,
-            "p99": 9.08,
+            "p50": 1.96,
+            "p95": 7.24,
+            "p99": 33.1,
             "n": 2251
           },
           "total": {
-            "p50": 348.47,
-            "p95": 355.79,
-            "p99": 364.65,
+            "p50": 331.08,
+            "p95": 356.6,
+            "p99": 395.54,
             "n": 2251
           }
         },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 63.8,
-        "gatewayRssMb": 178.1,
-        "rssGrowthMb": 53,
-        "saturated": false
+        "addedTtfbMet": false,
+        "saturated": false,
+        "gatewayCpuPct": 74.2,
+        "gatewayRssMb": 145,
+        "rssGrowthMb": 124.7
       },
       {
         "scenario": "body-150kb",
@@ -3387,68 +3387,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 2.39,
-          "p95": 4.75,
-          "p99": 7.71,
+          "p50": 2.74,
+          "p95": 6.87,
+          "p99": 19.25,
           "n": 2261
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 122.6,
-            "outputTokensPerS": 61284,
-            "elapsedS": 18.38
+            "requestsPerS": 122.7,
+            "outputTokensPerS": 61369,
+            "elapsedS": 18.36
           },
           "gateway": {
-            "requestsPerS": 123.3,
-            "outputTokensPerS": 61658,
-            "elapsedS": 18.34
+            "requestsPerS": 123.4,
+            "outputTokensPerS": 61711,
+            "elapsedS": 18.32
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 102.66,
-            "p95": 106.74,
-            "p99": 112.28,
+            "p50": 101.79,
+            "p95": 104.03,
+            "p99": 107.57,
             "n": 2253
           },
           "outsideProvider": {
-            "p50": 0.57,
-            "p95": 3.32,
-            "p99": 6.58,
+            "p50": 0.27,
+            "p95": 1.82,
+            "p99": 3.46,
             "n": 2253
           },
           "total": {
-            "p50": 383.55,
-            "p95": 405.76,
-            "p99": 428.1,
+            "p50": 350.26,
+            "p95": 363.66,
+            "p99": 400.42,
             "n": 2253
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 104.67,
-            "p95": 108.7,
-            "p99": 112.14,
+            "p50": 105.15,
+            "p95": 114.89,
+            "p99": 157.95,
             "n": 2261
           },
           "outsideProvider": {
-            "p50": 3.57,
-            "p95": 7.5,
-            "p99": 11.31,
+            "p50": 4.1,
+            "p95": 13.74,
+            "p99": 52.91,
             "n": 2261
           },
           "total": {
-            "p50": 352,
-            "p95": 362.16,
-            "p99": 367.3,
+            "p50": 337.64,
+            "p95": 374.23,
+            "p99": 466.88,
             "n": 2261
           }
         },
-        "addedTtfbMet": true,
-        "gatewayCpuPct": 63.8,
-        "gatewayRssMb": 183.5,
-        "rssGrowthMb": 90.3,
-        "saturated": false
+        "addedTtfbMet": false,
+        "saturated": false,
+        "gatewayCpuPct": 83,
+        "gatewayRssMb": 148.4,
+        "rssGrowthMb": 128
       },
       {
         "scenario": "body-150kb",
@@ -3477,68 +3477,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 1.08,
-          "p95": 2.02,
-          "p99": 3.03,
+          "p50": 1.01,
+          "p95": 1.7,
+          "p99": 3.19,
           "n": 1603
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 299.8,
-            "outputTokensPerS": 149919,
-            "elapsedS": 5.36
+            "requestsPerS": 300.3,
+            "outputTokensPerS": 150164,
+            "elapsedS": 5.35
           },
           "gateway": {
-            "requestsPerS": 299.6,
-            "outputTokensPerS": 149777,
-            "elapsedS": 5.35
+            "requestsPerS": 300.2,
+            "outputTokensPerS": 150094,
+            "elapsedS": 5.34
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.63,
-            "p95": 104.11,
-            "p99": 106.11,
+            "p50": 102.3,
+            "p95": 112.33,
+            "p99": 128.1,
             "n": 1606
           },
           "outsideProvider": {
-            "p50": 0.33,
-            "p95": 2.27,
-            "p99": 3.97,
+            "p50": 0.66,
+            "p95": 6.03,
+            "p99": 20.14,
             "n": 1606
           },
           "total": {
-            "p50": 353.52,
-            "p95": 367.93,
-            "p99": 372,
+            "p50": 370.54,
+            "p95": 614.12,
+            "p99": 644.88,
             "n": 1606
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 112.63,
-            "p95": 129.51,
-            "p99": 145.64,
+            "p50": 117.7,
+            "p95": 171.44,
+            "p99": 207.61,
             "n": 1603
           },
           "outsideProvider": {
-            "p50": 11.19,
-            "p95": 28.11,
-            "p99": 44.38,
+            "p50": 15.89,
+            "p95": 67.65,
+            "p99": 104.12,
             "n": 1603
           },
           "total": {
-            "p50": 376.7,
-            "p95": 398.94,
-            "p99": 407.68,
+            "p50": 404,
+            "p95": 530.2,
+            "p99": 553.1,
             "n": 1603
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 116.9,
-        "gatewayRssMb": 299.3,
-        "rssGrowthMb": 186.1,
-        "saturated": true
+        "saturated": true,
+        "gatewayCpuPct": 114.6,
+        "gatewayRssMb": 251.2,
+        "rssGrowthMb": 231.6
       },
       {
         "scenario": "body-150kb",
@@ -3567,68 +3567,68 @@
           "gateway": {}
         },
         "addedTtfb": {
-          "p50": 6.45,
-          "p95": 17.58,
-          "p99": 25.2,
+          "p50": 7.95,
+          "p95": 31.14,
+          "p99": 53.1,
           "n": 1597
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 299.8,
-            "outputTokensPerS": 149919,
-            "elapsedS": 5.36
+            "requestsPerS": 300.3,
+            "outputTokensPerS": 150164,
+            "elapsedS": 5.35
           },
           "gateway": {
-            "requestsPerS": 296.8,
-            "outputTokensPerS": 148392,
-            "elapsedS": 5.38
+            "requestsPerS": 297.8,
+            "outputTokensPerS": 148925,
+            "elapsedS": 5.36
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 101.63,
-            "p95": 104.11,
-            "p99": 106.11,
+            "p50": 102.3,
+            "p95": 112.33,
+            "p99": 128.1,
             "n": 1606
           },
           "outsideProvider": {
-            "p50": 0.33,
-            "p95": 2.27,
-            "p99": 3.97,
+            "p50": 0.66,
+            "p95": 6.03,
+            "p99": 20.14,
             "n": 1606
           },
           "total": {
-            "p50": 353.52,
-            "p95": 367.93,
-            "p99": 372,
+            "p50": 370.54,
+            "p95": 614.12,
+            "p99": 644.88,
             "n": 1606
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 121.06,
-            "p95": 147.68,
-            "p99": 165.85,
+            "p50": 128.2,
+            "p95": 225.98,
+            "p99": 258.25,
             "n": 1597
           },
           "outsideProvider": {
-            "p50": 19.4,
-            "p95": 46,
-            "p99": 64.9,
+            "p50": 26.48,
+            "p95": 121.71,
+            "p99": 156.57,
             "n": 1597
           },
           "total": {
-            "p50": 400.92,
-            "p95": 431.48,
-            "p99": 441.17,
+            "p50": 436.33,
+            "p95": 642.97,
+            "p99": 692.93,
             "n": 1597
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 107.4,
-        "gatewayRssMb": 267.4,
-        "rssGrowthMb": 116.8,
-        "saturated": true
+        "saturated": true,
+        "gatewayCpuPct": 116.4,
+        "gatewayRssMb": 283.2,
+        "rssGrowthMb": 262.2
       },
       {
         "scenario": "body-150kb",
@@ -3658,67 +3658,67 @@
         },
         "addedTtfb": {
           "p50": 1.05,
-          "p95": 2.34,
-          "p99": 3.58,
+          "p95": 2.45,
+          "p99": 4.32,
           "n": 6233
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 498.4,
-            "outputTokensPerS": 249185,
-            "elapsedS": 12.53
+            "requestsPerS": 402.9,
+            "outputTokensPerS": 201450,
+            "elapsedS": 15.5
           },
           "gateway": {
-            "requestsPerS": 421.5,
-            "outputTokensPerS": 210745,
-            "elapsedS": 14.79
+            "requestsPerS": 332.2,
+            "outputTokensPerS": 166108,
+            "elapsedS": 18.76
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 1087.32,
-            "p95": 2063.22,
-            "p99": 2162.14,
+            "p50": 1909.66,
+            "p95": 4802.83,
+            "p99": 5104.64,
             "n": 6245
           },
           "outsideProvider": {
-            "p50": 981.3,
-            "p95": 1955.67,
-            "p99": 2054.43,
+            "p50": 1800.58,
+            "p95": 4686.71,
+            "p99": 4995.05,
             "n": 6245
           },
           "total": {
-            "p50": 1942.58,
-            "p95": 2825.05,
-            "p99": 2851.08,
+            "p50": 2893.74,
+            "p95": 5765.22,
+            "p99": 5800.98,
             "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 2100.94,
-            "p95": 4223.15,
-            "p99": 4560.08,
+            "p50": 4864.09,
+            "p95": 8210.96,
+            "p99": 8726.26,
             "n": 6233
           },
           "outsideProvider": {
-            "p50": 1988.55,
-            "p95": 4104.63,
-            "p99": 4444.03,
+            "p50": 4750.37,
+            "p95": 8098.12,
+            "p99": 8608.58,
             "n": 6233
           },
           "total": {
-            "p50": 2817.02,
-            "p95": 4796.86,
-            "p99": 5079.34,
+            "p50": 5654.79,
+            "p95": 8870.87,
+            "p99": 9246.83,
             "n": 6233
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 110.6,
-        "gatewayRssMb": 515.5,
-        "rssGrowthMb": 314.3,
-        "saturated": true
+        "saturated": true,
+        "gatewayCpuPct": 100.1,
+        "gatewayRssMb": 450.8,
+        "rssGrowthMb": 405.3
       },
       {
         "scenario": "body-150kb",
@@ -3732,7 +3732,7 @@
         },
         "requests": {
           "direct": 6245,
-          "gateway": 6252
+          "gateway": 6244
         },
         "dropped": {
           "direct": 0,
@@ -3740,75 +3740,77 @@
         },
         "errors": {
           "direct": 0,
-          "gateway": 0
+          "gateway": 8
         },
         "errorKinds": {
           "direct": {},
-          "gateway": {}
+          "gateway": {
+            "502": 8
+          }
         },
         "addedTtfb": {
-          "p50": 223.98,
-          "p95": 506.98,
-          "p99": 556.88,
-          "n": 6252
+          "p50": 213.2,
+          "p95": 558.79,
+          "p99": 635.63,
+          "n": 6244
         },
         "throughput": {
           "direct": {
-            "requestsPerS": 498.4,
-            "outputTokensPerS": 249185,
-            "elapsedS": 12.53
+            "requestsPerS": 402.9,
+            "outputTokensPerS": 201450,
+            "elapsedS": 15.5
           },
           "gateway": {
-            "requestsPerS": 322.9,
-            "outputTokensPerS": 161466,
-            "elapsedS": 19.36
+            "requestsPerS": 280.3,
+            "outputTokensPerS": 140173,
+            "elapsedS": 22.27
           }
         },
         "direct": {
           "ttfb": {
-            "p50": 1087.32,
-            "p95": 2063.22,
-            "p99": 2162.14,
+            "p50": 1909.66,
+            "p95": 4802.83,
+            "p99": 5104.64,
             "n": 6245
           },
           "outsideProvider": {
-            "p50": 981.3,
-            "p95": 1955.67,
-            "p99": 2054.43,
+            "p50": 1800.58,
+            "p95": 4686.71,
+            "p99": 4995.05,
             "n": 6245
           },
           "total": {
-            "p50": 1942.58,
-            "p95": 2825.05,
-            "p99": 2851.08,
+            "p50": 2893.74,
+            "p95": 5765.22,
+            "p99": 5800.98,
             "n": 6245
           }
         },
         "gateway": {
           "ttfb": {
-            "p50": 4263.87,
-            "p95": 8898,
-            "p99": 9279.04,
-            "n": 6252
+            "p50": 6305.44,
+            "p95": 11634.02,
+            "p99": 12138.15,
+            "n": 6244
           },
           "outsideProvider": {
-            "p50": 4106.65,
-            "p95": 8682.45,
-            "p99": 9152.51,
-            "n": 6252
+            "p50": 6035.26,
+            "p95": 11422.35,
+            "p99": 12016.48,
+            "n": 6244
           },
           "total": {
-            "p50": 5017.96,
-            "p95": 9394.76,
-            "p99": 9712.69,
-            "n": 6252
+            "p50": 7158.16,
+            "p95": 12257.99,
+            "p99": 12580.14,
+            "n": 6244
           }
         },
         "addedTtfbMet": false,
-        "gatewayCpuPct": 94.1,
-        "gatewayRssMb": 562,
-        "rssGrowthMb": 410.1,
-        "saturated": true
+        "saturated": true,
+        "gatewayCpuPct": 90.1,
+        "gatewayRssMb": 507.1,
+        "rssGrowthMb": 485.7
       }
     ],
     "slopes": [
@@ -3817,17 +3819,17 @@
         "scenario": "non-streaming",
         "from": 100,
         "to": 500,
-        "cpuPctPer100Streams": 8.1,
-        "rssMbPer100Streams": 30,
-        "saturated": false
+        "cpuPctPer100Streams": 13.4,
+        "rssMbPer100Streams": 35.1,
+        "saturated": true
       },
       {
         "store": "redis",
         "scenario": "non-streaming",
         "from": 100,
         "to": 500,
-        "cpuPctPer100Streams": 10.8,
-        "rssMbPer100Streams": 37.4,
+        "cpuPctPer100Streams": 15.5,
+        "rssMbPer100Streams": 41.6,
         "saturated": true
       },
       {
@@ -3835,8 +3837,8 @@
         "scenario": "streaming-500",
         "from": 100,
         "to": 500,
-        "cpuPctPer100Streams": 11.3,
-        "rssMbPer100Streams": 38.9,
+        "cpuPctPer100Streams": 12.8,
+        "rssMbPer100Streams": 25.5,
         "saturated": true
       },
       {
@@ -3844,8 +3846,8 @@
         "scenario": "streaming-500",
         "from": 100,
         "to": 500,
-        "cpuPctPer100Streams": 11.5,
-        "rssMbPer100Streams": 32.1,
+        "cpuPctPer100Streams": 13.8,
+        "rssMbPer100Streams": 29.8,
         "saturated": true
       },
       {
@@ -3853,8 +3855,8 @@
         "scenario": "body-150kb",
         "from": 100,
         "to": 500,
-        "cpuPctPer100Streams": 11.7,
-        "rssMbPer100Streams": 65.3,
+        "cpuPctPer100Streams": 6.5,
+        "rssMbPer100Streams": 70.2,
         "saturated": true
       },
       {
@@ -3862,11 +3864,1474 @@
         "scenario": "body-150kb",
         "from": 100,
         "to": 500,
-        "cpuPctPer100Streams": 7.6,
-        "rssMbPer100Streams": 80,
+        "cpuPctPer100Streams": 1.8,
+        "rssMbPer100Streams": 89.4,
         "saturated": true
       }
-    ]
+    ],
+    "workers": {
+      "method": "The 500-stream rows again on the Redis store, with the gateway as 1, 2, 3, 4 processes sharing one port through node:cluster, as `tokenyard serve --workers <n>` runs it (a primary that serves no traffic hands each connection to a worker in turn; every worker has its own instance id and Redis connection). The harness is in several processes too, so it is not the bottleneck: the mock runs as 3 processes on one port and the load generator as 3 processes that split the connections and start together (the single-process rows above saturate the mock at 150 KB and 500 streams). The direct path goes through the same mock and load processes; the mock and load CPU columns are per process over the gateway run. Same schedule, mock timing, policy, measures and verdict as the rows above. Gateway CPU is the sum over the workers and the primary, with each worker in brackets; a row is flagged saturated when one worker uses a full core. The row with 1 process is the control: the same harness with one gateway process. The SLO rows use 3 processes, chosen from development runs on this machine before this run; every count is in the table. These rows run before the single-process sweep above, which heats the laptop until it throttles.",
+      "workers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sloWorkers": 3,
+      "mockProcesses": 3,
+      "loadProcesses": 3,
+      "rows": [
+        {
+          "scenario": "non-streaming",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 5,
+          "durationS": 10,
+          "intended": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "requests": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 0.71,
+            "p95": 42.25,
+            "p99": 78.28,
+            "n": 25000
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 2475.3,
+              "outputTokensPerS": 1237629,
+              "elapsedS": 10.1
+            },
+            "gateway": {
+              "requestsPerS": 2475.3,
+              "outputTokensPerS": 1237636,
+              "elapsedS": 10.1
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.04,
+              "p95": 101.64,
+              "p99": 104.67,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": -0.06,
+              "p95": 1.08,
+              "p99": 2.99,
+              "n": 25000
+            },
+            "total": {
+              "p50": 100.06,
+              "p95": 101.67,
+              "p99": 104.71,
+              "n": 25000
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 101.42,
+              "p95": 289.24,
+              "p99": 319.76,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": 1.36,
+              "p95": 188.72,
+              "p99": 218.99,
+              "n": 25000
+            },
+            "total": {
+              "p50": 101.47,
+              "p95": 289.29,
+              "p99": 319.84,
+              "n": 25000
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": true,
+          "gatewayCpuPct": 117.7,
+          "gatewayRssMb": 324.2,
+          "rssGrowthMb": 250.3,
+          "workers": 1,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              15.6,
+              14.5,
+              14.6
+            ],
+            "gateway": [
+              6.6,
+              6.7,
+              6.7
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              14.1,
+              14.2,
+              14
+            ],
+            "gateway": [
+              7.9,
+              7.9,
+              7.9
+            ]
+          }
+        },
+        {
+          "scenario": "non-streaming",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 5,
+          "durationS": 10,
+          "intended": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "requests": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 0.63,
+            "p95": 1.86,
+            "p99": 3.98,
+            "n": 25000
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 2475.3,
+              "outputTokensPerS": 1237629,
+              "elapsedS": 10.1
+            },
+            "gateway": {
+              "requestsPerS": 2475.4,
+              "outputTokensPerS": 1237708,
+              "elapsedS": 10.1
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.04,
+              "p95": 101.64,
+              "p99": 104.67,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": -0.06,
+              "p95": 1.08,
+              "p99": 2.99,
+              "n": 25000
+            },
+            "total": {
+              "p50": 100.06,
+              "p95": 101.67,
+              "p99": 104.71,
+              "n": 25000
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 100.99,
+              "p95": 103.96,
+              "p99": 109.04,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": 0.93,
+              "p95": 3.8,
+              "p99": 8.6,
+              "n": 25000
+            },
+            "total": {
+              "p50": 101.05,
+              "p95": 104.05,
+              "p99": 109.13,
+              "n": 25000
+            }
+          },
+          "addedTtfbMet": true,
+          "saturated": true,
+          "gatewayCpuPct": 204.2,
+          "perProcessCpuPct": [
+            101.5,
+            102.5
+          ],
+          "gatewayRssMb": 544.5,
+          "rssGrowthMb": 399.4,
+          "workers": 2,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              15.6,
+              14.5,
+              14.6
+            ],
+            "gateway": [
+              8,
+              8.4,
+              8.4
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              14.1,
+              14.2,
+              14
+            ],
+            "gateway": [
+              9.7,
+              9.8,
+              9.7
+            ]
+          }
+        },
+        {
+          "scenario": "non-streaming",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 5,
+          "durationS": 10,
+          "intended": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "requests": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 0.76,
+            "p95": 3.3,
+            "p99": 12.28,
+            "n": 25000
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 2475.3,
+              "outputTokensPerS": 1237629,
+              "elapsedS": 10.1
+            },
+            "gateway": {
+              "requestsPerS": 2475.2,
+              "outputTokensPerS": 1237625,
+              "elapsedS": 10.1
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.04,
+              "p95": 101.64,
+              "p99": 104.67,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": -0.06,
+              "p95": 1.08,
+              "p99": 2.99,
+              "n": 25000
+            },
+            "total": {
+              "p50": 100.06,
+              "p95": 101.67,
+              "p99": 104.71,
+              "n": 25000
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 101.22,
+              "p95": 108.96,
+              "p99": 135.17,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": 1.14,
+              "p95": 8.51,
+              "p99": 34.33,
+              "n": 25000
+            },
+            "total": {
+              "p50": 101.3,
+              "p95": 109.11,
+              "p99": 135.35,
+              "n": 25000
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": false,
+          "gatewayCpuPct": 266.6,
+          "perProcessCpuPct": [
+            87.6,
+            89.4,
+            89.4
+          ],
+          "gatewayRssMb": 687.1,
+          "rssGrowthMb": 498.2,
+          "workers": 3,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              15.6,
+              14.5,
+              14.6
+            ],
+            "gateway": [
+              9.4,
+              9.3,
+              9.6
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              14.1,
+              14.2,
+              14
+            ],
+            "gateway": [
+              11.4,
+              11.4,
+              11.3
+            ]
+          }
+        },
+        {
+          "scenario": "non-streaming",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 5,
+          "durationS": 10,
+          "intended": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "requests": {
+            "direct": 25000,
+            "gateway": 25000
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 0.93,
+            "p95": 4.43,
+            "p99": 10.07,
+            "n": 25000
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 2475.3,
+              "outputTokensPerS": 1237629,
+              "elapsedS": 10.1
+            },
+            "gateway": {
+              "requestsPerS": 2474.6,
+              "outputTokensPerS": 1237309,
+              "elapsedS": 10.1
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.04,
+              "p95": 101.64,
+              "p99": 104.67,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": -0.06,
+              "p95": 1.08,
+              "p99": 2.99,
+              "n": 25000
+            },
+            "total": {
+              "p50": 100.06,
+              "p95": 101.67,
+              "p99": 104.71,
+              "n": 25000
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 101.57,
+              "p95": 109.83,
+              "p99": 122.52,
+              "n": 25000
+            },
+            "outsideProvider": {
+              "p50": 1.48,
+              "p95": 9.17,
+              "p99": 21.82,
+              "n": 25000
+            },
+            "total": {
+              "p50": 101.67,
+              "p95": 109.96,
+              "p99": 122.57,
+              "n": 25000
+            }
+          },
+          "addedTtfbMet": true,
+          "saturated": false,
+          "gatewayCpuPct": 332.3,
+          "perProcessCpuPct": [
+            82.4,
+            81.9,
+            82,
+            85.7
+          ],
+          "gatewayRssMb": 834.3,
+          "rssGrowthMb": 598.5,
+          "workers": 4,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              15.6,
+              14.5,
+              14.6
+            ],
+            "gateway": [
+              10.6,
+              10.5,
+              10.8
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              14.1,
+              14.2,
+              14
+            ],
+            "gateway": [
+              13.1,
+              13.1,
+              13
+            ]
+          }
+        },
+        {
+          "scenario": "streaming-500",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6241,
+            "gateway": 6236
+          },
+          "requests": {
+            "direct": 6241,
+            "gateway": 6236
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 5.76,
+            "p95": 11.2,
+            "p99": 19.11,
+            "n": 6236
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 604.1,
+              "outputTokensPerS": 302058,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 603.1,
+              "outputTokensPerS": 301554,
+              "elapsedS": 10.34
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.12,
+              "p95": 101.49,
+              "p99": 102.24,
+              "n": 6241
+            },
+            "outsideProvider": {
+              "p50": -0.31,
+              "p95": 0.86,
+              "p99": 1.5,
+              "n": 6241
+            },
+            "total": {
+              "p50": 347.05,
+              "p95": 358.4,
+              "p99": 366.46,
+              "n": 6241
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 117.3,
+              "p95": 131.36,
+              "p99": 143.8,
+              "n": 6236
+            },
+            "outsideProvider": {
+              "p50": 16.95,
+              "p95": 30.79,
+              "p99": 42.91,
+              "n": 6236
+            },
+            "total": {
+              "p50": 365.33,
+              "p95": 381.44,
+              "p99": 392.06,
+              "n": 6236
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": true,
+          "gatewayCpuPct": 107.9,
+          "gatewayRssMb": 251.4,
+          "rssGrowthMb": 205.7,
+          "workers": 1,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              27.5,
+              26.9,
+              26.1
+            ],
+            "gateway": [
+              26.3,
+              25.9,
+              26.6
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              26.7,
+              26.6,
+              26.7
+            ],
+            "gateway": [
+              18.3,
+              18.4,
+              18.2
+            ]
+          }
+        },
+        {
+          "scenario": "streaming-500",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6241,
+            "gateway": 6254
+          },
+          "requests": {
+            "direct": 6241,
+            "gateway": 6254
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 2.15,
+            "p95": 11.33,
+            "p99": 16.33,
+            "n": 6254
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 604.1,
+              "outputTokensPerS": 302058,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 604.8,
+              "outputTokensPerS": 302404,
+              "elapsedS": 10.34
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.12,
+              "p95": 101.49,
+              "p99": 102.24,
+              "n": 6241
+            },
+            "outsideProvider": {
+              "p50": -0.31,
+              "p95": 0.86,
+              "p99": 1.5,
+              "n": 6241
+            },
+            "total": {
+              "p50": 347.05,
+              "p95": 358.4,
+              "p99": 366.46,
+              "n": 6241
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 106.39,
+              "p95": 129.63,
+              "p99": 138.63,
+              "n": 6254
+            },
+            "outsideProvider": {
+              "p50": 5.76,
+              "p95": 28.6,
+              "p99": 37.58,
+              "n": 6254
+            },
+            "total": {
+              "p50": 364.94,
+              "p95": 418.45,
+              "p99": 428.98,
+              "n": 6254
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": true,
+          "gatewayCpuPct": 207.1,
+          "perProcessCpuPct": [
+            103.4,
+            103.4
+          ],
+          "gatewayRssMb": 371.2,
+          "rssGrowthMb": 236,
+          "workers": 2,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              27.5,
+              26.9,
+              26.1
+            ],
+            "gateway": [
+              32,
+              32.3,
+              32.2
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              26.7,
+              26.6,
+              26.7
+            ],
+            "gateway": [
+              32.7,
+              32.4,
+              32.5
+            ]
+          }
+        },
+        {
+          "scenario": "streaming-500",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6241,
+            "gateway": 6249
+          },
+          "requests": {
+            "direct": 6241,
+            "gateway": 6249
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 5.56,
+            "p95": 55.15,
+            "p99": 76.48,
+            "n": 6249
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 604.1,
+              "outputTokensPerS": 302058,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 604,
+              "outputTokensPerS": 301992,
+              "elapsedS": 10.35
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.12,
+              "p95": 101.49,
+              "p99": 102.24,
+              "n": 6241
+            },
+            "outsideProvider": {
+              "p50": -0.31,
+              "p95": 0.86,
+              "p99": 1.5,
+              "n": 6241
+            },
+            "total": {
+              "p50": 347.05,
+              "p95": 358.4,
+              "p99": 366.46,
+              "n": 6241
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 126.94,
+              "p95": 213.18,
+              "p99": 228.53,
+              "n": 6249
+            },
+            "outsideProvider": {
+              "p50": 26.18,
+              "p95": 112.85,
+              "p99": 128.23,
+              "n": 6249
+            },
+            "total": {
+              "p50": 386.81,
+              "p95": 520.53,
+              "p99": 634.15,
+              "n": 6249
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": false,
+          "gatewayCpuPct": 253.7,
+          "perProcessCpuPct": [
+            87.5,
+            82.5,
+            83.4
+          ],
+          "gatewayRssMb": 479.9,
+          "rssGrowthMb": 296.6,
+          "workers": 3,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              27.5,
+              26.9,
+              26.1
+            ],
+            "gateway": [
+              31.5,
+              30.9,
+              31.4
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              26.7,
+              26.6,
+              26.7
+            ],
+            "gateway": [
+              32.3,
+              32.3,
+              32
+            ]
+          }
+        },
+        {
+          "scenario": "streaming-500",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6241,
+            "gateway": 6251
+          },
+          "requests": {
+            "direct": 6241,
+            "gateway": 6251
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 19.48,
+            "p95": 75.33,
+            "p99": 112.3,
+            "n": 6251
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 604.1,
+              "outputTokensPerS": 302058,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 594.8,
+              "outputTokensPerS": 297408,
+              "elapsedS": 10.51
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 100.12,
+              "p95": 101.49,
+              "p99": 102.24,
+              "n": 6241
+            },
+            "outsideProvider": {
+              "p50": -0.31,
+              "p95": 0.86,
+              "p99": 1.5,
+              "n": 6241
+            },
+            "total": {
+              "p50": 347.05,
+              "p95": 358.4,
+              "p99": 366.46,
+              "n": 6241
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 174.28,
+              "p95": 271.02,
+              "p99": 336.26,
+              "n": 6251
+            },
+            "outsideProvider": {
+              "p50": 72.84,
+              "p95": 169.88,
+              "p99": 235.65,
+              "n": 6251
+            },
+            "total": {
+              "p50": 458.32,
+              "p95": 716.12,
+              "p99": 885.11,
+              "n": 6251
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": false,
+          "gatewayCpuPct": 278.3,
+          "perProcessCpuPct": [
+            69.5,
+            69.2,
+            71,
+            68.4
+          ],
+          "gatewayRssMb": 599.1,
+          "rssGrowthMb": 368.9,
+          "workers": 4,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              27.5,
+              26.9,
+              26.1
+            ],
+            "gateway": [
+              34.1,
+              34.3,
+              33.6
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              26.7,
+              26.6,
+              26.7
+            ],
+            "gateway": [
+              30.5,
+              30.3,
+              30.3
+            ]
+          }
+        },
+        {
+          "scenario": "body-150kb",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6255,
+            "gateway": 6238
+          },
+          "requests": {
+            "direct": 6255,
+            "gateway": 6238
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 188.37,
+            "p95": 419.02,
+            "p99": 499.46,
+            "n": 6238
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 605.4,
+              "outputTokensPerS": 302708,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 467,
+              "outputTokensPerS": 233483,
+              "elapsedS": 13.36
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 101.46,
+              "p95": 106.81,
+              "p99": 112.44,
+              "n": 6255
+            },
+            "outsideProvider": {
+              "p50": 0.11,
+              "p95": 3.32,
+              "p99": 8.4,
+              "n": 6255
+            },
+            "total": {
+              "p50": 354.46,
+              "p95": 433.25,
+              "p99": 461.31,
+              "n": 6255
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 1521.89,
+              "p95": 3312.21,
+              "p99": 3700.82,
+              "n": 6238
+            },
+            "outsideProvider": {
+              "p50": 1413.79,
+              "p95": 3203.86,
+              "p99": 3596.34,
+              "n": 6238
+            },
+            "total": {
+              "p50": 1904.36,
+              "p95": 3600.22,
+              "p99": 4001.05,
+              "n": 6238
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": true,
+          "gatewayCpuPct": 114.7,
+          "gatewayRssMb": 521.9,
+          "rssGrowthMb": 475.8,
+          "workers": 1,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              57.7,
+              56.5,
+              54.8
+            ],
+            "gateway": [
+              40.9,
+              33.9,
+              35.9
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              31.6,
+              31.6,
+              31.8
+            ],
+            "gateway": [
+              7.4,
+              7.4,
+              7.5
+            ]
+          }
+        },
+        {
+          "scenario": "body-150kb",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6255,
+            "gateway": 6261
+          },
+          "requests": {
+            "direct": 6255,
+            "gateway": 6261
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 10.83,
+            "p95": 46.38,
+            "p99": 79.31,
+            "n": 6261
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 605.4,
+              "outputTokensPerS": 302708,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 604.2,
+              "outputTokensPerS": 302095,
+              "elapsedS": 10.36
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 101.46,
+              "p95": 106.81,
+              "p99": 112.44,
+              "n": 6255
+            },
+            "outsideProvider": {
+              "p50": 0.11,
+              "p95": 3.32,
+              "p99": 8.4,
+              "n": 6255
+            },
+            "total": {
+              "p50": 354.46,
+              "p95": 433.25,
+              "p99": 461.31,
+              "n": 6255
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 140.07,
+              "p95": 241.02,
+              "p99": 293.19,
+              "n": 6261
+            },
+            "outsideProvider": {
+              "p50": 38.23,
+              "p95": 137.38,
+              "p99": 189.77,
+              "n": 6261
+            },
+            "total": {
+              "p50": 416.05,
+              "p95": 590.43,
+              "p99": 653.43,
+              "n": 6261
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": true,
+          "gatewayCpuPct": 241.9,
+          "perProcessCpuPct": [
+            119,
+            122.6
+          ],
+          "gatewayRssMb": 699.1,
+          "rssGrowthMb": 571.6,
+          "workers": 2,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              57.7,
+              56.5,
+              54.8
+            ],
+            "gateway": [
+              56.2,
+              57.2,
+              55.7
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              31.6,
+              31.6,
+              31.8
+            ],
+            "gateway": [
+              19.9,
+              19.9,
+              19.7
+            ]
+          }
+        },
+        {
+          "scenario": "body-150kb",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6255,
+            "gateway": 6254
+          },
+          "requests": {
+            "direct": 6255,
+            "gateway": 6254
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 5.83,
+            "p95": 27.96,
+            "p99": 38.87,
+            "n": 6254
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 605.4,
+              "outputTokensPerS": 302708,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 604.1,
+              "outputTokensPerS": 302069,
+              "elapsedS": 10.35
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 101.46,
+              "p95": 106.81,
+              "p99": 112.44,
+              "n": 6255
+            },
+            "outsideProvider": {
+              "p50": 0.11,
+              "p95": 3.32,
+              "p99": 8.4,
+              "n": 6255
+            },
+            "total": {
+              "p50": 354.46,
+              "p95": 433.25,
+              "p99": 461.31,
+              "n": 6255
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 119.83,
+              "p95": 168.34,
+              "p99": 200.48,
+              "n": 6254
+            },
+            "outsideProvider": {
+              "p50": 18.09,
+              "p95": 66.5,
+              "p99": 98.03,
+              "n": 6254
+            },
+            "total": {
+              "p50": 392.72,
+              "p95": 464.03,
+              "p99": 488.16,
+              "n": 6254
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": true,
+          "gatewayCpuPct": 373.5,
+          "perProcessCpuPct": [
+            123.7,
+            119.4,
+            130.1
+          ],
+          "gatewayRssMb": 751.1,
+          "rssGrowthMb": 583.2,
+          "workers": 3,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              57.7,
+              56.5,
+              54.8
+            ],
+            "gateway": [
+              56.5,
+              54.9,
+              59.3
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              31.6,
+              31.6,
+              31.8
+            ],
+            "gateway": [
+              31.7,
+              31.4,
+              31.4
+            ]
+          }
+        },
+        {
+          "scenario": "body-150kb",
+          "store": "redis",
+          "concurrency": 500,
+          "ratePerConnection": 1.25,
+          "durationS": 10,
+          "intended": {
+            "direct": 6255,
+            "gateway": 6268
+          },
+          "requests": {
+            "direct": 6255,
+            "gateway": 6268
+          },
+          "dropped": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errors": {
+            "direct": 0,
+            "gateway": 0
+          },
+          "errorKinds": {
+            "direct": {},
+            "gateway": {}
+          },
+          "addedTtfb": {
+            "p50": 23.98,
+            "p95": 118.41,
+            "p99": 215.4,
+            "n": 6268
+          },
+          "throughput": {
+            "direct": {
+              "requestsPerS": 605.4,
+              "outputTokensPerS": 302708,
+              "elapsedS": 10.33
+            },
+            "gateway": {
+              "requestsPerS": 562.9,
+              "outputTokensPerS": 281428,
+              "elapsedS": 11.14
+            }
+          },
+          "direct": {
+            "ttfb": {
+              "p50": 101.46,
+              "p95": 106.81,
+              "p99": 112.44,
+              "n": 6255
+            },
+            "outsideProvider": {
+              "p50": 0.11,
+              "p95": 3.32,
+              "p99": 8.4,
+              "n": 6255
+            },
+            "total": {
+              "p50": 354.46,
+              "p95": 433.25,
+              "p99": 461.31,
+              "n": 6255
+            }
+          },
+          "gateway": {
+            "ttfb": {
+              "p50": 309.2,
+              "p95": 802.17,
+              "p99": 1115.08,
+              "n": 6268
+            },
+            "outsideProvider": {
+              "p50": 201.02,
+              "p95": 691.72,
+              "p99": 1008.74,
+              "n": 6268
+            },
+            "total": {
+              "p50": 869.35,
+              "p95": 1339.4,
+              "p99": 1595.54,
+              "n": 6268
+            }
+          },
+          "addedTtfbMet": false,
+          "saturated": false,
+          "gatewayCpuPct": 292.3,
+          "perProcessCpuPct": [
+            75,
+            70.2,
+            75.4,
+            71.5
+          ],
+          "gatewayRssMb": 1036.6,
+          "rssGrowthMb": 823.4,
+          "workers": 4,
+          "mockProcesses": 3,
+          "loadProcesses": 3,
+          "mockCpuPct": {
+            "direct": [
+              57.7,
+              56.5,
+              54.8
+            ],
+            "gateway": [
+              53.6,
+              52.1,
+              55.1
+            ]
+          },
+          "loadCpuPct": {
+            "direct": [
+              31.6,
+              31.6,
+              31.8
+            ],
+            "gateway": [
+              15.9,
+              16.2,
+              16
+            ]
+          }
+        }
+      ]
+    }
   },
   "budget": {
     "runs": [
@@ -3990,21 +5455,21 @@
   },
   "scan": {
     "bodyMb": 4.14,
-    "lastTurnMbPerS": 168.6,
-    "fullBodyMbPerS": 56.2,
+    "lastTurnMbPerS": 361.4,
+    "fullBodyMbPerS": 97.6,
     "fpCorpus": {
-      "files": 775,
-      "mb": 8.3,
+      "files": 843,
+      "mb": 9.4,
       "blockHits": 0,
       "documentedExamples": 9
     }
   },
   "replay": {
     "records": 1000000,
-    "seconds": 47.5,
-    "recordsPerSecond": 21033,
-    "fileMb": 100.4,
-    "fidelityAgreement": 1
+    "seconds": 54.4,
+    "recordsPerSecond": 18368,
+    "fileMb": 103.9,
+    "fidelityAgreement": 0.810874
   },
   "calibration": {
     "violations": 0,
@@ -4076,115 +5541,133 @@
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 10 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.68 ms / 1.54 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.91 / 4.92 ms, through the gateway 4.13 / 11.66 ms",
+      "measured": "0.5 ms / 1.59 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.04 / 3.76 ms, through the gateway 2.44 / 7.65 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 100 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.14 ms / 0.63 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.41 / 5.94 ms, through the gateway 0.93 / 8.28 ms",
+      "measured": "0.09 ms / 0.51 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.15 / 2.42 ms, through the gateway 0.38 / 3.1 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 500 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.05 ms / 0.1 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 7.94 ms, through the gateway 0.66 / 7.58 ms",
+      "measured": "0.05 ms / 0.12 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.19 / 7.33 ms, through the gateway 0.63 / 14.99 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 10 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.52 ms / 1.82 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 4.18 ms, through the gateway 2.05 / 7.71 ms",
+      "measured": "0.53 ms / 1.77 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.33 / 3.57 ms, through the gateway 1.78 / 7.96 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 100 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.17 ms / 0.44 ms (n = 2,252); client-side TTFB outside the provider, p50 / p99: direct 0.36 / 3.6 ms, through the gateway 0.95 / 5.46 ms",
+      "measured": "0.14 ms / 0.51 ms (n = 2,252); client-side TTFB outside the provider, p50 / p99: direct 0.18 / 7.78 ms, through the gateway 0.43 / 6.55 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 500 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.06 ms / 0.2 ms (n = 6,261); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 4.51 ms, through the gateway 12.99 / 22.47 ms",
+      "measured": "0.06 ms / 0.39 ms (n = 6,261); client-side TTFB outside the provider, p50 / p99: direct 0.8 / 6.95 ms, through the gateway 39.7 / 234.32 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 10 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "3.57 ms / 8.83 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.9 / 3.19 ms, through the gateway 5.9 / 16.41 ms",
-      "met": false
+      "measured": "2.83 ms / 8.5 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 13.98 ms, through the gateway 4.64 / 17.49 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 100 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "1.21 ms / 2.26 ms (n = 2,251); client-side TTFB outside the provider, p50 / p99: direct 0.57 / 6.58 ms, through the gateway 2.03 / 9.08 ms",
-      "met": true
+      "measured": "1.15 ms / 2.81 ms (n = 2,251); client-side TTFB outside the provider, p50 / p99: direct 0.27 / 3.46 ms, through the gateway 1.96 / 33.1 ms",
+      "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 500 streams, memory store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "1.05 ms / 3.58 ms (n = 6,233); client-side TTFB outside the provider, p50 / p99: direct 981.3 / 2054.43 ms, through the gateway 1988.55 / 4444.03 ms",
+      "measured": "1.05 ms / 4.32 ms (n = 6,233); client-side TTFB outside the provider, p50 / p99: direct 1800.58 / 4995.05 ms, through the gateway 4750.37 / 8608.58 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 10 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "2.49 ms / 8.98 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.91 / 4.92 ms, through the gateway 5.93 / 16.32 ms",
-      "met": false
+      "measured": "1.81 ms / 6.9 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 1.04 / 3.76 ms, through the gateway 3.6 / 10.84 ms",
+      "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 100 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "1.07 ms / 4.87 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.41 / 5.94 ms, through the gateway 1.96 / 9.69 ms",
+      "measured": "0.9 ms / 4 ms (n = 5,000); client-side TTFB outside the provider, p50 / p99: direct 0.15 / 2.42 ms, through the gateway 1.3 / 6.5 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, non-streaming, 500 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "0.7 ms / 4.34 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 7.94 ms, through the gateway 1.24 / 9.26 ms",
-      "met": true
+      "measured": "0.73 ms / 12.81 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct 0.19 / 7.33 ms, through the gateway 1.38 / 38.77 ms",
+      "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 10 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "2.5 ms / 6.91 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 4.18 ms, through the gateway 4.07 / 10.31 ms",
+      "measured": "2.3 ms / 8.02 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.33 / 3.57 ms, through the gateway 3.42 / 12.55 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 100 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "1.45 ms / 5.36 ms (n = 2,250); client-side TTFB outside the provider, p50 / p99: direct 0.36 / 3.6 ms, through the gateway 2.08 / 10.15 ms",
+      "measured": "1.13 ms / 5.04 ms (n = 2,250); client-side TTFB outside the provider, p50 / p99: direct 0.18 / 7.78 ms, through the gateway 1.41 / 8.32 ms",
       "met": true
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 500 tokens, 500 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "6.5 ms / 14 ms (n = 6,240); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 4.51 ms, through the gateway 21.54 / 33.62 ms",
+      "measured": "7.39 ms / 55.12 ms (n = 6,240); client-side TTFB outside the provider, p50 / p99: direct 0.8 / 6.95 ms, through the gateway 21.2 / 255.67 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 10 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "5.62 ms / 11.71 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.9 / 3.19 ms, through the gateway 8.16 / 16.74 ms",
+      "measured": "5 ms / 15.19 ms (n = 2,200); client-side TTFB outside the provider, p50 / p99: direct 0.66 / 13.98 ms, through the gateway 7.04 / 20.25 ms",
       "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 100 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "2.39 ms / 7.71 ms (n = 2,261); client-side TTFB outside the provider, p50 / p99: direct 0.57 / 6.58 ms, through the gateway 3.57 / 11.31 ms",
-      "met": true
+      "measured": "2.74 ms / 19.25 ms (n = 2,261); client-side TTFB outside the provider, p50 / p99: direct 0.27 / 3.46 ms, through the gateway 4.1 / 52.91 ms",
+      "met": false
     },
     {
       "sli": "Added TTFB p50 / p99, streaming 150 KB body, 500 streams, redis store",
       "target": "under 5 ms / under 25 ms",
-      "measured": "223.98 ms / 556.88 ms (n = 6,252); client-side TTFB outside the provider, p50 / p99: direct 981.3 / 2054.43 ms, through the gateway 4106.65 / 9152.51 ms",
+      "measured": "213.2 ms / 635.63 ms (n = 6,244); client-side TTFB outside the provider, p50 / p99: direct 1800.58 / 4995.05 ms, through the gateway 6035.26 / 12016.48 ms",
+      "met": false
+    },
+    {
+      "sli": "Added TTFB p50 / p99, non-streaming, 500 streams, redis store, 3 gateway processes (serve --workers 3)",
+      "target": "under 5 ms / under 25 ms",
+      "measured": "0.76 ms / 12.28 ms (n = 25,000); client-side TTFB outside the provider, p50 / p99: direct -0.06 / 2.99 ms, through the gateway 1.14 / 34.33 ms",
+      "met": false
+    },
+    {
+      "sli": "Added TTFB p50 / p99, streaming 500 tokens, 500 streams, redis store, 3 gateway processes (serve --workers 3)",
+      "target": "under 5 ms / under 25 ms",
+      "measured": "5.56 ms / 76.48 ms (n = 6,249); client-side TTFB outside the provider, p50 / p99: direct -0.31 / 1.5 ms, through the gateway 26.18 / 128.23 ms",
+      "met": false
+    },
+    {
+      "sli": "Added TTFB p50 / p99, streaming 150 KB body, 500 streams, redis store, 3 gateway processes (serve --workers 3)",
+      "target": "under 5 ms / under 25 ms",
+      "measured": "5.83 ms / 38.87 ms (n = 6,254); client-side TTFB outside the provider, p50 / p99: direct 0.11 / 8.4 ms, through the gateway 18.09 / 98.03 ms",
       "met": false
     },
     {
       "sli": "Gateway-attributable error rate",
       "target": "under 0.1% per month",
-      "measured": "not measured (a production SLI); overhead runs: 0 errors beside 133498 answered requests through the gateway",
+      "measured": "not measured (a production SLI); overhead runs: 8 errors beside 133490 answered requests through the gateway",
       "met": null
     },
     {
@@ -4214,7 +5697,7 @@
     {
       "sli": "Replay of 1,000,000 trace records",
       "target": "under 60 s on a CI runner",
-      "measured": "47.5 s on the machine above (not a CI runner)",
+      "measured": "54.4 s on the machine above (not a CI runner)",
       "met": true
     }
   ],
