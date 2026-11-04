@@ -1405,7 +1405,9 @@ function onPrimaryCommand(h) {
   });
 }
 function superviseWorkers(o) {
-  cluster.schedulingPolicy = cluster.SCHED_RR;
+  if (!o.fork) cluster.schedulingPolicy = cluster.SCHED_RR;
+  const forkWorker = o.fork ?? ((env) => cluster.fork(env));
+  const exit = o.exit ?? ((code2) => process.exit(code2));
   const slots = /* @__PURE__ */ new Map();
   const firstReady = Array.from({ length: o.n });
   let announced = false;
@@ -1415,7 +1417,7 @@ function superviseWorkers(o) {
   const crashes = [];
   const finish = () => {
     if (slots.size > 0) return;
-    process.exit(failed ? 1 : 0);
+    exit(failed ? 1 : 0);
   };
   const send = (w, m) => {
     if (w.isConnected()) w.send(m);
@@ -1424,7 +1426,7 @@ function superviseWorkers(o) {
     if (code2 === 1) failed = true;
     if (stopping) return;
     stopping = true;
-    for (const s2 of slots.values()) send(s2.worker, { tokenyard: "drain" });
+    for (const s2 of slots.values()) if (s2.ready) send(s2.worker, { tokenyard: "drain" });
     setTimeout(() => {
       for (const s2 of slots.values()) s2.worker.process.kill("SIGKILL");
       failed = true;
@@ -1434,7 +1436,7 @@ function superviseWorkers(o) {
   };
   const fork = (slot) => {
     const instance = workerInstanceId(o.baseInstance, ++forks);
-    const worker = cluster.fork({ [WORKER_SLOT_ENV]: String(slot), [WORKER_INSTANCE_ENV]: instance });
+    const worker = forkWorker({ [WORKER_SLOT_ENV]: String(slot), [WORKER_INSTANCE_ENV]: instance });
     const s2 = { slot, worker, instance, ready: false };
     slots.set(slot, s2);
     worker.on("message", (m) => {
@@ -1487,8 +1489,11 @@ function superviseWorkers(o) {
     if (o.graceMs > 0) o.log(`tokenyard: draining ${slots.size} workers, up to ${o.graceMs} ms for requests in flight (signal again to stop at once)`);
     stopAll(0);
   };
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
+  if (o.onSignal) o.onSignal(onSignal);
+  else {
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
+  }
 }
 var WORKER_SLOT_ENV, WORKER_INSTANCE_ENV, MAX_RESTARTS, RESTART_WINDOW_MS, EXIT_SLACK_MS, workerInstanceId;
 var init_cluster = __esm({

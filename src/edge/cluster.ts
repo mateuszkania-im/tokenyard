@@ -60,9 +60,16 @@ export function onPrimaryCommand(h: { drain(): void; now(): void }): void {
   });
 }
 
+/** What the supervisor uses of a cluster Worker (a fake in the unit tests). */
+export type SupervisedWorker = Pick<Worker, 'send' | 'isConnected'> & {
+  process: { pid?: number | undefined; kill(signal?: NodeJS.Signals): unknown };
+  on(event: 'message', listener: (m: unknown) => void): unknown;
+  on(event: 'exit', listener: (code: number | null, signal: string | null) => void): unknown;
+};
+
 interface Slot {
   slot: number;
-  worker: Worker;
+  worker: SupervisedWorker;
   instance: string;
   ready: boolean;
 }
@@ -78,9 +85,21 @@ interface Slot {
  * second signal closes their connections at once. A worker still starting gets the drain once it is ready, and any
  * worker left EXIT_SLACK_MS past the grace is killed. The primary exits 0 when every worker exited 0, 1 otherwise.
  */
-export function superviseWorkers(o: { n: number; baseInstance: string; graceMs: number; log(s: string): void; onReady(ready: WorkerReady[]): void }): void {
+export function superviseWorkers(o: {
+  n: number;
+  baseInstance: string;
+  graceMs: number;
+  log(s: string): void;
+  onReady(ready: WorkerReady[]): void;
+  /** Test seams: the fork, the signal hook and the exit (node:cluster, SIGINT and SIGTERM, process.exit by default). */
+  fork?: (env: Record<string, string>) => SupervisedWorker;
+  onSignal?: (handler: () => void) => void;
+  exit?: (code: number) => void;
+}): void {
   // Round robin everywhere: Windows defaults to letting the OS pick a worker, which spreads connections unevenly.
-  cluster.schedulingPolicy = cluster.SCHED_RR;
+  if (!o.fork) cluster.schedulingPolicy = cluster.SCHED_RR;
+  const forkWorker = o.fork ?? ((env: Record<string, string>): SupervisedWorker => cluster.fork(env));
+  const exit = o.exit ?? ((code: number) => process.exit(code));
   const slots = new Map<number, Slot>();
   const firstReady: Array<WorkerReady | undefined> = Array.from({ length: o.n });
   let announced = false;
@@ -91,16 +110,17 @@ export function superviseWorkers(o: { n: number; baseInstance: string; graceMs: 
 
   const finish = (): void => {
     if (slots.size > 0) return;
-    process.exit(failed ? 1 : 0);
+    exit(failed ? 1 : 0);
   };
-  const send = (w: Worker, m: ToWorker): void => {
+  const send = (w: SupervisedWorker, m: ToWorker): void => {
     if (w.isConnected()) w.send(m);
   };
   const stopAll = (code: 0 | 1): void => {
     if (code === 1) failed = true;
     if (stopping) return;
     stopping = true;
-    for (const s of slots.values()) send(s.worker, { tokenyard: 'drain' });
+    // A worker still starting has no command handler yet; it gets the drain when it reports ready.
+    for (const s of slots.values()) if (s.ready) send(s.worker, { tokenyard: 'drain' });
     setTimeout(() => {
       for (const s of slots.values()) s.worker.process.kill('SIGKILL');
       failed = true;
@@ -111,7 +131,7 @@ export function superviseWorkers(o: { n: number; baseInstance: string; graceMs: 
 
   const fork = (slot: number): void => {
     const instance = workerInstanceId(o.baseInstance, ++forks);
-    const worker = cluster.fork({ [WORKER_SLOT_ENV]: String(slot), [WORKER_INSTANCE_ENV]: instance });
+    const worker = forkWorker({ [WORKER_SLOT_ENV]: String(slot), [WORKER_INSTANCE_ENV]: instance });
     const s: Slot = { slot, worker, instance, ready: false };
     slots.set(slot, s);
     worker.on('message', (m: unknown) => {
@@ -167,6 +187,9 @@ export function superviseWorkers(o: { n: number; baseInstance: string; graceMs: 
     if (o.graceMs > 0) o.log(`tokenyard: draining ${slots.size} workers, up to ${o.graceMs} ms for requests in flight (signal again to stop at once)`);
     stopAll(0);
   };
-  process.on('SIGINT', onSignal);
-  process.on('SIGTERM', onSignal);
+  if (o.onSignal) o.onSignal(onSignal);
+  else {
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+  }
 }
