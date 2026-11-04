@@ -11,7 +11,9 @@ tokenyard is an open-source LLM gateway in TypeScript for Claude Code, Codex and
   <img alt="The policy replay comment for the demo policy change: cost -5.6% (estimated), 200 requests rerouted, 5 sessions cut mid-task by a tighter team budget, check failed on purpose" src="docs/demo-comment-light.png" width="720">
 </picture>
 
-See it live: [pull request #2](https://github.com/mateuszkania-im/tokenyard/pull/2) is a standing demo, never merged. It moves compaction and auxiliary requests to Haiku and tightens the web team's daily budget; the `policy replay` workflow replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,649 requests from 8 developers in 3 teams) through both policies and posts the comment above. Its check is red on purpose: five sessions would be cut mid-task, and the policy says `ci.failOn.cutSessions: 0`. The traffic is synthetic; real sessions, anonymized, are in [Real sessions](#real-sessions).
+The image is the comment for the bundled demo change (`tokenyard demo`: `examples/policy` against `examples/policy-head`), which also tightens a team budget, so its check fails: five sessions would be cut mid-task and the policy says `ci.failOn.cutSessions: 0`.
+
+See it live: [pull request #2](https://github.com/mateuszkania-im/tokenyard/pull/2) is a standing demo, never merged. It only moves compaction and auxiliary requests to Haiku; the `policy replay` workflow replays the committed synthetic week (`examples/traces/demo.ndjson.gz`, 3,649 requests from 8 developers in 3 teams) through both policies and comments: cost -2.0% (estimated), 206 requests rerouted, no sessions cut, check green. The traffic is synthetic; real sessions, anonymized, are in [Real sessions](#real-sessions).
 
 ## Quick start
 
