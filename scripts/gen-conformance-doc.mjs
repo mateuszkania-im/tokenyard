@@ -62,5 +62,6 @@ out.push('| Claude Code | 2.1.316 | 2026-11-02 | `claude -p "say hi"` through to
 out.push('| Codex | 0.166.0 | 2026-11-02 | `codex exec` with `wire_api = "responses"` through the live harness against the real OpenAI API (gpt-5.4-mini): a one-line edit in a scratch clone, 3 billed requests; see `test/live/codex.live.md` |');
 out.push('| Claude Code | 2.1.317 | 2026-11-03 | Live through the live harness: 6 sessions on Haiku 5.5 and Opus 5.5 with Explore and general-purpose subagents (two in parallel), file edits, Bash, `/compact` and `--resume`; per-request tokens equal to Claude Code\'s OTel `api_request` events on all 42 billed requests, cost within 1.79 micro-USD in total; budget block shown at once with no retries; see `test/live/claude-code.live.md`, run 2 |');
 out.push('| Codex | 0.166.0 | 2026-11-03 | `codex exec` live again (gpt-5.4-mini, 4 billed requests); it sent no `Content-Encoding` to the API-key base URL; the budget block printed at once without retries; see `test/live/codex.live.md`, run 2 |');
+out.push('| Claude Code | 2.1.318 | 2026-11-04 | `claude -p "say hi"` through tokenyard (`serve --dev-upstream`) against the mock: 200, streamed reply, usage settled from the final event (cache write 21,391, output 16), 8 ms added time to first byte; conformance suite 42 of 42 on the same day |');
 out.push('');
 process.stdout.write(out.join('\n'));
