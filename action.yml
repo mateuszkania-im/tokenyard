@@ -1,5 +1,5 @@
 name: tokenyard policy replay
-description: Replays recorded coding-agent traffic against a pull request's policy change and comments the cost, reroutes, blocks and cut sessions.
+description: Replays recorded coding-agent traffic against a PR's policy change and comments cost, reroutes, blocks and cut sessions.
 author: Mateusz Kania
 branding:
   icon: git-pull-request

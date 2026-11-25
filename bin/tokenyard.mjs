@@ -127319,7 +127319,7 @@ function useColor() {
 var program = new Command();
 
 // package.json
-var version = "0.2.0";
+var version = "0.2.1";
 var description = "LLM gateway for coding-agent traffic";
 
 // src/cli.ts

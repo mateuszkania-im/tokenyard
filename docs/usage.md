@@ -103,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: mateuszkania-im/tokenyard@v0.2.0
+      - uses: mateuszkania-im/tokenyard@v0
         with:
           policy-dir: policy
           traces: https://example.internal/traces.ndjson.gz   # a merged export, or a path in the checkout
